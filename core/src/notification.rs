@@ -392,9 +392,41 @@ pub trait ConsumerNotificationBinding {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NotificationPermission {
     Establish,
+    /// Retain/use the conversation's authority, independently of any item.
+    Maintain,
     Deliver,
     Respond,
     Cancel,
+}
+/// A policy may refuse one owned occurrence without withdrawing the continuing
+/// grant. Errors mean authority/dependency failure and fence the conversation.
+/// RejectOccurrence is valid only for Deliver/Respond with an actual occurrence.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NotificationDecision {
+    Allow,
+    RejectOccurrence,
+}
+/// Original logical context for one policy check. `target` is the conversation
+/// scope. Establish/Maintain/Cancel have no occurrence; Deliver/Respond always
+/// have the original owned item's coordinate, including delayed checks. It is
+/// not an authenticated sender, topic, principal or device identity. Subscription
+/// permission grants no permission to deliver a future item.
+#[derive(Clone, Copy)]
+pub struct NotificationAuthorization<'a> {
+    pub recipient: &'a NotificationIdentity,
+    pub target: &'a AffordanceTarget,
+    pub kind: NotificationKind,
+    pub occurrence: Option<&'a AffordanceTarget>,
+    pub permission: NotificationPermission,
+}
+impl NotificationAuthorization<'_> {
+    pub fn operation(&self) -> Operation {
+        if self.permission == NotificationPermission::Cancel {
+            self.kind.stop_operation()
+        } else {
+            self.kind.start_operation()
+        }
+    }
 }
 /// Actual captured application policy, rechecked at long-lived delivery and
 /// response/cancel. Native trust/credential services remain Binding-owned.
@@ -402,36 +434,63 @@ pub trait NotificationAuthorizer {
     fn work(&self) -> u64 {
         1
     }
-    fn authorize(
-        &self,
-        recipient: &NotificationIdentity,
-        target: &AffordanceTarget,
-        permission: NotificationPermission,
-    ) -> CoreResult<()>;
+    fn authorize(&self, request: NotificationAuthorization<'_>)
+    -> CoreResult<NotificationDecision>;
+}
+
+/// Origin of a captured validation failure. A CoreError category alone cannot
+/// distinguish rejected input from an observed prepared-service dependency loss.
+/// A later dependency read cannot erase evidence returned by this callback.
+#[derive(Debug)]
+pub enum NotificationValidationError {
+    /// Input or work-credit refusal while original dependencies remain valid.
+    Rejected(crate::CoreError),
+    /// An observed violation of the original prepared-service dependencies.
+    /// An admitted conversation must be fenced even if the declaration returns
+    /// to its original value before the caller retries or cleanup progresses.
+    Dependency(crate::CoreError),
+}
+impl NotificationValidationError {
+    pub fn into_error(self) -> crate::CoreError {
+        match self {
+            Self::Rejected(error) | Self::Dependency(error) => error,
+        }
+    }
 }
 
 /// Optional captured validation for the raw lifecycle. Data work is prepaid
 /// before native handoff; validation cannot strand an unowned late candidate.
 /// Implementations are trusted, pure and finite, like ConsumerDataService.
+/// Validation failures carry their origin, not an inferred CoreError category.
+/// Native data rejection remains fatal; caller response/input or short-credit
+/// rejection can be recoverable. An observed dependency failure is always fatal
+/// to already admitted semantic use, without changing its cleanup ownership.
 pub trait NotificationValidation {
     fn subscription(
         &self,
         input: &SubscriptionInput,
         budget: &mut clinkz_wot_foundation::WorkBudget,
-    ) -> CoreResult<()>;
+    ) -> Result<(), NotificationValidationError>;
     fn cancellation(
         &self,
         input: &CancellationInput,
         budget: &mut clinkz_wot_foundation::WorkBudget,
-    ) -> CoreResult<()>;
+    ) -> Result<(), NotificationValidationError>;
     fn response(
         &self,
         target: &AffordanceTarget,
         input: &EventDataResponse,
         budget: &mut clinkz_wot_foundation::WorkBudget,
-    ) -> CoreResult<()>;
-    fn prepay_data(&self, budget: &mut clinkz_wot_foundation::WorkBudget) -> CoreResult<()>;
-    fn data(&self, target: &AffordanceTarget, payload: Option<&Payload>) -> CoreResult<()>;
+    ) -> Result<(), NotificationValidationError>;
+    fn prepay_data(
+        &self,
+        budget: &mut clinkz_wot_foundation::WorkBudget,
+    ) -> Result<(), NotificationValidationError>;
+    fn data(
+        &self,
+        target: &AffordanceTarget,
+        payload: Option<&Payload>,
+    ) -> Result<(), NotificationValidationError>;
 }
 
 /// Complete recipient allowance includes attribution backing as well as data.

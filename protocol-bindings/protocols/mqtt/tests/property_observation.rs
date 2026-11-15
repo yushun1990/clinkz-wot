@@ -27,7 +27,7 @@ fn publication(
         now(),
         &mut budget(),
     )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()))
+    .unwrap_or_else(|e| panic!("{:?}", e))
 }
 
 #[test]
@@ -72,10 +72,15 @@ fn producer_property_validation_policy_and_family_refusals_return_original_value
         e.publish(&mut o, &mut budget()).unwrap_err();
         let end = Instant::now() + Duration::from_secs(3);
         loop {
-            let _ = o.step_notifications(&mut e
-                .participant_mut::<services::ServicesParticipant>(0)
-                .unwrap()
-                .native, &mut cx(), &mut budget())
+            let _ = o
+                .step_notifications(
+                    &mut e
+                        .participant_mut::<services::ServicesParticipant>(0)
+                        .unwrap()
+                        .native,
+                    &mut cx(),
+                    &mut budget(),
+                )
                 .unwrap();
             if e.publish(&mut o, &mut budget()).is_ok() {
                 break;
@@ -159,10 +164,15 @@ fn producer_property_validation_policy_and_family_refusals_return_original_value
         peer.event("validate/temperature", b"23");
         work.acknowledge().ok().unwrap();
         e.begin_close();
-        let _ = o.step_notifications(&mut e
-            .participant_mut::<services::ServicesParticipant>(0)
-            .unwrap()
-            .native, &mut cx(), &mut budget())
+        let _ = o
+            .step_notifications(
+                &mut e
+                    .participant_mut::<services::ServicesParticipant>(0)
+                    .unwrap()
+                    .native,
+                &mut cx(),
+                &mut budget(),
+            )
             .unwrap();
         e.retire(&mut o, &mut budget()).unwrap();
         drop(e);
@@ -314,7 +324,8 @@ fn partially_written_property_value_is_uncertain_and_fences_native_siblings() {
         assert_eq!(report.native.effect, PublicationEffect::Uncertain);
         assert!(matches!(report.cause, Some(CoreError::Cancelled(_))));
         assert_eq!(report.target, target());
-        let _ = o.step_notifications(native(&mut z), &mut cx(), &mut budget())
+        let _ = o
+            .step_notifications(native(&mut z), &mut cx(), &mut budget())
             .unwrap();
         assert!(o.description(z.key()).is_none());
         assert!(s.first_failure().is_some());
@@ -355,20 +366,27 @@ fn property_and_event_with_same_name_keep_schemas_targets_and_stop_independent()
         let two = consumer_owner(2);
         let definition =
             prepare_consumer(&s, td.clone(), &bank, Arc::new(Access::default())).unwrap();
-        let mut property = Consumer::try_new(one.reference(), definition, engine_limits(4))
-            .unwrap_or_else(|_| panic!());
+        let mut property = Consumer::try_new(
+            one.reference(),
+            definition,
+            Arc::new(Access::default()),
+            engine_limits(4),
+        )
+        .unwrap_or_else(|_| panic!());
         let event_target = AffordanceTarget::Event(Arc::from(NAME));
         let event_definition = {
             let thing = serde_json::from_value(td).unwrap();
-            let registry =
-                ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
+            let registry = ConsumerNotificationRegistry::try_new(
+                vec![ConsumerNotificationRegistration {
                     binding: s.binding(),
                     services: ConsumerServices {
                         data: Arc::new(MqttJsonData),
                         access: Arc::new(Access::default()),
                     },
-                }])
-                .unwrap();
+                }],
+                &bank,
+            )
+            .unwrap();
             let mut limits = GatewayDefaultV1::LIMITS.clone();
             assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));
             registry
@@ -387,8 +405,13 @@ fn property_and_event_with_same_name_keep_schemas_targets_and_stop_independent()
             event_definition.input().schemas.kind(),
             NotificationKind::Event
         );
-        let mut event = Consumer::try_new(two.reference(), event_definition, engine_limits(4))
-            .unwrap_or_else(|_| panic!());
+        let mut event = Consumer::try_new(
+            two.reference(),
+            event_definition,
+            Arc::new(Access::default()),
+            engine_limits(4),
+        )
+        .unwrap_or_else(|_| panic!());
         let mut cp = subscribe(&mut property, NotificationOverflow::Terminate);
         active(&mut property, &cp).await;
         let mut ce = subscribe(&mut event, NotificationOverflow::Terminate);

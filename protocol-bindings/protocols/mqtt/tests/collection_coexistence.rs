@@ -174,7 +174,7 @@ mod live {
     use broker::*;
     use clinkz_wot_core::{consumer::*, notification::*};
     use clinkz_wot_planning::open_consumer::*;
-    use clinkz_wot_servient_finite::{consumer::*, consumer_notification::*, notification::*};
+    use clinkz_wot_servient_finite::{consumer::*, notification::*};
     use std::{
         io::{Read, Write},
         net::TcpStream,
@@ -296,10 +296,19 @@ mod live {
                 .filter_map(|o| o.definition::<HttpActionDefinition>().cloned())
                 .collect();
             let mqtt_runtime = service
-                .participation(&owner.participation_token(), instance.key(), mqtt_definitions)
+                .participation(
+                    &owner.participation_token(),
+                    instance.key(),
+                    mqtt_definitions,
+                )
                 .unwrap();
-            let http_runtime =
-                HttpActionRuntime::try_new(&owner.participation_token(), instance.key(), http_definitions, 8).unwrap();
+            let http_runtime = HttpActionRuntime::try_new(
+                &owner.participation_token(),
+                instance.key(),
+                http_definitions,
+                8,
+            )
+            .unwrap();
             let mut exposure = stage(
                 &owner,
                 ComposedProducerInput {
@@ -330,15 +339,17 @@ mod live {
                 BindingGeneration::INITIAL,
             )
             .unwrap();
-            let registry =
-                ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
+            let registry = ConsumerNotificationRegistry::try_new(
+                vec![ConsumerNotificationRegistration {
                     binding: mqtt_consumer.binding(),
                     services: ConsumerServices {
                         data: Arc::new(MqttJsonData),
                         access: Arc::new(Access),
                     },
-                }])
-                .unwrap();
+                }],
+                &consumer_bank,
+            )
+            .unwrap();
             let thing = serde_json::from_value(td).unwrap();
             let mut limits = GatewayDefaultV1::LIMITS.clone();
             assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));
@@ -416,9 +427,10 @@ mod live {
                 )
             })
             .unwrap_or_else(|_| panic!());
-            let mut events = ConsumerNotificationRuntime::try_new(
+            let mut events = NotificationFixture::try_new(
                 consumer_owner.reference(),
                 event_definition,
+                Arc::new(Access),
                 RawNotificationLimits {
                     subscriptions: 2,
                     queue_items: 4,

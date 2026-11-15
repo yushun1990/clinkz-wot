@@ -43,7 +43,8 @@ document = "docs/work-packages/WP-400-servient.md"
 owner_crates = ["servient", "servient/finite", "core"]
 # Operation-scoped finite/continuing Action Consumer and notifications compose below preparation;
 # shared instance authority is independent of native facets (WP-400). Finite
-# persistent associations and explicit work capacity have independent cardinality.
+# and notification persistent associations and explicit work capacity have
+# independent cardinality; continuing Action capacity remains separate work.
 depends_on = ["WP-100", "WP-300"]
 
 [[package]]

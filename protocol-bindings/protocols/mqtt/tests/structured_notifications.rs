@@ -6,12 +6,12 @@ mod support;
 use clinkz_wot_core::{consumer::*, notification::*};
 use clinkz_wot_planning::open_consumer::*;
 #[cfg(feature = "broker-tests")]
-use clinkz_wot_servient_finite::{consumer_notification::*, notification::*};
+use clinkz_wot_servient_finite::notification::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 use support::*;
 
 #[cfg(feature = "broker-tests")]
-type Consumer = ConsumerNotificationRuntime<MqttNotificationConsumer>;
+type Consumer = NotificationFixture<MqttNotificationConsumer>;
 #[derive(Default)]
 struct Access(AtomicBool);
 impl ConsumerAccessService for Access {
@@ -101,10 +101,13 @@ fn definition(
     work: &mut WorkBudget,
 ) -> CoreResult<ConsumerNotificationDefinition<MqttNotificationConsumer>> {
     let source = serde_json::from_value(value).unwrap();
-    let registry = ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
-        binding: service.binding(),
-        services: ConsumerServices { data, access },
-    }])?;
+    let registry = ConsumerNotificationRegistry::try_new(
+        vec![ConsumerNotificationRegistration {
+            binding: service.binding(),
+            services: ConsumerServices { data, access },
+        }],
+        bank,
+    )?;
     registry.prepare_notification(
         &source,
         &target(kind),
@@ -619,7 +622,7 @@ fn structured_engine_producer_to_consumers_preserves_sharing_and_original_retain
             let one = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
             let two = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(2), Generation::INITIAL));
             let make = |consumer: &ConsumerInstance| Consumer::try_new(consumer.reference(),
-                definition(&service, v.clone(), kind, &bank, Arc::new(Access::default()), Arc::new(MqttJsonData), &preparation_limits(), &mut budget()).unwrap(), raw_limits())
+                definition(&service, v.clone(), kind, &bank, Arc::new(Access::default()), Arc::new(MqttJsonData), &preparation_limits(), &mut budget()).unwrap(), Arc::new(Access::default()), raw_limits())
                 .unwrap_or_else(|_| panic!("runtime"));
             let mut first = make(&one);
             let mut second = make(&two);
@@ -665,6 +668,7 @@ fn structured_engine_producer_to_consumers_preserves_sharing_and_original_retain
             assert!(second.front(&mut b, &mut budget()).is_err());
             let s = settled(&mut second, &b).await;
             assert_eq!(s.identity.consumer, two.reference());
+            drop(s);
             assert!(!service.connected());
             exposure.begin_close();
             drop((exposure, first, second, o));
@@ -740,7 +744,7 @@ fn independent_native_peer_cannot_deliver_invalid_nested_data_or_bypass_fresh_po
                     &mut budget(),
                 )
                 .unwrap();
-                let mut c = Consumer::try_new(owner.reference(), d, raw_limits())
+                let mut c = Consumer::try_new(owner.reference(), d, access.clone(), raw_limits())
                     .unwrap_or_else(|_| panic!());
                 let mut cursor = c
                     .subscribe(
@@ -771,6 +775,7 @@ fn independent_native_peer_cannot_deliver_invalid_nested_data_or_bypass_fresh_po
                 assert!(c.front(&mut cursor, &mut budget()).is_err());
                 drop(c);
                 assert!(!s.connected());
+                drop(result);
                 assert_empty(&bank);
             }
         }

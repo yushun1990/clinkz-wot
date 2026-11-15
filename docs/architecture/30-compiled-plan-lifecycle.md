@@ -29,6 +29,15 @@ original physical funding are separate from each mapping's checked endpoint,
 exact execution registration and live instance binding. It does not turn that
 HTTP representation into a required Engine program, cache or per-Thing owner.
 
+The notification Host path likewise retains one actual prepared mapping while
+binding independent logical associations and supplying conversation capacity
+separately. Its native program remains endpoint/registration specialized. Original
+service-owner import and prepared-declaration fencing follow
+[Planning](../spec/planning.md#open-consumer-notification-preparation); original
+occurrence policy and retained work follow
+[Runtime Safety](../spec/runtime-safety.md#notification-associations-and-conversation-capacity).
+This does not qualify authenticated source provenance or cross-endpoint lowering.
+
 Prepared security requirements are immutable content; credential services, verified
 principals and opaque per-call capabilities are live dependencies/work. Native key
 and trust owners remain in the Binding. Content sharing never shares permission. A physical content owner and its

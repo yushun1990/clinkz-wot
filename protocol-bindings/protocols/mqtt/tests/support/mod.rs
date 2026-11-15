@@ -239,3 +239,8 @@ pub fn collection_instance(
             ProducerNotificationSource::property("enabled"),
         ])
 }
+
+#[path = "../../../../../servient/finite/tests/support/composed_notification.rs"]
+mod composed_fixture;
+#[allow(unused_imports)]
+pub use composed_fixture::NotificationFixture;

@@ -285,6 +285,14 @@ credential leakage or an unmeasured allocator result. The finite path already
 retains and checks captured declarations; apply that obligation to other
 handoffs without silently capturing a new baseline.
 
+**Scoped notification disposition:** the later
+[notification composition evidence](../evidence/consumer-notification-composition.md)
+corrects this notification F2/F3 handoff through original service-owner import,
+prepared declaration checks and independent association/work capacity. It also
+adds original named occurrence policy. This does not resolve the continuing
+Action defects or establish authenticated source provenance. The diagnostic
+probe above remains historical evidence against its reviewed revision/API.
+
 **Proposed engineering sequence.** Increments establish ownership guarantees,
 using concrete paths to falsify them; they do not promote existing family
 containers into the target. Correct F1 before broader Producer authority claims

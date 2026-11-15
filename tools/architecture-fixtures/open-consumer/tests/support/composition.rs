@@ -1,3 +1,5 @@
+#[path = "../../../../../servient/finite/tests/support/composed_notification.rs"]
+mod composed_fixture;
 use super::*;
 use clinkz_wot_core::{consumer::*, notification::*};
 use clinkz_wot_servient_finite::notification::*;
@@ -146,7 +148,7 @@ fn same_named_property_and_action_have_distinct_definitions_inputs_results_and_w
     for n in ["7", "8"] {
         let mut call =
             rt.0.invoke_action(&rt.1, "a", integer(n), Deadline::NONE, now(), &mut work())
-                .unwrap_or_else(|e| panic!("{:?}", e.error()));
+                .unwrap_or_else(|e| panic!("{:?}", e));
         let result = poll(&mut call);
         assert_eq!(result.consumer(), &owner.reference());
         assert_eq!(result.operation(), Operation::InvokeAction);
@@ -803,28 +805,35 @@ struct Access(Rc<Hub>);
 impl NotificationAuthorizer for Access {
     fn authorize(
         &self,
-        id: &NotificationIdentity,
-        _: &AffordanceTarget,
-        _: NotificationPermission,
-    ) -> CoreResult<()> {
-        assert!(id.consumer.is_current());
+        request: NotificationAuthorization<'_>,
+    ) -> CoreResult<NotificationDecision> {
+        assert!(request.recipient.consumer.is_current());
         if self.0.deny.get() {
             Err(invalid())
         } else {
-            Ok(())
+            Ok(NotificationDecision::Allow)
         }
     }
 }
-fn observations(
-    owner: &ConsumerInstance,
+struct Observations {
+    inner: RawNotificationServient<Observe, Access>,
+    consumer: ConsumerInstanceRef,
     hub: Rc<Hub>,
-) -> RawNotificationServient<Observe, Access> {
-    RawNotificationServient::try_new(
-        Observe(hub.clone()),
-        1,
-        Access(hub),
-        owner.reference(),
-        RawNotificationLimits {
+}
+impl core::ops::Deref for Observations {
+    type Target = RawNotificationServient<Observe, Access>;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+impl core::ops::DerefMut for Observations {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+fn observations(owner: &ConsumerInstance, hub: Rc<Hub>) -> Observations {
+    Observations {
+        inner: RawNotificationServient::try_new(RawNotificationLimits {
             subscriptions: 2,
             queue_items: 2,
             queue_payload_bytes: 1024,
@@ -832,10 +841,13 @@ fn observations(
             control_backing_bytes: 0,
             target_name_bytes: 256,
             engine_bytes: 32768,
-        },
-    )
-    .unwrap_or_else(|_| panic!())
+        })
+        .unwrap(),
+        consumer: owner.reference(),
+        hub,
+    }
 }
+
 fn hub(peer: SocketAddr) -> Rc<Hub> {
     let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
     socket.set_nonblocking(true).unwrap();
@@ -849,24 +861,31 @@ fn hub(peer: SocketAddr) -> Rc<Hub> {
         closes: Cell::new(0),
     })
 }
-fn subscribe(root: &mut RawNotificationServient<Observe, Access>) -> NotificationCursor {
-    root.subscribe(
-        RawNotificationRequest {
-            target: AffordanceTarget::Property(Arc::from("a")),
-            kind: NotificationKind::PropertyObservation,
-            subscription: SubscriptionInput(None),
-            responses: ResponseRequirement::None,
-            overflow: NotificationOverflow::Terminate,
-        },
-        (),
-        &mut work(),
+fn subscribe(root: &mut Observations) -> NotificationCursor {
+    let context = RawNotificationContext::try_new(
+        Observe(root.hub.clone()),
+        1,
+        Access(root.hub.clone()),
+        root.consumer.clone(),
+        None,
     )
-    .unwrap_or_else(|_| panic!())
+    .unwrap_or_else(|_| panic!());
+    root.inner
+        .subscribe(
+            RawNotificationRequest {
+                target: AffordanceTarget::Property(Arc::from("a")),
+                kind: NotificationKind::PropertyObservation,
+                subscription: SubscriptionInput(None),
+                responses: ResponseRequirement::None,
+                overflow: NotificationOverflow::Terminate,
+            },
+            (),
+            context,
+            &mut work(),
+        )
+        .unwrap_or_else(|_| panic!())
 }
-fn progress(
-    root: &mut RawNotificationServient<Observe, Access>,
-    cursor: &NotificationCursor,
-) -> NotificationState {
+fn progress(root: &mut Observations, cursor: &NotificationCursor) -> NotificationState {
     root.progress(
         cursor.identity(),
         &mut Context::from_waker(Waker::noop()),
@@ -874,7 +893,7 @@ fn progress(
     )
     .unwrap()
 }
-fn deliver(root: &mut RawNotificationServient<Observe, Access>, cursor: &mut NotificationCursor) {
+fn deliver(root: &mut Observations, cursor: &mut NotificationCursor) {
     let start = Instant::now();
     loop {
         progress(root, cursor);
@@ -1171,7 +1190,7 @@ impl ConsumerNotificationPreparation for Observe {
 }
 #[test]
 fn downstream_property_preparation_uses_real_datagrams_after_source_and_registry_drop() {
-    use clinkz_wot_servient_finite::consumer_notification::ConsumerNotificationRuntime;
+    use composed_fixture::NotificationFixture;
     let peer = UdpSocket::bind("127.0.0.1:0").unwrap();
     peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
     let hub = hub(peer.local_addr().unwrap());
@@ -1183,15 +1202,17 @@ fn downstream_property_preparation_uses_real_datagrams_after_source_and_registry
         .unwrap();
         td["properties"]["a"]["observable"] = json!(true);
         let thing = serde_json::from_value(td).unwrap();
-        let registry =
-            ConsumerNotificationRegistry::try_new(vec![ConsumerNotificationRegistration {
+        let registry = ConsumerNotificationRegistry::try_new(
+            vec![ConsumerNotificationRegistration {
                 binding: Observe(hub.clone()),
                 services: ConsumerServices {
                     data: services(Arc::new(Probe::default())).data,
                     access: Arc::new(ObserveAccess),
                 },
-            }])
-            .unwrap();
+            }],
+            &bank,
+        )
+        .unwrap();
         registry
             .prepare_notification(
                 &thing,
@@ -1205,9 +1226,10 @@ fn downstream_property_preparation_uses_real_datagrams_after_source_and_registry
             .unwrap()
     };
     let owner = instance();
-    let mut root = ConsumerNotificationRuntime::try_new(
+    let mut root = NotificationFixture::try_new(
         owner.reference(),
         definition,
+        Arc::new(ObserveAccess),
         RawNotificationLimits {
             subscriptions: 2,
             queue_items: 2,

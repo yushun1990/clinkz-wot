@@ -89,7 +89,10 @@ test Bindings supply this evidence at their claimed scopes. The typed
 `ConsumerNotificationPreparation` facet now hands TD-selected Property/Event programs and
 actual services to the same notification participation API. The registered MQTT
 Consumer shares native topic interests and distribution across independent
-logical Consumers; real Mosquitto integration joins the existing qualified
+logical Consumers. The association/capacity increment reuses the same actual
+compiled program across independent Consumers while MQTT retains all native
+matching/distribution and leases; it adds no Engine subscription pool. Real
+Mosquitto integration joins the existing qualified
 Engine Producer to those Consumers, including stop, loss, replacement and final
 release. The [MQTT subset](../../protocol-bindings/protocols/mqtt/README.md) retains
 its concrete limits and control/response refusals;

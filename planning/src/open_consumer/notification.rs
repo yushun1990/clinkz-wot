@@ -31,20 +31,64 @@ pub struct ConsumerNotificationRegistration<B> {
     pub binding: B,
     pub services: ConsumerServices,
 }
+pub struct RetainedConsumerNotificationRegistration<B> {
+    pub binding: B,
+    pub services: RetainedConsumerServices,
+}
 pub struct ConsumerNotificationRegistry<B> {
-    registrations: Vec<ConsumerNotificationRegistration<B>>,
+    registrations: Vec<RetainedConsumerNotificationRegistration<B>>,
 }
 impl<B: ConsumerNotificationPreparation> ConsumerNotificationRegistry<B>
 where
     B::Configuration: Clone,
 {
-    pub fn try_new(registrations: Vec<ConsumerNotificationRegistration<B>>) -> CoreResult<Self> {
+    /// Adopt raw backing once at startup, recognizing aliases within this
+    /// registry. Across registries, import the same retained owners explicitly.
+    pub fn try_new(
+        inputs: Vec<ConsumerNotificationRegistration<B>>,
+        bank: &Arc<HostResourceAccounts>,
+    ) -> CoreResult<Self> {
+        if inputs.is_empty() || inputs.len() > MAX_REGISTRATIONS {
+            return Err(invalid());
+        }
+        let mut registrations: Vec<RetainedConsumerNotificationRegistration<B>> = Vec::new();
+        registrations
+            .try_reserve_exact(inputs.len())
+            .map_err(|_| busy())?;
+        for (i, input) in inputs.iter().enumerate() {
+            let data = match inputs[..i]
+                .iter()
+                .position(|old| Arc::ptr_eq(&old.services.data, &input.services.data))
+            {
+                Some(first) => registrations[first].services.data.clone(),
+                None => ConsumerServiceOwner::retain_data(input.services.data.clone(), bank)
+                    .map_err(|e| e.error().error().clone())?,
+            };
+            let access = match inputs[..i]
+                .iter()
+                .position(|old| Arc::ptr_eq(&old.services.access, &input.services.access))
+            {
+                Some(first) => registrations[first].services.access.clone(),
+                None => ConsumerServiceOwner::retain_access(input.services.access.clone(), bank)
+                    .map_err(|e| e.error().error().clone())?,
+            };
+            registrations.push(RetainedConsumerNotificationRegistration {
+                binding: input.binding.clone(),
+                services: RetainedConsumerServices { data, access },
+            });
+        }
+        Self::try_from_retained(registrations)
+    }
+    pub fn try_from_retained(
+        registrations: Vec<RetainedConsumerNotificationRegistration<B>>,
+    ) -> CoreResult<Self> {
         if registrations.is_empty()
             || registrations.len() > MAX_REGISTRATIONS
             || registrations.iter().enumerate().any(|(i, r)| {
                 let id = r.binding.registration_identity();
                 r.binding.identity() != (id.binding_id(), id.binding_generation())
                     || r.binding.preparation_bounds().work == 0
+                    || r.services.check_backing().is_err()
                     || r.services.access.work() == 0
                     || r.services.data.policy().validation_work == 0
                     || registrations[..i]
@@ -296,13 +340,18 @@ where
                 return Err(busy());
             }
             let data = &r.services.data;
+            r.services.check_backing()?;
+            let policy = data.policy();
+            let configuration = r.binding.configuration().clone();
+            let access_work = r.services.access.work();
+            let revision = r.services.access.security_revision();
             if !data.available()
                 || data.content_type() != facts.content_type
-                || !schemas.supports(data.as_ref())
+                || !schemas.supports(data.service())
             {
                 continue;
             }
-            if !pay(budget, W::ProviderProbes, r.services.access.work()) {
+            if !pay(budget, W::ProviderProbes, access_work) {
                 return Err(busy());
             }
             if r.services
@@ -328,7 +377,7 @@ where
                 return Err(busy());
             }
             let _temporary = reserve(
-                &bank,
+                bank,
                 &[
                     (K::EngineLiveBytesGlobalMax, bounds.temporary_bytes),
                     (K::AdmissionTemporaryBytesGlobalMax, bounds.temporary_bytes),
@@ -340,11 +389,9 @@ where
                     1024 + endpoint.len() as u64 + target.name().map_or(0, str::len) as u64,
                 )
                 .and_then(|n| n.checked_add(schemas.retained_bytes() as u64))
-                .and_then(|n| n.checked_add(data.policy().retained_bytes))
-                .and_then(|n| n.checked_add(r.services.access.retained_bytes()))
                 .ok_or_else(invalid)?;
             let funding = reserve(
-                &bank,
+                bank,
                 &[
                     (K::EngineLiveBytesGlobalMax, retained),
                     (K::CleanupItemsMax, 1),
@@ -361,26 +408,43 @@ where
                 Ok(None) | Err(CoreError::UnsupportedOperation(_)) => continue,
                 Err(e) => return Err(e),
             };
-            r.binding.support(&program, kind)?;
+            let support = r.binding.support(&program, kind)?;
+            // Callbacks cannot reset the funded admission baseline.
+            r.services.check_backing()?;
+            if data.policy() != policy
+                || r.binding.configuration() != &configuration
+                || r.binding.registration_identity() != id
+                || r.binding.preparation_bounds() != bounds
+                || r.services.access.work() != access_work
+                || r.services.access.security_revision() != revision
+                || !data.available()
+                || data.content_type() != facts.content_type
+                || !schemas.supports(data.service())
+            {
+                return Err(invalid());
+            }
             if chosen.is_some() {
                 return Err(ambiguous());
             }
-            chosen = Some((r, id, program, funding));
+            chosen = Some((r, id, program, configuration, policy, support, funding));
         }
-        let Some((r, id, program, funding)) = chosen else {
+        let Some((r, id, program, configuration, data_policy, support, funding)) = chosen else {
             return Ok(None);
         };
         Ok(Some(
             ConsumerNotificationDefinition::try_new(ConsumerNotificationDefinitionInput {
                 binding: r.binding.clone(),
                 program,
-                configuration: r.binding.configuration().clone(),
+                configuration,
                 identity: id,
                 target: target.clone(),
                 endpoint: endpoint.into(),
                 form: index,
                 schemas,
-                services: r.services.clone(),
+                data: r.services.data.clone(),
+                data_policy,
+                content_type: facts.content_type.into(),
+                support,
                 funding,
                 bank: bank.clone(),
             })

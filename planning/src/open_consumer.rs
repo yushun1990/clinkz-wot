@@ -23,7 +23,7 @@ const MAX_REGISTRATIONS: usize = 32;
 const MAX_OPERATIONS: usize = 128;
 
 /// Complete bounds of a pure typed native compilation, including rollback.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ConsumerPreparationBounds {
     pub work: u64,
     pub temporary_bytes: u64,

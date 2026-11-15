@@ -156,7 +156,7 @@ production HTTPS, constrained-profile or v1 qualification. Those remain delivery
 | --- | --- | --- |
 | 1 — Producer native/semantic authority boundary | Remove the Binding-to-Servient execution authority leak (Review 10 F1). Binding owns native matching, correlation, I/O and retirement; Servient alone decides logical admission, dispatch and revocation. Begin with the existing real HTTP continuing Action path; do not prescribe a universal RPC/session or a callback facade that secretly forwards Engine authority. | HTTP Action invoke/query/cancel and original continuation/result/cleanup work through native candidates/opportunities and a protocol-neutral Servient handoff. The HTTP Binding no longer depends on `servient-finite` to dispatch application work; failure before/after publication, late outcomes and independent native release remain truthful. |
 | 2 — Reusable definition compilation and checked instance binding (0081) | Converge the already accepted definition/instance/authority split into useful cross-instance preparation and compilation reuse **before** extending the same coupling to more runtime families. Reuse only genuinely invariant work with checked Binding dependencies/operands; endpoint-specialized mappings remain specialized. No universal `CompiledProgram`, cache or persisted image is prescribed. | With fixed compatible definitions and increasing Thing instances, distinguish definition-compilation work from necessary TD input checks, instance binding/admission and native specialization. Demonstrate a real qualifying reuse path, changed-dependency refusal/recompilation, independent permissions/accounts and final physical release; do not label semantic-content sharing alone as compiler reuse. |
-| 3 — Continuing Consumer notification composition | Extend independent logical association and capacity ownership to established conversations; retain exact per-occurrence target and qualified source/verification context for fresh policy where required. Preserve native sharing/stop/response rights and fix Review 10 F2/F3 at affected service handoffs. | Real MQTT notification conversations remain independently authorized under shared compatible native interests. A concrete evidence-bearing source mapping tests per-occurrence policy without treating an unauthenticated topic as a verified principal; queued delivery, stop, loss, late work and physical cleanup retain their original owners. |
+| 3 — Continuing Consumer notification composition | Independent Host notification associations/capacity, actual mapping reuse, named occurrence policy and notification F2/F3 corrections are implemented at the scoped evidence below. Extend original per-occurrence context to qualified source/verification evidence where required; preserve native sharing/stop/response rights. | Real MQTT notification conversations remain independently authorized under shared compatible native interests. A concrete evidence-bearing source mapping tests per-occurrence policy without treating an unauthenticated topic as a verified principal; queued delivery, stop, loss, late work and physical cleanup retain their original owners. |
 | 4 — Continuing Action and multi-capability reuse | Decouple continuing invocation capacity and checked prepared-service ownership from per-instance Runtime construction. Integrate finite, Action, notification and qualified Producer capabilities under their common logical authority without a mega-Runtime; repair F2/F3 and obsolete adapters as the affected boundaries are changed. | Original invoke/query/cancel mappings and late outcomes survive initial exchange, replacement and retirement. Actual shared content/services are funded once, prepared declarations cannot silently change during runtime construction, and mixed HTTP/MQTT capabilities retain independent progress and cleanup. |
 | 5 — Secure execution and Discovery clients | Broaden actual DataSchema/media/security execution, Host HTTPS and explicit bounded trusted Discovery/Directory retrieval where their dependencies are ready; these can proceed independently of the cross-family sequence. | Supported assertions, security branches and trusted retrieval execute through actual providers and peers without source-TD callbacks, silent weakening, credential leakage or fabricated interoperability claims. |
 | 6 — Product integration and supported profiles | Provide convenient execution composition for supported deployments alongside simple, composable manual poll/step APIs; converge Host HTTP/HTTPS delivery, selected portable/static representations and scoped v1 qualification. Integrate with deployment-supplied async runtimes, event loops, timers or main loops without prescribing Tokio, a universal scheduler, mega-Runtime or one execution owner per Thing. | Applications can progress supported mixed capabilities and cleanup through higher-level integration, with independent semantic/native ownership and preserved safety guarantees. Supported role/operation/profile combinations have actual integration, conformance, resource/performance and lifecycle evidence; unsupported combinations remain explicit. |
@@ -231,15 +231,21 @@ alone meets this objective. Automatic caching, disk persistence, universal
 `CompiledProgram` and fleet-scale throughput are independent optional choices,
 not prerequisites.
 
-Then extend the same independently retained association/capacity principles
-where continuing Consumer Notification and Action lifetimes need them. Original
-notification occurrence context must reach the relevant fresh policy without
-equating a native topic with authenticated identity; compatible native sharing
-must keep independent logical rights and physical leases. Repair F2/F3 shared
-service charging and prepared-declaration fencing when those handoffs are
-changed. Preserve family-specific state and support both manual driving and
-convenient higher-level execution composition. These are independently useful
-capabilities, not an all-family migration gate.
+The [notification association/capacity increment](docs/evidence/consumer-notification-composition.md)
+now shares an actual prepared mapping across independent Consumer associations,
+funds admitted conversations separately and repairs notification F2/F3 service
+ownership/declaration fencing. Original named Event coordinates reach fresh queued
+delivery/response policy; MQTT keeps native matching/distribution and physical
+leases. This is a scoped Host/manual capability, not completion of priority 3:
+authenticated source provenance still needs an evidence-bearing mapping/verifier,
+retained original trust/dependency context and forged/absent/ambiguous/stale-proof
+checks. Neither topics nor NoSec payloads establish that claim. Cross-endpoint
+notification lowering and managed multi-family registration also remain open.
+Continue the same independently retained association/capacity principles for
+continuing Actions, including their remaining F2/F3 corrections. Preserve
+family-specific state and support both manual driving and convenient higher-level
+execution composition. These are independently useful capabilities, not an
+all-family migration gate.
 
 Current implementations require application-driven poll/step turns, including
 after passive revocation or abandoned work; the existing runtime-safety contract
