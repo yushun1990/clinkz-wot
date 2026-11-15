@@ -385,6 +385,9 @@ impl ConsumerActionRegistry {
             let bytes = b
                 .retained_bytes
                 .checked_add(1024 + endpoint.len() as u64 + name.len() as u64)
+                // The service owner funds its original media string. This
+                // independent snapshot is acquired at the definition bank.
+                .and_then(|bytes| bytes.checked_add(content_type.len() as u64))
                 .ok_or_else(invalid)?;
             let funding = reserve(
                 bank,

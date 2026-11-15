@@ -28,6 +28,16 @@ backing dies under its original bank charge, and all banks return to zero after
 final release. These are resource-account measurements, not allocator heap,
 throughput or preparation-time measurements.
 
+The [preparation accounting regression](../../planning/tests/consumer_action_ownership.rs)
+uses an external test Binding with matching retained data services and 16-byte
+versus 4,143-byte media strings. Each definition owns a distinct media snapshot;
+its definition-bank reservation grows by exactly the 4,127-byte difference, while
+the original service-bank charge stays fixed during preparation. A definition
+bank one byte short of the complete copy reservation refuses before native
+compilation and releases partial preparation funding. Final owner disposal returns
+both banks to zero. This is preparation-only evidence, not HTTP support for that
+media parameter or a native execution claim.
+
 The F3 cases prepare once, then change data backing, temporary bytes, validation
 work, media or schema support, or native exchange bytes, poll work, registration
 identity or operation. Association construction refuses and returns the exact

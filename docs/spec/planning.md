@@ -384,7 +384,9 @@ owners disappear. `ConsumerActionRegistration` imports `RetainedConsumerServices
 from startup composition: service backing is adopted once at its original bank,
 then referenced across selected operations, definitions, registries and families.
 Mapping/schema/reference costs remain separately funded. Selection never adds
-physical data/access backing to each operation's reservation.
+physical data/access backing to each operation's reservation. Each owned media
+snapshot is a distinct copy: its actual length is reserved at the definition
+bank before acquisition, separately from the service's original string.
 
 Preparation captures the complete data policy/media/support, native identity,
 operation and exchange/continuation/result/scratch/work bounds. It checks original
