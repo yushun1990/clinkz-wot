@@ -2,6 +2,9 @@
 //! definition across independent names, native routes and logical authorities.
 use super::*;
 
+#[path = "shared_listener.rs"]
+mod shared_listener;
+
 #[derive(Default)]
 struct App {
     denied: Cell<bool>,
@@ -90,6 +93,19 @@ fn input(
     value: u8,
     app: Rc<App>,
 ) -> ComposedProducerInput {
+    input_with_listener(owner, authority, td, provider, name, value, app, None)
+}
+#[allow(clippy::too_many_arguments)] // Each independent publication operand is explicit in the fixture.
+fn input_with_listener(
+    owner: &RawProducerServient,
+    authority: ProducerInstanceAuthority,
+    td: &serde_json::Value,
+    provider: Rc<HttpFiniteProducer>,
+    name: &'static str,
+    value: u8,
+    app: Rc<App>,
+    listener: Option<&HttpFiniteListener>,
+) -> ComposedProducerInput {
     let key = authority.key();
     let instance = RawProducerInstance::new(
         authority,
@@ -132,6 +148,10 @@ fn input(
         .collect();
     let listen = HttpProducerConfig::for_loopback(mappings[0].1.listen_address()).unwrap();
     let config = HttpFiniteConfig::try_from_mappings(listen, mappings, key, 100).unwrap();
+    let config = match listener {
+        Some(listener) => config.with_listener(listener).unwrap(),
+        None => config,
+    };
     let runtime = RawFiniteRuntime::try_new(
         HttpFiniteBinding::new(config.clone(), provider.identity().0, provider.identity().1),
         config,

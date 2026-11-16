@@ -19,9 +19,11 @@ use std::{
 };
 #[cfg(feature = "prepare")]
 mod compiler;
+mod finite_listener;
 #[cfg(feature = "prepare")]
 mod finite_preparation;
 mod finite_producer;
+pub use finite_listener::HttpFiniteListener;
 #[cfg(feature = "prepare")]
 pub use finite_preparation::HttpFiniteProducer;
 #[cfg(all(test, feature = "prepare"))]

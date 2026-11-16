@@ -1,6 +1,9 @@
 //! Direct native participation in the shared finite execution architecture.
 //! No old installation, accept permit, handler or Servient dependency is used.
-use crate::{HttpProducerConfig, HttpProducerProgram, producer_transport::NativeConnection};
+use crate::{
+    HttpFiniteListener, HttpProducerConfig, HttpProducerProgram,
+    producer_transport::NativeConnection,
+};
 use clinkz_wot_core::{finite::*, producer::*, *};
 use clinkz_wot_foundation::MonotonicInstant;
 use std::{
@@ -21,6 +24,7 @@ pub struct HttpFiniteConfig {
     instance: ProducerInstanceKey,
     request_timeout_ticks: u64,
     security: Option<crate::HttpServerSecurity>,
+    listener: Option<HttpFiniteListener>,
 }
 
 impl HttpFiniteConfig {
@@ -65,6 +69,7 @@ impl HttpFiniteConfig {
             instance,
             request_timeout_ticks,
             security: None,
+            listener: None,
         })
     }
 
@@ -102,6 +107,7 @@ impl HttpFiniteConfig {
             instance,
             request_timeout_ticks,
             security: None,
+            listener: None,
         })
     }
 
@@ -119,6 +125,16 @@ impl HttpFiniteConfig {
         self.security = Some(security);
         Ok(self)
     }
+    /// Share compatible native infrastructure with independent participants.
+    /// The route lease is acquired at funded start, not configuration time.
+    pub fn with_listener(mut self, listener: &HttpFiniteListener) -> CoreResult<Self> {
+        if self.security.is_some() || !listener.compatible(self.listen, self.request_timeout_ticks)
+        {
+            return Err(crate::producer::producer_unsupported());
+        }
+        self.listener = Some(listener.clone());
+        Ok(self)
+    }
     pub fn listen_address(&self) -> std::net::SocketAddr {
         self.listen.listen_address()
     }
@@ -134,11 +150,13 @@ pub struct HttpFiniteReply {
     authentication: crate::security::HttpSecurity,
 }
 
-/// Manually polled HTTP listener/correlation owner. This facet directly uses
+/// Manually polled HTTP participation/correlation owner. This facet directly uses
 /// FiniteIngressBinding. Its only interaction with behavior is an owned candidate
 /// and a borrowed result; native polling cannot dispatch application code.
 ///
-/// At most 32 native root/Property mappings share one listener and one exchange.
+/// At most 32 native root/Property mappings share one participant's exchange.
+/// A compatible HttpFiniteListener can supply the physical listener for several
+/// independent participants; each keeps its original recipient and reply.
 /// HTTP/1.1 GET/PUT, exact path/Host, 16 headers/8192 bytes, JSON input/output
 /// <=4096 bytes and 4096 I/O bytes per native poll. Hyper/socket allocations are native
 /// Host backing, not a transitive allocation-free or aggregate-RAM guarantee.
@@ -149,6 +167,7 @@ pub struct HttpFiniteBinding {
     issuer: Arc<()>,
     connection: Option<NativeConnection>,
     listener: Option<TcpListener>,
+    shared_lease: Option<u64>,
     correlation: u64,
     accepted_mapping: Option<usize>,
     request_deadline: Deadline,
@@ -162,6 +181,9 @@ impl HttpFiniteBinding {
     pub fn bound_address(&self) -> Option<std::net::SocketAddr> {
         if self.closed || self.failed.is_some() {
             return None;
+        }
+        if self.shared_lease.is_some() {
+            return self.configuration.listener.as_ref()?.bound_address();
         }
         self.listener.as_ref()?.local_addr().ok()
     }
@@ -178,6 +200,7 @@ impl HttpFiniteBinding {
             issuer: Arc::new(()),
             connection: None,
             listener: None,
+            shared_lease: None,
             correlation: 0,
             accepted_mapping: None,
             request_deadline: Deadline::NONE,
@@ -204,6 +227,7 @@ impl Drop for HttpFiniteBinding {
     fn drop(&mut self) {
         // Native disposal precedes configuration/program/service release.
         drop(self.connection.take());
+        self.release_shared();
         drop(self.listener.take());
     }
 }
@@ -265,6 +289,11 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         definition: &dyn Any,
     ) -> bool {
         self.prepared_for_instance(key)
+            && self
+                .configuration
+                .listener
+                .as_ref()
+                .is_none_or(|s| s.available())
             && self.configuration.mappings.iter().any(|(target, program)| {
                 (match (target, site) {
                     (AffordanceTarget::Thing, clinkz_wot_core::thing::AffordanceSite::Thing) => {
@@ -332,6 +361,18 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         if let Some(error) = &self.failed {
             return Poll::Ready(Err(error.clone()));
         }
+        if self.shared_lease.is_some() {
+            return Poll::Ready(Ok(()));
+        }
+        if let Some(listener) = &self.configuration.listener {
+            return match listener.acquire(self.configuration.mappings.clone()) {
+                Ok(lease) => {
+                    self.shared_lease = Some(lease);
+                    Poll::Ready(Ok(()))
+                }
+                Err(_) => Poll::Ready(Err(self.failure(ErrorPhase::Prepare))),
+            };
+        }
         if self.listener.is_some() {
             return Poll::Ready(Ok(()));
         }
@@ -371,37 +412,58 @@ impl FiniteIngressBinding for HttpFiniteBinding {
             return Poll::Ready(Err(crate::producer::producer_unsupported()));
         }
         if self.connection.is_none() {
-            let Some(expires) = now.checked_add_ticks(self.configuration.request_timeout_ticks)
-            else {
-                return Poll::Ready(Err(self.failure(ErrorPhase::Binding)));
-            };
-            let Some(listener) = &self.listener else {
-                return Poll::Ready(Err(crate::producer::producer_unsupported()));
-            };
-            match listener.accept() {
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    cx.waker().wake_by_ref();
-                    return Poll::Pending;
-                }
-                Err(_) => return Poll::Ready(Err(self.failure(ErrorPhase::Binding))),
-                Ok((stream, _)) => {
-                    if stream.set_nonblocking(true).is_err() {
-                        return Poll::Ready(Err(self.failure(ErrorPhase::Binding)));
+            if let Some(lease) = self.shared_lease {
+                match self
+                    .configuration
+                    .listener
+                    .as_ref()
+                    .unwrap()
+                    .receive(lease, cx, now)
+                {
+                    Ok(Some(shared)) => {
+                        self.connection = Some(shared.connection);
+                        self.request_deadline = shared.deadline;
+                        let Some(next) = self.correlation.checked_add(1) else {
+                            return Poll::Ready(Err(self.failure(ErrorPhase::Binding)));
+                        };
+                        self.correlation = next;
                     }
-                    let Some(next) = self.correlation.checked_add(1) else {
-                        return Poll::Ready(Err(self.failure(ErrorPhase::Binding)));
-                    };
-                    self.correlation = next;
-                    self.request_deadline = Deadline::at(expires);
-                    self.connection = Some(NativeConnection::from_programs_secured(
-                        stream,
-                        self.configuration
-                            .mappings
-                            .iter()
-                            .map(|(_, p)| p.clone())
-                            .collect(),
-                        self.configuration.security.as_ref().map(|s| s.tls.clone()),
-                    ));
+                    Ok(None) => return Poll::Pending,
+                    Err(_) => return Poll::Ready(Err(self.failure(ErrorPhase::Binding))),
+                }
+            } else {
+                let Some(expires) = now.checked_add_ticks(self.configuration.request_timeout_ticks)
+                else {
+                    return Poll::Ready(Err(self.failure(ErrorPhase::Binding)));
+                };
+                let Some(listener) = &self.listener else {
+                    return Poll::Ready(Err(crate::producer::producer_unsupported()));
+                };
+                match listener.accept() {
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        cx.waker().wake_by_ref();
+                        return Poll::Pending;
+                    }
+                    Err(_) => return Poll::Ready(Err(self.failure(ErrorPhase::Binding))),
+                    Ok((stream, _)) => {
+                        if stream.set_nonblocking(true).is_err() {
+                            return Poll::Ready(Err(self.failure(ErrorPhase::Binding)));
+                        }
+                        let Some(next) = self.correlation.checked_add(1) else {
+                            return Poll::Ready(Err(self.failure(ErrorPhase::Binding)));
+                        };
+                        self.correlation = next;
+                        self.request_deadline = Deadline::at(expires);
+                        self.connection = Some(NativeConnection::from_programs_secured(
+                            stream,
+                            self.configuration
+                                .mappings
+                                .iter()
+                                .map(|(_, p)| p.clone())
+                                .collect(),
+                            self.configuration.security.as_ref().map(|s| s.tls.clone()),
+                        ));
+                    }
                 }
             }
         }
@@ -411,6 +473,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                 // Unsupported/malformed/disconnected input never escapes as a
                 // semantic candidate. Disposing it leaves the listener usable.
                 drop(self.connection.take());
+                self.finish_shared();
                 self.accepted_mapping = None;
                 self.request_deadline = Deadline::NONE;
                 Poll::Pending
@@ -462,6 +525,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Ok(())) => {
                 drop(self.connection.take());
+                self.finish_shared();
                 self.request_deadline = Deadline::NONE;
                 Poll::Ready(Ok(()))
             }
@@ -486,12 +550,23 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         // delivered and a partial write is never reported as NotDelivered.
         drop(self.connection.take());
         self.accepted_mapping = None;
+        self.release_shared();
         drop(self.listener.take());
         Poll::Ready(Ok(delivery))
     }
 }
 
 impl HttpFiniteBinding {
+    fn finish_shared(&self) {
+        if let Some(lease) = self.shared_lease {
+            self.configuration.listener.as_ref().unwrap().finish(lease);
+        }
+    }
+    fn release_shared(&mut self) {
+        if let Some(lease) = self.shared_lease.take() {
+            self.configuration.listener.as_ref().unwrap().release(lease);
+        }
+    }
     fn program_for(&self, candidate: &FiniteCandidate) -> CoreResult<&HttpProducerProgram> {
         let (target, program) = self
             .accepted_mapping

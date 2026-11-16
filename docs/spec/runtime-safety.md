@@ -807,6 +807,16 @@ gate writes have no callback or partial-failure branch. A revoked exposure close
 every original gate without requiring mutable access to the native drivers.
 Accepted Action work and physical retirement retain their independent owners.
 
+The optional [shared HTTP listener](binding-spi.md#independent-http-listener-participation)
+retains native infrastructure independently of these publication gates. Staged
+native buffering and route leases grant no application authority; every handed-off
+exchange retains its original participant, instance and result/cleanup reservation.
+Closing that participant releases its native lease even if its original unread
+settlement still prevents logical retirement. A sibling or replacement cannot
+acknowledge or fund the old work. Shared socket/parser/queue backing has the
+Binding's bounded native policy; each managed publication still pays its actual
+mapping, input/result, qualification and cleanup costs at its own original bank.
+
 Producer Property value/Event data publication owns an independent native publication and pins the
 original logical instance/reservation, including through replacement and loss of
 the exposure or Servient root. Data admission invokes the publication-captured

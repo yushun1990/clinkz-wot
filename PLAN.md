@@ -268,8 +268,13 @@ Producer collection fixture remains separate evidence. The
 [Producer preparation increment](docs/evidence/producer-preparation-reuse.md) proves
 one explicit invariant HTTP Read compilation across independent qualified
 Things, with fresh routes/behavior/authority and independent publication and
-retirement. Entire prepared Things remain description-specific. Other Producer
-families, shared-listener execution and broader profiles remain open.
+retirement. Entire prepared Things remain description-specific. Independent
+Things now execute through one compatible Binding-owned HTTP listener with
+independent complete qualification, publication/replacement, permission and
+retirement ([native topology evidence](docs/evidence/producer-shared-http-listener.md)).
+The existing SPI supports this topology; no Engine routing or universal runtime
+is needed. Other Producer families, shared secure infrastructure, broader profiles
+and production qualification remain open.
 
 Host applications can progress the supported mixed Consumer work and cleanup
 through one integration turn. Deployment-supplied native wakes and maintenance
