@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0128-producer-finite-capacity.md][0128 Persistent Producer participation and finite work capacity]]
+
 - [[file:0127-producer-shared-http-listener.md][0127 Independent Producer Things on shared native HTTP infrastructure]]
 
 - [[file:0126-reusable-producer-preparation.md][0126 Reusable Producer preparation and independent publication]]

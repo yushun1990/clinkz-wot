@@ -273,8 +273,14 @@ Things now execute through one compatible Binding-owned HTTP listener with
 independent complete qualification, publication/replacement, permission and
 retirement ([native topology evidence](docs/evidence/producer-shared-http-listener.md)).
 The existing SPI supports this topology; no Engine routing or universal runtime
-is needed. Other Producer families, shared secure infrastructure, broader profiles
-and production qualification remain open.
+is needed. [Independent finite Producer capacity](docs/evidence/producer-finite-capacity.md)
+now lets these publications share bounded active work without an idle exclusive
+input/result opportunity per Thing. Native settlement returns execution credit
+while unread or caller-held outcomes retain their original bounded funding.
+HTTP keeps its existing serial native exchange policy per participation; the
+default dedicated opportunity remains available. Producer Host-loop composition,
+continuing-family capacity, shared secure infrastructure, broader profiles and
+production qualification remain open.
 
 Host applications can progress the supported mixed Consumer work and cleanup
 through one integration turn. Deployment-supplied native wakes and maintenance

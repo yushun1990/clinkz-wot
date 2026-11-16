@@ -849,3 +849,12 @@ context lending. The index is checked against the original private reply's
 correlation, rather than exposed as a universal Engine route/Form token.
 Other native concurrency/lifetime strategies must establish equivalent original
 attribution within their own capabilities.
+
+Retaining a settled finite Producer result does not imply native occupancy.
+The optional Host [finite work capacity](runtime-safety.md#finite-producer-participation-and-work-capacity)
+can admit subsequent exchanges while earlier results remain unread. This changes
+no native facet: HTTP still has one queued-or-active connection per participation,
+the original accepted mapping/correlation through send/close, and independent
+listener leases. A Pending receive retains only Binding-owned native parsing;
+the next receive callback still requires a prepaid Engine opportunity. A shared
+work limit is not permission to multiplex or retarget one exclusive native reply.

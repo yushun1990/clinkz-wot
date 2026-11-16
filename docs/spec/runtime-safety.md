@@ -207,8 +207,9 @@ a separately retained settlement. The finite HTTP Consumer's native exchange
 lease follows [Binding SPI](binding-spi.md#native-thing-root-property-collection-reads):
 connection/driver retirement releases that lease independently of retained
 settlements, whose later destruction cannot release a successor's occupancy.
-The finite Producer retires its native exchange before settlement acknowledgement;
-an unread Producer settlement keeps that runtime unavailable for the next receive.
+The finite Producer retires its native exchange before settlement acknowledgement.
+Its default dedicated opportunity stops receives until the result is taken;
+optional independent finite capacity separates that policy as specified below.
 Validated Property Write completion is retained independently of that local
 cause and native delivery. Pre-dispatch refusal remains NotInvoked; errors after
 behavior entry without valid completion remain Unknown. Finite authenticated
@@ -225,6 +226,74 @@ revoke a successor in a reused slot. Its weak cell cannot preserve liveness;
 the retained capacity lease lasts through the last control handle so late weak
 storage does not outlive its accounting. Passive instance/publication revocation
 inside callbacks is observed at the final acceptance/delivery boundary.
+
+### Finite Producer participation and work capacity
+
+`RawFiniteRuntime` remains a persistent typed native participant, with at most
+one active exclusive exchange on that driver. Native configuration, closed
+readiness, complete final-TD qualification, publication membership and native
+retirement remain independent of execution capacity. A caller may select the
+existing dedicated single-opportunity policy or attach `ProducerFiniteCapacity`
+through `with_capacity` before native setup and managed admission. Attachment
+requires the same actual logical owner and sufficient bounds for every field
+of `RawFiniteLimits`; rejection returns the complete original participant.
+Publication/readiness MUST NOT require a vacant shared work opportunity.
+
+The optional capacity has separately bounded active and retained obligations
+(1 through 32 active, active through 32 retained) at one explicit original work
+bank. Retained counts active work, unread outcomes and acknowledged outcomes
+still held by callers. Before each native receive callback it reserves both
+credits and complete Engine input, result and cleanup backing. Saturation or
+account refusal leaves publication current and runs no native receive/handler.
+It MUST NOT consume `BindingPolls`: that credit remains available to a sibling
+whose native progress can release the occupied capacity. Zero native credit
+MUST NOT acquire an opportunity. Each actual native callback is charged just
+before invocation, after its capacity and other work prerequisites succeed.
+Pending parsing remains bounded by the Binding's existing native owner/policy
+and returns the temporary Engine credits; it does not reset the original native
+deadline. A returned ingress keeps its permit through fresh logical admission,
+dispatch/refusal, Pending/error send and terminal native retirement. Zero work
+credit makes no acquisition or callback progress; passive fencing still applies.
+
+Native terminal settlement returns active credit, without granting another
+concurrent exchange on that same driver. A bounded participant-local FIFO retains
+the original outcome, accepted behavior, publication funding and work lease.
+`take_retained_settlement` transfers the oldest complete `ProducerFiniteSettlement`;
+it does not refund retained credit or its original bank. Output and target views
+lend slices/coordinates without exposing original allocation owners. Only final
+disposal refunds retained-work/result/cleanup backing. A capacity-local checked
+sequence distinguishes records, including requests with identical Binding,
+recipient and operation; it confers no authority or native correlation right.
+Acknowledgement cannot redirect an original reply or refund a successor's debit.
+Before a delivery/cleanup poll that may create such a record, the runtime checks
+that `QueueOperations` can cover its current participant-local unread count plus
+one: one visit per existing FIFO link and one insertion. The count is maintained
+without traversal and cannot change during the exclusive native poll. This cost
+is at most the configured retained limit, not an unconditional global maximum.
+Insufficient queue credit invokes no native callback and consumes no native or
+cleanup credit. Pending/error native polls add no queue charge; their normal
+poll and security work still applies. Terminal success charges the checked
+queue cost once, before FIFO mutation.
+Native terminal handoff therefore cannot strand an outcome for lack of queue
+credit, and repeated Pending polls do not repeatedly pay for an absent insertion.
+
+Closing one publication does not close the capacity or a sibling. Final logical
+retirement requires native close and acknowledgement of all its unread records;
+returned outcome owners may survive that retirement and retain original funding.
+Dropping a participant locally disposes its original native driver/configuration
+before releasing active work funding. Unread records are locally disposed within
+the retained bound. The capacity owns no work/result registry or scheduler; loss
+of a facade cannot strand work behind a separate capacity queue. Native socket
+occupancy and final physical listener release remain Binding obligations.
+
+The dedicated raw handoff and narrow `ProducerExposure` facade deliberately keep
+their prior one-opportunity policy. Continuing Producer Actions/notifications
+retain their own capacity and acknowledgement contracts. The shared finite
+increment adds no general Producer Host loop, automatic wakes, timer, fairness,
+native concurrency or all-profile claim. [Executable scope](../evidence/producer-finite-capacity.md)
+uses the existing real shared HTTP listener and qualified final descriptions.
+
+### Continuing Action admission and handoff
 
 Continuing Action admission reserves the maximum selected native exchange,
 opaque continuation, input, response and validation scratch plus cleanup before

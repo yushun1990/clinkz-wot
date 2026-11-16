@@ -71,8 +71,9 @@ pub enum FiniteDelivery {
 
 /// One terminal native and semantic outcome, including the complete owned late
 /// result (even if delivery was refused or uncertain) and original mapping
-/// identity. Each native runtime retains one unread settlement; another exchange
-/// on that runtime cannot be received until it is taken. Siblings are independent.
+/// identity. This carrier does not prescribe execution capacity or result
+/// retention policy. The default Host participant retains one until taken;
+/// optional shared Host capacity wraps it in a separately funded result owner.
 pub struct RawFiniteSettlement {
     /// Actual native runtime association, retained even after independent close.
     pub binding: (BindingId, BindingGeneration),

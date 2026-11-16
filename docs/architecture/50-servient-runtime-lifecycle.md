@@ -31,6 +31,13 @@ inside that local commit. A deterministic support gap found later is a defect:
 close affected acceptance and requalify, rather than quietly returning Unsupported
 for a promise made at publication.
 
+Finite Producer participants may attach independently funded work capacity before
+setup. Publication needs no vacant work opportunity; native receive and accepted
+work acquire bounded capacity separately, and terminal native settlement releases
+execution credit while original result owners remain funded. The exact optional
+and dedicated policies belong to [Runtime Safety](../spec/runtime-safety.md#finite-producer-participation-and-work-capacity).
+Native concurrency and infrastructure ownership remain Binding decisions.
+
 Native candidates retain original logical tokens/captures and backing. Servient
 checks current identity, publication, policy, data and capacity independently per
 recipient, captures behavior and reply capability, and dispatches outside locks.

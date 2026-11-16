@@ -47,6 +47,8 @@ owner_crates = ["servient", "servient/finite", "core"]
 # capacity have independent cardinality. Borrowed Host Consumer turns and explicit
 # HTTP Read instruction reuse across independent qualified Producer publications
 # retain those owners; broader families/profiles remain independently scoped.
+# Optional Producer finite capacity separates persistent native participants,
+# active work and retained outcomes; WP-400 owns the scoped real-HTTP evidence.
 depends_on = ["WP-100", "WP-300"]
 
 [[package]]

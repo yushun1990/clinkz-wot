@@ -106,6 +106,22 @@ fn input_with_listener(
     app: Rc<App>,
     listener: Option<&HttpFiniteListener>,
 ) -> ComposedProducerInput {
+    input_with_capacity(
+        owner, authority, td, provider, name, value, app, listener, None,
+    )
+}
+#[allow(clippy::too_many_arguments)]
+fn input_with_capacity(
+    owner: &RawProducerServient,
+    authority: ProducerInstanceAuthority,
+    td: &serde_json::Value,
+    provider: Rc<HttpFiniteProducer>,
+    name: &'static str,
+    value: u8,
+    app: Rc<App>,
+    listener: Option<&HttpFiniteListener>,
+    capacity: Option<&ProducerFiniteCapacity>,
+) -> ComposedProducerInput {
     let key = authority.key();
     let instance = RawProducerInstance::new(
         authority,
@@ -168,6 +184,10 @@ fn input_with_listener(
     )
     .ok()
     .unwrap();
+    let runtime = match capacity {
+        Some(capacity) => runtime.with_capacity(capacity.clone()).ok().unwrap(),
+        None => runtime,
+    };
     ComposedProducerInput {
         instance,
         prepared,

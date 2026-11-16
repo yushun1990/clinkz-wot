@@ -48,6 +48,19 @@ callbacks/local destructors remain trusted cooperative code, not preemptible.
 Caller-provisioned runtime slots have independent native/dispatch/cleanup budgets
 and no growing Engine runtime queue. There is no aggregate process-RAM claim.
 
+The optional [finite Producer capacity increment](../evidence/producer-finite-capacity.md)
+separates persistent typed native participation from active work and retained
+outcomes. A shared original work bank admits finite receives without prepaying
+an idle input/result opportunity per publication. Native settlement returns
+active credit; unread and caller-held outcomes retain their original bounded
+quota/backing through disposal. The default single-opportunity policy remains
+available. Complete qualification, independent publication/permission, original
+native correlation, effect/delivery evidence and acknowledged final retirement
+are unchanged. Real shared HTTP tests cover active/retained/account pressure,
+replacement and bank/socket release; effectful HTTP Write adds normal/error/invalid
+results and Pending cleanup. No native multi-exchange, Producer Host loop,
+continuing-family migration or package/gate acceptance is claimed.
+
 The former runtime-owned-instance constructor and runtime-local revocation are
 replaced directly. Core settlement retains original Binding/target identity;
 the Binding facet remains native and receives no registry/handler capability.
