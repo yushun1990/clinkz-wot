@@ -404,7 +404,7 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
     fn retired(&self) -> bool {
         self.state == RawFiniteState::Closed
             && self.settlement.is_none()
-            && self.completed.is_none()
+            && self.completed.is_empty()
     }
 }
 

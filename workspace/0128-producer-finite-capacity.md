@@ -78,3 +78,35 @@ Completed/Unknown evidence across failures and Pending retirement. Historical
 shared-listener evidence remains valid for its native topology and dedicated
 policy; its old observation restriction is not a universal Producer contract.
 No package/gate/milestone closure or independent acceptance is asserted.
+
+## Shared-budget counterexample and local accounting correction
+
+The initial PR implementation charged `BindingPolls` before attempting work
+admission. With one active slot occupied by A's original reply, an idle published
+B polled first under each one-credit shared turn consumed the credit, failed
+admission and invoked no Binding callback. A could never send and release the
+slot. This is an accounting-induced progress cycle even with an otherwise ready
+native send; larger independent per-participant test budgets concealed it.
+
+The initial terminal path also prepaid the global 32-link FIFO bound on every
+send/close attempt. Pending/error polls inserted no outcome yet repeatedly spent
+that allowance; a one-slot capacity could not settle under a one-unit queue
+budget. This evidence invalidates the unconditional charge, not the separation
+of publication, original work and retained results.
+
+Select local prerequisite checks and exact mutation charging. Check native
+credit without acquiring on zero; acquire all original work funding before
+consuming the receive poll credit immediately before its callback. Track only
+the participant FIFO's unread count, check count + 1 queue units before a
+potentially terminal native poll, and charge once on actual terminal insertion.
+Exclusive runtime/budget borrowing keeps the checked cost available across
+callbacks. Retain existing original work, first cause and disposal/refund order.
+
+Merely increasing budgets hides both defects. A scheduler/rotating caller order
+would disguise the lost credit without correcting its ownership. Charging the
+configured maximum once per work would remove repeated charging but still bill
+unperformed traversal for short queues. Replacing the bounded FIFO with a new
+container or shared result registry adds no necessary capability. A local count
+preserves the existing allocation/ownership topology and exact FIFO behavior.
+Runtime Safety owns the corrected ordering; the existing evidence record links
+the deterministic red/green cases and their execution limits.

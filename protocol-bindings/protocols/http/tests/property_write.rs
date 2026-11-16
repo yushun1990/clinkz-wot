@@ -1712,8 +1712,17 @@ fn shared_producer_capacity_preserves_write_effects_unread_failures_and_pending_
             .step(&mut cx(), &mut WorkBudget::new(), now(0))
             .is_pending()
     );
+    let mut cleanup = WorkBudget::new()
+        .with_remaining(WorkClass::CleanupItems, 5)
+        .with_remaining(WorkClass::QueueOperations, 4);
     for _ in 0..5 {
-        server.step();
+        assert!(
+            server
+                .server()
+                .step(&mut cx(), &mut cleanup, now(0))
+                .is_pending()
+        );
+        assert_eq!(cleanup.remaining(WorkClass::QueueOperations), 4);
     }
     assert_eq!((capacity.active_work(), capacity.retained_work()), (1, 4));
     assert!(
@@ -1723,7 +1732,12 @@ fn shared_producer_capacity_preserves_write_effects_unread_failures_and_pending_
             .is_err()
     );
     controls.hold_close.set(false);
-    server.step();
+    cleanup.set_remaining(WorkClass::CleanupItems, 1);
+    assert_eq!(
+        server.server().step(&mut cx(), &mut cleanup, now(0)),
+        Poll::Ready(RawFiniteState::Closed)
+    );
+    assert_eq!(cleanup.remaining(WorkClass::QueueOperations), 0);
     assert_eq!(server.server().state(), RawFiniteState::Closed);
     assert_eq!((capacity.active_work(), capacity.retained_work()), (0, 4));
     let results: Vec<_> = (0..4)

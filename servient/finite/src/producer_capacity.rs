@@ -5,6 +5,23 @@ use clinkz_wot_foundation::ResourceKind as K;
 
 pub(super) const MAX_WORK: usize = 32;
 
+#[derive(Default)]
+pub(super) struct ProducerFiniteQueue {
+    head: Option<Box<ProducerFiniteSettlement>>,
+    len: usize,
+}
+impl ProducerFiniteQueue {
+    pub(super) fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub(super) fn insertion_work(&self) -> u64 {
+        // One visit per unread link, then one insertion. Active work already
+        // holds retained credit, so len + 1 is within the capacity's limit.
+        self.len as u64 + 1
+    }
+}
+
 /// A caller-provisioned work bank shared by finite Producer participants of one
 /// logical owner. Clones grant capacity access, never publication or dispatch.
 /// Active work and retained outcomes have separate limits; retained includes
@@ -211,23 +228,25 @@ impl ProducerFiniteSettlement {
         outcome: RawFiniteSettlement,
         accepted: Option<AcceptedBehavior>,
         owner: Option<Rc<dyn core::any::Any>>,
-        queue: &mut Option<Box<Self>>,
+        queue: &mut ProducerFiniteQueue,
     ) {
         self.outcome = Some(outcome);
         self.accepted = accepted;
         self.owner = owner;
         self.lease.finish();
         // At most MAX_WORK original records, no allocation or external callback.
-        let mut tail = queue;
+        let mut tail = &mut queue.head;
         while let Some(record) = tail {
             tail = &mut record.next;
         }
         *tail = Some(self);
+        queue.len += 1;
     }
 
-    pub(super) fn take(queue: &mut Option<Box<Self>>) -> Option<Box<Self>> {
-        let mut record = queue.take()?;
-        *queue = record.next.take();
+    pub(super) fn take(queue: &mut ProducerFiniteQueue) -> Option<Box<Self>> {
+        let mut record = queue.head.take()?;
+        queue.head = record.next.take();
+        queue.len -= 1;
         Some(record)
     }
 }

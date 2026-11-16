@@ -245,6 +245,10 @@ bank. Retained counts active work, unread outcomes and acknowledged outcomes
 still held by callers. Before each native receive callback it reserves both
 credits and complete Engine input, result and cleanup backing. Saturation or
 account refusal leaves publication current and runs no native receive/handler.
+It MUST NOT consume `BindingPolls`: that credit remains available to a sibling
+whose native progress can release the occupied capacity. Zero native credit
+MUST NOT acquire an opportunity. Each actual native callback is charged just
+before invocation, after its capacity and other work prerequisites succeed.
 Pending parsing remains bounded by the Binding's existing native owner/policy
 and returns the temporary Engine credits; it does not reset the original native
 deadline. A returned ingress keeps its permit through fresh logical admission,
@@ -261,8 +265,17 @@ disposal refunds retained-work/result/cleanup backing. A capacity-local checked
 sequence distinguishes records, including requests with identical Binding,
 recipient and operation; it confers no authority or native correlation right.
 Acknowledgement cannot redirect an original reply or refund a successor's debit.
-Delivery/cleanup polls that may create such a record additionally prepay 32
-`QueueOperations`, covering the bounded FIFO insertion before native handoff.
+Before a delivery/cleanup poll that may create such a record, the runtime checks
+that `QueueOperations` can cover its current participant-local unread count plus
+one: one visit per existing FIFO link and one insertion. The count is maintained
+without traversal and cannot change during the exclusive native poll. This cost
+is at most the configured retained limit, not an unconditional global maximum.
+Insufficient queue credit invokes no native callback and consumes no native or
+cleanup credit. Pending/error native polls add no queue charge; their normal
+poll and security work still applies. Terminal success charges the checked
+queue cost once, before FIFO mutation.
+Native terminal handoff therefore cannot strand an outcome for lack of queue
+credit, and repeated Pending polls do not repeatedly pay for an absent insertion.
 
 Closing one publication does not close the capacity or a sibling. Final logical
 retirement requires native close and acknowledgement of all its unread records;

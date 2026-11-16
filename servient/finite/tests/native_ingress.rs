@@ -1,4 +1,6 @@
 //! External Binding with actual TCP I/O and a separate retained-reply probe.
+#[path = "native_ingress/capacity.rs"]
+mod capacity;
 #[path = "native_ingress/shared_ownership.rs"]
 mod shared_ownership;
 use clinkz_wot_core::{

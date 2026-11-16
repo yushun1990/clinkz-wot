@@ -39,7 +39,8 @@ future outcome record and polling native receive. Refusal rolls back only that
 attempt. Pending native parsing returns the temporary Engine opportunity while
 native buffering remains covered by Binding policy. Terminal send/close disposes
 the original input/reply before returning active/ingress credit. FIFO insertion
-prepays its maximum 32 QueueOperations before native terminal handoff. Drop order
+checks its actual unread-link count plus one before native terminal handoff,
+then charges that allowance once on terminal success, before mutation. Drop order
 keeps active work leases through physical Binding/configuration disposal; terminal
 owners destroy result/behavior backing before releasing their original leases.
 No capacity borrow or lock spans a linked callback or destructor.
@@ -54,11 +55,17 @@ evidence, not allocator measurements or transitive process/OS/SDK RAM totals.
 
 ## Real execution
 
-The six [shared-listener capacity cases](../../protocol-bindings/protocols/http/tests/composed_thing/capacity.rs)
+The seven [shared-listener capacity cases](../../protocol-bindings/protocols/http/tests/composed_thing/capacity.rs)
 run actual preparation/validation, managed admission, complete retained final-TD
 qualification, independent publication, production HTTP listener/driver and real
 loopback TCP. Definition, publication and shared work banks are separate.
 
+- With one shared native credit and one active slot, always poll the saturated
+  receiving participant first, then the sibling holding the original reply.
+  Refusal preserves the credit; the sibling sends and releases active capacity,
+  and both original HTTP outcomes remain distinct and funded. At the original
+  PR head `3c93c9da75e2696167341cbad626260a62c7d5fe`, four such turns instead
+  left zero credit each time and the releasing sibling stayed Delivering.
 - Publish a second Thing while the only active credit is occupied. A second
   request cannot dispatch until native settlement returns that credit. Then a
   sibling request and a later request to the same continuously published Thing
@@ -67,7 +74,8 @@ loopback TCP. Definition, publication and shared work banks are separate.
   FIFO, distinct original sequences, recipient/operation/results, and all-bank
   release are checked. A native poll without prepaid FIFO work makes no send.
 - Saturate each of the six actual work accounts independently. No receive or
-  handler runs; all partial reservations roll back. Publication remains current.
+  handler runs; all partial reservations roll back and each refused turn retains
+  its native poll credit. Publication remains current.
   Zero work also makes no acquisition. Fresh request policy denies before effects,
   and later independent allowed work progresses while that refusal is retained.
 - Replace a Thing while its accepted reply remains pending. With two active
@@ -94,17 +102,35 @@ Success, a handler failure after committing a write, and an invalid result after
 another committed write all remain unread while subsequent requests progress.
 They retain Completed/Unknown effect evidence separately from delivery. A fourth
 validated write enters Pending retirement: zero credits and paused close cannot
-refund active work; terminal abort retains Completed with NotDelivered, the first
-local cancellation and original result. No write is replayed. Returned outcomes
+refund active work. Five Pending closes reuse the same four queue units; a final
+close inserts behind three unread outcomes for exactly four units. Terminal abort
+retains Completed with NotDelivered, the first local cancellation and original
+result. No write is replayed. Returned outcomes
 keep original behavior/publication/work funding through root loss and release
-it only on disposal. This case uses an exclusive HTTP native listener; the six
+it only on disposal. This case uses an exclusive HTTP native listener; the seven
 cases above establish the shared-listener execution boundary.
+
+Three [controlled native accounting regressions](../../servient/finite/tests/native_ingress/capacity.rs)
+separately isolate the terminal handoff. At the original PR head, three Pending
+send polls spent all 96 queue units without inserting anything; a one-unit queue
+allowance also prevented all close callbacks despite a retained limit of one.
+The corrected cases exercise retained limits 1, 3 and 32; every FIFO insertion
+cost from one through the limit; pop/reinsert counts and FIFO sequence; zero
+native credit without acquisition; retained pressure before and after
+acknowledgement; repeated Pending send/close with one shared queue allowance;
+error send and Pending/error/terminal cleanup of both unaccepted input and an
+accepted reply. A linked reply destructor asserts active/ingress and original
+cleanup/response/handler funding are still live at disposal. Terminal results
+retain the original bank after runtime/root loss and release it on final disposal.
+Short queue credit preserves native/cleanup credit and makes no callback. These
+probes establish accounting/ownership order, not additional protocol coverage.
 
 Focused commands:
 
 ```sh
 cargo test --locked -p clinkz-wot-binding-http --test composed_thing shared_work -- --nocapture
 cargo test --locked -p clinkz-wot-binding-http --test property_write shared_producer_capacity -- --nocapture
+cargo test --locked -p clinkz-wot-servient-finite --test native_ingress shared_capacity -- --nocapture
 ```
 
 The existing default-policy Write/unread-result and shared-listener tests remain
@@ -123,6 +149,10 @@ isolation. Shared work/result saturation prevents receive progress; neither this
 policy nor publication promises queueing, overload fairness, a wire refusal or
 deadline maintenance without funded receiving turns. All progress, cleanup and
 result observation remain caller-driven; no wake-only guarantee or timer appears.
+An actual Pending native poll still spends its poll credit. Callers must provide
+and distribute sufficient native/cleanup turns and the current FIFO insertion
+allowance; preserving credit on capacity refusal is not general scheduling
+fairness. The FIFO remains linear within its configured retained bound of 32.
 
 The default raw/dedicated constructor and narrow single-Property exposure keep
 their existing policy. Continuing Producer Actions and notifications, general

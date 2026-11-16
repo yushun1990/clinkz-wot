@@ -802,7 +802,7 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     ingress: Option<FiniteIngress<B::Reply>>,
     reply: Option<RawFiniteReply<B::Reply>>,
     settlement: Option<RawFiniteSettlement>,
-    completed: Option<Box<ProducerFiniteSettlement>>,
+    completed: producer_capacity::ProducerFiniteQueue,
     binding: B,
     // Survives native disposal and ends only at settlement acknowledgement.
     accepted_instance: Option<AcceptedBehavior>,
@@ -858,7 +858,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             ingress: None,
             reply: None,
             work: None,
-            completed: None,
+            completed: producer_capacity::ProducerFiniteQueue::default(),
             binding,
             accepted_instance: None,
             issuer: Rc::downgrade(&servient.issuer),
@@ -1164,22 +1164,23 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             Closing => WorkClass::CleanupItems,
             _ => WorkClass::BindingPolls,
         };
-        if budget.consume(class, 1).is_err() {
+        if budget.remaining(class) == 0 {
             return Poll::Pending;
         }
-        if self.capacity.is_some()
+        let queue_work = if self.capacity.is_some()
             && matches!(self.state, Delivering | Closing)
             && (self.ingress.is_some() || self.reply.is_some())
-            && budget
-                .consume(
-                    WorkClass::QueueOperations,
-                    producer_capacity::MAX_WORK as u64,
-                )
-                .is_err()
         {
-            // Prepay bounded FIFO insertion before native terminal handoff.
+            self.completed.insertion_work()
+        } else {
+            0
+        };
+        if budget.remaining(WorkClass::QueueOperations) < queue_work {
             return Poll::Pending;
         }
+        // The participant and budget remain exclusively borrowed throughout
+        // native callbacks. Check terminal handoff capacity now, then charge
+        // only before actual FIFO mutation; Pending/error inserts no record.
         if matches!(self.state, Starting | Serving | Dispatching) && self.issuer.strong_count() == 0
         {
             self.fail(CoreError::StaleHandle(context()));
@@ -1191,6 +1192,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         }
         match self.state {
             Starting => {
+                budget.consume(class, 1).expect("prechecked native poll");
                 // The first paid native invocation may create partial effects,
                 // independently of its readiness result.
                 self.native_started = true;
@@ -1215,6 +1217,9 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                         return Poll::Pending;
                     }
                 }
+                // Capacity refusal performs no Binding poll and must leave a
+                // shared turn's native credit available to the releasing owner.
+                budget.consume(class, 1).expect("prechecked native poll");
                 let received = self.binding.poll_receive(cx, now);
                 self.io_deadline = self.binding.request_deadline();
                 match received {
@@ -1327,6 +1332,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                         return Poll::Ready(self.state);
                     }
                 }
+                budget.consume(class, 1).expect("prechecked native poll");
                 match self
                     .binding
                     .poll_send(cx, self.reply.as_ref().expect("reply retained"))
@@ -1337,6 +1343,9 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                         Poll::Ready(self.state)
                     }
                     Poll::Ready(Ok(())) => {
+                        budget
+                            .consume(WorkClass::QueueOperations, queue_work)
+                            .expect("prechecked terminal handoff");
                         self.settle_reply(FiniteDelivery::Delivered);
                         self.io_deadline = Deadline::NONE;
                         self.state = Serving;
@@ -1344,27 +1353,33 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                     }
                 }
             }
-            Closing => match self.binding.poll_close(
-                cx,
-                self.ingress.as_ref(),
-                self.reply.as_ref(),
-                self.first_cause.as_ref(),
-            ) {
-                Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(e)) => {
-                    if self.first_cause.is_none() {
-                        self.first_cause = Some(e);
+            Closing => {
+                budget.consume(class, 1).expect("prechecked cleanup poll");
+                match self.binding.poll_close(
+                    cx,
+                    self.ingress.as_ref(),
+                    self.reply.as_ref(),
+                    self.first_cause.as_ref(),
+                ) {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(Err(e)) => {
+                        if self.first_cause.is_none() {
+                            self.first_cause = Some(e);
+                        }
+                        Poll::Ready(Closing)
                     }
-                    Poll::Ready(Closing)
+                    Poll::Ready(Ok(delivery)) => {
+                        budget
+                            .consume(WorkClass::QueueOperations, queue_work)
+                            .expect("prechecked terminal handoff");
+                        self.settle_ingress(delivery);
+                        self.settle_reply(delivery);
+                        self.work = None;
+                        self.state = Closed;
+                        Poll::Ready(Closed)
+                    }
                 }
-                Poll::Ready(Ok(delivery)) => {
-                    self.settle_ingress(delivery);
-                    self.settle_reply(delivery);
-                    self.work = None;
-                    self.state = Closed;
-                    Poll::Ready(Closed)
-                }
-            },
+            }
             InstalledClosed | Closed | Dispatching => unreachable!(),
         }
     }
