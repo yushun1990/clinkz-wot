@@ -1470,4 +1470,49 @@ permissions, normal/additional responses, complete final-description refusals,
 collisions/ambiguity, failed publication isolation, unread original results,
 independent retirement and final physical funding/socket release. This is scoped
 to Host/manual loopback HTTP NoSec Read. Other operations/security/profiles,
-normalized whole-TD reuse and shared-listener execution remain separate work.
+normalized whole-TD reuse and broader native sharing remain separate work.
+
+## Independent Things on one native HTTP listener
+
+Create one `HttpFiniteListener::new(listen, request_timeout_ticks)`, then attach it
+to each compatible finite configuration with `config.with_listener(&listener)`.
+Each participant retains its own instance key, complete prepared mappings,
+behavior, permission, managed account bank and publication/retirement boundary.
+The existing `ComposedProducerExposure` flow still admits and completely qualifies
+each final TD before publishing it. Reusable response instructions and shared
+physical infrastructure are independent choices.
+
+The optional listener owns native method/path collision checks and routing. It
+supports cleartext loopback configurations with matching address/timeout and one
+caller monotonic clock. Up to 32 routes share the socket; each native participation
+has one queued-or-active exchange, and at most 32 unclassified heads await bounded
+round-robin inspection. A receiving participant supplies native progress; staged
+recipients can buffer one connection but cannot dispatch. Slow heads and queued
+staged requests expire at their original accept deadlines. The existing parser
+continues to enforce exact Host, framing and payload constraints.
+
+Receive wakes request another manual turn and can fire while idle. The listener
+finishes its native handoff and unlocks before calling the Waker, which may
+reenter native configuration. These wakes signal neither I/O readiness nor a
+different recipient's driver. Pace/coalesce turns and explicitly progress each
+relevant participant and cleanup with caller clock/work credit; a no-op Waker
+works in a paced loop. Wake-only execution has no progress guarantee.
+
+Closing one lease preserves sibling service and original accepted results.
+Same-route replacement first closes the old native lease; a new route can stage
+while old work remains active. Input already accepted by the listener cannot
+move to a later registration. Final native participation release closes the
+socket even if the passive listener handle remains. Unread original settlements
+still prevent their own logical retirement.
+
+Run the joined real-I/O evidence with:
+
+```sh
+cargo test --locked -p clinkz-wot-binding-http --test composed_thing shared_listener
+```
+
+The [contract](../../../docs/spec/binding-spi.md#independent-http-listener-participation)
+and [evidence](../../../docs/evidence/producer-shared-http-listener.md) scope this
+to Host/manual NoSec Property Read. Shared HTTPS, continuing Actions, mixed native
+families, cross-Servient trust and production qualification remain open. The older
+single-registration installation above retains its exclusive-listener scope.

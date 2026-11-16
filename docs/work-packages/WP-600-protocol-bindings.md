@@ -434,3 +434,14 @@ refusal, native collisions, publication failure isolation and final original-ban
 and socket release. Existing specialized Write/collection/HTTPS and continuing
 Action/MQTT paths retain their separate scopes; no broad reuse, production,
 package, milestone or independent acceptance follows.
+
+## Independent HTTP publications on shared native infrastructure
+
+`HttpFiniteListener` supplies optional compatible native route leases to existing
+finite participants. [The Binding contract](../spec/binding-spi.md#independent-http-listener-participation)
+owns its route collision, buffering, timeout and last-participation release policy;
+the Engine SPI and per-description qualification/publication contracts are unchanged.
+[Real NoSec Read evidence](../evidence/producer-shared-http-listener.md) covers
+independent publication, replacement, original accepted work, pressure and final
+release on one listener. This changes no dependency, admission, gate or milestone
+status; shared HTTPS/Actions, mixed families and production scope remain open.

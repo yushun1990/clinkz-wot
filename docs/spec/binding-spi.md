@@ -212,6 +212,70 @@ The [real HTTP evidence](../evidence/producer-preparation-reuse.md) scopes this
 increment. Write/collection/Action/notification reuse, secure Producer reuse and
 broader profiles remain unqualified; their specialized execution is retained.
 
+## Independent HTTP listener participation
+
+The finite HTTP implementation can use a caller-provisioned `HttpFiniteListener`
+through `HttpFiniteConfig::with_listener`. This is a concrete native owner under
+SPI-NATIVE/RETIRE-001, not another Engine SPI. `FiniteIngressBinding` already
+supports shared infrastructure; its configuration, original candidates/replies
+and exact closed mapping coverage are sufficient for separate participation.
+Each complete description still selects actual providers, qualifies every retained
+Form/effective operation, captures behavior/services and commits its own logical
+publication. Sharing an HTTP address confers no shared permission or behavior.
+
+This optional listener admits compatible cleartext loopback configurations with
+the same nonzero address and request timeout, driven in one monotonic clock
+domain. It atomically reserves each participant's entire route set at funded
+start, with at most 32 mappings across the listener. Method/path collisions refuse
+regardless of logical key, provider or Property name. Independent native coverage
+and closed readiness remain mandatory; known listener failure cannot certify
+final coverage. Existing exclusive HTTP/HTTPS participants retain their scope.
+
+Native receive progress may be supplied by any receiving participant. Each turn
+accepts at most one socket and inspects one unclassified head in round-robin order,
+peeking at most 8192 bytes with 16 header slots. Up to 32 unclassified sockets and
+one queued-or-active connection per participant are retained; the OS backlog is
+requested at 128. A busy recipient or unknown/malformed route closes that socket
+without dispatch. Header selection stays in HTTP; the existing native parser
+still checks exact Host, version, framing, credentials and payload before offering
+a candidate. Its existing 4096-byte read/write allowance remains additional to the
+head peek. Native progress/SDK backing is separate from Engine work/accounts.
+
+Native receive wakes are advisory retry hints, including on an idle listener;
+they do not indicate socket readiness or notify a different recipient's driver.
+The native handoff completes and the listener mutex is released before invoking
+the supplied Waker. The caller still paces/coalesces turns and drives all relevant
+participants with explicit clock/work credit, including maintenance and cleanup.
+There is no OS/timer registration or wake-only progress guarantee; a no-op Waker
+is valid for a manually paced loop. Active connection polling and disposal also
+occur outside the listener lock; queued drivers remain unpolled until handoff.
+
+A staged recipient may retain one native connection while siblings serve; it
+cannot dispatch before its publication gate opens. The original accept deadline
+spans native queueing, input, dispatch and reply. Receiving turns expire staged
+queues and unclassified heads without requiring their recipient to publish.
+Each accepted socket records the latest original native lease: later route
+registrations cannot receive that input, including after replacement. OS backlog
+traffic has no assigned recipient until native acceptance; no arrival-time global
+publication boundary is claimed.
+
+Closing or dropping one participant disposes its queued/active connection and
+route lease. Sibling routes and accepted work continue. Same-route replacement
+requires closing the old native lease first; different routes may stage and
+publish concurrently with retained old work. The Engine's original replacement,
+late-result and acknowledgement rules remain unchanged. The last lease closes
+the listener and unclassified sockets even while passive infrastructure handles
+remain. Handles grant no whole-service shutdown API. A terminal shared native
+failure fences new native acceptance/coverage as each participant observes it;
+original results and cleanup still belong to their respective participants.
+
+[Real HTTP evidence](../evidence/producer-shared-http-listener.md) qualifies
+Host/manual NoSec Property Read with independent publication/replacement, policy,
+native pressure and final release. Shared HTTPS, continuing Actions, mixed
+interaction families, cross-Servient trust configurations and broader profiles
+are not established by that fixture. No Engine router, universal service manager,
+mandatory per-Thing Runtime or compatibility facade is introduced.
+
 ## Publication and security collaboration
 
 Producer publication follows [PREP-COVER-001](planning.md) and SAFE-PUBLISH-001.
