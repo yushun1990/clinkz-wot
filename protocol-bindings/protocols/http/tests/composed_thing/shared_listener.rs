@@ -1,5 +1,90 @@
 //! Independent complete publications over one actual native HTTP listener.
 use super::*;
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        mpsc,
+    },
+    task::Wake,
+};
+
+struct ReentrantWake {
+    config: HttpFiniteConfig,
+    listener: HttpFiniteListener,
+    calls: AtomicUsize,
+}
+impl Wake for ReentrantWake {
+    fn wake(self: Arc<Self>) {
+        self.wake_by_ref();
+    }
+    fn wake_by_ref(self: &Arc<Self>) {
+        // This safe callback does not poll the borrowed Binding again. A
+        // passive native configuration check may legally reenter its listener.
+        assert_eq!(
+            self.config.clone().with_listener(&self.listener).unwrap(),
+            self.config,
+        );
+        self.calls.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+#[test]
+fn idle_receive_waker_can_reenter_the_same_listener_without_deadlock() {
+    let address = tcp_addr();
+    let native = listener(address);
+    let accounts = bank();
+    let provider = compiler(address, &accounts);
+    let key = key(1, Generation::INITIAL).key();
+    let prepared = prepare(&td(address, "alpha", &["/alpha"]), key, &provider).unwrap();
+    let config = HttpFiniteConfig::try_new(
+        HttpProducerConfig::for_loopback(address).unwrap(),
+        prepared.operations()[0]
+            .definition::<HttpProducerProgram>()
+            .unwrap()
+            .clone(),
+        key,
+        AffordanceTarget::Property(Arc::from("alpha")),
+        100,
+    )
+    .unwrap()
+    .with_listener(&native)
+    .unwrap();
+    let mut binding = HttpFiniteBinding::new(
+        config.clone(),
+        BindingId::new(461),
+        BindingGeneration::INITIAL,
+    );
+    assert!(matches!(binding.poll_start(&mut cx()), Poll::Ready(Ok(()))));
+    let wake = Arc::new(ReentrantWake {
+        config,
+        listener: native,
+        calls: AtomicUsize::new(0),
+    });
+    let (completed, completion) = mpsc::sync_channel(1);
+    let worker_wake = wake.clone();
+    let worker = std::thread::spawn(move || {
+        let waker = Waker::from(worker_wake);
+        assert!(
+            binding
+                .poll_receive(&mut Context::from_waker(&waker), now())
+                .is_pending()
+        );
+        completed.send(binding).unwrap();
+    });
+    // A broken callback boundary must fail this regression in bounded time,
+    // rather than hanging the test process on the same-thread mutex lock.
+    let mut binding = completion
+        .recv_timeout(Duration::from_secs(5))
+        .expect("receive deadlocked while its Waker reentered the listener");
+    worker.join().unwrap();
+    assert_eq!(wake.calls.load(Ordering::Relaxed), 1);
+    assert!(matches!(
+        binding.poll_close(&mut cx(), None, None, None),
+        Poll::Ready(Ok(_))
+    ));
+    drop(binding);
+    TcpListener::bind(address).unwrap();
+}
 
 fn listener(address: SocketAddr) -> HttpFiniteListener {
     HttpFiniteListener::new(HttpProducerConfig::for_loopback(address).unwrap(), 100).unwrap()

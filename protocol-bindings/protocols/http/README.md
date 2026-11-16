@@ -1491,6 +1491,13 @@ recipients can buffer one connection but cannot dispatch. Slow heads and queued
 staged requests expire at their original accept deadlines. The existing parser
 continues to enforce exact Host, framing and payload constraints.
 
+Receive wakes request another manual turn and can fire while idle. The listener
+finishes its native handoff and unlocks before calling the Waker, which may
+reenter native configuration. These wakes signal neither I/O readiness nor a
+different recipient's driver. Pace/coalesce turns and explicitly progress each
+relevant participant and cleanup with caller clock/work credit; a no-op Waker
+works in a paced loop. Wake-only execution has no progress guarantee.
+
 Closing one lease preserves sibling service and original accepted results.
 Same-route replacement first closes the old native lease; a new route can stage
 while old work remains active. Input already accepted by the listener cannot

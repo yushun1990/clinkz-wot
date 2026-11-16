@@ -46,6 +46,13 @@ one method/path has no proved need in this increment and would require an explic
 native handoff policy; no generic authority or implicit collision exception is
 introduced. Last native participation release closes the physical listener.
 
+The listener's retry Waker is an external callback and may synchronously reenter
+native configuration. Complete the queued connection handoff and release the
+listener guard before waking. Its existing idle self-wake remains an advisory
+retry under caller-paced manual progress; it supplies neither socket readiness,
+recipient wake distribution nor work/time credit. This local callback-boundary
+correction requires no scheduler or Producer execution-capacity change.
+
 ## Migration and scope
 
 Exact native compatibility/buffering/release policy belongs to the

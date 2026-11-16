@@ -47,6 +47,8 @@ struct Listener {
 struct Routes {
     id: u64,
     mappings: Mappings,
+    // Constructed but never polled under the Listener lock: expiry/release
+    // cannot drop a driver that has retained an external task's Waker.
     queued: Option<SharedConnection>,
     busy: bool,
 }
@@ -252,13 +254,18 @@ impl HttpFiniteListener {
         }
         // The ordinary native parser still validates version, Host, framing,
         // credentials and body. Header peeking only selects the original lease.
-        cx.waker().wake_by_ref();
-        Ok(owner
+        let received = owner
             .leases
             .iter_mut()
             .find(|r| r.id == id)
             .unwrap()
             .queued
-            .take())
+            .take();
+        drop(owner);
+        // A Waker can synchronously reenter this listener. Complete the native
+        // handoff and release the lock before invoking that external callback.
+        // This is an advisory manual retry (even when idle), not I/O readiness.
+        cx.waker().wake_by_ref();
+        Ok(received)
     }
 }

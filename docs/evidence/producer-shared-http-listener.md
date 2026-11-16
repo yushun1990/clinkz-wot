@@ -80,6 +80,42 @@ Exact tested revisions, package counts and remote checks belong in the PR. These
 tests supplement existing standalone HTTP/HTTPS, qualified publication, collision,
 result/cleanup and reusable-instruction regressions; they do not replace them.
 
+## Reentrant wake boundary and callback audit
+
+`idle_receive_waker_can_reenter_the_same_listener_without_deadlock` uses
+`Waker::from(Arc<impl Wake>)`, the safe [Rust Wake API](https://doc.rust-lang.org/std/task/trait.Wake.html).
+Its callback passively calls `HttpFiniteConfig::with_listener` on the same native
+listener, reacquiring that listener's mutex without borrowing or polling the
+original Binding again. A worker completion channel bounds deadlock detection
+at five seconds; it is a test watchdog, not runtime orchestration. Against the
+original implementation this test times out: `receive` holds the mutex across
+`wake_by_ref`, and the callback cannot finish its compatible-configuration check.
+With the queued handoff extracted and the guard explicitly dropped before waking,
+the callback completes, the idle receive returns Pending, and final close releases
+the socket. The test asserts that the wake actually occurred, so suppressing it
+cannot hide the regression.
+
+The listener critical sections were audited for external code, including implicit
+destruction. Configuration/coverage checks are passive; route/program backing
+and original Host reservations have fixed local disposal. Pending heads own plain
+TCP streams. Queued Hyper drivers are constructed without a caller Context and
+never polled under the listener lock, so queue expiry/release cannot drop a
+retained external Waker. Handed-off drivers are polled and dropped by their actual
+Binding outside that lock, before reacquiring it for finish/release. In the
+adjacent transport, bridge quota guards end before retry wakes, and the bridge
+guard in `NativeConnection::poll` ends before polling Hyper. No other external
+callback under the listener mutex was found; no broader callback/scheduler API
+or capacity redesign is introduced.
+
+The existing idle retry wake is retained. It is consistent with the manual
+polling contract as a request for another caller-funded turn, and can cause
+repeated idle polls if a driver immediately retries every wake. It is not an
+I/O-readiness signal or a complete notification system: only the current poller's
+Waker is called, no recipient Waker or OS/timer registration is retained, and a
+staged/unread-result participant may supply no receive turn at all. Applications
+must pace/coalesce progress and drive relevant sibling/maintenance/cleanup turns
+with explicit time/work credit. A no-op Waker in a paced loop remains valid.
+
 ## Limits
 
 The proved shared topology is Host/manual loopback cleartext NoSec Property Read

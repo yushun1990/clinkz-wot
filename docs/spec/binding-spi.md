@@ -241,6 +241,15 @@ still checks exact Host, version, framing, credentials and payload before offeri
 a candidate. Its existing 4096-byte read/write allowance remains additional to the
 head peek. Native progress/SDK backing is separate from Engine work/accounts.
 
+Native receive wakes are advisory retry hints, including on an idle listener;
+they do not indicate socket readiness or notify a different recipient's driver.
+The native handoff completes and the listener mutex is released before invoking
+the supplied Waker. The caller still paces/coalesces turns and drives all relevant
+participants with explicit clock/work credit, including maintenance and cleanup.
+There is no OS/timer registration or wake-only progress guarantee; a no-op Waker
+is valid for a manually paced loop. Active connection polling and disposal also
+occur outside the listener lock; queued drivers remain unpolled until handoff.
+
 A staged recipient may retain one native connection while siblings serve; it
 cannot dispatch before its publication gate opens. The original accept deadline
 spans native queueing, input, dispatch and reply. Receiving turns expire staged
