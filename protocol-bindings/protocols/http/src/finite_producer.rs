@@ -32,11 +32,11 @@ impl HttpFiniteConfig {
                 | Operation::ReadMultipleProperties
                 | Operation::WriteAllProperties
                 | Operation::WriteMultipleProperties,
-            ) => program.property_map.is_some(),
+            ) => program.instructions.property_map.is_some(),
             (
                 AffordanceTarget::Property(name),
                 Operation::ReadProperty | Operation::WriteProperty,
-            ) => name.len() <= 256 && program.property_map.is_none(),
+            ) => name.len() <= 256 && program.instructions.property_map.is_none(),
             _ => false,
         }
     }
@@ -49,7 +49,7 @@ impl HttpFiniteConfig {
     ) -> Result<Self, BindingInputRejection<(HttpProducerProgram, AffordanceTarget)>> {
         // Program fields are private and produced by the HTTP compiler. Check
         // actual listen operands as well as the bounded native target backing.
-        if program.secure != listen.secure
+        if program.instructions.secure != listen.secure
             || program.listen_address() != listen.listen_address()
             || !Self::valid_target(&target, &program)
             || request_timeout_ticks == 0
@@ -82,7 +82,7 @@ impl HttpFiniteConfig {
             || mappings.len() > 32
             || request_timeout_ticks == 0
             || mappings.iter().enumerate().any(|(i, (target, program))| {
-                program.secure != listen.secure
+                program.instructions.secure != listen.secure
                     || !Self::valid_target(target, program)
                     || program.listen_address() != listen.listen_address()
                     || mappings[..i].iter().any(|(_, old)| {
@@ -109,9 +109,9 @@ impl HttpFiniteConfig {
         if !security.is_ready()
             || !self.listen.secure
             || self.mappings.iter().any(|(_, p)| {
-                !p.secure
+                !p.instructions.secure
                     || p.security_registration.as_ref() != Some(&security.registration)
-                    || !security.supports(p.authentication)
+                    || !security.supports(p.instructions.authentication)
             })
         {
             return Err(crate::producer::producer_unsupported());
@@ -275,7 +275,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                         clinkz_wot_core::thing::AffordanceSite::Property(b),
                     ) => a.as_ref() == b,
                     _ => false,
-                }) && operation == program.operation
+                }) && operation == program.instructions.operation
                     && form == program.form
                     && definition.downcast_ref::<HttpProducerProgram>() == Some(program)
             })
@@ -425,7 +425,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                     candidates: vec![FiniteCandidate {
                         instance: self.configuration.instance,
                         target: target.clone(),
-                        operation: program.operation,
+                        operation: program.instructions.operation,
                     }],
                     input,
                     reply: HttpFiniteReply {
@@ -433,7 +433,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                         mapping: index,
                         issuer: Arc::downgrade(&self.issuer),
                         credentials: connection.take_credentials(),
-                        authentication: program.authentication,
+                        authentication: program.instructions.authentication,
                     },
                 }))
             }
@@ -499,7 +499,7 @@ impl HttpFiniteBinding {
             .ok_or_else(crate::producer::producer_unsupported)?;
         if candidate.instance != self.configuration.instance
             || &candidate.target != target
-            || candidate.operation != program.operation
+            || candidate.operation != program.instructions.operation
         {
             return Err(crate::producer::producer_unsupported());
         }
@@ -511,13 +511,15 @@ impl FiniteValidator for HttpFiniteBinding {
         &self,
         candidate: &FiniteCandidate,
     ) -> CoreResult<Option<&clinkz_wot_core::execution::responses::FiniteResponses>> {
-        Ok(Some(&self.program_for(candidate)?.response_contract))
+        Ok(Some(
+            &self.program_for(candidate)?.instructions.response_contract,
+        ))
     }
     fn additional_validation_work(&self) -> u64 {
         let structured = self.configuration.mappings.iter().any(|(_, p)| {
-            p.response_contract.iter().any(|r| matches!(&r.data, clinkz_wot_core::execution::responses::ResponseData::Value(s) if !s.is_type_only()))
-                || !p.value_schema.is_type_only()
-                || p.property_map
+            p.instructions.response_contract.iter().any(|r| matches!(&r.data, clinkz_wot_core::execution::responses::ResponseData::Value(s) if !s.is_type_only()))
+                || !p.instructions.value_schema.is_type_only()
+                || p.instructions.property_map
                     .as_ref()
                     .is_some_and(|s| s.members().iter().any(|m| !m.schema.is_type_only()))
         });
@@ -526,14 +528,14 @@ impl FiniteValidator for HttpFiniteBinding {
             .configuration
             .mappings
             .iter()
-            .any(|(_, p)| p.operation == Operation::ReadMultipleProperties)
+            .any(|(_, p)| p.instructions.operation == Operation::ReadMultipleProperties)
         {
             4096 * 120 + extra
         } else if self
             .configuration
             .mappings
             .iter()
-            .any(|(_, p)| p.property_map.is_some())
+            .any(|(_, p)| p.instructions.property_map.is_some())
         {
             4096 * 40 + extra
         } else {
@@ -546,11 +548,12 @@ impl FiniteValidator for HttpFiniteBinding {
         input: &InteractionInput,
     ) -> CoreResult<()> {
         let program = self.program_for(candidate)?;
-        match (program.operation, input.data.as_ref()) {
+        match (program.instructions.operation, input.data.as_ref()) {
             (Operation::ReadProperty | Operation::ReadAllProperties, None) => Ok(()),
             (Operation::ReadMultipleProperties, Some(payload)) => {
                 crate::producer_validation::decode_property_selection(
                     program
+                        .instructions
                         .property_map
                         .as_ref()
                         .ok_or_else(crate::producer::producer_unsupported)?,
@@ -561,6 +564,7 @@ impl FiniteValidator for HttpFiniteBinding {
             (Operation::WriteMultipleProperties, Some(payload)) => {
                 crate::producer_validation::validate_property_write_map(
                     program
+                        .instructions
                         .property_map
                         .as_ref()
                         .ok_or_else(crate::producer::producer_unsupported)?,
@@ -571,6 +575,7 @@ impl FiniteValidator for HttpFiniteBinding {
             (Operation::WriteAllProperties, Some(payload)) => {
                 crate::producer_validation::validate_property_map(
                     program
+                        .instructions
                         .property_map
                         .as_ref()
                         .ok_or_else(crate::producer::producer_unsupported)?,
@@ -578,7 +583,10 @@ impl FiniteValidator for HttpFiniteBinding {
                 )
             }
             (Operation::WriteProperty, Some(payload)) => {
-                crate::producer_validation::validate_payload(&program.value_schema, payload)
+                crate::producer_validation::validate_payload(
+                    &program.instructions.value_schema,
+                    payload,
+                )
             }
             _ => Err(CoreError::Validation(ErrorContext::new(
                 ErrorPhase::Validate,
@@ -593,17 +601,18 @@ impl FiniteValidator for HttpFiniteBinding {
         output: &InteractionOutput,
     ) -> CoreResult<()> {
         let program = self.program_for(candidate)?;
-        match program.operation {
+        match program.instructions.operation {
             Operation::ReadMultipleProperties => {
                 // This facet still admits only the ordinary primary result.
                 // A valid selected map cannot certify its status or branch.
-                if !raw_finite_property_shape(program.operation, output) {
+                if !raw_finite_property_shape(program.instructions.operation, output) {
                     return Err(CoreError::Validation(ErrorContext::new(
                         ErrorPhase::Validate,
                         RetryClass::Never,
                     )));
                 }
                 let schema = program
+                    .instructions
                     .property_map
                     .as_ref()
                     .ok_or_else(crate::producer::producer_unsupported)?;
@@ -626,7 +635,7 @@ impl FiniteValidator for HttpFiniteBinding {
                 program.validate(output)
             }
             Operation::WriteAllProperties | Operation::WriteMultipleProperties
-                if raw_finite_property_shape(program.operation, output)
+                if raw_finite_property_shape(program.instructions.operation, output)
                     && output.metadata().property_write_report().is_none() =>
             {
                 Ok(())

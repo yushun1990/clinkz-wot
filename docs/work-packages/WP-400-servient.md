@@ -560,6 +560,16 @@ native participation owners. Refusal returns those same input owners. This is
 an ownership handoff after caller construction/preparation, before the managed
 participants acquire native work; it does not reuse the single-Property facade.
 
+The [reusable Producer increment](../evidence/producer-preparation-reuse.md)
+retains a distinct `PreparedThing` and complete publication for every instance,
+while actual HTTP mappings reference explicitly funded shared instructions.
+`ComposedProducerExposure` needs no shared-Thing wrapper or new runtime:
+[the ownership contract](../spec/runtime-safety.md#reusable-producer-definition-ownership)
+keeps physical definition funding independent of native membership, final
+qualification, behavior/authority and instance accounts. A conflicting staged
+publication and one sibling's unread result/retirement cannot revoke another
+publication or refund its original shared definition.
+
 The fixed member vector admits 1..=32 participants and 1..=32 actual capability
 registrations in this manual Host slice. Final common/service/behavior coverage
 is checked before the handoff and again after closed setup. Each effective

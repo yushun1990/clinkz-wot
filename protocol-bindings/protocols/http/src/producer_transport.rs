@@ -129,7 +129,7 @@ impl Ingress {
             .ok_or_else(invalid)?;
         let program = &self.programs[mapping];
         let has_input = matches!(
-            program.operation,
+            program.instructions.operation,
             Operation::WriteProperty
                 | Operation::WriteAllProperties
                 | Operation::WriteMultipleProperties
@@ -141,7 +141,7 @@ impl Ingress {
         let mut evidence = crate::security::HttpEvidence::default();
         for h in request.headers.iter() {
             if h.name.eq_ignore_ascii_case("authorization") {
-                if !program.authentication.uses_basic() || evidence.basic.is_some() {
+                if !program.instructions.authentication.uses_basic() || evidence.basic.is_some() {
                     return Err(invalid());
                 }
                 evidence.basic = Some(
@@ -150,7 +150,8 @@ impl Ingress {
             }
 
             if h.name.eq_ignore_ascii_case("x-api-key") {
-                if !program.authentication.uses_api_key() || evidence.api_key.is_some() {
+                if !program.instructions.authentication.uses_api_key() || evidence.api_key.is_some()
+                {
                     return Err(invalid());
                 }
                 evidence.api_key =
@@ -215,8 +216,8 @@ impl Ingress {
         let mut bridge = self.bridge.lock().unwrap();
         bridge.credentials = evidence;
         bridge.mapping = Some(mapping);
-        bridge.operation = Some(program.operation);
-        bridge.responses = program.responses;
+        bridge.operation = Some(program.instructions.operation);
+        bridge.responses = program.instructions.responses;
         self.complete = true;
         zeroize::Zeroize::zeroize(&mut self.head);
         Ok(())

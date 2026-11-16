@@ -41,10 +41,18 @@ fn key(slot: u32, generation: Generation) -> ProducerInstanceAuthority {
     ProducerInstanceAuthority::try_new(ThingSlotId::new(SlotIndex::new(slot), generation)).unwrap()
 }
 fn tcp_addr() -> SocketAddr {
-    TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
+    // Pure preparation deliberately releases its probe before native setup.
+    // Do not offer that same advertised endpoint to a parallel test meanwhile.
+    static SELECTED: std::sync::Mutex<Vec<SocketAddr>> = std::sync::Mutex::new(Vec::new());
+    loop {
+        let probe = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = probe.local_addr().unwrap();
+        let mut selected = SELECTED.lock().unwrap();
+        if !selected.contains(&address) {
+            selected.push(address);
+            return address;
+        }
+    }
 }
 fn udp_addr() -> SocketAddr {
     UdpSocket::bind("127.0.0.1:0")

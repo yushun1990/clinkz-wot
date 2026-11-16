@@ -38,11 +38,7 @@ impl HttpProducerConfig {
 /// Possession grants no installation, publication, dispatch or accept authority.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HttpProducerProgram {
-    pub(super) operation: Operation,
-    pub(super) responses: crate::responses::HttpResponses,
-    pub(super) response_contract: Arc<clinkz_wot_core::execution::responses::FiniteResponses>,
-    pub(super) secure: bool,
-    pub(super) authentication: crate::security::HttpSecurity,
+    pub(super) instructions: Arc<HttpProducerInstructions>,
     pub(super) security_registration: Option<crate::security::SecurityRegistration>,
     pub(super) form: u32,
     pub(super) address: SocketAddr,
@@ -51,18 +47,28 @@ pub struct HttpProducerProgram {
     pub(super) authority_end: u8,
     pub(super) origin: [u8; 64],
     pub(super) origin_len: u8,
-    pub(super) value_schema: Arc<clinkz_wot_core::data_schema::PreparedSchema>,
-    pub(super) property_map: Option<Arc<clinkz_wot_core::collection::PropertyCollectionSchema>>,
 }
-impl HttpProducerProgram {
-    pub(crate) fn schema_backing_bytes(&self) -> usize {
-        self.response_contract.retained_bytes()
+
+// The native response table and complete validation instructions have no
+// endpoint, Form coordinate, handler, authority or live security service.
+pub(super) struct HttpProducerInstructions {
+    pub operation: Operation,
+    pub responses: crate::responses::HttpResponses,
+    pub response_contract: Arc<clinkz_wot_core::execution::responses::FiniteResponses>,
+    pub secure: bool,
+    pub authentication: crate::security::HttpSecurity,
+    pub value_schema: Arc<clinkz_wot_core::data_schema::PreparedSchema>,
+    pub property_map: Option<Arc<clinkz_wot_core::collection::PropertyCollectionSchema>>,
+    // Last field: the complete original charge survives physical destruction.
+    pub funding: Option<[clinkz_wot_core::host_accounts::HostCapacityReservation; 5]>,
+}
+impl HttpProducerInstructions {
+    pub fn backing_bytes(&self) -> usize {
+        core::mem::size_of::<Self>()
+            + 2 * core::mem::size_of::<usize>()
+            + self.response_contract.retained_bytes()
             + core::mem::size_of_val(self.response_contract.as_ref())
             + 2 * core::mem::size_of::<usize>()
-            + self
-                .security_registration
-                .as_ref()
-                .map_or(0, |_| 2 * core::mem::size_of::<usize>())
             + self.value_schema.retained_bytes()
             + core::mem::size_of_val(self.value_schema.as_ref())
             + 2 * core::mem::size_of::<usize>()
@@ -72,8 +78,59 @@ impl HttpProducerProgram {
                     + 2 * core::mem::size_of::<usize>()
             })
     }
+}
+impl PartialEq for HttpProducerInstructions {
+    fn eq(&self, other: &Self) -> bool {
+        self.operation == other.operation
+            && self.responses == other.responses
+            && self.response_contract == other.response_contract
+            && self.secure == other.secure
+            && self.authentication == other.authentication
+            && self.value_schema == other.value_schema
+            && self.property_map == other.property_map
+    }
+}
+impl Eq for HttpProducerInstructions {}
+impl core::fmt::Debug for HttpProducerInstructions {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("HttpProducerInstructions")
+            .field("operation", &self.operation)
+            .field("backing_bytes", &self.backing_bytes())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Explicit reusable HTTP Property instructions, retaining their original bank.
+/// Every new description still requires complete selection and qualification.
+#[derive(Clone, Debug)]
+pub struct HttpProducerDefinition(pub(super) Arc<HttpProducerInstructions>);
+impl HttpProducerDefinition {
+    /// Only explicit funded compilation establishes this reuse contract.
+    pub fn from_program(program: &HttpProducerProgram) -> Option<Self> {
+        program.instructions.funding.as_ref()?;
+        Some(Self(Arc::clone(&program.instructions)))
+    }
+    pub fn shares_compilation_with(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+    pub fn retained_bytes(&self) -> usize {
+        self.0.backing_bytes()
+    }
+}
+impl HttpProducerProgram {
+    pub(crate) fn schema_backing_bytes(&self) -> usize {
+        // Explicit shared instructions pay once at their physical owner.
+        self.instructions
+            .funding
+            .as_ref()
+            .map_or_else(|| self.instructions.backing_bytes(), |_| 0)
+            + self
+                .security_registration
+                .as_ref()
+                .map_or(0, |_| 2 * core::mem::size_of::<usize>())
+    }
     pub(crate) fn method(&self) -> &'static str {
-        match self.operation {
+        match self.instructions.operation {
             Operation::WriteProperty
             | Operation::WriteAllProperties
             | Operation::WriteMultipleProperties => "PUT",
@@ -82,7 +139,7 @@ impl HttpProducerProgram {
         }
     }
     pub fn operation(&self) -> Operation {
-        self.operation
+        self.instructions.operation
     }
     pub fn listen_address(&self) -> SocketAddr {
         self.address
@@ -91,7 +148,7 @@ impl HttpProducerProgram {
         std::str::from_utf8(&self.target[..self.target_len as usize]).unwrap()
     }
     pub fn authority(&self) -> &str {
-        &self.target()[if self.secure { 8 } else { 7 }..self.authority_end as usize]
+        &self.target()[if self.instructions.secure { 8 } else { 7 }..self.authority_end as usize]
     }
     pub fn path_and_query(&self) -> &str {
         std::str::from_utf8(&self.origin[..self.origin_len as usize]).unwrap()
@@ -112,7 +169,7 @@ use std::{
 
 // Separate role identity: never borrow Consumer policy/seals or StrictV1's
 // transitive disposal claim. Native parser/reply backing remains Binding-owned.
-const INSTALL_POLICY: &[u8] = b"request-reply-v6;operation-scoped-program;shared-native-GET-PUT-parser;credential-headers-refuse;prepared-object-integer-string-schema;schema64/depth8;encoded-depth32;exact-decimal-integer;Hyper1.12.0-server-http1;complete-request-half-close;httparse1.10.1;serde_json1.0.149-RawValue+UTF8+codepoints;manual-nonblocking-poll;head16/8192inclusive;read-write4096-per-poll;one-connection;one-correlation;JSON4096;media64;request-deadline-caller-ticks;no-pipeline-keepalive-expect-upgrade-body;native-parser-box-and-bridge-private;clinkz-http-producer-install-v1;socket2-0.6.4-TcpListener;reuseaddr-no-reuseport;backlog128;loopback-nonzero-unscoped;exclusive-native-listener;permit-accept;Core-sealed-response;controlled-indirect=0/schema-Arc+fields+names/0;temporary=1024+structured-JSON-body*3-not-stack-ceiling;largest-indirect=max-schema,structured-JSON-body*2;local-drop-work=3+schema;finite-SDK-local-drop;no-task;no-network-wait";
+const INSTALL_POLICY: &[u8] = b"request-reply-v6;operation-scoped-program;shared-native-GET-PUT-parser;credential-headers-refuse;prepared-object-integer-string-schema;schema64/depth8;encoded-depth32;exact-decimal-integer;Hyper1.12.0-server-http1;complete-request-half-close;httparse1.10.1;serde_json1.0.149-RawValue+UTF8+codepoints;manual-nonblocking-poll;head16/8192inclusive;read-write4096-per-poll;one-connection;one-correlation;JSON4096;media64;request-deadline-caller-ticks;no-pipeline-keepalive-expect-upgrade-body;native-parser-box-and-bridge-private;clinkz-http-producer-install-v2;socket2-0.6.4-TcpListener;reuseaddr-no-reuseport;backlog128;loopback-nonzero-unscoped;exclusive-native-listener;permit-accept;Core-sealed-response;controlled-indirect=0/instructions-Arc+schema-Arc+fields+names/0;temporary=1024+structured-JSON-body*3-not-stack-ceiling;largest-indirect=max-schema,structured-JSON-body*2;local-drop-work=5+schema+responses;finite-SDK-local-drop;no-task;no-network-wait";
 
 /// Runtime-only executor. It retains neither a compiler nor source TD.
 pub struct HttpProducerExecutor {
@@ -163,7 +220,7 @@ impl ProducerExecutor for HttpProducerExecutor {
         self.identity
     }
     fn install_policy(&self, program: &Self::Program) -> ProducerInstallPolicy {
-        let schema = &program.value_schema;
+        let schema = &program.instructions.value_schema;
         // String lengths and object lookups decode owned strings. With the
         // locked serde_json slice decoder, a growing scratch Vec can request
         // up to twice the encoded body size. Its old/new buffers or final
@@ -187,12 +244,18 @@ impl ProducerExecutor for HttpProducerExecutor {
                 .max(core::mem::size_of_val(schema.as_ref()) + 2 * core::mem::size_of::<usize>())
                 .max(decoder_allocation as usize)
                 .max(
-                    program.response_contract.retained_bytes()
-                        + core::mem::size_of_val(program.response_contract.as_ref())
+                    core::mem::size_of::<HttpProducerInstructions>()
+                        + 2 * core::mem::size_of::<usize>(),
+                )
+                .max(
+                    program.instructions.response_contract.retained_bytes()
+                        + core::mem::size_of_val(program.instructions.response_contract.as_ref())
                         + 2 * core::mem::size_of::<usize>(),
                 ) as u64,
             // Native/owner disposal, both Arc releases and final tree disposal.
-            local_drop_work: 4 + schema.drop_work() + program.response_contract.drop_work(),
+            local_drop_work: 5
+                + schema.drop_work()
+                + program.instructions.response_contract.drop_work(),
         }
     }
     fn service_policy(&self) -> Option<ProducerServicePolicy> {
@@ -204,11 +267,15 @@ impl ProducerExecutor for HttpProducerExecutor {
     fn check_program(&self, program: &Self::Program) -> CoreResult<()> {
         // Inspect native operands, not a caller-supplied compatibility tag.
         if self.config.secure
-            || program.secure
+            || program.instructions.secure
             || program.security_registration.is_some()
-            || program.operation != Operation::ReadProperty
-            || program.property_map.is_some()
-            || !program.response_contract.additional().is_empty()
+            || program.instructions.operation != Operation::ReadProperty
+            || program.instructions.property_map.is_some()
+            || !program
+                .instructions
+                .response_contract
+                .additional()
+                .is_empty()
             || program.address != self.config.address
             || program.target_len as usize > program.target.len()
             || program.origin_len as usize > program.origin.len()
@@ -250,7 +317,7 @@ impl ProducerExecutor for HttpProducerExecutor {
 impl ProducerOutputValidator for HttpProducerProgram {
     fn validate(&self, output: &InteractionOutput) -> CoreResult<()> {
         if matches!(
-            self.operation,
+            self.instructions.operation,
             Operation::ReadMultipleProperties
                 | Operation::WriteAllProperties
                 | Operation::WriteMultipleProperties
@@ -268,15 +335,17 @@ impl ProducerOutputValidator for HttpProducerProgram {
                 RetryClass::Never,
             )));
         }
-        self.response_contract
+        self.instructions
+            .response_contract
             .shape(!matches!(
-                self.operation,
+                self.instructions.operation,
                 Operation::WriteProperty
                     | Operation::WriteAllProperties
                     | Operation::WriteMultipleProperties
             ))
             .validate(output.metadata().response_selection(), output.view())?;
         let response = self
+            .instructions
             .response_contract
             .get(output.metadata().response_selection())
             .ok_or_else(producer_unsupported)?;
@@ -294,17 +363,17 @@ impl ProducerOutputValidator for HttpProducerProgram {
                 output.data().ok_or_else(producer_unsupported)?,
             );
         }
-        if self.operation == Operation::WriteProperty {
+        if self.instructions.operation == Operation::WriteProperty {
             return Ok(());
         }
-        if let Some(schema) = &self.property_map {
+        if let Some(schema) = &self.instructions.property_map {
             return super::producer_validation::validate_property_map(
                 schema,
                 output.data().ok_or_else(producer_unsupported)?,
             );
         }
         crate::responses::validate_payload(
-            &self.value_schema,
+            &self.instructions.value_schema,
             output.data().ok_or_else(producer_unsupported)?,
         )
     }

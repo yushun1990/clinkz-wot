@@ -30,10 +30,19 @@ fn cx() -> Context<'static> {
     Context::from_waker(Waker::noop())
 }
 fn address() -> SocketAddr {
-    TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
+    // A released port-0 probe can be offered to another concurrently preparing
+    // test before either native owner binds. Keep advertised endpoints distinct
+    // in this binary; intentional collision cases reuse the returned value.
+    static SELECTED: std::sync::Mutex<Vec<SocketAddr>> = std::sync::Mutex::new(Vec::new());
+    loop {
+        let probe = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = probe.local_addr().unwrap();
+        let mut selected = SELECTED.lock().unwrap();
+        if !selected.contains(&address) {
+            selected.push(address);
+            return address;
+        }
+    }
 }
 fn accepted<T, I>(value: Result<T, BindingInputRejection<I>>) -> T {
     value.unwrap_or_else(|e| panic!("{:?}", e.error()))

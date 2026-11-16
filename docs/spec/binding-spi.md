@@ -163,6 +163,55 @@ measures setup-inclusive work, requested retained heap and capacity separately.
 Sharing is optional and can cost more for a small or unique-definition workload;
 no total preparation-time improvement or automatic profile choice is promised.
 
+## Reusable HTTP Producer instructions
+
+`HttpFiniteProducer::compiling` explicitly prepares reusable instructions for
+the supported Host cleartext NoSec Property Read mapping. Preparation qualifies
+all effective input before constructing one immutable native response table,
+complete common response contract and value/response constraint trees.
+`HttpProducerDefinition::from_program` extracts only this explicitly funded
+compilation; ordinary specialized programs do not establish reuse eligibility.
+`HttpFiniteProducer::reusing` supplies that definition to the existing actual
+`ProducerCapability`, with fresh registration and listen operands. It never
+falls back to compilation. Final qualification checks the actual supplied
+definition as well as the original mapping, even under unchanged numeric
+registration identity. This capability is not the older single-Property
+`FiniteProducerCompiler` facade.
+
+| Lifetime | Facts and obligations |
+| --- | --- |
+| Shared immutable instructions | Read operation, cleartext/NoSec framing, supported JSON response media, native status/success/data discrimination, complete response branches and prepared value/response schemas |
+| Checked mapping | Fresh IP/loopback/nonzero address, scheme, exact authority/path/query and bounded URI, Property and Form coordinates, actual Binding identity/generation; every original eligibility/method/extension/schema/security check still runs |
+| Native participation | Complete route inventory and method/path collisions, listener ownership, actual bound endpoint/readiness, request timeout, correlation, parser/connection and independent native retirement |
+| Logical publication | Complete retained final TD and behavior coverage, exact current authority/generation, publication/retirement and independently funded instance records |
+| Accepted interaction | Fresh permission, original recipient/behavior, validated selected response, effect/delivery, unread settlement and cleanup owners |
+
+Property names, TD identifiers/titles, Form indices and native endpoints may
+differ because they do not enter the shared instructions. Nested schema field
+names/required sets, constraints, supported media, response order/status/success
+and all facts observed by lowering remain dependencies. Unsupported operations,
+methods, security, coding, templates and extension assertions still refuse.
+The implementation is process-local under one concrete compiler/validator/native
+policy; no persistence/version negotiation or cross-Binding compatibility is
+inferred. Live TLS/key/verifier services are not moved into the definition.
+
+The original bank reserves bounded provisional definition backing before
+lowering, then retains its actual instruction/schema/response bytes plus artifact
+and cleanup leases. Physical descendants drop before the original leases.
+Every definition and native program reference retains that owner. Prepared and
+native mapping declarations exclude only this already funded physical content;
+their own actual layouts/operands remain separately charged. A reference cannot
+transfer the original charge to a new instance bank. Scratch and work for fresh
+input checking remain real preparation costs.
+
+`native_compilations`, `dependency_checks` and `mapping_bindings` observe the
+whole-Thing capability path: actual lowering attempts (including fresh support
+probes), comparisons, and successfully prepared route bindings respectively.
+They are not Thing counts, runtime throughput or a total preparation-time claim.
+The [real HTTP evidence](../evidence/producer-preparation-reuse.md) scopes this
+increment. Write/collection/Action/notification reuse, secure Producer reuse and
+broader profiles remain unqualified; their specialized execution is retained.
+
 ## Publication and security collaboration
 
 Producer publication follows [PREP-COVER-001](planning.md) and SAFE-PUBLISH-001.

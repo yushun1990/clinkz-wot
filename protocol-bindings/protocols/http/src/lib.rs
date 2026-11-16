@@ -38,8 +38,8 @@ mod program;
 mod responses;
 mod security;
 pub use producer::{
-    HttpProducerConfig, HttpProducerExecutor, HttpProducerInstallation, HttpProducerProgram,
-    producer_execution,
+    HttpProducerConfig, HttpProducerDefinition, HttpProducerExecutor, HttpProducerInstallation,
+    HttpProducerProgram, producer_execution,
 };
 pub use security::{
     HttpApiKey, HttpApiKeyVerifier, HttpBasicCredentials, HttpBasicVerifier, HttpClientAccess,

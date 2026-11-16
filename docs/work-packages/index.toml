@@ -44,8 +44,9 @@ owner_crates = ["servient", "servient/finite", "core"]
 # Operation-scoped finite/continuing Action Consumer and notifications compose below preparation;
 # shared instance authority is independent of native facets (WP-400). Finite
 # notification and continuing Action persistent associations and explicit work
-# capacity have independent cardinality. Managed mixed-family composition and
-# qualified Producer exposure reuse remain separate work.
+# capacity have independent cardinality. Borrowed Host Consumer turns and explicit
+# HTTP Read instruction reuse across independent qualified Producer publications
+# retain those owners; broader families/profiles remain independently scoped.
 depends_on = ["WP-100", "WP-300"]
 
 [[package]]

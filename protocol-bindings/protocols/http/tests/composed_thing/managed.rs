@@ -8,6 +8,9 @@ use clinkz_wot_servient::{
 
 type HttpRuntime = RawFiniteRuntime<HttpFiniteBinding>;
 
+#[path = "reuse.rs"]
+mod reuse;
+
 fn bank() -> Arc<HostResourceAccounts> {
     Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS))
 }

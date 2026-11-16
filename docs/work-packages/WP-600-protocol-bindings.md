@@ -421,3 +421,16 @@ retention, mismatch/refusal/rollback and limitations. Source scope is
 in `src/lib.rs`, and the definition/HTTPS tests. No Binding dependencies are added
 to Engine modules, and no native execution owner or per-Thing Runtime is required.
 This increment does not close WP-600 or qualify all protocol/profile families.
+
+## Reusable HTTP Producer preparation
+
+The [explicit HTTP Producer definition path](../spec/binding-spi.md#reusable-http-producer-instructions)
+qualifies reusable response/validation instructions for NoSec Property Read,
+then checks and binds fresh native route operands through `ProducerCapability`.
+The source-free runtime consumes these instructions without a compiler or TD.
+[Evidence](../evidence/producer-preparation-reuse.md) includes actual avoided
+lowering, distinct HTTP publications/behavior/permissions, complete final-TD
+refusal, native collisions, publication failure isolation and final original-bank
+and socket release. Existing specialized Write/collection/HTTPS and continuing
+Action/MQTT paths retain their separate scopes; no broad reuse, production,
+package, milestone or independent acceptance follows.
