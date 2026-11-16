@@ -204,7 +204,7 @@ fn main() {
             instance,
             prepared,
             providers: vec![provider],
-            participants: vec![Box::new(native)],
+            participants: vec![OwnedProducerParticipation::finite(native)],
             expected: None,
             handler_backing_bytes: 8192,
         },
@@ -217,18 +217,19 @@ fn main() {
     let mut cx = Context::from_waker(Waker::noop());
     let start = Instant::now();
     let now = || MonotonicInstant::new(ClockId::new(601), start.elapsed().as_millis() as u64);
-    let _ = exposure
-        .participant_mut::<Native>(0)
-        .unwrap()
-        .step(&mut cx, &mut work(), now());
+    exposure
+        .step(&mut owner, &mut cx, now(), |_, _| work())
+        .unwrap();
     exposure.publish(&mut owner, &mut work()).unwrap();
     println!("{}", owner.description(key).unwrap());
     loop {
         if start.elapsed() >= Duration::from_secs(seconds) {
             exposure.begin_close();
         }
+        exposure
+            .step(&mut owner, &mut cx, now(), |_, _| work())
+            .unwrap();
         let native = exposure.participant_mut::<Native>(0).unwrap();
-        let _ = owner.step(native, &mut cx, &mut work(), now()).unwrap();
         if let Some(result) = native.take_settlement() {
             eprintln!("Collection/Property settlement: {result:?}");
         }

@@ -2,12 +2,14 @@ use super::*;
 use clinkz_wot_servient::{
     host_accounts::HostResourceAccounts,
     producer_composition::{
-        ComposedProducerExposure, ComposedProducerInput, OwnedProducerParticipation,
+        ComposedProducerExposure, ComposedProducerInput, OwnedProducerParticipation, ProducerWork,
     },
 };
 
 type HttpRuntime = RawFiniteRuntime<HttpFiniteBinding>;
 
+#[path = "execution.rs"]
+mod execution;
 #[path = "reuse.rs"]
 mod reuse;
 
@@ -86,7 +88,7 @@ fn http_input(
         },
     )
     .unwrap();
-    let participants: Vec<Box<dyn OwnedProducerParticipation>> = prepared
+    let participants: Vec<OwnedProducerParticipation> = prepared
         .operations()
         .iter()
         .zip(addresses)
@@ -94,7 +96,7 @@ fn http_input(
             let FormSite::Property(name) = &operation.site else {
                 panic!("property")
             };
-            Box::new(http_read(
+            OwnedProducerParticipation::finite(http_read(
                 owner,
                 address,
                 operation
@@ -105,7 +107,7 @@ fn http_input(
                 name,
                 operation.binding.0,
                 FiniteValidation::Required,
-            )) as Box<dyn OwnedProducerParticipation>
+            ))
         })
         .collect();
     ComposedProducerInput {
@@ -149,7 +151,10 @@ fn action_input(
             instance,
             prepared,
             providers: vec![provider],
-            participants: vec![Box::new(ActionNative::lease(native, key))],
+            participants: vec![OwnedProducerParticipation::new(
+                ActionNative::lease(native, key),
+                |_, _, _, _, _| Ok(()),
+            )],
             expected,
             handler_backing_bytes: std::mem::size_of::<Counts>(),
         },
@@ -172,7 +177,6 @@ fn action_without_captured_validation_service_refuses_managed_handoff_before_nat
     );
     let key = input.instance.key();
     input.participants[0]
-        .as_mut()
         .as_any_mut()
         .downcast_mut::<ActionLease>()
         .unwrap()
@@ -208,7 +212,6 @@ fn action_without_prepared_control_route_refuses_managed_handoff_before_native_s
     );
     let key = input.instance.key();
     input.participants[0]
-        .as_mut()
         .as_any_mut()
         .downcast_mut::<ActionLease>()
         .unwrap()
@@ -310,7 +313,6 @@ fn aggregate_handoff_refuses_saturation_and_retains_unread_http_results() {
     assert_eq!(live(&accounts), retained);
     assert_eq!(
         returned.participants[0]
-            .as_mut()
             .as_any_mut()
             .downcast_mut::<HttpRuntime>()
             .unwrap()
@@ -661,7 +663,7 @@ fn partial_native_setup_and_failed_cleanup_keep_original_capacity_and_sockets() 
         100,
     )
     .unwrap();
-    input.participants[0] = Box::new(
+    input.participants[0] = OwnedProducerParticipation::finite(
         RawFiniteRuntime::try_new(
             ControlledClose {
                 inner: HttpFiniteBinding::new(
@@ -826,7 +828,7 @@ fn raw_or_foreign_native_pairs_are_returned_before_managed_setup() {
             .definition::<HttpProducerProgram>()
             .unwrap()
             .clone();
-        input.participants[0] = Box::new(http_read(
+        input.participants[0] = OwnedProducerParticipation::finite(http_read(
             if raw { &owner } else { &foreign },
             addresses[0],
             program,
@@ -851,7 +853,6 @@ fn raw_or_foreign_native_pairs_are_returned_before_managed_setup() {
         let mut input = rejection.into_input();
         assert_eq!(
             input.participants[0]
-                .as_mut()
                 .as_any_mut()
                 .downcast_mut::<HttpRuntime>()
                 .unwrap()
@@ -1230,19 +1231,31 @@ fn review_large_input(
             let FormSite::Property(name) = &operation.site else {
                 panic!("property")
             };
-            Box::new(ReviewLargeParticipant(http_read(
-                &owner,
-                address,
-                operation
-                    .definition::<ReviewLargeDefinition>()
-                    .unwrap()
-                    .program
-                    .clone(),
-                input.instance.key(),
-                name,
-                operation.binding.0,
-                FiniteValidation::Required,
-            ))) as Box<dyn OwnedProducerParticipation>
+            OwnedProducerParticipation::new(
+                ReviewLargeParticipant(http_read(
+                    &owner,
+                    address,
+                    operation
+                        .definition::<ReviewLargeDefinition>()
+                        .unwrap()
+                        .program
+                        .clone(),
+                    input.instance.key(),
+                    name,
+                    operation.binding.0,
+                    FiniteValidation::Required,
+                )),
+                |native, owner, cx, now, credit| {
+                    owner
+                        .step(
+                            &mut native.0,
+                            cx,
+                            &mut credit(ProducerWork::Participation),
+                            now,
+                        )
+                        .map(|_| ())
+                },
+            )
         })
         .collect();
     memory.recording.set(true);

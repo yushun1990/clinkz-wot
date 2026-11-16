@@ -676,6 +676,43 @@ impl RawProducerServient {
         Ok(progress.map(|()| Some(handle.reference().slot().get())))
     }
 
+    /// Opt-in Host turn cleanup for this participant's revoked invocations.
+    /// Does not send CancelAction, affect a current sibling or acknowledge a
+    /// result. Existing manual continuation progress remains available.
+    pub fn close_revoked_actions<B: ProducerActionBinding>(
+        &mut self,
+        binding: &B,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<()> {
+        if !binding.associated_with(&self.participation_token(), binding.instance()) {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        let store = self
+            .actions
+            .as_mut()
+            .ok_or_else(|| CoreError::StaleHandle(context()))?;
+        if budget
+            .consume(WorkClass::CleanupItems, store.limits.invocations as u64)
+            .is_err()
+        {
+            return Ok(());
+        }
+        for entry in &mut store.entries {
+            if !entry.current.get()
+                && entry
+                    .native_owner
+                    .as_ref()
+                    .is_some_and(|owner| binding.participation_id().matches(owner))
+            {
+                entry.token.set(true);
+                if entry.work.is_some() {
+                    entry.cancel_requested = true;
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn acknowledge_action<B: ProducerActionBinding>(
         &mut self,
         binding: &mut B,

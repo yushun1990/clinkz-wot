@@ -265,9 +265,10 @@ pub(crate) fn create_from_text(
         .filter_map(|o| o.definition::<HttpActionDefinition>().cloned())
         .collect();
     assert_eq!(definitions.len(), 3);
-    let mut participants: Vec<Box<dyn OwnedProducerParticipation>> = vec![Box::new(
-        HttpActionRuntime::try_new(&owner.participation_token(), key, definitions, 4).unwrap(),
-    )];
+    let mut participants: Vec<OwnedProducerParticipation> =
+        vec![OwnedProducerParticipation::actions(
+            HttpActionRuntime::try_new(&owner.participation_token(), key, definitions, 4).unwrap(),
+        )];
     if let Some(addr) = property {
         let program = prepared
             .operations()
@@ -283,7 +284,7 @@ pub(crate) fn create_from_text(
             100,
         )
         .unwrap();
-        participants.push(Box::new(
+        participants.push(OwnedProducerParticipation::finite(
             RawFiniteRuntime::try_new(
                 HttpFiniteBinding::new(
                     config.clone(),

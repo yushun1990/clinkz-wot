@@ -759,8 +759,60 @@ executor, mandatory scheduler, per-Thing work owner or complete drain on Drop is
 introduced. Manual per-handle poll/progress and capacity step remain usable alone.
 The [mixed execution evidence](../evidence/consumer-execution-composition.md)
 and [compiled Host example](../../protocol-bindings/protocols/mqtt/examples/mixed_consumer.rs)
-establish the scoped integration; Producer composition, mixed security/source
-verification and constrained continuing execution require separate evidence.
+establish the scoped Consumer integration. Producer integration has its separate
+scope below; mixed security/source verification and constrained continuing
+execution remain unqualified here.
+
+### Host Producer execution turns
+
+`producer_composition::OwnedProducerParticipation` retains a native member with
+its typed Servient turn rather than erasing only publication metadata and `Any`.
+The `finite`, `actions` and `notifications` constructors select existing native
+capabilities and semantic operations in Servient. The bounded `new` extension
+seam supports linked capabilities without a Core whitelist. Construction remains
+pure; the original native owner, operation pointer, identity reference and error
+storage are paid by the existing composed admission. No native callback receives
+a Servient, handler or semantic dispatcher. Custom turns owe the same current
+authority, captured-service, funding, outcome and cleanup obligations as direct
+use; they cannot implicitly publish, emit, acknowledge, replay or discard work.
+
+`ComposedProducerExposure::step` visits the retained complete member set, checking
+the original participation identity, issuer and instance before any callback.
+Typed loans cannot substitute a new participant into that turn. Each member and
+`ProducerWork` lane receives independent deployment-supplied credit. Native Action
+polling and accepted continuation/cleanup progress use separate allowances; both
+are attempted even if native polling lacks credit or returns an error. A member's
+short turn/error cannot skip its siblings. The turn returns an operational error
+in preference to backpressure, retains each member's first returned non-backpressure
+error and exposes it through `progress_failure`; absent such an error the accessor
+lends that member's native failure evidence. The original native, application,
+delivery and cleanup owners remain authoritative for their detailed outcomes.
+Native evidence is reconciled by Servient against committed membership before
+revocation; uncommitted or foreign evidence cannot revoke another publication.
+
+Action turns opt into funded `close_revoked_actions` on their own participation.
+It checks association and prepays the bounded original store scan before marking
+only that member's revoked invocations for local close. It neither changes a
+current sibling nor synthesizes a remote CancelAction. Original continuations
+progress fairly within their participant using the existing selection policy.
+Pending/error close retains work, result funding and first close failure; no
+result is acknowledged by a turn. Direct manual `progress_actions` retains its
+existing completion policy. Native closed Action polling remains valid maintenance
+and yields no new ingress rather than an unsupported-operation error.
+
+These Producer turns compose alongside [Consumer turns](#host-consumer-execution-turns)
+in a deployment-supplied Host loop with the same native/maintenance, clock and
+result-observation obligations. Concrete native installation, complete final-TD
+publication, semantic query/cancel/response decisions, each notification emission's
+work, retention/reaping and acknowledgement remain explicit. No shared scheduler,
+protocol router, task/result registry, automatic publication or background drain
+is introduced. A turn's return does not establish idle work or complete release.
+Explicit `retire` still checks the exact original member set, native retirement,
+unread finite outcomes, original Actions and notification publications. Disposed
+native resources and retired logical publication do not refund externally held
+settlement/definition funding. Drop retains only its qualified finite local abort.
+The [Host integration evidence](../evidence/host-execution-integration.md) bounds
+availability; this is not mixed security, all-profile or production qualification.
 
 ### Caller-owned finite Read
 

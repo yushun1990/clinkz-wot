@@ -123,6 +123,13 @@ impl Engine {
                 {"href":format!("http://{}/stop{{?id}}",peer.address),"op":"cancelaction","htv:methodName":"DELETE"}]}},
             "events":{"alarm":{"data":{"type":"integer"},"forms":[{"href":format!("mqtt://{}",broker.address),"mqv:filter":"mixed/alarm","mqv:qos":"0","mqv:retain":false}]}}
         })).unwrap();
+        Self::from_thing(&thing, broker, bank)
+    }
+    fn from_thing(
+        thing: &clinkz_wot_td::thing::Thing,
+        broker: &Broker,
+        bank: Arc<HostResourceAccounts>,
+    ) -> Self {
         let mut limits = GatewayDefaultV1::LIMITS.clone();
         assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));
         let config = HttpConsumerConfig::for_cleartext_ip().unwrap();
@@ -142,7 +149,7 @@ impl Engine {
         .unwrap();
         let prepared = registry
             .prepare(
-                &thing,
+                thing,
                 &limits,
                 bank.clone(),
                 ConsumerSelector::default(),
@@ -176,7 +183,7 @@ impl Engine {
         let action = Rc::new(
             registry
                 .prepare_action(
-                    &thing,
+                    thing,
                     "run",
                     ConsumerActionSelectors::default(),
                     &limits,
@@ -205,7 +212,7 @@ impl Engine {
         let notification = Rc::new(
             registry
                 .prepare_notification(
-                    &thing,
+                    thing,
                     &AffordanceTarget::Event(Arc::from("alarm")),
                     NotificationKind::Event,
                     ConsumerSelector::default(),
@@ -945,3 +952,6 @@ fn deployment_timer_observes_finite_and_action_deadlines_while_mqtt_stays_usable
         clean(&bank);
     });
 }
+
+#[path = "support/host_execution.rs"]
+mod host_execution;

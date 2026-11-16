@@ -467,7 +467,7 @@ fn exposure(
             instance,
             prepared,
             providers: vec![provider],
-            participants: vec![Box::new(server)],
+            participants: vec![OwnedProducerParticipation::finite(server)],
             expected,
             handler_backing_bytes: size_of::<Application>() + 8192,
         },

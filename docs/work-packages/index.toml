@@ -49,6 +49,8 @@ owner_crates = ["servient", "servient/finite", "core"]
 # retain those owners; broader families/profiles remain independently scoped.
 # Optional Producer finite capacity separates persistent native participants,
 # active work and retained outcomes; WP-400 owns the scoped real-HTTP evidence.
+# Host Producer turns retain typed Servient execution with existing erased native
+# members and compose alongside Consumer capacities; no new dependency or gate.
 depends_on = ["WP-100", "WP-300"]
 
 [[package]]

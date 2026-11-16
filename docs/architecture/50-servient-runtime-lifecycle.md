@@ -38,6 +38,12 @@ execution credit while original result owners remain funded. The exact optional
 and dedicated policies belong to [Runtime Safety](../spec/runtime-safety.md#finite-producer-participation-and-work-capacity).
 Native concurrency and infrastructure ownership remain Binding decisions.
 
+Optional [Host Producer turns](../spec/runtime-safety.md#host-producer-execution-turns)
+retain typed Servient progress with the existing erased native members. They
+compose with independent Consumer capacities, without owning a scheduler or
+changing publication/result ownership. Original revoked Action cleanup no longer
+requires an application handle inventory; acknowledgements remain explicit.
+
 Native candidates retain original logical tokens/captures and backing. Servient
 checks current identity, publication, policy, data and capacity independently per
 recipient, captures behavior and reply capability, and dispatches outside locks.

@@ -128,6 +128,10 @@ turn composition borrows existing family capacities under the
 It depends only on Core/Foundation and adds no owner, scheduler or protocol case.
 The deployment supplies wake/maintenance turns, time and independent credit;
 Servient retains logical authority/work and Bindings retain native resources.
+The composed Host Producer stores its typed Servient turn with each original
+native member under the [Producer turn contract](../spec/runtime-safety.md#host-producer-execution-turns).
+This storage correction keeps native callbacks independent of Servient and uses
+the existing publication, continuation, result and physical-resource owners.
 It does not model Property observation or Event notification as finite exchanges: their
 establishment, delivery, reciprocal responses and stop require separate logical
 conversation owners.

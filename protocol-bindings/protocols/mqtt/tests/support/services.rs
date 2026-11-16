@@ -178,11 +178,22 @@ pub fn intercept_with_instance(
             instance,
             prepared,
             providers: vec![Rc::new(provider.clone())],
-            participants: vec![Box::new(ServicesParticipant {
-                native: runtime,
-                services,
-                route,
-            })],
+            participants: vec![OwnedProducerParticipation::new(
+                ServicesParticipant {
+                    native: runtime,
+                    services,
+                    route,
+                },
+                |native, owner, cx, _, credit| {
+                    owner
+                        .step_notifications(
+                            &mut native.native,
+                            cx,
+                            &mut credit(ProducerWork::Participation),
+                        )
+                        .map(|_| ())
+                },
+            )],
             expected: None,
             handler_backing_bytes: 0,
         },

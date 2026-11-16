@@ -13,7 +13,7 @@ use std::{
     net::SocketAddr,
     rc::Rc,
     sync::Arc,
-    task::Poll,
+    task::{Context, Poll, Waker},
     time::{Duration, Instant},
 };
 
@@ -136,7 +136,7 @@ fn main() {
             instance,
             prepared,
             providers: vec![provider],
-            participants: vec![Box::new(native)],
+            participants: vec![OwnedProducerParticipation::actions(native)],
             expected: None,
             handler_backing_bytes: 0,
         },
@@ -157,10 +157,13 @@ fn main() {
         owner.description(exposure.key()).unwrap()
     );
     let start = Instant::now();
+    let mut cx = Context::from_waker(Waker::noop());
+    let now = || MonotonicInstant::new(ClockId::new(601), start.elapsed().as_millis() as u64);
     while start.elapsed() < Duration::from_secs(seconds) {
+        if let Err(error) = exposure.step(&mut owner, &mut cx, now(), |_, _| work()) {
+            eprintln!("Producer turn: {error:?}");
+        }
         let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
-        let _ = owner.step_actions(native, &mut work());
-        let _ = owner.progress_actions(native, &mut work());
         if let Some(settlement) = owner.reap_actions(native, Duration::from_secs(5)).unwrap() {
             println!("Expired Action settlement: {settlement:?}");
         }
@@ -170,21 +173,25 @@ fn main() {
         std::thread::sleep(Duration::from_millis(1));
     }
     exposure.begin_close();
-    let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
-    let ids: Vec<_> = native.action_ids().collect();
-    for id in ids {
-        let handle = owner.action_handle(native, id).unwrap();
-        owner.close_raw_action(&handle).unwrap();
-        loop {
-            match owner.step_raw_action(&handle, &mut work()).unwrap() {
-                Poll::Ready(()) => break,
-                Poll::Pending => std::thread::sleep(Duration::from_millis(1)),
+    loop {
+        if let Err(error) = exposure.step(&mut owner, &mut cx, now(), |_, _| work()) {
+            eprintln!("Producer cleanup turn: {error:?}");
+        }
+        let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
+        // Result retention/acknowledgement is application policy. The turn
+        // drives revoked original work without an application cleanup inventory.
+        let ids: Vec<_> = native.action_ids().collect();
+        for id in ids {
+            if let Some(settlement) = owner.acknowledge_action(native, id).unwrap() {
+                println!("Action settlement: {settlement:?}");
             }
         }
-        println!(
-            "Action settlement: {:?}",
-            owner.acknowledge_action(native, id).unwrap()
-        );
+        if let Some(delivery) = native.take_delivery() {
+            println!("HTTP Action write: {delivery:?}");
+        }
+        if exposure.retire(&mut owner, &mut work()).is_ok() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(1));
     }
-    exposure.retire(&mut owner, &mut work()).unwrap();
 }

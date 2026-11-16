@@ -297,8 +297,9 @@ not govern Query output. Real HTTP contrasts independent body allowances;
 downstream datagrams contrast JSON/plain-text media, output-only Query support,
 exact selected validation work and changed-declaration refusal during late cleanup.
 The root QueryAllActions fixture shares one Consumer authority across separate
-finite and continuing capacity. Managed mixed Consumer execution is scoped below;
-reusable Producer exposure composition and broader profiles remain separate work.
+finite and continuing capacity. Managed mixed Consumer execution, reusable
+Producer exposure composition and Host Producer turns have their separate scoped
+sections below; broader profile qualification remains open.
 
 Unread native completion remains revocable until a paid settlement handoff with
 fresh time, original authority and captured service/access checks. The HTTP
@@ -345,6 +346,27 @@ existing callback/late-result and F1/F2/F3 evidence stays applicable. The compil
 example exposes the same integration. No independent acceptance, Producer reuse,
 mixed authentication/source verification, constrained continuing implementation,
 production qualification or package/milestone closure is claimed.
+
+## Host Producer execution composition
+
+The [Producer turn contract](../spec/runtime-safety.md#host-producer-execution-turns)
+replaces storage-only participant erasure with the original native member and
+its typed Servient turn. Existing finite, Action and notification capabilities
+retain independent authority, preparation, native ownership and settlement.
+Per-member/lane budgets keep native Action ingress separate from accepted work;
+errors/short credit do not skip siblings. Funded revoked-Action local close no
+longer requires application handle enumeration. Publication, emissions, result
+observation/acknowledgement and complete-set retirement remain explicit.
+
+The [real Host integration](../evidence/host-execution-integration.md) combines
+independently qualified publications, actual HTTP definition reuse and a shared
+native listener/work capacity with Engine Consumer Property/Action/Event work
+through HTTP and Mosquitto. Replacement, original Pending/error cleanup,
+caller-held outcomes and final physical/account release are exercised. Native
+startup failure and typed-loan substitution additionally test original membership
+and sibling progress. Existing qualification/native-authority/resource evidence
+is retained. This does not close the work package or qualify production/security,
+shared continuing-family capacity, constrained execution or broader reuse.
 
 ## Open finite Consumer ownership
 

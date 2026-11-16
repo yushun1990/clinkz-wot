@@ -132,7 +132,7 @@ pub fn input_with_instance(
         instance,
         prepared,
         providers: vec![Rc::new(provider.clone())],
-        participants: vec![Box::new(runtime)],
+        participants: vec![OwnedProducerParticipation::notifications(runtime)],
         expected,
         handler_backing_bytes: 0,
     }

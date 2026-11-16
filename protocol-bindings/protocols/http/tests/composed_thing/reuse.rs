@@ -192,7 +192,7 @@ fn input_with_capacity(
         instance,
         prepared,
         providers: vec![provider],
-        participants: vec![Box::new(runtime)],
+        participants: vec![OwnedProducerParticipation::finite(runtime)],
         expected: None,
         handler_backing_bytes: std::mem::size_of::<App>(),
     }

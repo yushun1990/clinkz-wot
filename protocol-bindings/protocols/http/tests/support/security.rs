@@ -299,7 +299,7 @@ impl SecureFixture {
                 instance,
                 prepared,
                 providers: vec![provider],
-                participants: vec![Box::new(server)],
+                participants: vec![OwnedProducerParticipation::finite(server)],
                 expected: None,
                 handler_backing_bytes: 4096,
             },
