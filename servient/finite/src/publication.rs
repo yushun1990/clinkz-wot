@@ -355,9 +355,15 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
         {
             return None;
         }
-        size_of::<Self>()
+        let persistent = size_of::<Self>()
             .checked_add(2 * size_of::<usize>())?
-            .checked_add(self.binding.engine_backing_bytes()?)?
+            .checked_add(self.binding.engine_backing_bytes()?)?;
+        if self.capacity.is_some() {
+            // Actual shared work/result/cleanup backing is reserved at its
+            // original work bank before receive, not once per publication.
+            return Some(persistent);
+        }
+        persistent
             .checked_add(
                 self.limits
                     .candidates
@@ -396,7 +402,9 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
         &self.ingress_gate
     }
     fn retired(&self) -> bool {
-        self.state == RawFiniteState::Closed && self.settlement.is_none()
+        self.state == RawFiniteState::Closed
+            && self.settlement.is_none()
+            && self.completed.is_none()
     }
 }
 

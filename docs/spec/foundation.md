@@ -54,6 +54,28 @@ reservation; copied metadata and variable records have separate allowances.
 Capacity-owner loss cannot migrate these reservations to the association or a
 successor bank. Captured native limits remain additional independent constraints.
 
+Optional Host `ProducerFiniteCapacity` funds finite incoming work independently
+of publication/participant count. Its own bounded accounting state retains an
+explicit work bank. Before receive, each opportunity reserves an original result
+owner, candidate/input allowance, maximum output backing, cleanup bytes/items,
+`PendingHandlerCallsGlobalMax`, `InFlightResponsesGlobalMax` and
+`BindingIngressItemsGlobalMax`. All reservations precede native receive; partial
+refusal releases only that attempt's leases. Pending native parsing retains no
+Engine permit or result backing; its actual buffers and connection remain covered
+by Binding policy. Publication banks retain their own description, behavior,
+prepared/native configuration and membership backing, without another idle
+input/result opportunity when explicit capacity is selected.
+
+At terminal native settlement, active credit and the ingress-item debit return.
+The retained-work limit, outstanding-handler/response quotas, conservative byte
+allowance and cleanup leases last through final outcome disposal, including after
+acknowledgement, capacity-handle loss or publication retirement. Accepted outcomes
+retain original instance/publication funding as well. These limits compose only
+the selected work bank: no per-Thing quota isolation, transitive native/process
+RAM bound or automatic aggregation across independent capacities is inferred.
+The [runtime contract](runtime-safety.md#finite-producer-participation-and-work-capacity)
+owns ordering and default dedicated-policy scope.
+
 The Host notification representation imports the same original data/access
 service owners. A shared prepared mapping pays its actual program/schema/reference
 records, without charging service backing again. Independent associations fund

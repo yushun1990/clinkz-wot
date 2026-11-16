@@ -226,6 +226,21 @@ fn exposure(
     authority: ProducerInstanceAuthority,
     expected: Option<ProducerInstanceKey>,
 ) -> ComposedProducerExposure {
+    exposure_with_capacity(
+        owner, accounts, td, app, controls, authority, expected, None,
+    )
+}
+#[allow(clippy::too_many_arguments)]
+fn exposure_with_capacity(
+    owner: &RawProducerServient,
+    accounts: Arc<HostResourceAccounts>,
+    td: Value,
+    app: Rc<Application>,
+    controls: Rc<Controls>,
+    authority: ProducerInstanceAuthority,
+    expected: Option<ProducerInstanceKey>,
+    capacity: Option<&ProducerFiniteCapacity>,
+) -> ComposedProducerExposure {
     let addr = td["properties"]["level"]["forms"][0]["href"]
         .as_str()
         .unwrap()
@@ -305,6 +320,10 @@ fn exposure(
         Deadline::NONE,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let server = match capacity {
+        Some(capacity) => server.with_capacity(capacity.clone()).ok().unwrap(),
+        None => server,
+    };
     let result = ComposedProducerExposure::try_new(
         owner,
         ComposedProducerInput {
@@ -1606,3 +1625,159 @@ fn unread_results_and_service_loss_keep_bounded_original_owners_until_acknowledg
 
 #[path = "support/response_alternatives.rs"]
 mod response_alternatives;
+
+#[test]
+fn shared_producer_capacity_preserves_write_effects_unread_failures_and_pending_retirement() {
+    let addr = address();
+    let mut owner = RawProducerServient::try_empty(RawProducerRegistryLimits {
+        instances: 1,
+        behaviors_per_instance: 2,
+        target_name_bytes: 256,
+    })
+    .unwrap();
+    let publication_bank = bank();
+    let work_bank = bank();
+    let capacity = ProducerFiniteCapacity::try_new(
+        &owner,
+        RawFiniteLimits {
+            candidates: 1,
+            input_body_bytes: 4096,
+            output_body_bytes: 4096,
+            output_media_capacity: 64,
+            output_retained_bytes: 8192,
+        },
+        1,
+        4,
+        work_bank.clone(),
+    )
+    .unwrap();
+    let app = Rc::new(Application::default());
+    let controls = Rc::new(Controls::default());
+    let mut exposure = exposure_with_capacity(
+        &owner,
+        publication_bank.clone(),
+        description(addr),
+        app.clone(),
+        controls.clone(),
+        authority(Generation::INITIAL),
+        None,
+        Some(&capacity),
+    );
+    assert_eq!(
+        exposure
+            .participant_mut::<Server>(0)
+            .unwrap()
+            .step(&mut cx(), &mut work(), now(0)),
+        Poll::Ready(RawFiniteState::InstalledClosed)
+    );
+    exposure.publish(&mut owner, &mut work()).unwrap();
+    let key = exposure.key();
+    let mut server = Fixture {
+        owner,
+        exposure,
+        bank: publication_bank.clone(),
+        app: app.clone(),
+        controls: controls.clone(),
+        addr,
+    };
+    for (i, mode) in [0, 1, 2].into_iter().enumerate() {
+        app.output.set(mode);
+        let value = 31 + i;
+        let (response, dedicated_result) = raw_reply(&mut server, format!("PUT /level HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{value}").as_bytes());
+        assert!(dedicated_result.is_none());
+        assert_eq!(response.starts_with(b"HTTP/1.1 204"), mode == 0);
+        assert_eq!(app.writes.get(), i + 1);
+        assert_eq!(&*app.value.borrow(), value.to_string().as_bytes());
+        assert_eq!(
+            (capacity.active_work(), capacity.retained_work()),
+            (0, i + 1)
+        );
+    }
+    app.output.set(0);
+    controls.hold_send.set(true);
+    let mut peer = TcpStream::connect(addr).unwrap();
+    peer.write_all(format!("PUT /level HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n34").as_bytes()).unwrap();
+    peer.shutdown(std::net::Shutdown::Write).unwrap();
+    let end = Instant::now() + Duration::from_secs(5);
+    while server.server().state() != RawFiniteState::Delivering {
+        server.step();
+        assert!(Instant::now() < end);
+    }
+    assert_eq!(app.writes.get(), 4);
+    controls.hold_close.set(true);
+    server.exposure.begin_close();
+    assert!(
+        server
+            .server()
+            .step(&mut cx(), &mut WorkBudget::new(), now(0))
+            .is_pending()
+    );
+    for _ in 0..5 {
+        server.step();
+    }
+    assert_eq!((capacity.active_work(), capacity.retained_work()), (1, 4));
+    assert!(
+        server
+            .exposure
+            .retire(&mut server.owner, &mut work())
+            .is_err()
+    );
+    controls.hold_close.set(false);
+    server.step();
+    assert_eq!(server.server().state(), RawFiniteState::Closed);
+    assert_eq!((capacity.active_work(), capacity.retained_work()), (0, 4));
+    let results: Vec<_> = (0..4)
+        .map(|_| server.server().take_retained_settlement().unwrap())
+        .collect();
+    for (i, result) in results.iter().enumerate() {
+        assert_eq!(result.recipient(), Some(key));
+        assert_eq!(result.operation(), Some(Operation::WriteProperty));
+        assert_eq!(
+            result.effect(),
+            if i == 0 || i == 3 {
+                FiniteEffect::Completed
+            } else {
+                FiniteEffect::Unknown
+            }
+        );
+        assert_eq!(
+            result.delivery(),
+            if i == 3 {
+                FiniteDelivery::NotDelivered
+            } else {
+                FiniteDelivery::Delivered
+            }
+        );
+        assert_eq!(result.result().is_ok(), i == 0 || i == 3);
+    }
+    assert!(
+        results
+            .windows(2)
+            .all(|pair| pair[0].sequence() < pair[1].sequence())
+    );
+    assert_eq!(app.writes.get(), 4); // Neither failure nor close replayed effects.
+    assert_eq!(&*app.value.borrow(), b"34");
+    assert!(matches!(
+        server.server().first_cause(),
+        Some(CoreError::Cancelled(_))
+    ));
+    server
+        .exposure
+        .retire(&mut server.owner, &mut work())
+        .unwrap();
+    drop(server);
+    assert_eq!(app.drops.get(), 0);
+    assert!(
+        publication_bank
+            .account(ResourceKind::EngineLiveBytesGlobalMax)
+            .used()
+            > 0
+    );
+    TcpListener::bind(addr).unwrap();
+    drop(results);
+    assert_eq!(app.drops.get(), 2);
+    assert_eq!(capacity.retained_work(), 0);
+    drop(capacity);
+    clean(&publication_bank);
+    clean(&work_bank);
+}

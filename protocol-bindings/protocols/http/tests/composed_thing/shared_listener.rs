@@ -1,5 +1,8 @@
 //! Independent complete publications over one actual native HTTP listener.
 use super::*;
+
+#[path = "capacity.rs"]
+mod capacity;
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},

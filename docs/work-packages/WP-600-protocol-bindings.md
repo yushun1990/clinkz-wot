@@ -445,3 +445,7 @@ the Engine SPI and per-description qualification/publication contracts are uncha
 independent publication, replacement, original accepted work, pressure and final
 release on one listener. This changes no dependency, admission, gate or milestone
 status; shared HTTPS/Actions, mixed families and production scope remain open.
+
+WP-400's [optional finite work capacity](../evidence/producer-finite-capacity.md)
+uses this unchanged native listener/driver to separate publication, active work
+and retained outcomes. It adds no HTTP concurrency or protocol-mapping contract.

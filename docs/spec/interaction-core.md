@@ -31,6 +31,12 @@ owner. The Host finite association/work split and its original operand retention
 are defined in [Runtime Safety](runtime-safety.md); the common finite transition
 kernel remains independent of that storage representation.
 
+The raw finite Producer settlement is an original outcome carrier, not a mandate
+to keep native execution occupied until observation. Host finite participation
+may use [independent work capacity](runtime-safety.md#finite-producer-participation-and-work-capacity),
+returning active credit at native settlement and retaining bounded result owners.
+This adds no Core scheduler, native routing or common Consumer/Producer lifecycle.
+
 Managed finite registration constructs the unique `ConsumerInstance` in the
 actual Servient owner. Internal slot assignment/reuse is not an ordinary public
 Thing address or caller obligation. Application handles retain original identity/currentness

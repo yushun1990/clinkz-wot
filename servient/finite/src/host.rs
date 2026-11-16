@@ -23,6 +23,9 @@ pub use notification_publication::*;
 #[path = "publication.rs"]
 mod publication;
 pub use publication::*;
+#[path = "producer_capacity.rs"]
+mod producer_capacity;
+pub use producer_capacity::*;
 
 use alloc::{
     boxed::Box,
@@ -756,7 +759,7 @@ impl RawProducerServient {
     }
 }
 
-/// Per-runtime exchange opportunity and Engine-retained result backing. Output is
+/// Maximum exchange opportunity and Engine-retained result backing. Output is
 /// application-backed during the handler callback; on return it is moved into
 /// Engine ownership only if the *entire* measured representation fits this
 /// declared result opportunity. Native input/metadata/backing is Binding-owned.
@@ -789,14 +792,17 @@ pub enum RawFiniteState {
     Closed,
 }
 
-/// A single native driver may match many logical instances. At most one owned
-/// exclusive exchange is in the Engine at a time in this manual Host slice.
+/// Persistent typed native participation. One exclusive exchange may be active
+/// on this driver. By default its single reserved opportunity also retains one
+/// unread result. `with_capacity` instead admits work from an independent shared
+/// bank and permits further exchanges while original funded outcomes are unread.
 /// Refusals still travel through the original Binding reply opportunity.
 pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     // Complete pending work drops before the physical driver on local disposal.
     ingress: Option<FiniteIngress<B::Reply>>,
     reply: Option<RawFiniteReply<B::Reply>>,
     settlement: Option<RawFiniteSettlement>,
+    completed: Option<Box<ProducerFiniteSettlement>>,
     binding: B,
     // Survives native disposal and ends only at settlement acknowledgement.
     accepted_instance: Option<AcceptedBehavior>,
@@ -818,6 +824,9 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     native_started: bool,
     participation: ProducerParticipationId,
     retained_owner: Option<Rc<dyn core::any::Any>>,
+    // Active input/result/cleanup funding outlives native driver/config disposal.
+    work: Option<Box<ProducerFiniteSettlement>>,
+    capacity: Option<ProducerFiniteCapacity>,
 }
 
 impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
@@ -848,6 +857,8 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         Ok(Self {
             ingress: None,
             reply: None,
+            work: None,
+            completed: None,
             binding,
             accepted_instance: None,
             issuer: Rc::downgrade(&servient.issuer),
@@ -867,7 +878,27 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             native_started: false,
             participation: ProducerParticipationId::new(),
             retained_owner: None,
+            capacity: None,
         })
+    }
+
+    /// Select independently funded finite work before native setup or managed
+    /// admission. Publication/readiness needs no vacant work slot. The capacity
+    /// must belong to this logical owner and cover every declared exchange bound.
+    /// Rejection returns this complete unstarted participation.
+    pub fn with_capacity(
+        mut self,
+        capacity: ProducerFiniteCapacity,
+    ) -> Result<Self, BindingInputRejection<Self>> {
+        if self.state != RawFiniteState::Starting
+            || self.native_started
+            || self.retained_owner.is_some()
+            || !capacity.supports(&self.issuer, self.limits)
+        {
+            return Err(rejection(self));
+        }
+        self.capacity = Some(capacity);
+        Ok(self)
     }
 
     pub fn state(&self) -> RawFiniteState {
@@ -891,15 +922,23 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         self.fail(cause);
     }
 
-    /// A delivered or explicitly retired exchange must be acknowledged before
-    /// the next receive. This bounded record reports local effect and native
-    /// delivery independently; neither an error nor close proves a write absent.
+    /// Acknowledge the default dedicated opportunity, before its next receive.
+    /// Participants using `with_capacity` use `take_retained_settlement` instead.
+    /// Neither an error nor close proves a write absent.
     pub fn take_settlement(&mut self) -> Option<RawFiniteSettlement> {
         let settlement = self.settlement.take();
         if settlement.is_some() {
             self.accepted_instance = None;
         }
         settlement
+    }
+
+    /// Acknowledge the oldest outcome admitted from explicit capacity. The
+    /// returned owner retains original result/instance/publication funding and
+    /// its retained-work debit until disposal. Execution credit was already
+    /// released at native settlement; taking this record grants no native right.
+    pub fn take_retained_settlement(&mut self) -> Option<Box<ProducerFiniteSettlement>> {
+        ProducerFiniteSettlement::take(&mut self.completed)
     }
 
     /// Locally enable raw acceptance after native readiness; this does not
@@ -1025,7 +1064,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     fn settle_reply(&mut self, delivery: FiniteDelivery) {
         if let Some(reply) = self.reply.take() {
             assert!(self.settlement.is_none(), "unread finite settlement");
-            self.settlement = Some(RawFiniteSettlement {
+            let settlement = RawFiniteSettlement {
                 binding: self.identity,
                 // A view of the captured registered target shares its funded
                 // backing, rather than extending Binding-private input storage.
@@ -1039,7 +1078,11 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 effect: reply.effect,
                 delivery,
                 result: reply.result,
-            });
+            };
+            // Dispose the original native input/opportunity before refunding
+            // active/ingress credit, including a linked Reply destructor.
+            drop(reply.ingress);
+            self.retain_settlement(settlement);
         }
     }
 
@@ -1050,7 +1093,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 .candidates
                 .first()
                 .filter(|_| ingress.candidates.len() == 1);
-            self.settlement = Some(RawFiniteSettlement {
+            let settlement = RawFiniteSettlement {
                 binding: self.identity,
                 target: None,
                 recipient: single.map(|c| c.instance),
@@ -1058,7 +1101,22 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 effect: FiniteEffect::NotInvoked,
                 delivery,
                 result: Err(self.first_cause.clone().expect("close has a first cause")),
-            });
+            };
+            drop(ingress);
+            self.retain_settlement(settlement);
+        }
+    }
+
+    fn retain_settlement(&mut self, settlement: RawFiniteSettlement) {
+        if self.capacity.is_some() {
+            self.work.take().expect("prepaid finite receive").complete(
+                settlement,
+                self.accepted_instance.take(),
+                self.retained_owner.clone(),
+                &mut self.completed,
+            );
+        } else {
+            self.settlement = Some(settlement);
         }
     }
 
@@ -1109,6 +1167,19 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         if budget.consume(class, 1).is_err() {
             return Poll::Pending;
         }
+        if self.capacity.is_some()
+            && matches!(self.state, Delivering | Closing)
+            && (self.ingress.is_some() || self.reply.is_some())
+            && budget
+                .consume(
+                    WorkClass::QueueOperations,
+                    producer_capacity::MAX_WORK as u64,
+                )
+                .is_err()
+        {
+            // Prepay bounded FIFO insertion before native terminal handoff.
+            return Poll::Pending;
+        }
         if matches!(self.state, Starting | Serving | Dispatching) && self.issuer.strong_count() == 0
         {
             self.fail(CoreError::StaleHandle(context()));
@@ -1136,10 +1207,23 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 }
             }
             Serving => {
+                if let Some(capacity) = &self.capacity {
+                    self.work = capacity.acquire();
+                    if self.work.is_none() {
+                        // Bounded work/result pressure does not unpublish or
+                        // close a persistent native participant.
+                        return Poll::Pending;
+                    }
+                }
                 let received = self.binding.poll_receive(cx, now);
                 self.io_deadline = self.binding.request_deadline();
                 match received {
-                    Poll::Pending => Poll::Pending,
+                    Poll::Pending => {
+                        // Incomplete parsing remains Binding-owned and bounded
+                        // by its native policy, independently of Engine work.
+                        self.work = None;
+                        Poll::Pending
+                    }
                     Poll::Ready(Err(e)) => {
                         self.fail(e);
                         Poll::Ready(self.state)
@@ -1276,6 +1360,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 Poll::Ready(Ok(delivery)) => {
                     self.settle_ingress(delivery);
                     self.settle_reply(delivery);
+                    self.work = None;
                     self.state = Closed;
                     Poll::Ready(Closed)
                 }

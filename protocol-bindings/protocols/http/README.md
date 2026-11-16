@@ -809,8 +809,11 @@ retain separate facts. No owner automatically retries a write. Retained Consumer
 settlements pin original result/service funding independently of the native
 exchange lease released at connection/driver retirement. Engine call slots remain
 occupied until settlement handoff or funded abandoned-call disposal. An unread
-Producer settlement keeps that runtime unavailable for the next receive until
-acknowledgement. Cancellation, replacement and root loss preserve original accepted
+Producer settlement under the default dedicated policy keeps that runtime
+unavailable until acknowledgement. Optional `ProducerFiniteCapacity` returns
+active execution credit at native settlement while separately bounding retained
+outcomes through disposal; `take_retained_settlement` transfers the original funded
+owner. Cancellation, replacement and root loss preserve original accepted
 work and funding through their required retirement and disposal boundaries.
 
 `property_write` proves actual Consumer-to-Producer state changes and subsequent
@@ -1504,6 +1507,18 @@ while old work remains active. Input already accepted by the listener cannot
 move to a later registration. Final native participation release closes the
 socket even if the passive listener handle remains. Unread original settlements
 still prevent their own logical retirement.
+
+Persistent participants can independently select `RawFiniteRuntime::with_capacity`
+before setup and managed admission. `ProducerFiniteCapacity` belongs to one
+logical owner and explicit work bank; its active and retained limits do not
+allocate an exclusive idle exchange to every publication. A result retained on
+one participant no longer prevents later receives when both limits and the bank
+allow them. Output views lend bytes under the original result owner, including
+after acknowledgement and logical retirement. Complete qualification/publication
+and the native bounds above remain mandatory. The default constructor deliberately
+keeps the single dedicated opportunity and `take_settlement` handoff. See the
+[runtime policy](../../../docs/spec/runtime-safety.md#finite-producer-participation-and-work-capacity)
+and [capacity evidence](../../../docs/evidence/producer-finite-capacity.md).
 
 Run the joined real-I/O evidence with:
 
