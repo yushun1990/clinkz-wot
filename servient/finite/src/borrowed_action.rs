@@ -488,6 +488,17 @@ impl<'a, B: ActionBinding, I: ActionInput> ActionSlot<'a, B, I> {
 ///     let _bytes = view.data().unwrap().body;
 /// }
 /// ```
+///
+/// ```compile_fail,E0505
+/// use clinkz_wot_core::execution::action::{ActionBinding, ActionInput};
+/// use clinkz_wot_servient_finite::borrowed_action::ActionSettlement;
+/// fn refund_while_evidence_borrowed<B: ActionBinding, I: ActionInput>(s: ActionSettlement<'_, B, I>,
+///     budget: &mut clinkz_wot_foundation::WorkBudget) {
+///     let evidence = s.native_result(budget).unwrap().unwrap().unwrap();
+///     let _funding = s.into_funding();
+///     let _bytes = evidence.data().unwrap().body;
+/// }
+/// ```
 pub struct ActionSettlement<'a, B: ActionBinding, I: ActionInput>(Invocation<'a, B, I>);
 impl<B: ActionBinding, I: ActionInput> ActionSettlement<'_, B, I> {
     /// Matches the Host continuing Action's conservative effect evidence.
@@ -525,16 +536,33 @@ impl<B: ActionBinding, I: ActionInput> ActionSettlement<'_, B, I> {
     /// Current view supplied by the original retained input owner. This calls
     /// `ActionInput::view` again; bytes/media/coding may differ from the exact
     /// view used for admission and dispatch. No dispatch snapshot is retained.
-    pub fn input(&self) -> Option<PayloadView<'_>> {
-        self.0.input.as_ref().map(ActionInput::view)
+    /// A present input requires one HandlerSteps adapter unit. Short credit
+    /// enters no callback and retains all evidence, state and funding.
+    pub fn input(&self, budget: &mut WorkBudget) -> CoreResult<Option<PayloadView<'_>>> {
+        let Some(input) = self.0.input.as_ref() else {
+            return Ok(None);
+        };
+        budget.consume(W::HandlerSteps, 1).map_err(|_| busy())?;
+        Ok(Some(input.view()))
     }
     /// Current native evidence, including rejected or late output. This view
     /// carries no application-validation claim and may differ on another call.
-    pub fn native_result(&self) -> Option<Result<InteractionOutputView<'_>, &CoreError>> {
-        self.0
-            .result
-            .as_ref()
-            .map(|r| r.as_ref().map(ActionOutput::view))
+    /// Prepay one HandlerSteps unit before a present output's adapter callback.
+    /// Absence and retained native errors are passive and need no credit. The
+    /// outer error reports short adapter credit; the inner result preserves the
+    /// original native disposition. No codec, authority or native progress runs.
+    pub fn native_result(
+        &self,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Option<Result<InteractionOutputView<'_>, &CoreError>>> {
+        Ok(match &self.0.result {
+            Some(Ok(output)) => {
+                budget.consume(W::HandlerSteps, 1).map_err(|_| busy())?;
+                Some(Ok(output.view()))
+            }
+            Some(Err(error)) => Some(Err(error)),
+            None => None,
+        })
     }
     /// Capture, validate and return one exact application loan. Native output
     /// owners may select different views between calls; prior validation grants

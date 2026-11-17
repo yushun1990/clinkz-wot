@@ -254,6 +254,125 @@ fn fixture(f: impl FnOnce(Case<'_>)) {
 }
 
 #[test]
+fn native_evidence_inspection_requires_adapter_credit() {
+    fixture(|mut c| {
+        let h = c.complete();
+        let mut s = c.finish(h);
+        let before = c.stats.output_views.get();
+        let mut zero = WorkBudget::new();
+        assert!(matches!(
+            s.result(&mut zero),
+            Err(CoreError::Backpressure(_))
+        ));
+        assert_eq!(c.stats.output_views.get(), before);
+        assert!(matches!(
+            s.native_result(&mut zero),
+            Err(CoreError::Backpressure(_))
+        ));
+        assert_eq!(
+            c.stats.output_views.get(),
+            before,
+            "unfunded native evidence inspection entered the adapter"
+        );
+        let validations = c.query_codec.number.validations.get();
+        let checks = c.query_access.checks.get();
+        let polls = c.stats.polls.get();
+        let closes = c.stats.closes.get();
+        c.query_codec.number.available.set(false);
+        let mut one = WorkBudget::new().with_remaining(WorkClass::HandlerSteps, 1);
+        assert_eq!(
+            s.native_result(&mut one)
+                .unwrap()
+                .unwrap()
+                .unwrap()
+                .data()
+                .unwrap()
+                .body,
+            b"42"
+        );
+        assert_eq!(one.remaining(WorkClass::HandlerSteps), 0);
+        assert_eq!(c.stats.output_views.get(), before + 1);
+        assert!(matches!(
+            s.native_result(&mut one),
+            Err(CoreError::Backpressure(_))
+        ));
+        assert_eq!(c.stats.output_views.get(), before + 1);
+        assert_eq!(c.query_codec.number.validations.get(), validations);
+        assert_eq!(c.query_access.checks.get(), checks);
+        assert_eq!(c.stats.polls.get(), polls);
+        assert_eq!(c.stats.closes.get(), closes);
+        assert!(s.first_cause().is_none());
+        assert!(s.validation_error().is_none());
+        assert_eq!(c.stats.outputs_dropped.get(), 0);
+        assert_eq!(c.stats.tokens_dropped.get(), 0);
+    });
+}
+
+#[test]
+fn input_owner_inspection_requires_adapter_credit() {
+    fixture(|mut c| {
+        let h = c.complete();
+        let s = c.finish(h);
+        let before = c.stats.input_views.get();
+        assert!(matches!(
+            s.input(&mut WorkBudget::new()),
+            Err(CoreError::Backpressure(_))
+        ));
+        assert_eq!(
+            c.stats.input_views.get(),
+            before,
+            "unfunded input inspection entered the adapter"
+        );
+        let validations = c.invoke_codec.number.validations.get();
+        let mut one = WorkBudget::new().with_remaining(WorkClass::HandlerSteps, 1);
+        assert_eq!(s.input(&mut one).unwrap().unwrap().body, b"7");
+        assert_eq!(one.remaining(WorkClass::HandlerSteps), 0);
+        assert_eq!(c.stats.input_views.get(), before + 1);
+        assert!(matches!(s.input(&mut one), Err(CoreError::Backpressure(_))));
+        assert_eq!(c.stats.input_views.get(), before + 1);
+        assert_eq!(c.invoke_codec.number.validations.get(), validations);
+        assert!(s.first_cause().is_none());
+        assert_eq!(c.stats.inputs_dropped.get(), 0);
+    });
+}
+
+#[test]
+fn absent_and_failed_native_dispositions_are_passive_at_zero_credit() {
+    for failed in [false, true] {
+        fixture(|mut c| {
+            let h = if failed {
+                let h = c.accept();
+                c.slot.query(h, now(1), &mut budget()).unwrap();
+                c.exchange(&[b'Q', 7], b"F");
+                h
+            } else {
+                let h = c.start();
+                c.slot.cancel_local(h).unwrap();
+                c.step();
+                h
+            };
+            let s = c.finish(h);
+            let views = c.stats.output_views.get();
+            let mut zero = WorkBudget::new();
+            let observation = s.native_result(&mut zero).unwrap();
+            if failed {
+                let error = observation.unwrap().unwrap_err();
+                assert!(matches!(error, CoreError::Binding(_)));
+                let again = s.native_result(&mut zero).unwrap().unwrap().unwrap_err();
+                assert!(core::ptr::eq(error, again));
+            } else {
+                assert!(observation.is_none());
+                assert!(matches!(s.first_cause(), Some(CoreError::Cancelled(_))));
+            }
+            assert_eq!(c.stats.output_views.get(), views);
+            for class in WorkClass::ALL {
+                assert_eq!(zero.remaining(class), 0);
+            }
+        });
+    }
+}
+
+#[test]
 fn authorization_cannot_expose_output_selected_after_validation() {
     for variant in [
         OutputVariant::Bytes,
@@ -290,7 +409,7 @@ fn authorization_cannot_expose_output_selected_after_validation() {
                 assert!(s.validation_error().is_some());
                 assert!(matches!(s.first_cause(), Some(CoreError::Validation(_))));
                 assert_eq!(s.state(), ConsumerActionState::Closed);
-                assert!(s.native_result().unwrap().is_ok());
+                assert!(s.native_result(&mut budget()).unwrap().unwrap().is_ok());
                 assert_eq!(c.stats.outputs_dropped.get(), 0);
                 assert_eq!(c.stats.tokens_dropped.get(), 0);
                 drop(s);
@@ -400,7 +519,13 @@ fn accepted_owner_retains_native_output_when_loan_validation_service_is_unavaila
         assert_eq!(c.query_codec.number.validations.get(), 1);
         assert!(s.validation_error().is_some());
         assert_eq!(
-            s.native_result().unwrap().unwrap().data().unwrap().body,
+            s.native_result(&mut budget())
+                .unwrap()
+                .unwrap()
+                .unwrap()
+                .data()
+                .unwrap()
+                .body,
             b"7"
         );
         assert_eq!(c.stats.outputs_dropped.get(), 0);
@@ -442,7 +567,7 @@ fn continuing_invoke_pending_query_cancel_then_completion_keeps_original_owners(
                 .content_type,
             "text/x-test-number"
         );
-        assert_eq!(s.input().unwrap().body, b"7");
+        assert_eq!(s.input(&mut budget()).unwrap().unwrap().body, b"7");
         assert_eq!(c.invoke_codec.number.validations.get(), 1);
         // Initial completion plus two separately validated application loans.
         assert_eq!(c.query_codec.number.validations.get(), 3);
@@ -498,10 +623,29 @@ fn cancellation_retains_pending_failed_close_and_validated_late_output_after_rev
         assert!(s.cleanup_error().is_some());
         assert!(s.native_error().is_none());
         assert!(s.result(&mut budget()).is_err());
+        let views = c.stats.output_views.get();
+        assert!(matches!(
+            s.native_result(&mut WorkBudget::new()),
+            Err(CoreError::Backpressure(_))
+        ));
+        assert_eq!(c.stats.output_views.get(), views);
+        assert!(matches!(s.first_cause(), Some(CoreError::Cancelled(_))));
+        assert!(s.cleanup_error().is_some());
+        assert_eq!(s.state(), ConsumerActionState::Closed);
+        c.query_codec.number.available.set(false);
+        let mut evidence = WorkBudget::new().with_remaining(WorkClass::HandlerSteps, 1);
         assert_eq!(
-            s.native_result().unwrap().unwrap().data().unwrap().body,
+            s.native_result(&mut evidence)
+                .unwrap()
+                .unwrap()
+                .unwrap()
+                .data()
+                .unwrap()
+                .body,
             b"42"
         );
+        assert_eq!(evidence.remaining(WorkClass::HandlerSteps), 0);
+        assert_eq!(c.stats.output_views.get(), views + 1);
         assert_eq!(c.query_codec.number.validations.get(), 1);
         assert_eq!(c.stats.outputs_dropped.get(), 0);
         assert_eq!(c.stats.tokens_dropped.get(), 0);
@@ -535,7 +679,13 @@ fn poll_error_and_late_output_survive_repeated_physical_retirement_failure() {
         assert!(s.cleanup_error().is_some());
         assert!(s.validation_error().is_none());
         assert_eq!(
-            s.native_result().unwrap().unwrap().data().unwrap().body,
+            s.native_result(&mut budget())
+                .unwrap()
+                .unwrap()
+                .unwrap()
+                .data()
+                .unwrap()
+                .body,
             b"42"
         );
         assert_eq!(c.query_codec.number.validations.get(), 1);
@@ -557,7 +707,7 @@ fn unread_completion_requires_fresh_permission_and_short_handoff_retains_slot() 
         let mut s = c.finish(h);
         assert!(matches!(s.first_cause(), Some(CoreError::Security { .. })));
         assert!(s.result(&mut budget()).is_err());
-        assert!(s.native_result().unwrap().is_ok());
+        assert!(s.native_result(&mut budget()).unwrap().unwrap().is_ok());
         assert_eq!(c.query_codec.number.validations.get(), validations);
     });
 }
@@ -642,7 +792,7 @@ fn unavailable_query_codec_refuses_late_value_without_reentering_service() {
         let mut s = c.finish(h);
         assert!(s.validation_error().is_some());
         assert!(s.result(&mut budget()).is_err());
-        assert!(s.native_result().unwrap().is_ok());
+        assert!(s.native_result(&mut budget()).unwrap().unwrap().is_ok());
         assert_eq!(c.query_codec.number.validations.get(), 0);
     });
 }
@@ -657,7 +807,7 @@ fn wrong_shape_media_coding_and_schema_keep_rejected_original_output() {
             let mut s = c.finish(h);
             assert!(s.validation_error().is_some());
             assert!(s.result(&mut budget()).is_err());
-            assert!(s.native_result().unwrap().is_ok());
+            assert!(s.native_result(&mut budget()).unwrap().unwrap().is_ok());
             assert_eq!(c.stats.outputs_dropped.get(), 0);
             drop(s);
             assert_eq!(c.stats.outputs_dropped.get(), 1);
@@ -758,7 +908,7 @@ fn deadline_and_clock_regression_preserve_original_late_completion() {
             } else {
                 assert!(matches!(s.first_cause(), Some(CoreError::Validation(_))));
             }
-            assert!(s.native_result().unwrap().is_ok());
+            assert!(s.native_result(&mut budget()).unwrap().unwrap().is_ok());
             assert!(s.result(&mut budget()).is_err());
         });
     }
@@ -786,7 +936,7 @@ fn handoff_callback_policy_rotation_cannot_accept_unread_success() {
         c.query_access.rotate_on_check.set(true);
         let mut s = c.finish(h);
         assert!(matches!(s.first_cause(), Some(CoreError::Validation(_))));
-        assert!(s.native_result().unwrap().is_ok());
+        assert!(s.native_result(&mut budget()).unwrap().unwrap().is_ok());
         assert!(s.result(&mut budget()).is_err());
     });
 }
@@ -835,7 +985,7 @@ fn failed_remote_cancel_keeps_uncertainty_without_claiming_rollback() {
             ConsumerActionCancellation::Uncertain
         );
         assert!(s.accepted());
-        assert!(s.native_result().unwrap().is_err());
+        assert!(s.native_result(&mut budget()).unwrap().unwrap().is_err());
         assert!(s.result(&mut budget()).is_err());
     });
 }
@@ -866,7 +1016,13 @@ fn output_validation_callback_revocation_preserves_output_before_failed_acceptan
         assert!(s.result(&mut budget()).is_err());
         assert!(s.validation_error().is_none());
         assert_eq!(
-            s.native_result().unwrap().unwrap().data().unwrap().body,
+            s.native_result(&mut budget())
+                .unwrap()
+                .unwrap()
+                .unwrap()
+                .data()
+                .unwrap()
+                .body,
             b"42"
         );
         assert_eq!(c.query_codec.number.validations.get(), 1);
@@ -884,7 +1040,7 @@ fn cancellation_before_first_native_poll_closes_original_unsent_exchange() {
         assert_eq!(c.stats.polls.get(), 0);
         assert_eq!(c.stats.closes.get(), 1);
         assert!(!s.accepted());
-        assert!(s.native_result().is_none());
+        assert!(s.native_result(&mut budget()).unwrap().is_none());
         c.peer.released();
     });
 }
@@ -1183,7 +1339,10 @@ fn native_start_uses_validated_input_view_when_authorization_changes_selection()
     assert_eq!(views.get(), 1);
     assert_eq!(dropped.get(), 0);
     // The retained owner now supplies 99, even though the actual request was I7.
-    assert_eq!(settlement.input().unwrap().body, b"99");
+    assert_eq!(
+        settlement.input(&mut budget()).unwrap().unwrap().body,
+        b"99"
+    );
     assert_eq!(views.get(), 2);
     let funding = settlement.into_funding();
     assert_eq!(dropped.get(), 1);

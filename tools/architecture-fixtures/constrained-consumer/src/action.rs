@@ -21,6 +21,7 @@ pub struct Statistics {
     pub tokens_dropped: Cell<usize>,
     pub outputs_dropped: Cell<usize>,
     pub inputs_dropped: Cell<usize>,
+    pub input_views: Cell<usize>,
     pub close_blocked: Cell<bool>,
     pub close_error: Cell<bool>,
     pub poll_error_with_late: Cell<bool>,
@@ -66,6 +67,7 @@ pub struct Input<'a> {
 }
 impl ActionInput for Input<'_> {
     fn view(&self) -> PayloadView<'_> {
+        bump(&self.stats.input_views);
         PayloadView {
             body: self.body,
             content_type: "application/x-test-number",

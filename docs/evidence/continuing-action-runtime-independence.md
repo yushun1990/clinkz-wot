@@ -97,6 +97,10 @@ exercise:
   owners without callbacks or a sticky failure, unavailable codecs are not
   re-entered, invalid loans keep native evidence and first cause, and disposal
   returns original funding without native re-poll or new permission;
+- native-evidence and input inspection each prepay adapter work for present
+  values, with no callback at zero credit or after a single allowance is spent;
+  absent/native-error observations stay passive, while cancelled/late evidence
+  remains accessible with adapter-only credit even after codec/authority loss;
 - cancellation before initial native progress and after Query starts, issuer
   revocation, Pending/failed physical close, retained late output and validation
   using original funding without effectful polling after local fencing;
@@ -116,6 +120,7 @@ exercise:
 
 The settlement compile-fail cases reject a result slice escaping its owner and
 moving that owner into funding return while the result loan is still used.
+Unvalidated native evidence loans have the same owner/funding lifetime protection.
 Host callback regressions and the existing downstream/real HTTP Action suites
 execute the extracted kernel under their original reentrant authority, wake,
 service-funding, unread-result, late-output and physical-release obligations.
@@ -158,7 +163,16 @@ copy, self-reference, scheduler or shared execution storage is introduced.
 
 The input selection regression additionally verifies the distinction between
 the original input owner and a dispatched byte receipt: the peer receives `I7`
-while `settlement.input()` later lends that owner's current `99` selection.
+while `settlement.input(budget)` later lends that owner's current `99` selection.
+
+At `67a106fdf209b93b617d9220155d11c5bf540a56`, `native_result()` still invoked the
+output adapter without consuming work. The review's real-datagram counterexample
+advanced the view count from 1 to 2 after zero-credit application access had
+correctly refused. Input inspection had the same unbudgeted callback pattern.
+Both inspection methods now require adapter credit for a present value. Native
+absence/error fields remain passive; short credit is distinct from a native
+failure and preserves original state, evidence and funding. No view caching,
+copying, codec access or new execution owner is needed.
 
 ## Remaining 0081 and runtime-independence scope
 

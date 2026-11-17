@@ -982,9 +982,18 @@ already transferred with the owner. Already-returned loans remain ordinary
 immutable borrows even if a selector, service or logical authority later changes.
 Future loans require their own original-service validation and may refuse.
 
-`native_result()` lends current unvalidated native evidence, including rejected
-and late output. `input()` calls `view()` on the retained original input owner
-and lends its current view; it is not the exact dispatched payload or a dispatch
+`native_result(budget)` lends current unvalidated native evidence, including
+rejected and late output. A present successful native output requires one
+`HandlerSteps` unit before its view adapter is entered, even after local failure
+or codec/authority loss. It performs no codec validation, authorization or native
+progress. An absent disposition or a retained native error is a passive field
+observation and needs no adapter credit. The outer `CoreResult` reports short
+adapter credit; the nested native result preserves the original failure or
+output independently. Short credit retains all owners and records no new cause.
+
+`input(budget)` likewise prepays one `HandlerSteps` unit before calling `view()`
+on a present retained input; an absent input is passive. It lends the original
+input owner's current view; it is not the exact dispatched payload or a dispatch
 receipt. Admission's single input loan is used unchanged for validation/start
 but is not stored in the movable settlement. An input facet backed by a selector
 may therefore expose `99` here even though the actual wire request used validated
@@ -992,8 +1001,8 @@ may therefore expose `99` here even though the actual wire request used validate
 immutable input representation; no implicit copy is required.
 
 The settlement retains original input, output, continuation, dependencies and
-reservation; result loans cannot escape their owner or survive moving it into
-`into_funding`. That method disposes native/input/result owners before returning
+reservation; application and evidence loans cannot escape their owner or survive
+moving it into `into_funding`. That method disposes native/input/result owners before returning
 the exact lease. Drop refunds it only after local disposal.
 
 The [cross-representation evidence](../evidence/continuing-action-runtime-independence.md)
