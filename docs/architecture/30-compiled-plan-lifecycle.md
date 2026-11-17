@@ -4,6 +4,14 @@ The exact preparation requirements are owned by [Planning](../spec/planning.md).
 A compiled plan set is an optional representation, not the Engine's universal
 unit of execution, publication or physical ownership.
 
+These lifetimes do not impose one execution representation. The
+[runtime profile contract](../spec/runtime-safety.md) distinguishes compilation
+reuse, independent logical authority, executor independence and runtime/storage
+independence. The shared finite and continuing Action kernels preserve semantic
+transitions while Host and caller-owned implementations retain different native
+programs, services, work/results and funding. Neither a borrowed schema nor a
+shared kernel certifies reusable native compilation or all-profile execution.
+
 | Object | Identity, content and lifetime |
 | --- | --- |
 | TD/TM revision | Description/model, not execution authority |

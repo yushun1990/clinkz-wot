@@ -153,12 +153,7 @@ pub trait RawActionHandler {
 /// Continuing state and invocation references are sealed by the Servient,
 /// never trusted from handler metadata or a Binding response.
 pub fn raw_action_output_shape(output: &InteractionOutput) -> bool {
-    use crate::{InteractionStatus, ResponsePayloadRole};
-    output.status() == InteractionStatus::Ok
-        && output.metadata().payload_role() == ResponsePayloadRole::Application
-        && output.metadata().action_invocation().is_none()
-        && output.metadata().binding_response().is_none()
-        && output.metadata().property_write_report().is_none()
+    crate::execution::action::action_output_shape(output.view())
 }
 
 /// Querying a completed invocation lends the same slices as its settlement.

@@ -2,8 +2,8 @@
 //! Bindings depend on Core, never on Servient or a concrete logical runtime.
 use super::ValueExecution;
 use crate::{
-    BindingGeneration, BindingId, CoreError, CoreResult, Deadline, InteractionOutputView,
-    PayloadView, PlanId, ThingSlotId, data_schema::PreparedSchema,
+    BindingGeneration, BindingId, CoreError, CoreResult, Deadline, InteractionOutputView, PlanId,
+    ThingSlotId,
 };
 use clinkz_wot_foundation::WorkBudget;
 use core::{
@@ -137,22 +137,6 @@ pub trait ReadBinding {
     /// socket/SDK resources keep their native owner's separate bounded policy.
     fn backing_bytes(&self) -> u64;
     fn start(&self, program: &Self::Program, deadline: Deadline) -> CoreResult<Self::Call>;
-}
-
-/// Actual bounded media/schema service. Constraint meaning is Core's shared
-/// PreparedSchema; decoding stays with the actual codec. Support is complete,
-/// not merely outer type recognition. No source TD or callback is retained.
-/// Callback scratch is bounded caller/service storage, not an Engine allocation;
-/// validation retains no payload and acquires no unreserved Engine backing.
-pub trait ReadValidator {
-    fn content_type(&self) -> &str;
-    fn supports(&self, schema: &PreparedSchema) -> bool;
-    fn body_bytes(&self) -> usize;
-    fn work(&self) -> u64;
-    fn available(&self) -> bool {
-        true
-    }
-    fn validate(&self, schema: &PreparedSchema, payload: PayloadView<'_>) -> CoreResult<()>;
 }
 
 /// Fresh destination and original-instance permission, independent of NoSec.

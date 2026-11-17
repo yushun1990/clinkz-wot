@@ -60,7 +60,12 @@ structured-schema capture still uses the existing alloc-backed representation;
 caller-provided arbitrary schema arenas are not demonstrated. Host account
 banks, Arc payloads, boxed/pinned calls, Rc registries, existing synchronization
 and native SDKs remain legitimate Host implementations. Modern TD-driven
-Planning/registration, continuing Actions, notifications, Producer publication,
+Planning/registration, notifications, Producer publication,
 credential composition, concrete Embedded transports and automatic schedulers
 are not ported by this proof. All previously scoped Host evidence retains its
 obligations; no package, milestone, gate or production profile is accepted here.
+
+Continuing Actions now have a separate
+[cross-representation increment](continuing-action-runtime-independence.md).
+Its common kernel and native ownership evidence do not widen this finite Read
+claim or qualify constrained TD preparation and embedded transports.

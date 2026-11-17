@@ -5,7 +5,7 @@ use clinkz_wot_core::{
     CoreError, CoreResult, Deadline, ErrorContext, ErrorPhase, InteractionOutputView, Operation,
     RetryClass,
     execution::{
-        FiniteCallDriver, FiniteCallState, NativeProgress, ValueExecution, read::*,
+        FiniteCallDriver, FiniteCallState, NativeProgress, ValueExecution, ValueValidator, read::*,
         validate_finite_output,
     },
     security::SecurityRequirement,
@@ -27,7 +27,7 @@ pub struct ReadDefinition<'a, B: ReadBinding> {
     program: &'a B::Program,
     configuration: B::Configuration,
     mapping: ReadMapping<'a>,
-    validator: &'a dyn ReadValidator,
+    validator: &'a dyn ValueValidator,
     validation_work: u64,
     body_bytes: usize,
     media: &'a str,
@@ -39,7 +39,7 @@ impl<'a, B: ReadBinding> ReadDefinition<'a, B> {
         binding: &'a B,
         program: &'a B::Program,
         configuration: B::Configuration,
-        validator: &'a dyn ReadValidator,
+        validator: &'a dyn ValueValidator,
     ) -> Result<Self, (B::Configuration, CoreError)> {
         if meaning.operation() != Operation::ReadProperty
             || meaning.uri_variables().is_some_and(|v| v.is_dynamic())

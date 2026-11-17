@@ -428,6 +428,39 @@ separately described query/cancel routes. Its 202 means locally admitted work,
 not remote terminal success or rollback. Other qualified Bindings must provide
 their actual validation services during publication, not at individual ingress.
 
+### Continuing execution across representations
+
+Core's `execution::action::step_action` owns the common continuing Consumer
+transitions. `ActionProgress` is per-invocation semantic state only: it owns no
+native work, continuation, output, service, account, wake or registry. Host and
+caller-owned drivers retain those actual owners separately. Both execute the
+same acceptance/pending/control/completion, first-cause and retirement algorithm.
+Native poll error remains independent of a later output and failed cleanup.
+Pending/error close cannot remove an exchange; acknowledged close may retain its
+original late observation. Output moves into original result storage before
+validation. Cancel acknowledgement means requested cancellation, never rollback.
+An unread validated completion still requires fresh paid authority at handoff.
+
+`ValueExecution` lends the shared Action input/output schemas; Query validates
+completed application values against that same output meaning using its own
+captured media/body/work service. `ValueValidator`, also used by finite Read,
+supplies decoding evidence to Core's schema evaluator without imposing a payload
+owner. Native artifact, token and exchange types need not match across profiles.
+The typed Core Action facet and the Host erased facet are separate native
+representations, not conversions or substitutes for one another's qualification.
+The [caller-owned runtime contract](runtime-safety.md#caller-owned-continuing-action)
+owns the implemented subset and physical ownership obligations.
+
+The caller-owned `ActionOutput` facet lends arbitrary untrusted views; ownership
+does not establish equality between successive selections. Its movable settlement
+therefore validates each exact application loan at `result(budget)` using the
+returning operation's captured data service and shape/primary-response checks.
+Outcome-owner transfer and a validated payload loan are separate edges. Native
+progress/late validation still applies, while the result loan requires its own
+paid work and retains the original owner. This adds no universal frozen-output
+container or payload copy. The [runtime contract](runtime-safety.md#caller-owned-continuing-action)
+owns exact work, failure, permission and input-view semantics.
+
 The Host continuing Consumer Action separates four owners. A reusable
 `ConsumerActionDefinition` retains source-free native mappings, Action data roles
 and qualified data services. It contains no Consumer or access grant, invocation

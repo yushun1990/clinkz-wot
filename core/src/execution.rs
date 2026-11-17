@@ -1,19 +1,22 @@
-//! Shared finite execution, independent of storage, reference counting, threads
+//! Shared finite and continuing execution, independent of storage, reference counting, threads
 //! and native driving. Owners retain actual work/results and supply bounded
 //! callbacks; this kernel grants no TD support or logical authority by itself.
+pub mod action;
 pub mod read;
 pub mod responses;
 
 use crate::{
     AffordanceSite, BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext, ErrorPhase,
-    InteractionOutputView, Operation, PlanId, ResponsePayloadRole, RetryClass,
-    data_schema::ValueSchemas, security::SecurityRequirement,
+    InteractionOutputView, Operation, PayloadView, PlanId, ResponsePayloadRole, RetryClass,
+    data_schema::{PreparedSchema, ValueSchemas},
+    security::SecurityRequirement,
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass as W};
 use core::task::Context;
 use core::task::Poll;
 
-/// Borrowed immutable meaning for a finite single-value interaction. The loan
+/// Borrowed immutable single-value meaning, including the input/output roles of
+/// a continuing Action. Invoke and Query share schemas, not a native exchange. The loan
 /// may come from a prepared Host owner, a caller value or static storage. It
 /// retains no authority, endpoint, service, native program or resource account.
 #[derive(Clone, Copy)]
@@ -298,4 +301,38 @@ impl FiniteCallState {
 
 fn invalid() -> CoreError {
     CoreError::Validation(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
+}
+
+/// Actual bounded media/schema service. Constraint meaning is Core's shared
+/// PreparedSchema; decoding stays with the actual codec. Support is complete,
+/// not merely outer type recognition. No source TD or callback is retained.
+/// Callback scratch is bounded caller/service storage, not an Engine allocation;
+/// validation retains no payload and acquires no unreserved Engine backing.
+pub trait ValueValidator {
+    fn content_type(&self) -> &str;
+    fn supports(&self, schema: &PreparedSchema) -> bool;
+    fn body_bytes(&self) -> usize;
+    fn work(&self) -> u64;
+    fn available(&self) -> bool {
+        true
+    }
+    fn validate(&self, schema: &PreparedSchema, payload: PayloadView<'_>) -> CoreResult<()>;
+}
+
+/// Conservative remote-operation certainty, independent of local cancellation
+/// and validated result delivery. Any native progress may cross the effect edge;
+/// failure or cancellation afterwards cannot authorize implicit replay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConsumerEffect {
+    NotAttempted,
+    /// Remote effects may include a partially applied collection. No replay.
+    Unknown,
+    /// A Property or collection write's native completion was validated. This
+    /// reports completion under the selected mapping, not atomicity, rollback
+    /// or independent confirmation of physical state.
+    /// Local cancellation/policy failure can still refuse application handoff.
+    Completed,
+    /// A validated member report is retained; the whole group is incomplete.
+    /// Consult the original native output for exact member/atomicity evidence.
+    Reported,
 }

@@ -2,12 +2,13 @@
 //! Binding/codec/state owners compile without std or atomics and execute with
 //! actual UDP datagrams in tests. This is not a production protocol mapping.
 #![no_std]
+pub mod action;
 use clinkz_wot_core::{
     BindingGeneration, BindingId, BindingResponseMetadata, CoreError, CoreResult, Deadline,
     ErrorContext, ErrorPhase, InteractionOutputMetadata, InteractionOutputView, InteractionStatus,
     Operation, PayloadView, PlanId, ResponsePayloadRole, ResponseSelection, RetryClass,
     data_schema::{NumberValue, PreparedSchema, SchemaViolation, ValueAccess, ValueType},
-    execution::{ValueExecution, read::*},
+    execution::{ValueExecution, ValueValidator, read::*},
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
 use core::{
@@ -233,7 +234,7 @@ impl NumberCodec<'_> {
         }
     }
 }
-impl ReadValidator for NumberCodec<'_> {
+impl ValueValidator for NumberCodec<'_> {
     fn content_type(&self) -> &str {
         "application/x-test-number"
     }

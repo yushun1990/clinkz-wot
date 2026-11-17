@@ -138,10 +138,13 @@ after retirement of its non-production prototypes.
 Deleting legacy Producer/Consumer, Action/Event, subscription, discovery,
 security or embedded-related APIs withdraws those API implementations and any
 unmatched current availability, not the corresponding enduring objectives.
-Deleted tests are not evidence of migrated capability. The current pointer-
-atomic requirement for Core execution is a representation gap, not a decision
-to exclude devices without atomics; portable TD/tooling compilation is not
-embedded runtime qualification. Runtime principal/auth/scope values alone do
+Deleted tests are not evidence of migrated capability. Remaining Host-only
+execution carriers are representation gaps, not a decision to exclude devices
+without atomics. The [finite Read](../evidence/constrained-finite-execution.md)
+and [continuing Action](../evidence/continuing-action-runtime-independence.md)
+slices combine actual execution with separate no-atomic compilation evidence;
+portable TD/tooling compilation alone is not embedded runtime qualification.
+Runtime principal/auth/scope values alone do
 not establish authentication or HTTPS support.
 
 [Review 08's diagnostics](../reviews/review-08-integrated-architecture-reassessment.md#findings-and-evidence-classification)

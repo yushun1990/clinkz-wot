@@ -316,6 +316,11 @@ services after callbacks. Insufficient credit grants no success and keeps the
 original slot and funding. Native poll errors and late retirement output retain
 independent evidence; even after an error, captured validation applies to that
 late output before final settlement, without clearing the first cause.
+
+The [caller-owned Action representation](#caller-owned-continuing-action) also
+validates each application result loan. Moving its generic output owner does
+not prove that a later `ActionOutput::view` selects the previously checked value.
+
 ### Notification associations and conversation capacity
 
 `ConsumerNotificationAssociation` retains the original Consumer reference,
@@ -712,6 +717,18 @@ cases where applicable and their own storage/wake/release evidence. No portable
 compile, matching mock trace or std flag qualifies hardware, SDK, allocator or
 real-time performance. Missing implemented profiles remain gaps, not exclusions.
 
+Runtime-independence claims distinguish four guarantees. Compilation reuse is
+owned by PREP-REUSE-001. Logical instance independence requires distinct current
+authority and original obligations even when content/infrastructure is shared.
+Executor independence permits deployment-supplied manual or async driving without
+an Engine scheduler. Runtime/storage representation independence additionally
+requires actual execution without imposing another profile's account bank,
+reference counts, synchronization, work registry or native object layout. None
+of the first three alone establishes the fourth. Shared semantic kernels do not
+require identical native Binding artifacts in incompatible environments; each
+representation must qualify its actual dependencies, controls, work and release.
+Scoped executable support does not close the remaining profile/interaction gaps.
+
 ### Host Consumer execution turns
 
 `consumer_execution::ConsumerProgress` is an optional borrowed progress interface
@@ -878,10 +895,122 @@ the slot owner can close/step or perform local disposal.
 The [downstream fixture](../evidence/constrained-finite-execution.md) exercises
 these rules with real datagrams and inline output, plus no-atomic compilation.
 Host finite execution shares the kernel but retains its original Rc registry,
-reentrant controls, Host account bank and boxed native calls. Continuing Actions,
-notifications, Producer publication, TD preparation, general caller-provided
+reentrant controls, Host account bank and boxed native calls. This finite Read
+evidence does not qualify continuing Actions. Notifications, Producer publication,
+TD preparation, general caller-provided
 structured-schema storage, concrete Embedded drivers and automatic scheduling
 are outside this constrained execution claim.
+
+### Caller-owned continuing Action
+
+`borrowed_action::ActionSlot` supplies one continuing Consumer invocation
+opportunity using the common Action kernel. It borrows a source-free
+`ActionDefinition`, actual native program, captured per-operation data/access
+services and `LocalConsumerRef`; that loan proves original issuer lifetime and
+identity without revocation power. Separate equal numeric slots are foreign.
+Checked non-reused issuer sequences fence old handles across slot reuse. The
+exclusive mutable slot loan prevents duplicate native progress; callback-time
+external authority/service changes remain observable and must be fenced.
+
+The implemented subset is NoSec InvokeAction with optional QueryAction and
+CancelAction, static prepared value meaning and primary output. Unsupported
+security, dynamic URI meaning, response alternatives, missing service/schema
+support or changed native configuration refuse before dependent effects. This
+is execution-only qualification, not TD parsing/admission or a production
+protocol mapping. Native continuation compatibility belongs to the actual
+Binding's checked configuration; its typed `ActionExchange`/token/output can
+differ from Host Box/Any/Arc carriers. Destination calculation is pure and
+original-instance policy checks cover the same actual destination used by start.
+Invoke input and Invoke/Query output use their own captured media/body/work
+services over one shared schema pair. No codec is selected from untrusted media.
+
+After admission prepayment, capture one input payload view before fresh
+authorization. Validation and native start MUST use that same borrowed view,
+including its media/coding. Retaining the original input owner does not prove
+that repeated views select the same payload. No further input-view callback may
+follow final authorization; input-view-time revocation MUST refuse before native
+start. This requires neither an input copy nor a different ownership format.
+
+Definition and service storage stay with the caller through safe loans. Before
+native construction a complete original Foundation reservation must match owner,
+resource kind and complete inline plus declared indirect work/input/result/token/
+retirement backing. Refusal returns the identical input and reservation.
+Accepted work owns them through every exchange and unread settlement. Complete
+new-work qualification is distinct from live dependency checking: original Invoke
+native/authority dependencies remain, while data dependencies follow the actual
+current exchange/unread output. Unused or retired controls and a retired input
+codec do not revoke independently represented Query work. A pre-effect control
+refusal retains unrelated accepted work; it grants no control permission.
+
+Query and remote Cancel remain explicit. Local cancel, deadline, dependency loss,
+slot close or issuer revocation preserve first cause independently of native
+poll failure, failed/Pending close, validation failure and late output. Cleanup
+uses original funding without new authority. It enters no further effectful poll
+after local fencing. Accepted remote cancellation remains uncertain about remote
+termination/rollback; native continuation is evidence, not logical authority.
+Close acknowledgement concerns local exchange retirement only. Drop performs
+finite local disposal without waiting or claiming an acknowledged drain.
+
+The slot retains an unread completion until `take_settlement` prepays cleanup
+and performs fresh time, original authority and paid service/access checks.
+Short credit retains the slot and original output. Failed handoff retains native
+output as evidence. Successful handoff transfers the complete outcome owner and
+its current recipient permission; subsequent revocation cannot retarget or
+retract that ownership. This transfer provides no new payload view and does not
+seal the bytes that a generic `ActionOutput::view` may select later.
+
+`ActionSettlement::result(&mut WorkBudget)` is a paid application-loan edge.
+Before obtaining a view it prepays one `HandlerSteps` bounded view-adapter
+operation plus the returning operation's originally captured `CodecInputBytes`
+validation allowance. It captures one view, checks its complete application
+shape (including primary response metadata), media/coding/body bounds and shared
+output schema with the original data service, and returns that exact loan.
+No second output view or authorization callback follows this validation.
+Progress/retirement validation remains mandatory, including late output after
+local failure; its result is no certificate for a subsequent arbitrary view.
+This contract guarantees each returned loan matches its own validation, rather
+than asserting that all historic views are identical. Host's immutable output
+carrier remains a different qualified representation.
+
+Short loan credit enters no view/codec callback, records no failure and retains
+all original owners for retry. A loan validation failure records a sticky first
+cause and validation error while retaining native evidence, input, continuation
+and funding; it cannot erase an earlier cause or assert remote rollback. An
+unavailable original codec is not re-entered. No native poll, cleanup, new account,
+allocation, copy or fresh authorization is performed by this loan. Permission
+already transferred with the owner. Already-returned loans remain ordinary
+immutable borrows even if a selector, service or logical authority later changes.
+Future loans require their own original-service validation and may refuse.
+
+`native_result(budget)` lends current unvalidated native evidence, including
+rejected and late output. A present successful native output requires one
+`HandlerSteps` unit before its view adapter is entered, even after local failure
+or codec/authority loss. It performs no codec validation, authorization or native
+progress. An absent disposition or a retained native error is a passive field
+observation and needs no adapter credit. The outer `CoreResult` reports short
+adapter credit; the nested native result preserves the original failure or
+output independently. Short credit retains all owners and records no new cause.
+
+`input(budget)` likewise prepays one `HandlerSteps` unit before calling `view()`
+on a present retained input; an absent input is passive. It lends the original
+input owner's current view; it is not the exact dispatched payload or a dispatch
+receipt. Admission's single input loan is used unchanged for validation/start
+but is not stored in the movable settlement. An input facet backed by a selector
+may therefore expose `99` here even though the actual wire request used validated
+`7`. Applications requiring a byte receipt can explicitly retain one or use an
+immutable input representation; no implicit copy is required.
+
+The settlement retains original input, output, continuation, dependencies and
+reservation; application and evidence loans cannot escape their owner or survive
+moving it into `into_funding`. That method disposes native/input/result owners before returning
+the exact lease. Drop refunds it only after local disposal.
+
+The [cross-representation evidence](../evidence/continuing-action-runtime-independence.md)
+joins real datagrams, common Host Action regressions and no-atomic compilation.
+No separate awaited-result wake contract or embedded transport is supplied.
+Constrained TD preparation, notifications, Producer publication, credentials,
+general schema arenas, hardware/allocator/time qualification and broader runtime
+independence remain open.
 
 QueryAllActions retains its finite query's original Consumer authority, root
 mapping, named output schemas, actual services and normal/late native payload
