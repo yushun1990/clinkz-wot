@@ -18,6 +18,21 @@ discard native ownership evidence. Host call/registration machinery remains a
 separate supported representation. Actual schemas, permission and result checks
 remain mandatory in either representation.
 
+The continuing caller-owned facet is Core's `execution::action::ActionBinding`.
+It qualifies actual source-free program/configuration and continuation
+compatibility, then creates concrete owned `ActionExchange` values for explicit
+Invoke/Query/Cancel. `ActionInput`/`ActionOutput` lend original payload views;
+tokens and inline/indirect backing retain their actual owners. Metadata and
+support checks are pure bounded operations. The captured native allowance covers
+poll plus close and pure destination work; close errors/Pending retain original
+work, and acknowledged close may return one original late observation. Start
+refusal leaves no native effects or partially retained work. Local destruction
+is finite and nonblocking. No logical dispatcher or revocation owner enters the
+Binding. This native representation has no Send/Sync, std, atomics, Box/Any/Arc
+or executor requirement. Host `ConsumerActionMapping` remains separately qualified;
+neither native artifact is required to implement the other's storage contract.
+Both Servient owners execute Core's common Action semantic transitions.
+
 `SPI-COMPOSE-001`: Applications MUST be able to Cargo-link and startup-register
 complete conforming third-party capability implementations without a built-in
 compiler/protocol whitelist or workspace membership. A registration captures

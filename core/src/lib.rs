@@ -4,7 +4,7 @@
 //!
 //! Protocol-neutral vocabulary and execution contracts.
 //!
-//! Semantic values, borrowed output and the finite execution kernel are available
+//! Semantic values, borrowed output and finite/continuing Action kernels are available
 //! without std or pointer atomics. Host owners and historical execution carriers
 //! retain their platform requirements; see `execution` for the shared boundary.
 #![no_std]

@@ -31,11 +31,25 @@ lifetime-bound local authority and caller-funded active work/results. Its
 [downstream datagram fixture](../evidence/constrained-finite-execution.md) checks
 bounded progress, first cause, stale references, late/invalid output and final
 physical release without making the Host registry representation mandatory.
-Existing Host finite execution uses that same transition kernel. Only NoSec
-Property Read is implemented for the constrained representation; other families,
-TD preparation, real Embedded transports and automatic driving remain open.
+Existing Host finite execution uses that same transition kernel. That evidence
+implements only NoSec Property Read; the separate continuing Action increment
+below adds its own scoped execution claim. TD preparation, real Embedded
+transports and automatic driving remain open.
 This is a single architecture-risk correction, not a new portability programme
 or a prerequisite to common Security composition and execution-semantics work.
+
+The [caller-owned Action increment](../spec/runtime-safety.md#caller-owned-continuing-action)
+now executes source-free NoSec Invoke with optional Query/Cancel through the
+same continuing kernel as Host `ConsumerActions`. A concrete single slot borrows
+meaning, services and original issuer authority while retaining native work,
+input/result/token and original funding through settlement/disposal. It does not
+wrap the Host registry or import its account bank, shared services or erasure.
+Real datagrams and Host callback/I/O regressions test the same invariant
+categories; no-atomic compilation remains separate evidence. Exact scope,
+alternatives and remaining runtime-independence work belong to the
+[evidence](../evidence/continuing-action-runtime-independence.md). Existing
+notification/Producer ownership, TD integration, credentials and embedded driving
+are not ported. No package, milestone or gate status changes.
 
 The execution-only Host slice in `servient/finite` separates the bounded logical
 registry from typed native runtimes. Registry count/name limits belong to

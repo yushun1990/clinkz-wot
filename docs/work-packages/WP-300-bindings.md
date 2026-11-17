@@ -10,6 +10,16 @@ execution-only composition does not. Package completion is not a blanket start
 barrier; exact available predecessors and affected authority must support the
 chosen slice under ADR-0013. No new runtime tranche is admitted by this migration.
 
+## Continuing execution representations
+
+The [caller-owned continuing Action facet](../spec/binding-spi.md) supplies typed
+native program/configuration, continuation and exchange/result owners beside the
+Host erased facet. Both join the common semantic kernel without a universal
+Runtime or cross-environment native artifact ABI. The downstream real-datagram
+[evidence](../evidence/continuing-action-runtime-independence.md) covers explicit
+controls, late output, failed/Pending close and physical release. Production
+embedded transport, native registration/preparation and other profiles remain open.
+
 ## Dynamic finite destinations
 
 The Host finite seam permits pure paid native destination resolution before

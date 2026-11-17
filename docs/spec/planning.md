@@ -97,6 +97,13 @@ The HTTP Consumer increment uses one typed input extraction for lowering and reu
 with derived input equality; it retains no independent semantic projection.
 This is a concrete Binding choice, not a required generic compiler framework.
 
+Compilation reuse does not establish executor or runtime/storage independence.
+Sharing a semantic schema or transition kernel across representations does not
+establish native lowering reuse. Compatible dependencies are checked within each
+actual Binding representation; incompatible environments need not use identical
+native artifacts. The [runtime profile contract](runtime-safety.md) distinguishes
+these claims from independent logical authority and their executable evidence.
+
 `PREP-COVER-001`: Before Producer Serving, every retained final Thing-root and
 affordance Form and each effective operation MUST have complete support under
 the actual Binding/services/configuration and registered behavior or an explicitly

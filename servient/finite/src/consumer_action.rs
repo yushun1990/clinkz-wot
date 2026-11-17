@@ -13,33 +13,10 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ConsumerActionState {
-    Invoking,
-    Pending,
-    Querying,
-    Cancelling,
-    Closing,
-    /// Validated native completion, still revocable until settlement handoff.
-    Completed,
-    Failed,
-    Closed,
-}
-impl ConsumerActionState {
-    fn settlement_ready(self) -> bool {
-        matches!(self, Self::Completed | Self::Failed | Self::Closed)
-    }
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ConsumerActionCancellation {
-    NotRequested,
-    /// A native cancel may have reached the peer. Local failure proves no more.
-    Uncertain,
-    /// Peer accepted a cancellation request; execution may still complete.
-    Requested,
-    /// Peer reports terminal execution, without supplying the terminal result.
-    AlreadyTerminal,
-}
+use clinkz_wot_core::execution::action::{
+    ActionDriver, ActionObservation, ActionProgress, ActionWork, step_action,
+};
+pub use clinkz_wot_core::execution::action::{ConsumerActionCancellation, ConsumerActionState};
 #[derive(Clone, Debug)]
 pub struct ConsumerActionIdentity {
     consumer: ConsumerInstanceRef,
@@ -315,6 +292,7 @@ impl Drop for Exchange {
     }
 }
 struct Invocation {
+    progress: ActionProgress,
     control: Rc<Control>,
     continuation: Option<Box<dyn Any>>,
     exchange: Option<Exchange>,
@@ -322,15 +300,8 @@ struct Invocation {
     native_result: Option<CoreResult<InteractionOutput>>,
     native_error: Option<CoreError>,
     input: Option<Payload>,
-    state: ConsumerActionState,
     operation: usize,
-    retiring: bool,
-    first_cause: Option<CoreError>,
-    cleanup_error: Option<CoreError>,
-    validation_error: Option<CoreError>,
-    accepted: bool,
     effect: ConsumerEffect,
-    remote_cancel: ConsumerActionCancellation,
     association: Rc<Association>,
     _funding: Vec<HostCapacityReservation>,
 }
@@ -695,6 +666,7 @@ impl ConsumerActions {
             // Allocate the separately funded record before native effects. Input
             // stays caller-owned until start succeeds, including on refusal.
             let mut invocation = Box::new(Invocation {
+                progress: ActionProgress::default(),
                 control,
                 association: d.clone(),
                 continuation: None,
@@ -703,15 +675,8 @@ impl ConsumerActions {
                 native_result: None,
                 native_error: None,
                 input: None,
-                state: ConsumerActionState::Invoking,
                 operation: 0,
-                retiring: false,
-                first_cause: None,
-                cleanup_error: None,
-                validation_error: None,
-                accepted: false,
                 effect: ConsumerEffect::Unknown,
-                remote_cancel: ConsumerActionCancellation::NotRequested,
                 _funding: funding,
             });
             let raw = invoke.op.mapping.start(input.as_ref(), None)?;
@@ -759,7 +724,7 @@ impl ConsumerActions {
             {
                 let v = lease.invocation.as_mut().unwrap();
                 v.step(&self.state, cx, budget);
-                if v.control.abandoned.get() && v.state.settlement_ready() {
+                if v.control.abandoned.get() && v.progress.state.settlement_ready() {
                     drop(lease.take());
                 }
             }
@@ -821,7 +786,7 @@ impl ConsumerActionHandle {
                 ConsumerActionState::Closed
             }
         } else {
-            v.state
+            v.progress.state
         })
     }
     pub fn first_cause(&self) -> CoreResult<Option<CoreError>> {
@@ -831,11 +796,15 @@ impl ConsumerActionHandle {
     pub fn cleanup_error(&self) -> CoreResult<Option<CoreError>> {
         Ok(self
             .get(&self.state.registry.borrow())?
+            .progress
             .cleanup_error
             .clone())
     }
     pub fn remote_cancellation(&self) -> CoreResult<ConsumerActionCancellation> {
-        Ok(self.get(&self.state.registry.borrow())?.remote_cancel)
+        Ok(self
+            .get(&self.state.registry.borrow())?
+            .progress
+            .remote_cancel)
     }
     /// Explicit described control; neither call automatically queries/reinvokes.
     /// A reentrant control of the checked-out original invocation is busy.
@@ -857,7 +826,7 @@ impl ConsumerActionHandle {
         let v = lease.invocation.as_mut().unwrap();
         v.fence(&self.state);
         self.control.check(&self.state)?;
-        if v.state != ConsumerActionState::Pending || v.exchange.is_some() {
+        if v.progress.state != ConsumerActionState::Pending || v.exchange.is_some() {
             return Err(busy());
         }
         let association = v.association.clone();
@@ -892,15 +861,15 @@ impl ConsumerActionHandle {
         };
         v.exchange = Some(Exchange(Some(raw)));
         v.operation = operation;
-        v.retiring = false;
+        v.progress.retiring = false;
         v.reply = None;
-        v.state = if operation == 1 {
+        v.progress.state = if operation == 1 {
             ConsumerActionState::Querying
         } else {
             ConsumerActionState::Cancelling
         };
         if operation == 2 {
-            v.remote_cancel = ConsumerActionCancellation::Uncertain;
+            v.progress.remote_cancel = ConsumerActionCancellation::Uncertain;
         }
         v.fence(&self.state);
         Ok(())
@@ -928,7 +897,7 @@ impl ConsumerActionHandle {
             .checkout(self.slot, Some(self.sequence), Some(cx.waker()))?;
         let v = lease.invocation.as_mut().unwrap();
         v.step(&self.state, cx, budget);
-        Ok(v.state)
+        Ok(v.progress.state)
     }
     /// Native completion remains revocable until this paid, fresh handoff.
     /// Busy/short-credit entry retains the original slot and complete evidence.
@@ -942,7 +911,7 @@ impl ConsumerActionHandle {
         let mut lease = self.state.checkout(self.slot, Some(self.sequence), None)?;
         let v = lease.invocation.as_mut().unwrap();
         v.fence(&self.state);
-        if !v.state.settlement_ready() || !pay(budget, W::CleanupItems, 1) {
+        if !v.progress.state.settlement_ready() || !pay(budget, W::CleanupItems, 1) {
             return Err(busy());
         }
         v.refresh_access(&self.state, budget)?;
@@ -1003,22 +972,22 @@ impl ConsumerActionSettlement {
         self.0.effect
     }
     pub fn state(&self) -> ConsumerActionState {
-        self.0.state
+        self.0.progress.state
     }
     pub fn first_cause(&self) -> Option<&CoreError> {
-        self.0.first_cause.as_ref()
+        self.0.progress.first_cause.as_ref()
     }
     pub fn cleanup_error(&self) -> Option<&CoreError> {
-        self.0.cleanup_error.as_ref()
+        self.0.progress.cleanup_error.as_ref()
     }
     pub fn validation_error(&self) -> Option<&CoreError> {
-        self.0.validation_error.as_ref()
+        self.0.progress.validation_error.as_ref()
     }
     pub fn accepted(&self) -> bool {
-        self.0.accepted
+        self.0.progress.accepted
     }
     pub fn remote_cancellation(&self) -> ConsumerActionCancellation {
-        self.0.remote_cancel
+        self.0.progress.remote_cancel
     }
     pub fn native_result(&self) -> Option<Result<InteractionOutputView<'_>, &CoreError>> {
         self.0
@@ -1032,11 +1001,11 @@ impl ConsumerActionSettlement {
         self.0.native_error.as_ref()
     }
     pub fn result(&self) -> CoreResult<InteractionOutputView<'_>> {
-        if let Some(e) = &self.0.first_cause {
+        if let Some(e) = &self.0.progress.first_cause {
             return Err(e.clone());
         }
         match &self.0.native_result {
-            Some(Ok(o)) if self.0.state == ConsumerActionState::Completed => Ok(o.view()),
+            Some(Ok(o)) if self.0.progress.state == ConsumerActionState::Completed => Ok(o.view()),
             Some(Err(e)) => Err(e.clone()),
             _ => Err(invalid()),
         }
@@ -1080,9 +1049,9 @@ impl Invocation {
     }
     fn close(&mut self, cause: CoreError) {
         self.control.record(cause);
-        self.first_cause = self.control.cause();
-        self.retiring = self.exchange.is_some();
-        self.state = if self.retiring {
+        self.progress.first_cause = self.control.cause();
+        self.progress.retiring = self.exchange.is_some();
+        self.progress.state = if self.progress.retiring {
             ConsumerActionState::Closing
         } else {
             ConsumerActionState::Closed
@@ -1093,7 +1062,7 @@ impl Invocation {
         if let Err(e) = self.control.check(state) {
             self.close(e);
         }
-        if self.first_cause.is_none()
+        if self.progress.first_cause.is_none()
             && let Err(e) = self.check_dependencies()
         {
             self.close(e);
@@ -1103,7 +1072,7 @@ impl Invocation {
         }
     }
     fn refresh_access(&mut self, state: &State, budget: &mut WorkBudget) -> CoreResult<()> {
-        if self.first_cause.is_some() {
+        if self.progress.first_cause.is_some() {
             return Ok(());
         }
         let selected = self.association.selected(self.operation)?;
@@ -1128,178 +1097,173 @@ impl Invocation {
         Ok(())
     }
     fn step(&mut self, state: &State, cx: &mut Context<'_>, budget: &mut WorkBudget) {
-        self.fence(state);
-        if self.state.settlement_ready() {
-            let _ = self.refresh_access(state, budget);
-            self.fence(state);
-            return;
-        }
-        let selected = self
-            .association
-            .selected(self.operation)
-            .expect("captured operation");
-        // All callback and late validation work is paid before native progress.
-        if prepay(&selected, budget, self.live_output_schema().is_some()).is_err() {
-            return;
-        }
-        if self.first_cause.is_none()
-            && let Err(e) = selected.check(
+        step_action(
+            &mut HostActionDriver {
+                invocation: self,
                 state,
-                &self.control,
-                self.continuation.as_deref(),
-                self.live_output_schema(),
-            )
-        {
-            self.close(e);
-        }
-        self.fence(state);
-        if let Some(raw) = self.exchange.as_mut()
-            && !self.retiring
-        {
-            match raw.0.as_mut().expect("owned exchange").poll(cx) {
-                Poll::Pending => {
-                    self.fence(state);
-                    if self.first_cause.is_none() {
-                        return;
-                    }
-                }
-                Poll::Ready(Ok(reply)) => {
-                    self.reply = Some(reply);
-                    self.retiring = true;
-                }
-                Poll::Ready(Err(e)) => {
-                    // A poll failure is an outcome of its own. Retirement
-                    // may still supply the original response; neither can
-                    // overwrite the first local cause or erase the other.
-                    self.native_error.get_or_insert_with(|| e.clone());
-                    self.native_result = Some(Err(e.clone()));
-                    self.close(e);
-                }
-            }
-        }
-        self.fence(state);
-        if let Some(raw) = self.exchange.as_mut() {
-            match raw.0.as_mut().expect("owned exchange").poll_close(cx) {
-                Poll::Pending => {
-                    self.fence(state);
-                    return;
-                }
-                Poll::Ready(Err(e)) => {
-                    if self.cleanup_error.is_none() {
-                        self.cleanup_error = Some(e);
-                    }
-                    self.fence(state);
-                    return;
-                }
-                Poll::Ready(Ok(late)) => {
-                    if let Some(late) = late
-                        && self.reply.is_none()
-                    {
-                        self.reply = Some(late);
-                    }
-                    self.exchange = None;
-                }
-            }
-        }
-        self.fence(state);
-        if let Some(reply) = self.reply.take() {
-            self.accept_reply(state, reply);
-        }
-        self.fence(state);
-        if self.first_cause.is_some() {
-            self.state = ConsumerActionState::Closed;
-        } else if self.state == ConsumerActionState::Pending {
-            // The control's status/ack was consumed and its exchange retired.
-            // No unread application result depends on that control any longer.
-            self.operation = 0;
-        }
-        self.retiring = false;
+            },
+            cx,
+            budget,
+        );
     }
-    fn accept_reply(&mut self, state: &State, reply: ConsumerActionReply) {
-        // Keep the original output even when validation, cancellation or a
-        // replacement prevents it from becoming an application success.
-        match reply {
-            ConsumerActionReply::Complete(output) if self.operation != 2 => {
-                // Store before validator entry: unwind must retain the original
-                // evidence, even though arbitrary panicking code need not resume.
-                self.native_result = Some(Ok(output));
-                let output = self.native_result.as_ref().unwrap().as_ref().unwrap();
-                let validation = if raw_action_output_shape(output)
-                    && interaction_output_backing(output).is_some_and(|n| {
-                        n as u64
-                            <= self
-                                .association
-                                .selected(self.operation)
-                                .unwrap()
-                                .bounds
-                                .response_bytes
-                    }) {
-                    self.association.validate(
-                        self.operation,
-                        self.association.definition.input().schemas.output.as_ref(),
-                        output.data(),
-                    )
-                } else {
-                    Err(invalid())
-                };
-                if let Err(e) = validation {
-                    self.validation_error = Some(e.clone());
-                    self.close(e);
+}
+
+struct HostActionDriver<'a> {
+    invocation: &'a mut Invocation,
+    state: &'a State,
+}
+impl ActionDriver for HostActionDriver<'_> {
+    fn progress(&mut self) -> &mut ActionProgress {
+        &mut self.invocation.progress
+    }
+    fn operation(&self) -> Operation {
+        [
+            Operation::InvokeAction,
+            Operation::QueryAction,
+            Operation::CancelAction,
+        ][self.invocation.operation]
+    }
+    fn has_exchange(&self) -> bool {
+        self.invocation.exchange.is_some()
+    }
+    fn work(&self) -> ActionWork {
+        let v = &self.invocation;
+        let s = v
+            .association
+            .selected(v.operation)
+            .expect("captured operation");
+        ActionWork {
+            access: s.access_work,
+            native: s.bounds.poll_work,
+            validation: if v.live_output_schema().is_some() {
+                s.policy.validation_work
+            } else {
+                0
+            },
+        }
+    }
+    fn fence(&mut self) {
+        self.invocation.fence(self.state);
+    }
+    fn close(&mut self, cause: CoreError) {
+        self.invocation.close(cause);
+    }
+    fn invalid_reply(&self) -> CoreError {
+        invalid()
+    }
+    fn check_current(&mut self) -> CoreResult<()> {
+        let v = &self.invocation;
+        v.association.selected(v.operation)?.check(
+            self.state,
+            &v.control,
+            v.continuation.as_deref(),
+            v.live_output_schema(),
+        )
+    }
+    fn refresh_access(&mut self, budget: &mut WorkBudget) -> CoreResult<()> {
+        self.invocation.refresh_access(self.state, budget)
+    }
+    fn poll_exchange(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>> {
+        let v = &mut self.invocation;
+        v.exchange
+            .as_mut()
+            .unwrap()
+            .0
+            .as_mut()
+            .unwrap()
+            .poll(cx)
+            .map(|result| match result {
+                Ok(reply) => {
+                    v.reply = Some(reply);
+                    Ok(())
                 }
-                if self.operation == 0 {
-                    self.accepted = true;
+                Err(e) => {
+                    v.native_error.get_or_insert_with(|| e.clone());
+                    v.native_result = Some(Err(e.clone()));
+                    Err(e)
                 }
-                self.state = ConsumerActionState::Completed;
+            })
+    }
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>> {
+        let v = &mut self.invocation;
+        v.exchange
+            .as_mut()
+            .unwrap()
+            .0
+            .as_mut()
+            .unwrap()
+            .poll_close(cx)
+            .map(|result| {
+                result.map(|late| {
+                    if v.reply.is_none() {
+                        v.reply = late;
+                    }
+                    v.exchange = None;
+                })
+            })
+    }
+    fn retain_reply(&mut self) -> Option<ActionObservation> {
+        let v = &mut self.invocation;
+        Some(match v.reply.take()? {
+            ConsumerActionReply::Accepted(token) if v.operation == 0 => {
+                v.continuation = Some(token);
+                ActionObservation::Accepted
             }
-            ConsumerActionReply::Accepted(token) if self.operation == 0 => {
-                self.continuation = Some(token);
-                self.accepted = true;
-                self.state = ConsumerActionState::Pending;
-            }
-            ConsumerActionReply::Pending if self.operation == 1 => {
-                self.state = ConsumerActionState::Pending
-            }
-            ConsumerActionReply::CancelRequested if self.operation == 2 => {
-                self.remote_cancel = ConsumerActionCancellation::Requested;
-                self.state = ConsumerActionState::Pending;
-            }
-            ConsumerActionReply::AlreadyTerminal if self.operation == 2 => {
-                self.remote_cancel = ConsumerActionCancellation::AlreadyTerminal;
-                self.state = ConsumerActionState::Pending;
+            ConsumerActionReply::Accepted(_) => ActionObservation::Invalid,
+            ConsumerActionReply::Complete(output) => {
+                v.native_result = Some(Ok(output));
+                ActionObservation::Complete
             }
             ConsumerActionReply::Failed(e) => {
-                self.native_result = Some(Err(e));
-                self.state = ConsumerActionState::Failed;
+                v.native_result = Some(Err(e));
+                ActionObservation::Failed
             }
-            _ => self.close(invalid()),
+            ConsumerActionReply::Pending => ActionObservation::Pending,
+            ConsumerActionReply::CancelRequested => ActionObservation::CancelRequested,
+            ConsumerActionReply::AlreadyTerminal => ActionObservation::AlreadyTerminal,
+        })
+    }
+    fn validate_output(&mut self) -> CoreResult<()> {
+        let v = &self.invocation;
+        let output = v.native_result.as_ref().unwrap().as_ref().unwrap();
+        if !raw_action_output_shape(output)
+            || interaction_output_backing(output).is_none_or(|n| {
+                n as u64
+                    > v.association
+                        .selected(v.operation)
+                        .unwrap()
+                        .bounds
+                        .response_bytes
+            })
+        {
+            return Err(invalid());
         }
-        // Native/validator callbacks can revoke original identity or policy.
-        self.fence(state);
-        if self.first_cause.is_none() {
-            let s = self.association.selected(self.operation).unwrap();
-            if let Err(e) = s.check(
-                state,
-                &self.control,
-                self.continuation.as_deref(),
-                self.live_output_schema(),
-            ) {
-                // Terminal state must not suppress fencing of this late result.
-                self.close(e);
-            }
-        }
+        v.association.validate(
+            v.operation,
+            v.association.definition.input().schemas.output.as_ref(),
+            output.data(),
+        )
+    }
+    fn reset_operation(&mut self) {
+        self.invocation.operation = 0;
     }
 }
+
 fn prepay(s: &Selected<'_>, budget: &mut WorkBudget, codec: bool) -> CoreResult<()> {
-    let access = s.access_work.checked_mul(2).ok_or_else(invalid)?;
-    if !pay(budget, W::ProviderProbes, access)
-        || !pay(budget, W::BindingPolls, s.bounds.poll_work)
-        || !pay(budget, W::CleanupItems, 1)
-        || (codec && !pay(budget, W::CodecInputBytes, s.policy.validation_work))
+    s.access_work.checked_mul(2).ok_or_else(invalid)?;
+    if (ActionWork {
+        access: s.access_work,
+        native: s.bounds.poll_work,
+        validation: if codec { s.policy.validation_work } else { 0 },
+    })
+    .prepay(budget)
     {
-        return Err(busy());
+        Ok(())
+    } else {
+        Err(busy())
     }
-    Ok(())
 }
+
 fn check_time(deadline: Deadline, now: MonotonicInstant) -> CoreResult<()> {
     match deadline.checked_is_elapsed_at(now) {
         Some(false) => Ok(()),

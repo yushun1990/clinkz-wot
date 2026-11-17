@@ -11,6 +11,19 @@ the [reuse evidence](../docs/evidence/consumer-execution-reuse.md#explicit-http-
 owns the HTTP increment, alternatives and remaining architectural limits.
 Migration does not close a package, milestone or independent acceptance gate.
 
+The remaining scope is explicit: broader useful compilation-work reuse still
+requires concrete invariant dependencies/operands and measured distinction from
+instance admission or native specialization. Action/notification mappings remain
+endpoint-specialized; other Producer families and Bindings need their own proof.
+Cache/persistence, universal program types and identical native artifacts across
+incompatible environments are not required completion boundaries.
+Logical independence and executor independence do not establish runtime/storage
+independence. The latter remains a separate open product objective, now advanced
+by the [caller-owned continuing Action increment](../docs/evidence/continuing-action-runtime-independence.md).
+The [runtime profile contract](../docs/spec/runtime-safety.md) owns the four-way
+distinction; scoped Read/Action execution does not close this topic's broader
+reuse capability or all-profile execution.
+
 The rest of this file preserves historical investigation and alternatives.
 Its v5 Plan-Set clauses, 0086-first sequence and DISCUSSING conclusions are not
 current authority or implementation prerequisites. Broader cache/persistence

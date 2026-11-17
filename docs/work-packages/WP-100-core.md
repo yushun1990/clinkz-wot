@@ -96,6 +96,15 @@ caller-owned native Read facet remains in Core, below Servient. Executable scope
 and limits are in [the evidence](../evidence/constrained-finite-execution.md);
 historical PlanSet/static acceptance is not reused for this modern claim.
 
+Continuing Consumer Actions now use the separate state-only
+`execution::action::step_action` kernel in both actual Host and caller-owned
+Servient execution. Shared Action schemas/output shape and `ValueValidator`
+keep decoding/meaning independent of native representation. Core's typed Action
+native facet retains no Servient dependency or Host storage requirement. The
+[cross-representation evidence](../evidence/continuing-action-runtime-independence.md)
+owns the tested subset, original native/result owners and remaining profile gaps.
+No broader Action/notification/Producer portability or package closure follows.
+
 ## Finite security contracts
 
 Core now carries immutable security requirement operands and redacted opaque

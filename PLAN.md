@@ -25,6 +25,14 @@ Optional [Producer turns](docs/evidence/host-execution-integration.md) now join
 independently published Things and existing mixed Consumer capacities in a
 deployment-supplied Host loop. These are scoped capabilities, not all-profile
 execution or architecture closure.
+The [caller-owned continuing Action increment](docs/evidence/continuing-action-runtime-independence.md)
+now executes a source-free NoSec Invoke/Query/Cancel path through the same
+semantic kernel as Host Actions, with independent native storage and original
+funding. Compilation reuse, logical instance independence, executor independence
+and runtime/storage independence are distinct delivery dimensions. Selected
+finite Read and continuing Action evidence advances the last dimension; it does
+not complete constrained preparation, notifications, Producers, credentials,
+embedded driving or runtime independence.
 Basic Property/Action/Event and described collection coverage in
 both roles has reached a meaningful milestone. These real execution paths do
 not establish architecture completion or v1 qualification.
@@ -92,7 +100,7 @@ the [Action ownership increment](docs/evidence/consumer-action-composition.md)
 adds reuse of one actual endpoint-specialized continuing definition across
 independent Consumers and execution capacities, original service funding and
 prepared-declaration refusal. General security/schema, cross-endpoint Action
-lowering, constrained execution and production qualification remain open.
+lowering, constrained TD integration and broader execution, and production qualification remain open.
 Completed output now preserves the returning operation's representation and
 data limits against shared Action meaning, with independent HTTP body-allowance
 and downstream JSON/plain-text evidence at the same scoped increment.
@@ -102,7 +110,8 @@ notifications under managed Consumer lifecycle, with aggregate progress/cleanup
 and a deployment-supplied Host loop. The [Producer preparation increment](docs/evidence/producer-preparation-reuse.md)
 now reuses actual HTTP Property Read response/validation compilation across
 independent fully qualified publications. Broader Producer families, mixed
-security, authenticated source evidence and constrained continuing execution remain open.
+security, authenticated source evidence and constrained continuing execution beyond
+the scoped source-free Action path remain open.
 
 The [Property Write integration](protocol-bindings/protocols/http/tests/property_write.rs)
 proves the bounded endpoint NoSec HTTP subset, including
@@ -231,6 +240,16 @@ program per Thing. Topic 0081's historical investigation is migrated into the
 current Planning and compiled-plan contracts; concrete representations remain
 Binding-specific choices.
 
+**0081 remains open in implementation scope:** extend genuinely useful invariant
+compilation/native lowering reuse to further supported mappings where evidence
+justifies it, preserving complete dependency/operand checks and independent
+instance authority/funding. Existing HTTP reuse is a scoped result, and retained
+Action/notification definitions remain endpoint-specialized. Runtime/storage
+independence is separately unfinished; it neither requires nor is established
+by identical native Binding artifacts across incompatible environments. The
+source-free caller-owned Action path advances execution representation without
+claiming new native compilation reuse or closing 0081.
+
 **The capability is cross-instance compilation-work reuse, alongside
 schema/content reuse.** Ordinary finite `prepare_with_content` shares semantic
 content and still invokes the selected native preparation capability. The explicit
@@ -304,7 +323,8 @@ publication, emission, result acknowledgement and final retirement are applicati
 integration decisions. Storage-only erasure and per-handle revoked Action cleanup
 were execution API gaps; copying another application loop would not fix them.
 Broader Producer reuse, authenticated notification provenance, mixed secure
-execution, constrained continuing capabilities and broader Host integration remain
+execution, constrained continuing capabilities beyond the source-free Action slice,
+and broader Host integration remain
 independently useful work, without an all-family migration gate.
 
 Select subsequent increments against remaining product capabilities and the

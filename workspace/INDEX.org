@@ -42,6 +42,8 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0130-continuing-action-runtime-independence.md][0130 Continuing Action execution across ownership representations]]
+
 - [[file:0129-host-producer-execution.md][0129 Host execution across independent Consumer and Producer capabilities]]
 
 - [[file:0128-producer-finite-capacity.md][0128 Persistent Producer participation and finite work capacity]]

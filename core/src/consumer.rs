@@ -611,23 +611,7 @@ impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDe
     }
 }
 
-/// Conservative remote-operation certainty, independent of local cancellation
-/// and validated result delivery. Any native progress may cross the effect edge;
-/// failure or cancellation afterwards cannot authorize implicit replay.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ConsumerEffect {
-    NotAttempted,
-    /// Remote effects may include a partially applied collection. No replay.
-    Unknown,
-    /// A Property or collection write's native completion was validated. This
-    /// reports completion under the selected mapping, not atomicity, rollback
-    /// or independent confirmation of physical state.
-    /// Local cancellation/policy failure can still refuse application handoff.
-    Completed,
-    /// A validated member report is retained; the whole group is incomplete.
-    /// Consult the original native output for exact member/atomicity evidence.
-    Reported,
-}
+pub use crate::execution::ConsumerEffect;
 
 /// Immutable semantic execution content. It contains no endpoint, executor,
 /// service, policy, authority or account. Its existing coordinate/schema storage
