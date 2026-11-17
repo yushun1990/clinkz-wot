@@ -315,7 +315,10 @@ mod live {
                     instance,
                     prepared,
                     providers: vec![Rc::new(mqtt), Rc::new(http)],
-                    participants: vec![Box::new(mqtt_runtime), Box::new(http_runtime)],
+                    participants: vec![
+                        OwnedProducerParticipation::notifications(mqtt_runtime),
+                        OwnedProducerParticipation::actions(http_runtime),
+                    ],
                     expected: None,
                     handler_backing_bytes: 0,
                 },

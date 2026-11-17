@@ -21,7 +21,10 @@ registrations, non-revoking association views and independent `ConsumerCalls`
 capacity (PR #276). Independently bound continuing Actions and notifications
 now join that managed authority through
 [optional Host execution turns](docs/evidence/consumer-execution-composition.md).
-These are scoped capabilities, not all-profile execution or architecture closure.
+Optional [Producer turns](docs/evidence/host-execution-integration.md) now join
+independently published Things and existing mixed Consumer capacities in a
+deployment-supplied Host loop. These are scoped capabilities, not all-profile
+execution or architecture closure.
 Basic Property/Action/Event and described collection coverage in
 both roles has reached a meaningful milestone. These real execution paths do
 not establish architecture completion or v1 qualification.
@@ -174,7 +177,7 @@ production HTTPS, constrained-profile or v1 qualification. Those remain delivery
 | 3 — Continuing Consumer notification composition | Independent Host notification associations/capacity, actual mapping reuse, named occurrence policy and notification F2/F3 corrections are implemented at the scoped evidence below. Extend original per-occurrence context to qualified source/verification evidence where required; preserve native sharing/stop/response rights. | Real MQTT notification conversations remain independently authorized under shared compatible native interests. A concrete evidence-bearing source mapping tests per-occurrence policy without treating an unauthenticated topic as a verified principal; queued delivery, stop, loss, late work and physical cleanup retain their original owners. |
 | 4 — Continuing Action and multi-capability reuse | Independent continuing Action associations/capacity, actual prepared-definition reuse and Action F2/F3 corrections are implemented at the [scoped evidence](docs/evidence/consumer-action-composition.md). [Mixed Consumer turns](docs/evidence/consumer-execution-composition.md) now integrate finite HTTP, continuing HTTP Actions and MQTT under managed authority. [HTTP Producer preparation reuse](docs/evidence/producer-preparation-reuse.md) now separates shared response/validation instructions from independent complete publication. Extend other justified families without a mega-Runtime. | Original invoke/query/cancel mappings and late outcomes survive initial exchange, replacement and retirement. Actual shared content/services are funded once, prepared declarations cannot silently change during runtime construction, and mixed capabilities retain independent progress and cleanup. The scoped Producer evidence includes complete qualification, changed-dependency refusal, native collisions, independent publication failure/retirement and original physical release; broader Producer reuse remains open. |
 | 5 — Secure execution and Discovery clients | Broaden actual DataSchema/media/security execution, Host HTTPS and explicit bounded trusted Discovery/Directory retrieval where their dependencies are ready; these can proceed independently of the cross-family sequence. | Supported assertions, security branches and trusted retrieval execute through actual providers and peers without source-TD callbacks, silent weakening, credential leakage or fabricated interoperability claims. |
-| 6 — Product integration and supported profiles | Optional borrowed Host Consumer turn composition is implemented alongside manual poll/step APIs. Broaden supported deployment integration, Host HTTP/HTTPS delivery, selected portable/static representations and scoped v1 qualification without prescribing Tokio, a universal scheduler, mega-Runtime or one execution owner per Thing. | Applications progress the scoped mixed Consumer capabilities and cleanup through a deployment-supplied loop with independent semantic/native ownership. Broader role/operation/profile combinations still need integration, conformance, resource/performance and lifecycle evidence; unsupported combinations remain explicit. |
+| 6 — Product integration and supported profiles | Optional Host Consumer and composed Producer turns now join existing capabilities alongside manual poll/step APIs. Broaden supported deployment integration, Host HTTP/HTTPS delivery, selected portable/static representations and scoped v1 qualification without prescribing Tokio, a universal scheduler, mega-Runtime or one execution owner per Thing. | Applications progress independent publications and mixed Consumer work through a deployment-supplied loop with independent semantic/native ownership, explicit outcomes and complete cleanup. Broader role/operation/profile combinations still need integration, conformance, resource/performance and lifecycle evidence; unsupported combinations remain explicit. |
 
 Priorities express concentration, not sequential package gates. Security/HTTPS,
 Discovery and portable-profile work can advance with available dependencies;
@@ -278,9 +281,15 @@ now lets these publications share bounded active work without an idle exclusive
 input/result opportunity per Thing. Native settlement returns execution credit
 while unread or caller-held outcomes retain their original bounded funding.
 HTTP keeps its existing serial native exchange policy per participation; the
-default dedicated opportunity remains available. Producer Host-loop composition,
-continuing-family capacity, shared secure infrastructure, broader profiles and
-production qualification remain open.
+default dedicated opportunity remains available.
+[Host Producer turns](docs/evidence/host-execution-integration.md) now retain
+typed Servient execution alongside erased native membership, including scoped
+revoked Action cleanup, and compose with existing Consumer capacities. Real
+HTTP/Mosquitto execution joins independent publications, actual definition reuse,
+shared finite capacity, replacement, original Pending/error cleanup and retained
+outcomes through final physical/account release. Shared continuing-family
+capacity, broader Producer compilation reuse, shared secure infrastructure,
+broader profiles and production qualification remain open.
 
 Host applications can progress the supported mixed Consumer work and cleanup
 through one integration turn. Deployment-supplied native wakes and maintenance
@@ -289,7 +298,11 @@ explicit. The [runtime contract](docs/spec/runtime-safety.md#host-consumer-execu
 owns exact wake, result-observation and drain limits. The implementation provides
 no scheduler or execution state container. Low-level poll/step remains important
 for deployments without an async runtime; the Host example demonstrates one
-possible supplied runtime/timer, not a dependency required by the Engine.
+possible supplied runtime/timer, not a dependency required by the Engine. Producer
+turns use the existing publication's complete native set; explicit installation,
+publication, emission, result acknowledgement and final retirement are application
+integration decisions. Storage-only erasure and per-handle revoked Action cleanup
+were execution API gaps; copying another application loop would not fix them.
 Broader Producer reuse, authenticated notification provenance, mixed secure
 execution, constrained continuing capabilities and broader Host integration remain
 independently useful work, without an all-family migration gate.

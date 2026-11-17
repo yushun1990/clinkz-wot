@@ -1,3 +1,4 @@
+use clinkz_wot_servient::producer_composition::OwnedProducerParticipation;
 // Shared real-wire and contract cases for all/selected writes.
 fn shared_untrusted_producer_input_is_fully_validated_before_group_authorization_or_effects(
     operation: Operation,
@@ -554,7 +555,7 @@ fn shared_final_qualification_requires_original_writable_members_and_actual_root
             instance,
             prepared,
             providers: vec![provider],
-            participants: vec![Box::new(native)],
+            participants: vec![OwnedProducerParticipation::finite(native)],
             expected: None,
             handler_backing_bytes: 8192,
         },

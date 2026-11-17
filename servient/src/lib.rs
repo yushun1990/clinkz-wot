@@ -21,6 +21,8 @@ pub mod producer;
 #[cfg(feature = "std")]
 pub mod producer_composition;
 #[cfg(feature = "std")]
+mod producer_execution;
+#[cfg(feature = "std")]
 pub mod producer_installation;
 mod property_read;
 

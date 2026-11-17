@@ -214,6 +214,9 @@ pub enum ProducerActionReply<'a> {
 /// that encode a reply must do no I/O: only a later paid native poll sends it.
 pub trait ProducerActionBinding: crate::publication::ClosedProducerParticipation {
     fn instance(&self) -> ProducerInstanceKey;
+    /// Closing/closed participation remains pollable for native maintenance
+    /// while original logical work/results drain. It must yield no new
+    /// candidate after close; a closed gate alone is not an unsupported call.
     fn poll_action(
         &mut self,
         budget: &mut clinkz_wot_foundation::WorkBudget,

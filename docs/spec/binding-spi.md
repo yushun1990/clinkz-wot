@@ -354,6 +354,14 @@ to refusal. Closing an initiating exchange does not dispose the Action; native
 record removal follows Servient acknowledgement, whose transferred result owner
 still retains its original capacity until disposal.
 
+`ProducerActionBinding::poll_action` remains valid for native maintenance after
+participation close while original logical work/results retire. Closing/closed
+polls yield no new candidate; a closed gate is not by itself an unsupported
+operation. This does not move application continuation progress into the Binding.
+Optional [Host Producer turns](runtime-safety.md#host-producer-execution-turns)
+retain typed Servient operations with existing native owners. Bindings receive
+no logical registry, dispatch callback or new universal progress SPI.
+
 Native failure is evidence, not a logical revocation decision. Servient's
 `reconcile_participation` validates issuer/instance association and requires the
 participant's exact identity in that incarnation's committed native set before

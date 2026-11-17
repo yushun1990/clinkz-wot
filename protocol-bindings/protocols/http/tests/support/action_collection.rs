@@ -11,7 +11,20 @@ use std::{cell::{Cell, RefCell}, io::{Read, Write}, net::{SocketAddr, TcpListene
 fn work() -> WorkBudget { WorkClass::ALL.into_iter().fold(WorkBudget::new(), |b,c| b.with_remaining(c,1_000_000)) }
 fn cx() -> Context<'static> { Context::from_waker(Waker::noop()) }
 fn now() -> MonotonicInstant { MonotonicInstant::new(ClockId::new(66),0) }
-fn address() -> SocketAddr { TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap() }
+fn address() -> SocketAddr {
+    // Pure preparation releases the probe before native installation. Do not
+    // give that same advertised endpoint to another parallel fixture meanwhile.
+    static SELECTED: std::sync::Mutex<Vec<SocketAddr>> = std::sync::Mutex::new(Vec::new());
+    loop {
+        let probe = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = probe.local_addr().unwrap();
+        let mut selected = SELECTED.lock().unwrap();
+        if !selected.contains(&address) {
+            selected.push(address);
+            return address;
+        }
+    }
+}
 fn accounts() -> Arc<HostResourceAccounts> { Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS)) }
 fn clean(bank: &HostResourceAccounts) { for k in ResourceKind::ALL { assert_eq!(bank.account(k).used(),0,"{k:?}"); } }
 fn io() -> tokio::runtime::Runtime { tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build().unwrap() }
@@ -97,7 +110,7 @@ fn exposure(owner:&RawProducerServient,auth:ProducerInstanceAuthority,td:&Value,
     let definitions=prepared.operations().iter().map(|o|o.definition::<HttpActionDefinition>().unwrap().clone()).collect();
     let participant=HttpActionRuntime::try_new(&owner.participation_token(), instance.key(), definitions, 8).unwrap();
     ComposedProducerExposure::try_new(owner,ComposedProducerInput { instance,prepared,providers,
-        participants:vec![Box::new(participant)],expected,handler_backing_bytes:256 },
+        participants:vec![OwnedProducerParticipation::actions(participant)],expected,handler_backing_bytes:256 },
         Arc::new(GatewayDefaultV1::LIMITS.clone()),bank,&mut work()).ok().unwrap()
 }
 struct Server { owner:RawProducerServient, exposure:ComposedProducerExposure, app:Rc<App>, bank:Arc<HostResourceAccounts>, addr:SocketAddr, td:Value }

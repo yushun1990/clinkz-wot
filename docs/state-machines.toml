@@ -500,3 +500,10 @@ requirements = ["SAFE-AUTH-001", "SAFE-CONCUR-001", "SAFE-CLEANUP-001", "RES-WOR
 participants = ["logical-instance", "accepted-work", "action-invocation", "notification-conversation", "cleanup-owner", "native-infrastructure"]
 preconditions = ["original-managed-reference-and-independent-family-permission", "separate-per-capacity-credit-and-original-work-owners", "deployment-native-wakes-and-maintenance-turns", "application-result-observation-in-driving-task"]
 ownership = "A borrowed turn creates no owner or scheduler. Existing family transitions retain normal/late results and pending/failed retirement. Live notification cursors retain unread reports; aggregate driving disposes abandoned reports only after complete original local retirement and paid cleanup. Explicit manual cleanup may instead collect reports after cursor loss. Passive logical replacement or owner loss cannot retarget work or manufacture a wake; native physical resources remain Binding-owned."
+
+[[composition]]
+id = "producer-participation-turn"
+requirements = ["SAFE-AUTH-001", "SAFE-CLEANUP-001", "SPI-RETIRE-001", "RES-WORK-001"]
+participants = ["producer-publication", "accepted-work", "action-invocation", "cleanup-owner", "native-infrastructure"]
+preconditions = ["original-native-membership-issuer-instance-and-typed-servient-operation", "independent-member-and-native-action-work-credit", "deployment-native-and-maintenance-turns", "explicit-application-outcome-observation-and-acknowledgement"]
+ownership = "The existing composed owner retains execution with native erasure. A short/error member cannot skip siblings; native callbacks receive no semantic dispatcher. Action selection and opt-in revoked-work marking share one prepaid scan and retain the selected original index through progress; manual progress keeps normal late-completion policy. Revoked original Actions enter funded local close without handle enumeration or remote CancelAction. Pending/error cleanup and unread or caller-held outcomes retain original funding. Publication, emission and exact complete-set retirement remain explicit; a progress return does not prove physical release."

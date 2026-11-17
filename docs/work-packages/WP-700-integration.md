@@ -23,6 +23,14 @@ deployment maintenance turns use independent work credit; manual APIs remain
 available. This is integration availability, not all-family Producer reuse,
 security/source qualification, an embedded-profile claim or release acceptance.
 
+The [Host execution increment](../evidence/host-execution-integration.md) joins
+those Consumer capacities with independent qualified Producers through existing
+HTTP/MQTT capabilities. Servient retains execution with native member erasure;
+real protocol work, replacement, failed/Pending cleanup, explicit result ownership
+and final socket/session/account release are checked. This is bounded integration
+availability; mixed secure execution, supported-profile conformance/performance
+and independent v1 qualification remain separate deliverables.
+
 Retained Property Read code/tests and historical tranches remain useful within
 their recorded contracts. Their old status does not close this package under
 v6. Exact successor source scope/API/state/resource changes, removals, checks and

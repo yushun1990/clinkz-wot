@@ -558,7 +558,9 @@ impl HttpActionRuntime {
         budget: &mut WorkBudget,
     ) -> CoreResult<Poll<Option<ProducerActionCandidate>>> {
         if self.closed {
-            return Err(producer_unsupported());
+            // Closed participation can still be visited while original Action
+            // work/results retire at the logical owner. No new ingress exists.
+            return Ok(Poll::Ready(None));
         }
         // Revocation fences new connections and semantic ingress, not a socket
         // already accepted by this native owner or its pending response write.

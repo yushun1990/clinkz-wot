@@ -627,6 +627,27 @@ impl RawProducerServient {
         binding: &B,
         budget: &mut WorkBudget,
     ) -> CoreResult<Poll<Option<u32>>> {
+        self.progress_action_turn(binding, budget, false)
+    }
+
+    /// The same fair progress turn, opting into local close for this
+    /// participant's revoked original invocations. Revocation marking and
+    /// selection share one prepaid scan; no result is acknowledged and no
+    /// remote CancelAction is sent. Manual progress keeps its completion policy.
+    pub fn progress_actions_closing_revoked<B: ProducerActionBinding>(
+        &mut self,
+        binding: &B,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Poll<Option<u32>>> {
+        self.progress_action_turn(binding, budget, true)
+    }
+
+    fn progress_action_turn<B: ProducerActionBinding>(
+        &mut self,
+        binding: &B,
+        budget: &mut WorkBudget,
+        close_revoked: bool,
+    ) -> CoreResult<Poll<Option<u32>>> {
         if !binding.associated_with(&self.participation_token(), binding.instance()) {
             return Err(CoreError::StaleHandle(context()));
         }
@@ -640,19 +661,26 @@ impl RawProducerServient {
         {
             return Ok(Poll::Pending);
         }
-        let Some(index) = store
-            .entries
-            .iter()
-            .enumerate()
-            .filter(|(_, entry)| {
-                entry
-                    .native_owner
-                    .as_ref()
-                    .is_some_and(|owner| binding.participation_id().matches(owner))
-            })
-            .min_by_key(|(_, entry)| entry.native_progress)
-            .map(|(index, _)| index)
-        else {
+        let mut selected = None;
+        for (index, entry) in store.entries.iter_mut().enumerate() {
+            if !entry
+                .native_owner
+                .as_ref()
+                .is_some_and(|owner| binding.participation_id().matches(owner))
+            {
+                continue;
+            }
+            if close_revoked && !entry.current.get() {
+                entry.token.set(true);
+                if entry.work.is_some() {
+                    entry.cancel_requested = true;
+                }
+            }
+            if selected.is_none_or(|(_, progress)| entry.native_progress < progress) {
+                selected = Some((index, entry.native_progress));
+            }
+        }
+        let Some((index, _)) = selected else {
             return Ok(Poll::Ready(None));
         };
         store.native_progress = store
@@ -661,19 +689,17 @@ impl RawProducerServient {
             .ok_or_else(|| CoreError::Backpressure(context()))?;
         let entry = &mut store.entries[index];
         entry.native_progress = store.native_progress;
-        let handle = RawActionHandle {
-            id: entry.id,
-            token: Rc::downgrade(&entry.token),
-        };
-        let progress = self.step_raw_action(&handle, budget)?;
+        let id = entry.id.slot().get();
+        // Selection already established the original entry. This exclusive
+        // store loan spans its callback, so its index cannot be removed or
+        // retargeted. Handle lookup and terminal relookup would repeat the scan.
+        let progress = store.progress(index, budget)?;
         if progress.is_ready() {
-            let store = self.actions.as_mut().unwrap();
-            let index = store.index(&handle).unwrap();
             store.entries[index]
                 .native_finished
                 .get_or_insert_with(Instant::now);
         }
-        Ok(progress.map(|()| Some(handle.reference().slot().get())))
+        Ok(progress.map(|()| Some(id)))
     }
 
     pub fn acknowledge_action<B: ProducerActionBinding>(

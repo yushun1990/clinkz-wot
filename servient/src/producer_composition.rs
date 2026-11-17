@@ -3,11 +3,12 @@
 //! Binding; this boundary commits one final TD and behavior owner only after
 //! all participants are closed and the *whole* description is requalified.
 #![allow(clippy::result_large_err)]
+pub use crate::producer_execution::{OwnedProducerParticipation, ProducerWork};
 use crate::{
     host_accounts::HostResourceAccounts,
     producer::{Funding, QualificationFunding},
 };
-use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
+use alloc::{rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::{
     AffordanceTarget, BindingInputRejection, BindingOperationalError, producer::ProducerInstanceKey,
 };
@@ -367,25 +368,6 @@ fn context() -> ErrorContext {
     ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
 }
 
-/// Host storage erasure only. Native polling, Action progress and controls
-/// remain their concrete interfaces; this introduces no universal driver.
-pub trait OwnedProducerParticipation: ClosedProducerParticipation + Any {
-    fn as_any_mut(&mut self) -> &mut dyn Any;
-    fn as_participation(&self) -> &dyn ClosedProducerParticipation;
-    fn as_participation_mut(&mut self) -> &mut dyn ClosedProducerParticipation;
-}
-impl<T: ClosedProducerParticipation + Any> OwnedProducerParticipation for T {
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-    fn as_participation(&self) -> &dyn ClosedProducerParticipation {
-        self
-    }
-    fn as_participation_mut(&mut self) -> &mut dyn ClosedProducerParticipation {
-        self
-    }
-}
-
 /// Pure caller-provisioned owners. Construction/compilation precede this
 /// ownership handoff and acquire no native resources. Actual immutable startup
 /// registrations and the raw logical root/Action-store baseline remain
@@ -395,7 +377,7 @@ pub struct ComposedProducerInput {
     pub instance: RawProducerInstance,
     pub prepared: PreparedThing,
     pub providers: Vec<Rc<dyn ProducerCapability>>,
-    pub participants: Vec<Box<dyn OwnedProducerParticipation>>,
+    pub participants: Vec<OwnedProducerParticipation>,
     pub expected: Option<ProducerInstanceKey>,
     /// Trusted complete handler indirect backing, additional to actual handler
     /// layouts. Output/native allowances come from the actual participants.
@@ -407,7 +389,7 @@ pub struct ComposedProducerInput {
 /// opaque identities are rechecked at publication and retirement, and each
 /// actual participant independently retains the same funding owner.
 pub struct ComposedProducerExposure {
-    participants: Vec<Box<dyn OwnedProducerParticipation>>,
+    participants: Vec<OwnedProducerParticipation>,
     prepared: PreparedThing,
     providers: Vec<Rc<dyn ProducerCapability>>,
     publication: ProducerPublication,
@@ -460,9 +442,10 @@ impl ComposedProducerExposure {
             // traversing or accounting caller-supplied handler collections.
             owner.check_publication_input(&input.instance, input.expected)?;
             if input.participants.iter().enumerate().any(|(i, p)| {
-                input.participants[..i]
-                    .iter()
-                    .any(|prior| p.participation_id().same_owner(prior.participation_id()))
+                !p.has_original_native()
+                    || input.participants[..i]
+                        .iter()
+                        .any(|prior| p.participation_id().same_owner(prior.participation_id()))
             }) {
                 return Err(CoreError::Validation(context()));
             }
@@ -495,8 +478,7 @@ impl ComposedProducerExposure {
                 })
                 .and_then(|n| {
                     n.checked_add(
-                        input.participants.capacity()
-                            * size_of::<Box<dyn OwnedProducerParticipation>>(),
+                        input.participants.capacity() * size_of::<OwnedProducerParticipation>(),
                     )
                 })
                 .and_then(|n| {
@@ -523,9 +505,11 @@ impl ComposedProducerExposure {
                             input.instance.key(),
                         )
                         .and_then(|native| {
-                            native.checked_add(p.notification_publication_slots().checked_mul(
-                                CapturedNotificationRoute::publication_overhead_bytes(),
-                            )?)
+                            native.checked_add(p.overhead())?.checked_add(
+                                p.notification_publication_slots().checked_mul(
+                                    CapturedNotificationRoute::publication_overhead_bytes(),
+                                )?,
+                            )
                         })
                         .ok_or_else(|| CoreError::UnsupportedOperation(context()))?,
                     )
@@ -678,9 +662,41 @@ impl ComposedProducerExposure {
     pub fn participant_mut<T: Any>(&mut self, index: usize) -> Option<&mut T> {
         self.participants
             .get_mut(index)?
-            .as_mut()
             .as_any_mut()
             .downcast_mut()
+    }
+
+    /// One bounded turn of every retained member. Supply independent credit per
+    /// participant and lane; an error or short turn never skips a sibling.
+    /// Native readiness and maintenance turns are deployment responsibilities,
+    /// as for Consumer execution. This does not publish, emit, query, cancel a
+    /// remote operation, acknowledge results or claim completed retirement.
+    pub fn step(
+        &mut self,
+        owner: &mut RawProducerServient,
+        cx: &mut core::task::Context<'_>,
+        now: clinkz_wot_foundation::MonotonicInstant,
+        mut credit: impl FnMut(usize, ProducerWork) -> WorkBudget,
+    ) -> CoreResult<()> {
+        let key = self.key();
+        let mut failure = None;
+        for (index, participant) in self.participants.iter_mut().enumerate() {
+            if let Err(error) =
+                participant.step(owner, key, cx, now, &mut |lane| credit(index, lane))
+                && failure
+                    .as_ref()
+                    .is_none_or(|e| matches!(e, CoreError::Backpressure(_)))
+            {
+                failure = Some(error);
+            }
+        }
+        failure.map_or(Ok(()), Err)
+    }
+
+    /// First returned operational turn error, or the member's native failure
+    /// evidence. Full settlement and cleanup remain at their original owners.
+    pub fn progress_failure(&self, index: usize) -> Option<&CoreError> {
+        self.participants.get(index)?.failure()
     }
 
     pub fn publish(

@@ -440,7 +440,7 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
                 instance,
                 prepared,
                 providers: vec![Rc::new(provider.clone())],
-                participants: vec![Box::new(participant)],
+                participants: vec![OwnedProducerParticipation::notifications(participant)],
                 expected: None,
                 handler_backing_bytes: 0,
             },
