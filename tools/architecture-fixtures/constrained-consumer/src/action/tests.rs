@@ -728,3 +728,258 @@ fn host_action_content_lends_same_schema_to_distinct_native_representation() {
         assert_eq!(c.finish(h).result().unwrap().data().unwrap().body, b"42");
     });
 }
+
+#[test]
+fn input_view_revocation_is_fenced_before_native_start() {
+    struct RevokingInput<'a> {
+        authority: &'a LocalConsumerInstance,
+        views: &'a Cell<usize>,
+        revoke_on: usize,
+    }
+    impl ActionInput for RevokingInput<'_> {
+        fn view(&self) -> PayloadView<'_> {
+            let views = self.views.get() + 1;
+            self.views.set(views);
+            if views == self.revoke_on {
+                self.authority.revoke();
+            }
+            PayloadView {
+                body: b"7",
+                content_type: "application/x-test-number",
+                content_coding: None,
+            }
+        }
+        fn backing_bytes(&self) -> u64 {
+            0
+        }
+    }
+    // First-view revocation must refuse before effects; a second view must
+    // never be requested after the first has passed fresh permission checks.
+    for revoke_on in [1, 2] {
+        let peer = Peer::new();
+        let authority = instance();
+        let started_after_revocation = Cell::new(false);
+        let open = || {
+            started_after_revocation.set(!authority.is_current());
+            let socket = peer.open()?;
+            socket.0.send(b"START").unwrap();
+            Ok(socket)
+        };
+        let stats = Statistics::default();
+        let binding = Binding {
+            open: &open,
+            stats: &stats,
+            configuration: 4,
+            query_media: "text/x-test-number",
+        };
+        let program = Program {
+            target: "test-datagram:measure",
+        };
+        let invoke_codec = Codec {
+            number: NumberCodec::ready(),
+            media: "application/x-test-number",
+            revoke_on_validate: Cell::new(false),
+            authority: &authority,
+        };
+        let query_codec = Codec {
+            number: NumberCodec::ready(),
+            media: "text/x-test-number",
+            revoke_on_validate: Cell::new(false),
+            authority: &authority,
+        };
+        let definition = ActionDefinition::try_new(
+            meaning(),
+            &binding,
+            &program,
+            4,
+            Some(&invoke_codec),
+            Some(&query_codec),
+        )
+        .unwrap();
+        let access = Permission::default();
+        let mut bank = account();
+        let mut slot = ActionSlot::<_, RevokingInput<'_>>::try_new(
+            &definition,
+            authority.reference(),
+            [Some(&access), Some(&access), Some(&access)],
+        )
+        .unwrap();
+        let views = Cell::new(0);
+        let input = RevokingInput {
+            authority: &authority,
+            views: &views,
+            revoke_on,
+        };
+        let funding = bank
+            .try_reserve(slot.required_bytes(Some(&input)).unwrap())
+            .unwrap();
+        let bytes = funding.bytes();
+        let result = slot.invoke(Some(input), funding, Deadline::NONE, now(1), &mut budget());
+        assert!(
+            !started_after_revocation.get(),
+            "native start sent a real datagram after the input view revoked its issuer"
+        );
+        assert_eq!(views.get(), 1);
+        if revoke_on == 1 {
+            let (input, funding, error) = result.err().unwrap();
+            assert!(matches!(error, CoreError::StaleHandle(_)));
+            assert!(core::ptr::eq(input.as_ref().unwrap().authority, &authority));
+            assert_eq!(funding.bytes(), bytes);
+            assert!(slot.is_idle());
+            assert_eq!(stats.starts.get(), 0);
+            assert_eq!(invoke_codec.number.validations.get(), 0);
+            peer.socket.set_nonblocking(true).unwrap();
+            assert!(matches!(peer.socket.recv_from(&mut [0; 64]), Err(e)
+            if e.kind() == std::io::ErrorKind::WouldBlock));
+            drop(funding);
+        } else {
+            let handle = result.unwrap_or_else(|_| panic!("admission"));
+            // This Binding opens/sends during start, before any progress turn.
+            let mut wire = [0; 64];
+            let (len, _) = peer.socket.recv_from(&mut wire).unwrap();
+            assert_eq!(&wire[..len], b"START");
+            let mut cx = Context::from_waker(core::task::Waker::noop());
+            slot.step(&mut cx, now(1), &mut budget());
+            peer.respond(b"I7", b"O\x0042");
+            slot.step(&mut cx, now(1), &mut budget());
+            let settlement = slot.take_settlement(handle, now(1), &mut budget()).unwrap();
+            assert_eq!(settlement.result().unwrap().data().unwrap().body, b"42");
+            let funding = settlement.into_funding();
+            assert_eq!(funding.bytes(), bytes);
+            drop(funding);
+        }
+        drop(slot);
+        assert_eq!(bank.used(), 0);
+        assert_eq!(stats.starts.get(), stats.exchanges_dropped.get());
+        peer.released();
+    }
+}
+
+#[test]
+fn native_start_uses_validated_input_view_when_authorization_changes_selection() {
+    struct SelectedInput<'a> {
+        body: &'a Cell<&'static [u8]>,
+        views: &'a Cell<usize>,
+        dropped: &'a Cell<usize>,
+    }
+    impl ActionInput for SelectedInput<'_> {
+        fn view(&self) -> PayloadView<'_> {
+            bump(self.views);
+            PayloadView {
+                body: self.body.get(),
+                content_type: "application/x-test-number",
+                content_coding: None,
+            }
+        }
+        fn backing_bytes(&self) -> u64 {
+            0
+        }
+    }
+    impl Drop for SelectedInput<'_> {
+        fn drop(&mut self) {
+            bump(self.dropped);
+        }
+    }
+    let peer = Peer::new();
+    let authority = instance();
+    let open = || peer.open();
+    let stats = Statistics::default();
+    let binding = Binding {
+        open: &open,
+        stats: &stats,
+        configuration: 4,
+        query_media: "text/x-test-number",
+    };
+    let program = Program {
+        target: "test-datagram:measure",
+    };
+    let invoke_codec = Codec {
+        number: NumberCodec::ready(),
+        media: "application/x-test-number",
+        revoke_on_validate: Cell::new(false),
+        authority: &authority,
+    };
+    let query_codec = Codec {
+        number: NumberCodec::ready(),
+        media: "text/x-test-number",
+        revoke_on_validate: Cell::new(false),
+        authority: &authority,
+    };
+    let definition = ActionDefinition::try_new(
+        meaning(),
+        &binding,
+        &program,
+        4,
+        Some(&invoke_codec),
+        Some(&query_codec),
+    )
+    .unwrap();
+    let body = Cell::new(b"7".as_slice());
+    let checks = Cell::new(0);
+    let callback = || {
+        checks.set(checks.get() + 1);
+        if checks.get() == 2 {
+            body.set(b"99");
+        }
+    };
+    let access = Permission {
+        callback: Some(&callback),
+        ..Permission::default()
+    };
+    let mut bank = account();
+    let mut slot = ActionSlot::<_, SelectedInput<'_>>::try_new(
+        &definition,
+        authority.reference(),
+        [Some(&access), Some(&access), Some(&access)],
+    )
+    .unwrap();
+    let views = Cell::new(0);
+    let dropped = Cell::new(0);
+    let input = SelectedInput {
+        body: &body,
+        views: &views,
+        dropped: &dropped,
+    };
+    let funding = bank
+        .try_reserve(slot.required_bytes(Some(&input)).unwrap())
+        .unwrap();
+    let bytes = funding.bytes();
+    let (input, funding, error) = slot
+        .invoke(
+            Some(input),
+            funding,
+            Deadline::NONE,
+            now(1),
+            &mut WorkBudget::new(),
+        )
+        .err()
+        .unwrap();
+    assert!(matches!(error, CoreError::Backpressure(_)));
+    assert_eq!(funding.bytes(), bytes);
+    assert_eq!(views.get(), 0);
+    assert_eq!(checks.get(), 0);
+    assert_eq!(stats.starts.get(), 0);
+    assert_eq!(dropped.get(), 0);
+    let handle = slot
+        .invoke(input, funding, Deadline::NONE, now(1), &mut budget())
+        .unwrap_or_else(|_| panic!("admission"));
+    assert_eq!(body.get(), b"99");
+    assert_eq!(views.get(), 1);
+    assert_eq!(invoke_codec.number.validations.get(), 1);
+    let mut cx = Context::from_waker(core::task::Waker::noop());
+    slot.step(&mut cx, now(1), &mut budget());
+    peer.respond(b"I7", b"O\x0042");
+    slot.step(&mut cx, now(1), &mut budget());
+    let settlement = slot.take_settlement(handle, now(1), &mut budget()).unwrap();
+    assert_eq!(settlement.result().unwrap().data().unwrap().body, b"42");
+    assert_eq!(views.get(), 1);
+    assert_eq!(dropped.get(), 0);
+    let funding = settlement.into_funding();
+    assert_eq!(dropped.get(), 1);
+    assert_eq!(funding.bytes(), bytes);
+    drop(funding);
+    drop(slot);
+    assert_eq!(bank.used(), 0);
+    assert_eq!(stats.starts.get(), stats.exchanges_dropped.get());
+    peer.released();
+}

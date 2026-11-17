@@ -348,22 +348,17 @@ impl<'a, B: ActionBinding, I: ActionInput> ActionSlot<'a, B, I> {
             if !a.work(Operation::InvokeAction, schema).prepay(budget) {
                 return Err(busy());
             }
+            // Keep one loan across authorization, validation and native start.
+            // A new view may select different bytes or revoke the issuer.
+            let payload = input.as_ref().map(ActionInput::view);
             a.check(Operation::InvokeAction, schema, None)?;
-            d.validate(
-                Operation::InvokeAction,
-                schema,
-                input.as_ref().map(ActionInput::view),
-            )?;
+            d.validate(Operation::InvokeAction, schema, payload)?;
             a.check(Operation::InvokeAction, schema, None)?;
             a.qualify()?;
             let sequence = a.consumer.reserve_sequence()?;
-            let exchange = d.binding.start(
-                d.program,
-                Operation::InvokeAction,
-                input.as_ref().map(ActionInput::view),
-                None,
-                deadline,
-            )?;
+            let exchange =
+                d.binding
+                    .start(d.program, Operation::InvokeAction, payload, None, deadline)?;
             Ok((sequence, exchange))
         })();
         let (sequence, exchange) = match checked {

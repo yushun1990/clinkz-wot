@@ -84,6 +84,10 @@ exercise:
 - original input, opaque token, native output and exact lease ownership through
   unread settlement, disposal and slot reuse; all created native socket ports
   become bindable after their actual owners retire;
+- one prepaid input view reused across authorization, validation and native
+  start: policy-time selection of `99` cannot replace the validated `7` on the
+  actual wire, input-view-time revocation fences an immediate-send Binding,
+  and short admission credit obtains no input view or native effect;
 - cancellation before initial native progress and after Query starts, issuer
   revocation, Pending/failed physical close, retained late output and validation
   using original funding without effectful polling after local fencing;

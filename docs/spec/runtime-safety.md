@@ -919,6 +919,13 @@ original-instance policy checks cover the same actual destination used by start.
 Invoke input and Invoke/Query output use their own captured media/body/work
 services over one shared schema pair. No codec is selected from untrusted media.
 
+After admission prepayment, capture one input payload view before fresh
+authorization. Validation and native start MUST use that same borrowed view,
+including its media/coding. Retaining the original input owner does not prove
+that repeated views select the same payload. No further input-view callback may
+follow final authorization; input-view-time revocation MUST refuse before native
+start. This requires neither an input copy nor a different ownership format.
+
 Definition and service storage stay with the caller through safe loans. Before
 native construction a complete original Foundation reservation must match owner,
 resource kind and complete inline plus declared indirect work/input/result/token/

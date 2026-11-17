@@ -62,6 +62,9 @@ pub trait ActionOutput {
     fn view(&self) -> InteractionOutputView<'_>;
 }
 pub trait ActionInput {
+    /// Lend encoded input. Admission captures one view after prepayment and
+    /// before fresh permission, then reuses that loan for validation and start.
+    /// A later view is not proof of the previously validated bytes or metadata.
     fn view(&self) -> PayloadView<'_>;
     /// Indirect original input backing beyond this owner's inline layout.
     fn backing_bytes(&self) -> u64;
