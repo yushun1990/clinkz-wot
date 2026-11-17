@@ -451,6 +451,16 @@ representations, not conversions or substitutes for one another's qualification.
 The [caller-owned runtime contract](runtime-safety.md#caller-owned-continuing-action)
 owns the implemented subset and physical ownership obligations.
 
+The caller-owned `ActionOutput` facet lends arbitrary untrusted views; ownership
+does not establish equality between successive selections. Its movable settlement
+therefore validates each exact application loan at `result(budget)` using the
+returning operation's captured data service and shape/primary-response checks.
+Outcome-owner transfer and a validated payload loan are separate edges. Native
+progress/late validation still applies, while the result loan requires its own
+paid work and retains the original owner. This adds no universal frozen-output
+container or payload copy. The [runtime contract](runtime-safety.md#caller-owned-continuing-action)
+owns exact work, failure, permission and input-view semantics.
+
 The Host continuing Consumer Action separates four owners. A reusable
 `ConsumerActionDefinition` retains source-free native mappings, Action data roles
 and qualified data services. It contains no Consumer or access grant, invocation

@@ -59,6 +59,10 @@ pub enum ActionReply<C, O> {
     AlreadyTerminal,
 }
 pub trait ActionOutput {
+    /// One bounded local view-adapter operation, with no native progress. Safe
+    /// interior mutability may select different immutable backing between calls.
+    /// A view is untrusted: application access must validate the exact loan it
+    /// returns, including bytes, media, coding, status and metadata.
     fn view(&self) -> InteractionOutputView<'_>;
 }
 pub trait ActionInput {
@@ -143,8 +147,10 @@ pub trait ActionAccess {
 }
 
 /// Common application-result shape, independent of native artifact/storage.
+/// This continuing facet admits primary application output only.
 pub fn action_output_shape(output: InteractionOutputView<'_>) -> bool {
     output.status() == crate::InteractionStatus::Ok
+        && output.metadata().response_selection() == crate::ResponseSelection::Primary
         && output.metadata().payload_role() == crate::ResponsePayloadRole::Application
         && output.metadata().action_invocation().is_none()
         && output.metadata().binding_response().is_none()

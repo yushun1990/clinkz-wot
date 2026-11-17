@@ -316,6 +316,11 @@ services after callbacks. Insufficient credit grants no success and keeps the
 original slot and funding. Native poll errors and late retirement output retain
 independent evidence; even after an error, captured validation applies to that
 late output before final settlement, without clearing the first cause.
+
+The [caller-owned Action representation](#caller-owned-continuing-action) also
+validates each application result loan. Moving its generic output owner does
+not prove that a later `ActionOutput::view` selects the previously checked value.
+
 ### Notification associations and conversation capacity
 
 `ConsumerNotificationAssociation` retains the original Consumer reference,
@@ -949,11 +954,47 @@ finite local disposal without waiting or claiming an acknowledged drain.
 The slot retains an unread completion until `take_settlement` prepays cleanup
 and performs fresh time, original authority and paid service/access checks.
 Short credit retains the slot and original output. Failed handoff retains native
-output as evidence. Successful handoff is application acceptance; subsequent
-revocation cannot retract the caller's accepted loan. The settlement retains
-original input, output, continuation, dependencies and reservation; result views
-cannot escape their owner. `into_funding` disposes native/input/result owners
-before returning that exact lease. Drop refunds it only after local disposal.
+output as evidence. Successful handoff transfers the complete outcome owner and
+its current recipient permission; subsequent revocation cannot retarget or
+retract that ownership. This transfer provides no new payload view and does not
+seal the bytes that a generic `ActionOutput::view` may select later.
+
+`ActionSettlement::result(&mut WorkBudget)` is a paid application-loan edge.
+Before obtaining a view it prepays one `HandlerSteps` bounded view-adapter
+operation plus the returning operation's originally captured `CodecInputBytes`
+validation allowance. It captures one view, checks its complete application
+shape (including primary response metadata), media/coding/body bounds and shared
+output schema with the original data service, and returns that exact loan.
+No second output view or authorization callback follows this validation.
+Progress/retirement validation remains mandatory, including late output after
+local failure; its result is no certificate for a subsequent arbitrary view.
+This contract guarantees each returned loan matches its own validation, rather
+than asserting that all historic views are identical. Host's immutable output
+carrier remains a different qualified representation.
+
+Short loan credit enters no view/codec callback, records no failure and retains
+all original owners for retry. A loan validation failure records a sticky first
+cause and validation error while retaining native evidence, input, continuation
+and funding; it cannot erase an earlier cause or assert remote rollback. An
+unavailable original codec is not re-entered. No native poll, cleanup, new account,
+allocation, copy or fresh authorization is performed by this loan. Permission
+already transferred with the owner. Already-returned loans remain ordinary
+immutable borrows even if a selector, service or logical authority later changes.
+Future loans require their own original-service validation and may refuse.
+
+`native_result()` lends current unvalidated native evidence, including rejected
+and late output. `input()` calls `view()` on the retained original input owner
+and lends its current view; it is not the exact dispatched payload or a dispatch
+receipt. Admission's single input loan is used unchanged for validation/start
+but is not stored in the movable settlement. An input facet backed by a selector
+may therefore expose `99` here even though the actual wire request used validated
+`7`. Applications requiring a byte receipt can explicitly retain one or use an
+immutable input representation; no implicit copy is required.
+
+The settlement retains original input, output, continuation, dependencies and
+reservation; result loans cannot escape their owner or survive moving it into
+`into_funding`. That method disposes native/input/result owners before returning
+the exact lease. Drop refunds it only after local disposal.
 
 The [cross-representation evidence](../evidence/continuing-action-runtime-independence.md)
 joins real datagrams, common Host Action regressions and no-atomic compilation.

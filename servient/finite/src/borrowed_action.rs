@@ -182,6 +182,16 @@ impl<'a, B: ActionBinding> ActionDefinition<'a, B> {
             0
         }
     }
+    fn validate_output_view(
+        &self,
+        op: Operation,
+        output: InteractionOutputView<'_>,
+    ) -> CoreResult<()> {
+        if !action_output_shape(output) {
+            return Err(invalid());
+        }
+        self.validate(op, self.meaning.schemas().output.as_ref(), output.data())
+    }
 }
 
 struct Association<'a, B: ActionBinding> {
@@ -436,8 +446,9 @@ impl<'a, B: ActionBinding, I: ActionInput> ActionSlot<'a, B, I> {
             step_action(w, cx, budget);
         }
     }
-    /// Fresh paid acceptance edge. Short credit retains the original occupied
-    /// slot. Failed settlements still lend the original late/native evidence.
+    /// Fresh paid owner/permission transfer. Short credit retains the original
+    /// occupied slot. Application payload loans require their own exact-view
+    /// validation at `ActionSettlement::result`; failed settlements retain native evidence.
     pub fn take_settlement(
         &mut self,
         handle: ActionHandle<'_>,
@@ -462,8 +473,19 @@ impl<'a, B: ActionBinding, I: ActionInput> ActionSlot<'a, B, I> {
 /// ```compile_fail,E0515
 /// use clinkz_wot_core::execution::action::{ActionBinding, ActionInput};
 /// use clinkz_wot_servient_finite::borrowed_action::ActionSettlement;
-/// fn escape<B: ActionBinding, I: ActionInput>(s: ActionSettlement<'_, B, I>) -> &'static [u8] {
-///     s.result().unwrap().data().unwrap().body
+/// fn escape<B: ActionBinding, I: ActionInput>(mut s: ActionSettlement<'_, B, I>) -> &'static [u8] {
+///     s.result(&mut clinkz_wot_foundation::WorkBudget::new()).unwrap().data().unwrap().body
+/// }
+/// ```
+///
+/// ```compile_fail,E0505
+/// use clinkz_wot_core::execution::action::{ActionBinding, ActionInput};
+/// use clinkz_wot_servient_finite::borrowed_action::ActionSettlement;
+/// fn refund_while_borrowed<B: ActionBinding, I: ActionInput>(mut s: ActionSettlement<'_, B, I>,
+///     budget: &mut clinkz_wot_foundation::WorkBudget) {
+///     let view = s.result(budget).unwrap();
+///     let _funding = s.into_funding();
+///     let _bytes = view.data().unwrap().body;
 /// }
 /// ```
 pub struct ActionSettlement<'a, B: ActionBinding, I: ActionInput>(Invocation<'a, B, I>);
@@ -500,24 +522,52 @@ impl<B: ActionBinding, I: ActionInput> ActionSettlement<'_, B, I> {
     pub fn native_error(&self) -> Option<&CoreError> {
         self.0.native_error.as_ref()
     }
+    /// Current view supplied by the original retained input owner. This calls
+    /// `ActionInput::view` again; bytes/media/coding may differ from the exact
+    /// view used for admission and dispatch. No dispatch snapshot is retained.
     pub fn input(&self) -> Option<PayloadView<'_>> {
         self.0.input.as_ref().map(ActionInput::view)
     }
+    /// Current native evidence, including rejected or late output. This view
+    /// carries no application-validation claim and may differ on another call.
     pub fn native_result(&self) -> Option<Result<InteractionOutputView<'_>, &CoreError>> {
         self.0
             .result
             .as_ref()
             .map(|r| r.as_ref().map(ActionOutput::view))
     }
-    pub fn result(&self) -> CoreResult<InteractionOutputView<'_>> {
+    /// Capture, validate and return one exact application loan. Native output
+    /// owners may select different views between calls; prior validation grants
+    /// no certificate for a new loan. Prepay one HandlerSteps adapter operation
+    /// and the original returning operation's complete codec allowance before
+    /// obtaining a view. Short credit retains all owners without recording a
+    /// failure; invalid output records a sticky first cause and validation error.
+    /// Ownership/current permission was transferred at `take_settlement`; this
+    /// does no new authorization, native progress or remote-effect inference.
+    pub fn result(&mut self, budget: &mut WorkBudget) -> CoreResult<InteractionOutputView<'_>> {
         if let Some(e) = &self.0.progress.first_cause {
             return Err(e.clone());
         }
-        match &self.0.result {
-            Some(Ok(output)) if self.state() == ConsumerActionState::Completed => Ok(output.view()),
-            Some(Err(e)) => Err(e.clone()),
-            _ => Err(invalid()),
+        let output = match &self.0.result {
+            Some(Ok(output)) if self.state() == ConsumerActionState::Completed => output,
+            Some(Err(e)) => return Err(e.clone()),
+            _ => return Err(invalid()),
+        };
+        let d = self.0.association.definition;
+        let work = d.validation_work(self.0.operation, d.meaning.schemas().output.as_ref());
+        if budget.consume(W::HandlerSteps, 1).is_err()
+            || budget.consume(W::CodecInputBytes, work).is_err()
+        {
+            return Err(busy());
         }
+        let view = output.view();
+        if let Err(error) = d.validate_output_view(self.0.operation, view) {
+            self.0.progress.validation_error = Some(error.clone());
+            // Owner transfer already required acknowledged exchange retirement.
+            self.0.progress.close(error.clone(), false);
+            return Err(error);
+        }
+        Ok(view)
     }
 }
 impl<'a, B: ActionBinding, I: ActionInput> ActionSettlement<'a, B, I> {
@@ -727,15 +777,9 @@ impl<B: ActionBinding, I: ActionInput> ActionDriver for Invocation<'_, B, I> {
     }
     fn validate_output(&mut self) -> CoreResult<()> {
         let output = self.result.as_ref().unwrap().as_ref().unwrap().view();
-        if !action_output_shape(output) {
-            return Err(invalid());
-        }
-        let d = self.association.definition;
-        d.validate(
-            self.operation,
-            d.meaning.schemas().output.as_ref(),
-            output.data(),
-        )
+        self.association
+            .definition
+            .validate_output_view(self.operation, output)
     }
     fn reset_operation(&mut self) {
         self.operation = Operation::InvokeAction;

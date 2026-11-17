@@ -33,6 +33,14 @@ or executor requirement. Host `ConsumerActionMapping` remains separately qualifi
 neither native artifact is required to implement the other's storage contract.
 Both Servient owners execute Core's common Action semantic transitions.
 
+Typed `ActionOutput::view` is a bounded local adapter without native progress;
+safe interior mutability can select different immutable bytes/metadata on later
+calls. It supplies an untrusted view, not an immutable-output certificate. The
+caller-owned [application loan](runtime-safety.md#caller-owned-continuing-action)
+validates and returns a single captured view under paid original data bounds.
+The original native owner/backing stays retained. Host's concrete immutable
+carrier can support different access mechanics without changing WoT meaning.
+
 `SPI-COMPOSE-001`: Applications MUST be able to Cargo-link and startup-register
 complete conforming third-party capability implementations without a built-in
 compiler/protocol whitelist or workspace membership. A registration captures

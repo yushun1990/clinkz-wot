@@ -65,3 +65,28 @@ qualification remain open. This increment cannot close 0081, runtime independenc
 a milestone or an acceptance gate. The [runtime contract](../docs/spec/runtime-safety.md#caller-owned-continuing-action)
 and [evidence](../docs/evidence/continuing-action-runtime-independence.md) own the
 migrated scope and remaining limits; this file preserves investigation rationale.
+
+## Output loan reassessment
+
+At `fb8dee594f2df595cadcf01a8ad17317dad53f0c`, source and an executable datagram
+case falsify the assumption that retaining an `ActionOutput` owner seals its
+validated view. A safe `Cell` selector changes from the native schema-valid `7`
+to `99` in authorization after validation; a later `result()` calls the facet
+again and exposes unvalidated bytes. The same gap affects media/status/metadata.
+
+| Alternative | Disposition |
+| --- | --- |
+| Require stability through documentation or a marker trait | Insufficient as the sole enforcement for the public safe-Rust view facet |
+| Validate only again at owned settlement transfer | A subsequent view can still differ before application access |
+| Retain the view inside the movable generic owner | Introduces a self-reference for inline outputs or couples result lifetime to the work slot; neither is needed |
+| Copy into a fixed immutable output representation | Possible with separately funded backing, but unnecessary and restrictive for native owned/borrowed/inline representations |
+| Validate each exact application loan under paid original bounds | Selected: retain the movable original owner, capture/validate/return one view at `result(budget)`, keep native progress validation and existing ownership/cleanup |
+
+The selected contract distinguishes permission/owner transfer from validation
+of a particular application loan. It guarantees each returned loan matches its
+own validation, not equality of every historical native view. Loan errors retain
+original evidence/funding and first cause; already-returned borrows remain valid.
+`input()` similarly lends the retained original input owner's current view and
+does not manufacture a dispatched-payload receipt. These semantics migrate to
+the existing Runtime Safety/Core/Binding owners and evidence; no new gate,
+milestone, universal Runtime, scheduler or copying requirement follows.

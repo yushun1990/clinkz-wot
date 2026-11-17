@@ -26,6 +26,21 @@ pub struct Statistics {
     pub poll_error_with_late: Cell<bool>,
     pub fail_start: Cell<bool>,
     pub query_work: Cell<u64>,
+    pub output_views: Cell<usize>,
+    pub output_variant: Cell<OutputVariant>,
+    pub select_after_validation: Cell<Option<OutputVariant>>,
+}
+/// Adversarial safe-Rust view selection. The original output stays owned;
+/// interior mutability can select different immutable bytes or metadata later.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum OutputVariant {
+    #[default]
+    Original,
+    Bytes,
+    Media,
+    Coding,
+    Status,
+    Metadata,
 }
 pub struct Program<'a> {
     pub target: &'a str,
@@ -72,26 +87,38 @@ pub struct Output<'a> {
     flags: u8,
     media: &'static str,
     metadata: InteractionOutputMetadata,
+    alternate_metadata: InteractionOutputMetadata,
     stats: &'a Statistics,
 }
 impl ActionOutput for Output<'_> {
     fn view(&self) -> InteractionOutputView<'_> {
+        bump(&self.stats.output_views);
+        let variant = self.stats.output_variant.get();
         InteractionOutputView::new(
             Some(PayloadView {
-                body: &self.body[..self.len],
-                content_type: if self.flags == 1 {
+                body: if variant == OutputVariant::Bytes {
+                    b"99"
+                } else {
+                    &self.body[..self.len]
+                },
+                content_type: if self.flags == 1 || variant == OutputVariant::Media {
                     "wrong/media"
                 } else {
                     self.media
                 },
-                content_coding: (self.flags == 2).then_some("unsupported"),
+                content_coding: (self.flags == 2 || variant == OutputVariant::Coding)
+                    .then_some("unsupported"),
             }),
-            if self.flags == 3 {
+            if self.flags == 3 || variant == OutputVariant::Status {
                 InteractionStatus::Accepted
             } else {
                 InteractionStatus::Ok
             },
-            &self.metadata,
+            if variant == OutputVariant::Metadata {
+                &self.alternate_metadata
+            } else {
+                &self.metadata
+            },
         )
     }
 }
@@ -242,6 +269,8 @@ impl<'a, S: TestDatagrams> Exchange<'a, S> {
                     flags: bytes[1],
                     media: self.media,
                     metadata: InteractionOutputMetadata::default(),
+                    alternate_metadata: InteractionOutputMetadata::default()
+                        .with_response_selection(clinkz_wot_core::ResponseSelection::Additional(0)),
                     stats: self.stats,
                 }))
             }

@@ -205,8 +205,21 @@ fn fixture_with(meaning: ValueExecution<'_>, f: impl FnOnce(Case<'_>)) {
         Some(&query_codec),
     )
     .unwrap();
-    let invoke_access = Permission::default();
-    let query_access = Permission::default();
+    let select_after_validation = || {
+        if (invoke_codec.number.validations.get() >= 2 || query_codec.number.validations.get() != 0)
+            && let Some(variant) = stats.select_after_validation.get()
+        {
+            stats.output_variant.set(variant);
+        }
+    };
+    let invoke_access = Permission {
+        callback: Some(&select_after_validation),
+        ..Permission::default()
+    };
+    let query_access = Permission {
+        callback: Some(&select_after_validation),
+        ..Permission::default()
+    };
     let cancel_access = Permission::default();
     let access = [
         Some(&invoke_access as &dyn ActionAccess),
@@ -241,6 +254,161 @@ fn fixture(f: impl FnOnce(Case<'_>)) {
 }
 
 #[test]
+fn authorization_cannot_expose_output_selected_after_validation() {
+    for variant in [
+        OutputVariant::Bytes,
+        OutputVariant::Media,
+        OutputVariant::Coding,
+        OutputVariant::Status,
+        OutputVariant::Metadata,
+    ] {
+        for at_handoff in [false, true] {
+            fixture(|mut c| {
+                if !at_handoff {
+                    c.stats.select_after_validation.set(Some(variant));
+                }
+                let h = c.accept();
+                c.slot.query(h, now(1), &mut budget()).unwrap();
+                c.exchange(&[b'Q', 7], b"O\x007");
+                assert_eq!(c.query_codec.number.validations.get(), 1);
+                if at_handoff {
+                    assert_eq!(c.stats.output_variant.get(), OutputVariant::Original);
+                    c.stats.select_after_validation.set(Some(variant));
+                }
+                assert_eq!(c.slot.state(h).unwrap(), ConsumerActionState::Completed);
+                let mut s = c.finish(h);
+                assert_eq!(c.stats.output_variant.get(), variant);
+                let result = s.result(&mut budget());
+                assert!(
+                    result.is_err(),
+                    "unvalidated {variant:?} escaped application handoff: {:?}",
+                    result
+                        .ok()
+                        .and_then(|view| view.data())
+                        .map(|payload| payload.body)
+                );
+                assert!(s.validation_error().is_some());
+                assert!(matches!(s.first_cause(), Some(CoreError::Validation(_))));
+                assert_eq!(s.state(), ConsumerActionState::Closed);
+                assert!(s.native_result().unwrap().is_ok());
+                assert_eq!(c.stats.outputs_dropped.get(), 0);
+                assert_eq!(c.stats.tokens_dropped.get(), 0);
+                drop(s);
+                assert_eq!(c.stats.outputs_dropped.get(), 1);
+                assert_eq!(c.stats.tokens_dropped.get(), 1);
+            });
+        }
+    }
+}
+
+#[test]
+fn result_loan_stays_valid_when_later_views_select_different_bytes() {
+    fixture(|mut c| {
+        let h = c.accept();
+        c.slot.query(h, now(1), &mut budget()).unwrap();
+        c.exchange(&[b'Q', 7], b"O\x007");
+        let mut s = c.finish(h);
+        let checks = c.query_access.checks.get();
+        let polls = c.stats.polls.get();
+        let closes = c.stats.closes.get();
+        {
+            let view = s.result(&mut budget()).unwrap();
+            c.stats.output_variant.set(OutputVariant::Bytes);
+            // A changed selector cannot alter the exact loan already validated.
+            assert_eq!(view.data().unwrap().body, b"7");
+            assert_eq!(view.data().unwrap().content_type, "text/x-test-number");
+            assert_eq!(view.data().unwrap().content_coding, None);
+            assert_eq!(view.status(), InteractionStatus::Ok);
+            assert_eq!(view.metadata(), &InteractionOutputMetadata::default());
+        }
+        assert_eq!(c.query_codec.number.validations.get(), 2);
+        assert!(s.result(&mut budget()).is_err());
+        assert_eq!(c.query_codec.number.validations.get(), 3);
+        assert_eq!(c.query_access.checks.get(), checks);
+        assert_eq!(c.stats.polls.get(), polls);
+        assert_eq!(c.stats.closes.get(), closes);
+        assert!(s.validation_error().is_some());
+        let views = c.stats.output_views.get();
+        c.stats.output_variant.set(OutputVariant::Original);
+        assert!(matches!(
+            s.result(&mut WorkBudget::new()),
+            Err(CoreError::Validation(_))
+        ));
+        assert_eq!(c.stats.output_views.get(), views);
+        assert_eq!(c.query_codec.number.validations.get(), 3);
+        let bytes = c.slot.required_bytes(None).unwrap();
+        let lease = s.into_funding();
+        assert_eq!(lease.bytes(), bytes);
+        assert_eq!(c.stats.outputs_dropped.get(), 1);
+        assert_eq!(c.stats.tokens_dropped.get(), 1);
+        assert_eq!(c.stats.inputs_dropped.get(), 1);
+        c.funding = Some(lease);
+    });
+}
+
+#[test]
+fn result_loan_credit_is_separate_from_original_owner_and_permission_handoff() {
+    fixture(|mut c| {
+        let h = c.accept();
+        c.slot.query(h, now(1), &mut budget()).unwrap();
+        c.exchange(&[b'Q', 7], b"O\x007");
+        let mut s = c.finish(h);
+        let views = c.stats.output_views.get();
+        let checks = c.query_access.checks.get();
+        let work = c.query_codec.number.work();
+        for short in [WorkClass::HandlerSteps, WorkClass::CodecInputBytes] {
+            let mut allowance = WorkBudget::new()
+                .with_remaining(WorkClass::HandlerSteps, 1)
+                .with_remaining(WorkClass::CodecInputBytes, work);
+            allowance.set_remaining(short, 0);
+            assert!(matches!(
+                s.result(&mut allowance),
+                Err(CoreError::Backpressure(_))
+            ));
+            assert_eq!(c.stats.output_views.get(), views);
+            assert_eq!(c.query_codec.number.validations.get(), 1);
+            assert_eq!(s.state(), ConsumerActionState::Completed);
+            assert!(s.first_cause().is_none());
+            assert!(s.validation_error().is_none());
+            assert_eq!(c.stats.outputs_dropped.get(), 0);
+        }
+        // Ownership permission already transferred. Revocation cannot retarget
+        // or retract it; this loan still needs its own data validation work.
+        c.authority.revoke();
+        let mut allowance = WorkBudget::new()
+            .with_remaining(WorkClass::HandlerSteps, 1)
+            .with_remaining(WorkClass::CodecInputBytes, work);
+        assert_eq!(s.result(&mut allowance).unwrap().data().unwrap().body, b"7");
+        assert_eq!(allowance.remaining(WorkClass::HandlerSteps), 0);
+        assert_eq!(allowance.remaining(WorkClass::CodecInputBytes), 0);
+        assert_eq!(c.query_codec.number.validations.get(), 2);
+        assert_eq!(c.query_access.checks.get(), checks);
+        assert!(c.slot.is_idle());
+        assert_eq!(c.stats.outputs_dropped.get(), 0);
+    });
+}
+
+#[test]
+fn accepted_owner_retains_native_output_when_loan_validation_service_is_unavailable() {
+    fixture(|mut c| {
+        let h = c.accept();
+        c.slot.query(h, now(1), &mut budget()).unwrap();
+        c.exchange(&[b'Q', 7], b"O\x007");
+        let mut s = c.finish(h);
+        c.query_codec.number.available.set(false);
+        assert!(s.result(&mut budget()).is_err());
+        assert_eq!(c.query_codec.number.validations.get(), 1);
+        assert!(s.validation_error().is_some());
+        assert_eq!(
+            s.native_result().unwrap().unwrap().data().unwrap().body,
+            b"7"
+        );
+        assert_eq!(c.stats.outputs_dropped.get(), 0);
+        assert_eq!(c.stats.tokens_dropped.get(), 0);
+    });
+}
+
+#[test]
 fn continuing_invoke_pending_query_cancel_then_completion_keeps_original_owners() {
     fixture(|mut c| {
         let h = c.accept();
@@ -255,7 +423,7 @@ fn continuing_invoke_pending_query_cancel_then_completion_keeps_original_owners(
         assert_eq!(c.slot.state(h).unwrap(), ConsumerActionState::Completed);
         assert_eq!(c.stats.tokens_dropped.get(), 0);
         assert_eq!(c.stats.inputs_dropped.get(), 0);
-        let s = c.finish(h);
+        let mut s = c.finish(h);
         assert!(s.accepted());
         assert_eq!(
             s.effect(),
@@ -265,14 +433,19 @@ fn continuing_invoke_pending_query_cancel_then_completion_keeps_original_owners(
             s.remote_cancellation(),
             ConsumerActionCancellation::Requested
         );
-        assert_eq!(s.result().unwrap().data().unwrap().body, b"42");
+        assert_eq!(s.result(&mut budget()).unwrap().data().unwrap().body, b"42");
         assert_eq!(
-            s.result().unwrap().data().unwrap().content_type,
+            s.result(&mut budget())
+                .unwrap()
+                .data()
+                .unwrap()
+                .content_type,
             "text/x-test-number"
         );
         assert_eq!(s.input().unwrap().body, b"7");
         assert_eq!(c.invoke_codec.number.validations.get(), 1);
-        assert_eq!(c.query_codec.number.validations.get(), 1);
+        // Initial completion plus two separately validated application loans.
+        assert_eq!(c.query_codec.number.validations.get(), 3);
         let lease = s.into_funding();
         c.funding = Some(lease);
         assert_eq!(c.stats.tokens_dropped.get(), 1);
@@ -287,7 +460,15 @@ fn continuing_invoke_pending_query_cancel_then_completion_keeps_original_owners(
             Err(CoreError::StaleHandle(_))
         ));
         c.exchange(b"I7", b"O\x0041");
-        assert_eq!(c.finish(next).result().unwrap().data().unwrap().body, b"41");
+        assert_eq!(
+            c.finish(next)
+                .result(&mut budget())
+                .unwrap()
+                .data()
+                .unwrap()
+                .body,
+            b"41"
+        );
     });
 }
 
@@ -312,11 +493,11 @@ fn cancellation_retains_pending_failed_close_and_validated_late_output_after_rev
         c.peer.respond(&[b'Q', 7], b"O\x0042");
         c.stats.close_blocked.set(false);
         c.step();
-        let s = c.finish(h);
+        let mut s = c.finish(h);
         assert!(matches!(s.first_cause(), Some(CoreError::Cancelled(_))));
         assert!(s.cleanup_error().is_some());
         assert!(s.native_error().is_none());
-        assert!(s.result().is_err());
+        assert!(s.result(&mut budget()).is_err());
         assert_eq!(
             s.native_result().unwrap().unwrap().data().unwrap().body,
             b"42"
@@ -373,9 +554,9 @@ fn unread_completion_requires_fresh_permission_and_short_handoff_retains_slot() 
         );
         assert!(!c.slot.is_idle());
         c.query_access.denied.set(true);
-        let s = c.finish(h);
+        let mut s = c.finish(h);
         assert!(matches!(s.first_cause(), Some(CoreError::Security { .. })));
-        assert!(s.result().is_err());
+        assert!(s.result(&mut budget()).is_err());
         assert!(s.native_result().unwrap().is_ok());
         assert_eq!(c.query_codec.number.validations.get(), validations);
     });
@@ -404,18 +585,21 @@ fn equal_slots_share_definition_without_sharing_authority_or_work() {
         ));
         c.authority.revoke();
         c.step();
-        let old = c.finish(h);
+        let mut old = c.finish(h);
         assert!(matches!(old.first_cause(), Some(CoreError::StaleHandle(_))));
         let mut cx = Context::from_waker(core::task::Waker::noop());
         c.other.step(&mut cx, now(1), &mut budget());
         c.peer.respond(b"I7", b"O\x0042");
         c.other.step(&mut cx, now(1), &mut budget());
-        let current = c
+        let mut current = c
             .other
             .take_settlement(other, now(1), &mut budget())
             .unwrap();
-        assert_eq!(current.result().unwrap().data().unwrap().body, b"42");
-        assert!(old.result().is_err());
+        assert_eq!(
+            current.result(&mut budget()).unwrap().data().unwrap().body,
+            b"42"
+        );
+        assert!(old.result(&mut budget()).is_err());
         assert!(c.slot.is_idle());
         // Retained old settlement still owns its original continuation/input.
         assert_eq!(c.stats.tokens_dropped.get(), 0);
@@ -455,9 +639,9 @@ fn unavailable_query_codec_refuses_late_value_without_reentering_service() {
         c.query_codec.number.available.set(false);
         c.peer.respond(&[b'Q', 7], b"O\x0042");
         c.step();
-        let s = c.finish(h);
+        let mut s = c.finish(h);
         assert!(s.validation_error().is_some());
-        assert!(s.result().is_err());
+        assert!(s.result(&mut budget()).is_err());
         assert!(s.native_result().unwrap().is_ok());
         assert_eq!(c.query_codec.number.validations.get(), 0);
     });
@@ -470,9 +654,9 @@ fn wrong_shape_media_coding_and_schema_keep_rejected_original_output() {
             let h = c.accept();
             c.slot.query(h, now(1), &mut budget()).unwrap();
             c.exchange(&[b'Q', 7], reply);
-            let s = c.finish(h);
+            let mut s = c.finish(h);
             assert!(s.validation_error().is_some());
-            assert!(s.result().is_err());
+            assert!(s.result(&mut budget()).is_err());
             assert!(s.native_result().unwrap().is_ok());
             assert_eq!(c.stats.outputs_dropped.get(), 0);
             drop(s);
@@ -568,14 +752,14 @@ fn deadline_and_clock_regression_preserve_original_late_completion() {
                 time,
                 &mut budget(),
             );
-            let s = c.slot.take_settlement(h, time, &mut budget()).unwrap();
+            let mut s = c.slot.take_settlement(h, time, &mut budget()).unwrap();
             if expired {
                 assert!(matches!(s.first_cause(), Some(CoreError::TimedOut(_))));
             } else {
                 assert!(matches!(s.first_cause(), Some(CoreError::Validation(_))));
             }
             assert!(s.native_result().unwrap().is_ok());
-            assert!(s.result().is_err());
+            assert!(s.result(&mut budget()).is_err());
         });
     }
 }
@@ -586,8 +770,8 @@ fn foreign_acceptance_cannot_replace_original_control_token() {
         let h = c.accept();
         c.slot.query(h, now(1), &mut budget()).unwrap();
         c.exchange(&[b'Q', 7], &[b'A', 9]);
-        let s = c.finish(h);
-        assert!(s.result().is_err());
+        let mut s = c.finish(h);
+        assert!(s.result(&mut budget()).is_err());
         assert!(s.first_cause().is_some());
         assert_eq!(c.stats.tokens_dropped.get(), 1);
         drop(s);
@@ -600,10 +784,10 @@ fn handoff_callback_policy_rotation_cannot_accept_unread_success() {
     fixture(|mut c| {
         let h = c.complete();
         c.query_access.rotate_on_check.set(true);
-        let s = c.finish(h);
+        let mut s = c.finish(h);
         assert!(matches!(s.first_cause(), Some(CoreError::Validation(_))));
         assert!(s.native_result().unwrap().is_ok());
-        assert!(s.result().is_err());
+        assert!(s.result(&mut budget()).is_err());
     });
 }
 
@@ -645,14 +829,14 @@ fn failed_remote_cancel_keeps_uncertainty_without_claiming_rollback() {
         let h = c.accept();
         c.slot.request_cancel(h, now(1), &mut budget()).unwrap();
         c.exchange(&[b'C', 7], b"F");
-        let s = c.finish(h);
+        let mut s = c.finish(h);
         assert_eq!(
             s.remote_cancellation(),
             ConsumerActionCancellation::Uncertain
         );
         assert!(s.accepted());
         assert!(s.native_result().unwrap().is_err());
-        assert!(s.result().is_err());
+        assert!(s.result(&mut budget()).is_err());
     });
 }
 
@@ -677,9 +861,9 @@ fn output_validation_callback_revocation_preserves_output_before_failed_acceptan
         c.query_codec.revoke_on_validate.set(true);
         c.slot.query(h, now(1), &mut budget()).unwrap();
         c.exchange(&[b'Q', 7], b"O\x0042");
-        let s = c.finish(h);
+        let mut s = c.finish(h);
         assert!(matches!(s.first_cause(), Some(CoreError::StaleHandle(_))));
-        assert!(s.result().is_err());
+        assert!(s.result(&mut budget()).is_err());
         assert!(s.validation_error().is_none());
         assert_eq!(
             s.native_result().unwrap().unwrap().data().unwrap().body,
@@ -725,7 +909,15 @@ fn host_action_content_lends_same_schema_to_distinct_native_representation() {
     assert!(core::ptr::eq(shared.schemas(), schemas));
     fixture_with(shared, |mut c| {
         let h = c.complete();
-        assert_eq!(c.finish(h).result().unwrap().data().unwrap().body, b"42");
+        assert_eq!(
+            c.finish(h)
+                .result(&mut budget())
+                .unwrap()
+                .data()
+                .unwrap()
+                .body,
+            b"42"
+        );
     });
 }
 
@@ -842,8 +1034,16 @@ fn input_view_revocation_is_fenced_before_native_start() {
             slot.step(&mut cx, now(1), &mut budget());
             peer.respond(b"I7", b"O\x0042");
             slot.step(&mut cx, now(1), &mut budget());
-            let settlement = slot.take_settlement(handle, now(1), &mut budget()).unwrap();
-            assert_eq!(settlement.result().unwrap().data().unwrap().body, b"42");
+            let mut settlement = slot.take_settlement(handle, now(1), &mut budget()).unwrap();
+            assert_eq!(
+                settlement
+                    .result(&mut budget())
+                    .unwrap()
+                    .data()
+                    .unwrap()
+                    .body,
+                b"42"
+            );
             let funding = settlement.into_funding();
             assert_eq!(funding.bytes(), bytes);
             drop(funding);
@@ -970,10 +1170,21 @@ fn native_start_uses_validated_input_view_when_authorization_changes_selection()
     slot.step(&mut cx, now(1), &mut budget());
     peer.respond(b"I7", b"O\x0042");
     slot.step(&mut cx, now(1), &mut budget());
-    let settlement = slot.take_settlement(handle, now(1), &mut budget()).unwrap();
-    assert_eq!(settlement.result().unwrap().data().unwrap().body, b"42");
+    let mut settlement = slot.take_settlement(handle, now(1), &mut budget()).unwrap();
+    assert_eq!(
+        settlement
+            .result(&mut budget())
+            .unwrap()
+            .data()
+            .unwrap()
+            .body,
+        b"42"
+    );
     assert_eq!(views.get(), 1);
     assert_eq!(dropped.get(), 0);
+    // The retained owner now supplies 99, even though the actual request was I7.
+    assert_eq!(settlement.input().unwrap().body, b"99");
+    assert_eq!(views.get(), 2);
     let funding = settlement.into_funding();
     assert_eq!(dropped.get(), 1);
     assert_eq!(funding.bytes(), bytes);

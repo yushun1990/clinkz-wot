@@ -50,6 +50,11 @@ alternatives and remaining runtime-independence work belong to the
 [evidence](../evidence/continuing-action-runtime-independence.md). Existing
 notification/Producer ownership, TD integration, credentials and embedded driving
 are not ported. No package, milestone or gate status changes.
+The generic caller-owned output facet validates each exact application loan at
+`result(budget)`; owned settlement transfer alone cannot seal a later native view.
+Short work and invalid loans keep original evidence/funding, and input inspection
+lends the original owner's current view rather than an implicit dispatch receipt.
+The existing runtime contract and output-loan regressions own these boundaries.
 
 The execution-only Host slice in `servient/finite` separates the bounded logical
 registry from typed native runtimes. Registry count/name limits belong to

@@ -88,6 +88,15 @@ exercise:
   start: policy-time selection of `99` cannot replace the validated `7` on the
   actual wire, input-view-time revocation fences an immediate-send Binding,
   and short admission credit obtains no input view or native effect;
+- paid output loans over a safe-Rust Cell-selected native output: authorization
+  after validation or at owner handoff can select invalid `99`, media/coding,
+  status or response metadata, and each exact application loan refuses it;
+  changing a selector after a successful loan cannot change that loan's checked
+  bytes or metadata, while another loan must validate its own view;
+- loan work separate from owner transfer: short view/codec credit retains all
+  owners without callbacks or a sticky failure, unavailable codecs are not
+  re-entered, invalid loans keep native evidence and first cause, and disposal
+  returns original funding without native re-poll or new permission;
 - cancellation before initial native progress and after Query starts, issuer
   revocation, Pending/failed physical close, retained late output and validation
   using original funding without effectful polling after local fencing;
@@ -105,7 +114,8 @@ exercise:
 - an optional loan of the exact schemas inside a modern Host Action content
   owner to the different native representation, without schema recompilation.
 
-The settlement compile-fail case rejects a result slice escaping its owner.
+The settlement compile-fail cases reject a result slice escaping its owner and
+moving that owner into funding return while the result loan is still used.
 Host callback regressions and the existing downstream/real HTTP Action suites
 execute the extracted kernel under their original reentrant authority, wake,
 service-funding, unread-result, late-output and physical-release obligations.
@@ -127,6 +137,28 @@ No-atomic compilation establishes buildability of these contracts and fixture
 owners, while hosted real datagrams establish execution and ownership behavior.
 Neither establishes executable embedded hardware/SDK/allocator/real-time support.
 Exact checked revisions and validation results belong to the PR.
+
+## Output validation and owner handoff
+
+At `fb8dee594f2df595cadcf01a8ad17317dad53f0c`, a conforming safe-Rust native output
+could use `Cell` to select immutable backing. The real Query response supplied
+`7`, which the original codec validated against maximum 50; a subsequent access
+callback selected `99`, and the old unpaid `result()` exposed it successfully.
+Retaining the same output owner did not establish payload/media/status/metadata
+identity. This was a real application-validation gap.
+
+The corrected `result(budget)` validates one captured view and returns that
+same loan. Each successful call certifies its own bytes and metadata, without
+promising immutable replay of every prior view. It uses the original returning
+operation's schema/codec/bounds and charges its adapter and validation work.
+Progress validation remains necessary for normal/late evidence. Moving the owned
+settlement remains the permission/ownership handoff; obtaining an application
+loan does no fresh authorization or native work. No payload or metadata-history
+copy, self-reference, scheduler or shared execution storage is introduced.
+
+The input selection regression additionally verifies the distinction between
+the original input owner and a dispatched byte receipt: the peer receives `I7`
+while `settlement.input()` later lends that owner's current `99` selection.
 
 ## Remaining 0081 and runtime-independence scope
 
