@@ -41,6 +41,43 @@ cleanup operation marks only this participant's revoked original invocations for
 local close. It neither acknowledges outcomes nor sends remote CancelAction.
 HTTP closed polling returns no new candidate and remains usable during drain.
 
+### Action progress cost correction
+
+At `8e3593cad2b75880b5f0c7e6e728d48c59c0931a`, the independent review's
+four-slot probe and a repository HTTP regression both reproduce a stall: 100
+aggregate turns with four Actions CleanupItems make zero continuation polls,
+while direct `progress_actions` with the same allowance completes. The separate
+`close_revoked_actions` scan consumes the entire allowance even with no revoked
+entry; selection then cannot run. Calling this merely insufficient caller credit
+would protect an unnecessary implementation cost rather than the product goal.
+
+The correction replaces that helper with `progress_actions_closing_revoked`.
+One prepaid scan both marks scoped revoked entries and selects the least-recently
+progressed original invocation. It shares a private algorithm with manual
+`progress_actions`, whose cancellation/late-completion policy remains unchanged.
+The exclusive store loan preserves the selected index through the original
+callback and terminal timestamp update, so neither a handle lookup nor a second
+completion lookup is necessary. Existing direct handle steps keep their own
+lookup costs. Actual callbacks and original validation/cleanup remain paid;
+Pending/error neither refunds their work nor releases their owners.
+
+Raising caller credit makes the old sequence execute but retains the unnecessary
+scan. Refunding the first scan after discovering no revoked work would misaccount
+work already done. A cached revoked count/dirty flag would need to track passive
+currentness changes, adding state to avoid work already covered by selection.
+A per-participant index or resumable/global scheduler is unnecessary for this
+counterexample; the conservative configured-store scan bound remains. Marking
+only the selected revoked entry could also work, but merging marking into the
+same traversal preserves the original all-matching close-intent policy without
+extra scans or lifecycle state.
+
+The [runtime owner](../docs/spec/runtime-safety.md#host-producer-execution-turns)
+now specifies the single-scan/callback boundary. [HTTP evidence](../docs/evidence/host-execution-integration.md#action-progress-under-tight-credit)
+checks the original 100-turn counterexample, exact and short budgets, current and
+revoked siblings, Pending/error cleanup, manual late completion and described
+CancelAction. No new resource, scheduler, Runtime or native protocol change is
+required; current gates and roadmap milestones are unaffected.
+
 Publication and final retirement remain explicit. The existing exact complete-set
 retirement check still includes unread finite results, Action owners/results and
 notification publication obligations. No idle/Ready value is promoted to proof

@@ -790,15 +790,40 @@ delivery and cleanup owners remain authoritative for their detailed outcomes.
 Native evidence is reconciled by Servient against committed membership before
 revocation; uncommitted or foreign evidence cannot revoke another publication.
 
-Action turns opt into funded `close_revoked_actions` on their own participation.
-It checks association and prepays the bounded original store scan before marking
-only that member's revoked invocations for local close. It neither changes a
-current sibling nor synthesizes a remote CancelAction. Original continuations
-progress fairly within their participant using the existing selection policy.
-Pending/error close retains work, result funding and first close failure; no
-result is acknowledged by a turn. Direct manual `progress_actions` retains its
-existing completion policy. Native closed Action polling remains valid maintenance
-and yields no new ingress rather than an unsupported-operation error.
+Action turns use `progress_actions_closing_revoked`: one association check and
+one prepaid original-store scan both mark only this member's revoked invocations
+for local close and select its least-recently progressed entry. Manual
+`progress_actions` uses the identical selection/progress algorithm without the
+opt-in close marking; revocation still requests cooperative cancellation and
+permits normal late completion. Ordinary described CancelAction cannot force
+local close of current work. No current sibling is marked or progressed through
+another participant's turn, and no remote CancelAction is synthesized.
+
+For a configured Action-store bound `N`, either entry point consumes `N`
+CleanupItems before the scan, including when selection is empty. Below that
+allowance there is no marking, selection or application callback. The scan
+retains its original selected index under the exclusive store loan through
+progress and completion bookkeeping. It does not construct a handle and repeat
+a lookup scan. Direct handle-based `step_raw_action` still pays its own lookup.
+Work after selection pays the original callback envelope: normal work consumes
+HandlerSteps for output body/media, the captured validator and poll, plus one
+unit if cancellation must be requested; local close consumes one CleanupItems
+unit for its poll plus one if cancellation must be requested. Unread completed
+entries require no further callback allowance. Short callback credit may retain
+paid selection/close intent but invokes no application code; it never refunds a
+scan already performed. Least-recent selection remains participant-scoped,
+including after Pending/error and with unread results; its existing progress
+counter remains checked.
+
+The same Actions allowance funds selection, optional close marking and actual
+callbacks. There is no separate unconditional close scan. For example, with
+`N=4`, normal work needs four cleanup units, first cancel/close needs six, and
+later close polls need five, plus any normal HandlerSteps envelope. Pending/error
+close retains original work, result funding, cancellation failure and first close
+failure; no result is acknowledged by a turn. Native closed Action polling remains
+valid maintenance and yields no new ingress rather than an unsupported-operation
+error. Conservative global-store selection bounds, deployment scheduling and
+partitioning of credit between participants remain separate from this correction.
 
 These Producer turns compose alongside [Consumer turns](#host-consumer-execution-turns)
 in a deployment-supplied Host loop with the same native/maintenance, clock and

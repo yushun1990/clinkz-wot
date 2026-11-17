@@ -60,7 +60,12 @@ pub(crate) struct Counters {
     pub(crate) invoked: Cell<usize>,
     pub(crate) polls: Cell<usize>,
     pub(crate) cancelled: Cell<usize>,
+    pub(crate) closes: Cell<usize>,
     pub(crate) complete: Cell<bool>,
+    pub(crate) first_pending: Cell<bool>,
+    pub(crate) first_close_pending: Cell<bool>,
+    pub(crate) close_error: RefCell<Option<CoreError>>,
+    pub(crate) cancel_error: RefCell<Option<CoreError>>,
     pub(crate) invalid: Cell<bool>,
     pub(crate) immediate: Cell<bool>,
     pub(crate) deny_invoke: Cell<bool>,
@@ -116,14 +121,17 @@ impl RawActionHandler for Action {
                 ),
             )));
         }
-        Ok(RawActionStart::Continue(Box::new(Work(Rc::clone(&self.0)))))
+        Ok(RawActionStart::Continue(Box::new(Work(
+            Rc::clone(&self.0),
+            self.0.invoked.get(),
+        ))))
     }
 }
-struct Work(Rc<Counters>);
+struct Work(Rc<Counters>, usize);
 impl RawActionWork for Work {
     fn poll(&mut self) -> Poll<CoreResult<InteractionOutput>> {
         self.0.polls.set(self.0.polls.get() + 1);
-        if !self.0.complete.get() {
+        if !self.0.complete.get() || self.0.first_pending.get() && self.1 == 1 {
             return Poll::Pending;
         }
         Poll::Ready(Ok(InteractionOutput::with_data(Payload::new(
@@ -139,10 +147,17 @@ impl RawActionWork for Work {
     }
     fn request_cancel(&mut self) -> CoreResult<()> {
         self.0.cancelled.set(self.0.cancelled.get() + 1);
-        Ok(())
+        self.0.cancel_error.borrow().clone().map_or(Ok(()), Err)
     }
     fn poll_close(&mut self) -> Poll<CoreResult<()>> {
-        Poll::Ready(Ok(()))
+        self.0.closes.set(self.0.closes.get() + 1);
+        if let Some(error) = self.0.close_error.borrow_mut().take() {
+            Poll::Ready(Err(error))
+        } else if self.0.first_close_pending.get() && self.1 == 1 {
+            Poll::Pending
+        } else {
+            Poll::Ready(Ok(()))
+        }
     }
     fn abort_local(self: Box<Self>) {}
 }

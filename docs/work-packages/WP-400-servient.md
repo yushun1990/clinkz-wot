@@ -355,7 +355,10 @@ its typed Servient turn. Existing finite, Action and notification capabilities
 retain independent authority, preparation, native ownership and settlement.
 Per-member/lane budgets keep native Action ingress separate from accepted work;
 errors/short credit do not skip siblings. Funded revoked-Action local close no
-longer requires application handle enumeration. Publication, emissions, result
+longer requires application handle enumeration. Optional revoked-work marking and
+fair selection use one funded Action-store scan; the selected original index is
+progressed without handle lookup/relookup. Manual and aggregate progress share
+that algorithm while keeping their distinct local-close policies. Publication, emissions, result
 observation/acknowledgement and complete-set retirement remain explicit.
 
 The [real Host integration](../evidence/host-execution-integration.md) combines
@@ -364,7 +367,10 @@ native listener/work capacity with Engine Consumer Property/Action/Event work
 through HTTP and Mosquitto. Replacement, original Pending/error cleanup,
 caller-held outcomes and final physical/account release are exercised. Native
 startup failure and typed-loan substitution additionally test original membership
-and sibling progress. Existing qualification/native-authority/resource evidence
+and sibling progress. Tight-budget HTTP cases reproduce the former duplicate-scan
+stall and check exact scan/callback allowances, Pending/error close, normal late
+completion, described cancellation, fair siblings and final original-owner release.
+Existing qualification/native-authority/resource evidence
 is retained. This does not close the work package or qualify production/security,
 shared continuing-family capacity, constrained execution or broader reuse.
 

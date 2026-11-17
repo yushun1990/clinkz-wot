@@ -111,9 +111,10 @@ impl OwnedProducerParticipation {
                     .map(|_| ())
             };
             let mut work = credit(ProducerWork::Actions);
-            let close = owner.close_revoked_actions(native, &mut work);
-            let progress = owner.progress_actions(native, &mut work).map(|_| ());
-            combine(ingress, combine(close, progress))
+            let progress = owner
+                .progress_actions_closing_revoked(native, &mut work)
+                .map(|_| ());
+            combine(ingress, progress)
         })
     }
     pub fn notifications<B: ProducerNotificationBinding + ClosedProducerParticipation + Any>(

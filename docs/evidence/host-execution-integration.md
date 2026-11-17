@@ -34,6 +34,73 @@ no turn automatically publishes, acknowledges, reaps, emits or returns a complet
 drain claim. The existing exact `retire` boundary remains binding. Low-level
 manual operations remain useful independently of the opt-in aggregate policy.
 
+## Action progress under tight credit
+
+The original `8e3593cad2b75880b5f0c7e6e728d48c59c0931a` implementation paid an
+unconditional `close_revoked_actions` scan followed by `progress_actions` on the
+same allowance. An independent probe, rerun during this correction, measured zero
+continuation polls after 100 aggregate turns with four configured slots and four
+Actions CleanupItems, despite direct manual progress completing with that same
+allowance. The [repository HTTP regression](../../protocol-bindings/protocols/http/tests/action_producer/progress.rs)
+also failed before the correction: its manual invocation completed, but the
+aggregate invocation made no poll in 100 turns. This is unnecessary orchestration
+cost, not merely a reason to demand more caller credit.
+
+`progress_actions_closing_revoked` replaces the standalone marking helper. Both
+it and manual `progress_actions` use one selection algorithm; optional marking
+happens in the same prepaid traversal. The selected original index remains valid
+under the exclusive store loan through progress and terminal bookkeeping. Calling
+the handle-based step would scan again for information already established;
+updating the timestamp through another handle lookup would repeat it again.
+Direct handle APIs keep their lookup costs; the aggregate operation pays only its
+actual selection and original callback envelopes. No cache, dirty flag, scheduler,
+new runtime, native SPI change or work/result owner is introduced.
+
+For the four-slot, type-only HTTP fixture, the tests check these actual allowances:
+
+| Work | CleanupItems | HandlerSteps |
+| --- | --- | --- |
+| Normal selected work | 4 for selection | 4225 for its original output/media/poll envelope |
+| First revoked cancel/close | 4 + 1 cancel + 1 close | 0 |
+| Later revoked close | 4 + 1 close | 0 |
+| Failed old cancel/close and a current participant's normal progress on one shared budget | 10 total | 4225 total |
+
+The five qualified real-HTTP cases cover:
+
+- Direct manual and aggregate normal completion under the same four-unit cleanup
+  allowance, including 100 aggregate turns without re-polling an unread result.
+- A scan allowance of three leaves both scan and callback credit untouched and
+  makes no poll. Exactly four scan units with one short callback unit pays only
+  the scan; the exact callback allowance then completes. Unread completed entries
+  need no further callback credit; empty selection returns no work.
+- Actual described HTTP DELETE requests cooperative cancellation of current
+  work; aggregate turns still poll normal work and retain its successful result.
+  Manual progress after logical revocation also retains normal late completion.
+  Neither policy is silently converted into forced local close.
+- Two current invocations in one participation share tight turns: the first
+  remains Pending and the second completes on its next fair selection despite
+  zero native credit. Native Backpressure remains reported, and both original
+  results stay independently acknowledged and funded.
+- Two revoked invocations and a current independent publication share one store.
+  An actual shared ten-unit cleanup budget pays an old cancellation/close error
+  and a live sibling's normal completion with no replenishment between them.
+  The next six-unit turn closes the other revoked invocation; the failed one
+  cannot monopolize selection. Three later five-unit Pending close turns and a
+  scan-only short turn retain its original work and failures. Aggregate turns
+  continue that cleanup while the independent publication returns actual finite
+  HTTP 200. Release preserves original cancellation failure, first close failure,
+  Cancelled result and PossiblyApplied effect. Native sockets can be rebound
+  after retirement; caller-held results retain both original banks until disposal,
+  after which every account is zero.
+
+These are budget/ownership regressions, not throughput measurements. The existing
+conservative configured-store scan bound remains; this correction does not supply
+global scheduling fairness or refund unused by-value participant allowances.
+
+```sh
+cargo test --locked -p clinkz-wot-binding-http --test action_producer progress::
+```
+
 ## Real execution and adversarial evidence
 
 The [joined Host case](../../protocol-bindings/protocols/mqtt/tests/support/host_execution.rs)

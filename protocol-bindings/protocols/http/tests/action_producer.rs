@@ -20,6 +20,9 @@ use std::{
 mod fixture;
 use fixture::*;
 
+#[path = "action_producer/progress.rs"]
+mod progress;
+
 fn send(
     owner: &mut RawProducerServient,
     exposure: &mut ComposedProducerExposure,
