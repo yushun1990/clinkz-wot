@@ -21,18 +21,35 @@ impl OutboundDestination {
             .checked_add((2 * core::mem::size_of::<usize>()) as u64)?
             .checked_add(capacity as u64)
     }
-    /// Transfer the reservation acquired before resolving/allocating the value.
-    /// It must cover backing_bytes(value.len()) at the original physical bank.
-    /// The last destination owner releases it, independently of call capacity.
+    /// Check and transfer the reservation acquired before resolving/allocating
+    /// the value. Its kind must be EngineLiveBytesGlobalMax and its amount must
+    /// cover backing_bytes(value.len()). Refusal returns both original inputs
+    /// without altering the reservation or allocating the shared owner.
+    /// Success retains the complete reservation at its original bank until the
+    /// last destination owner releases it, independently of call capacity.
     #[cfg(feature = "std")]
-    pub fn with_funding(
+    pub fn try_with_funding(
         value: Box<str>,
         funding: crate::host_accounts::HostCapacityReservation,
-    ) -> Self {
-        Self(Arc::new(DestinationStorage {
+    ) -> Result<
+        Self,
+        BindingInputRejection<(Box<str>, crate::host_accounts::HostCapacityReservation)>,
+    > {
+        if funding.kind() != clinkz_wot_foundation::ResourceKind::EngineLiveBytesGlobalMax
+            || Self::backing_bytes(value.len()).is_none_or(|bytes| funding.amount() < bytes)
+        {
+            return Err(BindingInputRejection::new(
+                (value, funding),
+                BindingOperationalError::new(CoreError::Validation(ErrorContext::new(
+                    ErrorPhase::Admission,
+                    RetryClass::Never,
+                ))),
+            ));
+        }
+        Ok(Self(Arc::new(DestinationStorage {
             value,
             _funding: Some(funding),
-        }))
+        })))
     }
 }
 impl From<Box<str>> for OutboundDestination {

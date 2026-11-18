@@ -1099,7 +1099,10 @@ impl ConsumerAssociation {
             if destination.len() > mapping.configuration().target_capacity() {
                 return Err(invalid());
             }
-            Some(OutboundDestination::with_funding(destination, backing))
+            Some(
+                OutboundDestination::try_with_funding(destination, backing)
+                    .map_err(|rejection| rejection.error().error().clone())?,
+            )
         } else {
             None
         };

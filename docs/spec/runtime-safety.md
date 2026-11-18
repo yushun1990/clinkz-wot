@@ -70,6 +70,12 @@ bank's reservation lasts until the final destination reference is disposed,
 including a native request surviving the handle. Dynamic resolution creates one
 per-call destination under the call's existing lifetime funding; native request
 and settlement share it. Borrowed `&str` observations confer no ownership.
+`OutboundDestination::try_with_funding` checks that a supplied reservation is
+for `EngineLiveBytesGlobalMax` and covers `backing_bytes(value.len())` before
+allocating the shared owner. Refusal returns the identical boxed value and
+unchanged reservation for recovery; it does not debit, grow or replace funding.
+Success retains the whole supplied reservation, including any excess capacity,
+at its original bank until the last destination owner is disposed.
 Fresh dependency, permission, credential, time, capacity and actual result checks
 continue at the existing callback and handoff boundaries.
 

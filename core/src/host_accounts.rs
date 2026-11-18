@@ -115,6 +115,9 @@ impl Drop for HostCapacityReservation {
 }
 
 impl HostCapacityReservation {
+    pub(crate) const fn kind(&self) -> K {
+        self.kind
+    }
     pub fn amount(&self) -> u64 {
         self.amount
     }

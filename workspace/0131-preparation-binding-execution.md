@@ -114,3 +114,12 @@ payload validation and native serialization/I/O remain real costs. Bindings may
 retain their own parsed/encoded/security representations; this correction does
 not optimize or standardize them. Pointer-identity and final-reservation-release
 regressions establish ownership without benchmark measurements.
+
+The initial shared-owner constructor at `ca0d687` trusts arbitrary funding,
+including an unrelated resource kind or less than the owner/header/value backing.
+A safe public constructor must enforce this transfer contract rather than rely
+on caller documentation. Replace it with `try_with_funding`: inspect the existing
+lease's kind and amount before shared-owner allocation; return both unchanged
+inputs on refusal. The accepted lease keeps its complete original amount and
+bank through final-owner disposal. This needs only Core-visible kind metadata,
+not a new reservation type, accounting mechanism or funding-source replacement.
