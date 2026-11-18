@@ -4,6 +4,8 @@
 //! evidence uses the unmodified executor in the final tests below.
 #[path = "support/prepared_read_callbacks.rs"]
 mod prepared_read;
+#[path = "support/qualification_adoption.rs"]
+mod qualification_adoption;
 use clinkz_wot_binding_http::*;
 use clinkz_wot_core::{consumer::*, data_schema::PreparedSchema, host_accounts::*, *};
 use clinkz_wot_foundation::*;
