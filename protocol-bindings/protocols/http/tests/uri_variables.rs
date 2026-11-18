@@ -934,3 +934,5 @@ fn dynamic_write_executes_once_and_revoked_pending_work_keeps_original_cleanup()
 
 #[path = "support/independent_capacity.rs"]
 mod independent_capacity;
+#[path = "support/prepared_read.rs"]
+mod prepared_read;

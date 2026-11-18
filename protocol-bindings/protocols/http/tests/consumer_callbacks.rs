@@ -2,6 +2,8 @@
 //! Callback isolation through public TD preparation and finite Consumer APIs.
 //! Local native work makes adversarial scheduling deterministic; real HTTP
 //! evidence uses the unmodified executor in the final tests below.
+#[path = "support/prepared_read_callbacks.rs"]
+mod prepared_read;
 use clinkz_wot_binding_http::*;
 use clinkz_wot_core::{consumer::*, data_schema::PreparedSchema, host_accounts::*, *};
 use clinkz_wot_foundation::*;
@@ -14,13 +16,14 @@ use std::{
     rc::Rc,
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     },
     task::{Context, Poll, Wake, Waker},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Edge {
+    Resolve,
     Access,
     Issue,
     Validate,
@@ -75,29 +78,49 @@ fn usage(bank: &HostResourceAccounts) -> Vec<u64> {
         .map(|k| bank.account(k).used())
         .collect()
 }
-struct Data(Arc<dyn ConsumerDataService>);
+struct Data(Arc<dyn ConsumerDataService>, Arc<Probe>);
 impl ConsumerDataService for Data {
+    fn qualification_revision(&self) -> u64 {
+        self.1.data_revision.load(Ordering::Acquire)
+    }
     fn content_type(&self) -> &str {
         self.0.content_type()
     }
     fn policy(&self) -> ConsumerDataPolicy {
-        self.0.policy()
+        let mut policy = self.0.policy();
+        if self.1.changed_bounds.load(Ordering::Acquire) {
+            policy.validation_work += 1;
+        }
+        policy
+    }
+    fn supports_media(&self, media: &str) -> bool {
+        self.1.qualifications.fetch_add(1, Ordering::Relaxed);
+        self.0.supports_media(media)
     }
     fn supports_schema(&self, s: &PreparedSchema) -> bool {
+        self.1.qualifications.fetch_add(1, Ordering::Relaxed);
         self.0.supports_schema(s)
     }
     fn validate(&self, s: &PreparedSchema, p: &Payload) -> CoreResult<()> {
+        self.1.validations.fetch_add(1, Ordering::Relaxed);
         fire(Edge::Validate);
         self.0.validate(s, p)
     }
 }
-struct Access(Arc<dyn ConsumerAccessService>);
+struct Access(Arc<dyn ConsumerAccessService>, Arc<Probe>);
 impl Drop for Access {
     fn drop(&mut self) {
         fire(Edge::ServiceDrop);
     }
 }
 impl ConsumerAccessService for Access {
+    fn security_revision(&self) -> u64 {
+        self.1.access_revision.load(Ordering::Acquire)
+    }
+    fn supports_security(&self, requirement: &security::SecurityRequirement) -> bool {
+        self.1.qualifications.fetch_add(1, Ordering::Relaxed);
+        self.0.supports_security(requirement)
+    }
     fn authorize(&self, b: BindingRegistrationIdentity, t: &str, o: Operation) -> CoreResult<()> {
         self.0.authorize(b, t, o)
     }
@@ -131,6 +154,13 @@ impl ConsumerAccessService for Access {
 }
 #[derive(Default)]
 struct Probe {
+    qualifications: AtomicUsize,
+    resolutions: AtomicUsize,
+    validations: AtomicUsize,
+    data_revision: AtomicU64,
+    native_revision: AtomicU64,
+    access_revision: AtomicU64,
+    changed_bounds: AtomicBool,
     starts: AtomicUsize,
     polls: AtomicUsize,
     cancels: AtomicUsize,
@@ -143,7 +173,11 @@ struct LocalClient {
     probe: Arc<Probe>,
 }
 impl binding::ClientBinding for LocalClient {
+    fn qualification_revision(&self) -> u64 {
+        self.probe.native_revision.load(Ordering::Acquire)
+    }
     fn supports_operation(&self, o: Operation) -> bool {
+        self.probe.qualifications.fetch_add(1, Ordering::Relaxed);
         matches!(o, Operation::ReadProperty | Operation::WriteProperty)
     }
     fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
@@ -151,6 +185,19 @@ impl binding::ClientBinding for LocalClient {
     }
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
         self.compatibility
+    }
+    fn resolve_target(
+        &self,
+        target: &str,
+        variables: &[(&str, &str)],
+        _: &BindingArtifactEnvelope<HostBindingArtifact>,
+    ) -> CoreResult<Box<str>> {
+        self.probe.resolutions.fetch_add(1, Ordering::Relaxed);
+        fire(Edge::Resolve);
+        if !variables.is_empty() || target.len() > self.configuration.target_capacity() {
+            return Err(invalid());
+        }
+        Ok(target.into())
     }
     fn invoke(
         &self,
@@ -309,8 +356,8 @@ fn association_harness(
     .unwrap();
     let services = input.services;
     input.services = ConsumerServices {
-        data: Arc::new(Data(services.data)),
-        access: Arc::new(Access(services.access)),
+        data: Arc::new(Data(services.data, probe.clone())),
+        access: Arc::new(Access(services.access, probe.clone())),
     };
     if address.is_none() {
         let (runtime, compiler) = input.preparation.into_parts();

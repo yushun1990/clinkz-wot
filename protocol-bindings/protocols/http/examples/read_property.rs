@@ -66,6 +66,13 @@ fn main() {
             .set_configuration(&thing_id, "default", standalone, &mut work())
             .unwrap_or_else(|e| panic!("{:?}", e.error())),
     );
+    // Retain the selected operation for repeated use without another name
+    // lookup or fixed-target resolution. Each read still checks live permission.
+    let read = owner
+        .association(&thing_id, "default", &mut work())
+        .unwrap()
+        .bind_property_read(&args[2], &mut work())
+        .unwrap();
     let calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
     let clock = Instant::now();
     let now = || MonotonicInstant::new(ClockId::new(600), clock.elapsed().as_millis() as u64);
@@ -75,16 +82,8 @@ fn main() {
         .build()
         .unwrap();
     io.block_on(async {
-        let mut call = owner
-            .read_property(
-                &thing_id,
-                "default",
-                &calls,
-                &args[2],
-                Deadline::NONE,
-                now(),
-                &mut work(),
-            )
+        let mut call = read
+            .read(&calls, Deadline::NONE, now(), &mut work())
             .unwrap();
         let result = loop {
             if let Poll::Ready(result) =
@@ -100,7 +99,7 @@ fn main() {
         }
     });
     owner.remove_thing(&thing_id, &mut work()).unwrap();
-    drop((owner, calls));
+    drop((owner, calls, read));
     assert!(
         ResourceKind::ALL
             .iter()

@@ -147,6 +147,16 @@ slices, with unsupported meaning reported truthfully.
 
 ## Implemented open finite Consumer slice
 
+Finite definitions now retain complete capability qualification against original
+data/native qualification revisions, with security support captured at access
+binding. Live checks compare revisions, availability and original declarations;
+they do not traverse the supported schema/media inventory again. The exact
+contract is in [Planning](../spec/planning.md#open-finite-consumer-implementation)
+and [Binding SPI](../spec/binding-spi.md). This scoped correction does not migrate
+continuing Action/Notification or Producer qualification. The
+[investigation](../../workspace/0131-preparation-binding-execution.md) records
+the source trace and alternatives.
+
 The public entry is `open_consumer::ConsumerRegistry`; HTTP's
 `try_consumer_registration` supplies a complete registration and actual services.
 The existing generic Host compiler erasure now captures `ConsumerCompiler` work,

@@ -62,13 +62,6 @@ impl Definition {
     }
     fn check_dependencies(&self) -> CoreResult<()> {
         self.input.definition.check_dependencies()?;
-        if !self
-            .input
-            .access
-            .supports_security(self.input.definition.content().security())
-        {
-            return Err(invalid());
-        }
         if self.input.access.security_revision() != self.input.security_revision
             || self.input.access.work() != self.access_work
             || self.input.access.retained_bytes() != self.input.access.backing_bytes()
@@ -294,14 +287,10 @@ impl Definition {
             .with_destination(destination.into())
             .with_security(security)
             .with_responses(self.input.definition.content().response_shape());
-        self.input
-            .definition
-            .execution()
-            .start_finite(request, artifact)
-            .map_err(|e| {
-                let (request, error) = e.into_parts();
-                BindingInputRejection::new(request.into_input(), error)
-            })
+        self.input.definition.start_finite(request).map_err(|e| {
+            let (request, error) = e.into_parts();
+            BindingInputRejection::new(request.into_input(), error)
+        })
     }
 }
 
@@ -323,6 +312,53 @@ impl Definition {
 #[derive(Clone)]
 pub struct ConsumerAssociation {
     state: Rc<Association>,
+}
+
+/// One selected Property Read bound to its original association. Retains no
+/// unselected mappings and grants no lasting permission. Drop is passive;
+/// removing/replacing the association or parent fences this handle and its work.
+pub struct ConsumerPropertyRead {
+    authority: Rc<AssociationAuthority>,
+    definition: Arc<Definition>,
+    bank: Arc<HostResourceAccounts>,
+    destination: Option<alloc::boxed::Box<str>>,
+    _funding: Vec<HostCapacityReservation>,
+}
+impl ConsumerPropertyRead {
+    pub fn read(
+        &self,
+        calls: &ConsumerCalls,
+        deadline: Deadline,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ConsumerCall> {
+        self.read_with_variables(calls, &[], deadline, now, budget)
+    }
+
+    /// Variable operands remain per-interaction data; the Binding resolves
+    /// their actual destination before fresh authorization and native entry.
+    pub fn read_with_variables(
+        &self,
+        calls: &ConsumerCalls,
+        variables: &[(&str, &str)],
+        deadline: Deadline,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ConsumerCall> {
+        ConsumerAssociation::start_selected(
+            &self.authority,
+            self.definition.clone(),
+            self.bank.clone(),
+            self.destination.as_deref(),
+            calls,
+            CallInput::Value(None),
+            variables,
+            deadline,
+            now,
+            budget,
+        )
+        .map_err(|e| e.error().error().clone())
+    }
 }
 struct Association {
     authority: Rc<AssociationAuthority>,
@@ -947,57 +983,173 @@ impl ConsumerAssociation {
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
+        let (definition, bank) = match self.select(target, operation, budget) {
+            Ok(selected) => selected,
+            Err(error) => {
+                let input = match input {
+                    CallInput::Value(input) => input,
+                    CallInput::Members(_) => None,
+                };
+                return Err(reject(input, error));
+            }
+        };
+        Self::start_selected(
+            &self.state.authority,
+            definition,
+            bank,
+            None,
+            calls,
+            input,
+            variables,
+            deadline,
+            now,
+            budget,
+        )
+    }
+
+    fn select(
+        &self,
+        target: AffordanceSite<'_>,
+        operation: Operation,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<(Arc<Definition>, Arc<HostResourceAccounts>)> {
+        if !self.state.authority.current() {
+            return Err(stale());
+        }
+        let name_len = match target {
+            AffordanceSite::Thing => 0,
+            AffordanceSite::Property(n) | AffordanceSite::Action(n) | AffordanceSite::Event(n) => {
+                n.len()
+            }
+        };
+        if name_len > 256 {
+            return Err(invalid());
+        }
+        // No association borrow crosses linked callbacks or allocation.
+        let mappings = self.state.mappings.borrow();
+        let mappings = mappings.as_ref().ok_or_else(stale)?;
+        if !pay(
+            budget,
+            W::PlanningItems,
+            (mappings.definitions.len() * (name_len + 1)) as u64,
+        ) {
+            return Err(busy());
+        }
+        let definition = mappings
+            .definitions
+            .iter()
+            .find(|d| d.matches(target, operation))
+            .ok_or_else(unsupported)?
+            .clone();
+        Ok((definition, mappings.bank.clone()))
+    }
+
+    /// Select once for repeated reads. Fixed destinations are resolved once by
+    /// the actual Binding under funded scratch; dynamic templates stay dynamic.
+    /// This performs no native I/O, credential issuance or permission grant.
+    pub fn bind_property_read(
+        &self,
+        property: &str,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ConsumerPropertyRead> {
+        let (definition, bank) = self.select(
+            AffordanceSite::Property(property),
+            Operation::ReadProperty,
+            budget,
+        )?;
+        definition.check_dependencies()?;
+        let mapping = &definition.input.definition;
+        let fixed = !mapping.content().uri_variables().is_dynamic();
+        let target_bytes = if fixed {
+            mapping.configuration().target_capacity() as u64
+        } else {
+            0
+        };
+        let funding = reserve(
+            &bank,
+            &[(
+                K::EngineLiveBytesGlobalMax,
+                core::mem::size_of::<ConsumerPropertyRead>() as u64 + 128 + target_bytes,
+            )],
+        )?;
+        let destination = if fixed {
+            let temporary = mapping.resources().transient().peak_bytes();
+            if temporary
+                > bank
+                    .account(K::AdmissionTemporaryBytesPerOperationMax)
+                    .limit()
+            {
+                return Err(busy());
+            }
+            let _scratch = reserve(
+                &bank,
+                &[
+                    (K::EngineLiveBytesGlobalMax, temporary),
+                    (K::AdmissionTemporaryBytesGlobalMax, temporary),
+                ],
+            )?;
+            if !pay(budget, W::BindingPolls, 1) {
+                return Err(busy());
+            }
+            let destination =
+                mapping
+                    .execution()
+                    .resolve_target(mapping.target(), &[], mapping.artifact())?;
+            if destination.len() > mapping.configuration().target_capacity() {
+                return Err(invalid());
+            }
+            Some(destination)
+        } else {
+            None
+        };
+        definition.check_dependencies()?;
+        if !self.state.authority.current() {
+            return Err(stale());
+        }
+        Ok(ConsumerPropertyRead {
+            authority: self.state.authority.clone(),
+            definition,
+            bank,
+            destination,
+            _funding: funding,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn start_selected(
+        authority: &Rc<AssociationAuthority>,
+        definition: Arc<Definition>,
+        association_bank: Arc<HostResourceAccounts>,
+        bound_destination: Option<&str>,
+        calls: &ConsumerCalls,
+        input: CallInput<'_>,
+        variables: &[(&str, &str)],
+        deadline: Deadline,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
         let (input, members) = match input {
             CallInput::Value(input) => (input, None),
             CallInput::Members(members) => (None, Some(members)),
         };
-        let association = &self.state;
+        let operation = definition.input.definition.operation();
         let state = &calls.state;
-        if !state.current() || !association.authority.current() {
+        if !state.current() || !authority.current() {
             return Err(reject(input, stale()));
         }
         let mut reserved = match state.reserve_slot() {
             Ok(reserved) => reserved,
             Err(error) => return Err(reject(input, error)),
         };
-        let control = match CallControl::new(&state.bank, association.authority.clone(), now) {
+        let control = match CallControl::new(&state.bank, authority.clone(), now) {
             Ok(control) => control,
             Err(error) => return Err(reject(input, error)),
         };
         reserved.attach(control.clone());
         let checked = (|| -> CoreResult<_> {
-            if !state.current() || !association.authority.current() {
+            if !state.current() || !authority.current() {
                 return Err(stale());
             }
-            let name_len = match target {
-                AffordanceSite::Thing => 0,
-                AffordanceSite::Property(n)
-                | AffordanceSite::Action(n)
-                | AffordanceSite::Event(n) => n.len(),
-            };
-            if name_len > 256 {
-                return Err(invalid());
-            }
-            // Snapshot only the selected definition and bank. No registry or
-            // association borrow crosses permission/codec/native callbacks.
-            let (definition, association_bank) = {
-                let mappings = association.mappings.borrow();
-                let mappings = mappings.as_ref().ok_or_else(stale)?;
-                if !pay(
-                    budget,
-                    W::PlanningItems,
-                    (mappings.definitions.len() * (name_len + 1)) as u64,
-                ) {
-                    return Err(busy());
-                }
-                let definition = mappings
-                    .definitions
-                    .iter()
-                    .find(|d| d.matches(target, operation))
-                    .ok_or_else(unsupported)?
-                    .clone();
-                (definition, mappings.bank.clone())
-            };
             match deadline.checked_is_elapsed_at(now) {
                 Some(false) => {}
                 Some(true) => return Err(CoreError::TimedOut(context())),
@@ -1132,22 +1284,27 @@ impl ConsumerAssociation {
                     &[(K::PendingHandlerCallsGlobalMax, 1)],
                 )?);
             }
-            if !pay(budget, W::BindingPolls, 1) {
-                return Err(busy());
-            }
             definition.check_dependencies()?;
-            let destination = definition.input.definition.execution().resolve_target(
-                definition.input.definition.target(),
-                variables,
-                definition.input.definition.artifact(),
-            )?;
+            let destination = match bound_destination {
+                Some(destination) => destination.into(),
+                None => {
+                    if !pay(budget, W::BindingPolls, 1) {
+                        return Err(busy());
+                    }
+                    definition.input.definition.execution().resolve_target(
+                        definition.input.definition.target(),
+                        variables,
+                        definition.input.definition.artifact(),
+                    )?
+                }
+            };
             if destination.len() > definition.configuration().target_capacity() {
                 return Err(invalid());
             }
             if !pay(budget, W::ProviderProbes, definition.access_work()) {
                 return Err(busy());
             }
-            definition.check_current(&association.authority.consumer, None, &destination)?;
+            definition.check_current(&authority.consumer, None, &destination)?;
             // Prepay local-disposal bookkeeping and the one native invocation. The
             // selected ConsumerOwnedHostV2 facet owes finite nonblocking local Drop.
             if budget.remaining(W::BindingPolls) < 1 || budget.remaining(W::CleanupItems) < 1 {
@@ -1190,7 +1347,7 @@ impl ConsumerAssociation {
                 if !pay(budget, W::ProviderProbes, definition.access_work()) {
                     return Err(busy());
                 }
-                definition.check_current(&association.authority.consumer, None, &destination)?;
+                definition.check_current(&authority.consumer, None, &destination)?;
             }
             let payload = encoded.as_ref().or(input.as_ref());
             let input_selection = match definition.validate_payload(payload, budget) {
@@ -1203,12 +1360,12 @@ impl ConsumerAssociation {
                     return Err(busy());
                 }
                 definition.check_current(
-                    &association.authority.consumer,
+                    &authority.consumer,
                     input_selection.or(selection),
                     &destination,
                 )?;
             }
-            if !state.current() || !association.authority.current() {
+            if !state.current() || !authority.current() {
                 return Err(stale());
             }
             if let Some(cause) = control.cause() {
@@ -1257,7 +1414,7 @@ impl ConsumerAssociation {
         let mut call = Call {
             progress: FiniteCallState::default(),
             work: CallWork {
-                consumer: association.authority.consumer.clone(),
+                consumer: authority.consumer.clone(),
                 control: control.clone(),
                 effect: ConsumerEffect::NotAttempted,
                 sequence,

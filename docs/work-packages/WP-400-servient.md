@@ -395,6 +395,18 @@ shared continuing-family capacity, constrained execution or broader reuse.
 
 ## Open finite Consumer ownership
 
+The optional bound Property Read is a funded selected-operation handle over the
+same finite call owner. [Runtime Safety](../spec/runtime-safety.md) owns its
+authority, destination and release contract.
+`cargo test --locked -p clinkz-wot-binding-http --test consumer_callbacks --test uri_variables`
+includes fixed/variable real HTTP, zero lookup credit, support/resolution
+counters, original revision/bound changes, callback revocation, binding refusal,
+late/unread ownership and final account release. The external
+`cargo test --locked --manifest-path tools/architecture-fixtures/open-consumer/Cargo.toml --test integration`
+also executes bound reads over independent datagrams and HTTP after source and
+compiler disposal. Existing security, selected-read, replacement and reuse
+regressions remain applicable; no gate/profile/milestone acceptance follows.
+
 The source-free `servient-finite::consumer` owner consumes Core instance bindings and
 pins their exact actual execution/configuration and services. It accepts no
 call-time executor, codec, validator, security or configuration override. Managed

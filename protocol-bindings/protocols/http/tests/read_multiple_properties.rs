@@ -948,6 +948,9 @@ struct ReviewData {
     validated: Arc<std::sync::atomic::AtomicUsize>,
 }
 impl ConsumerDataService for ReviewData {
+    fn qualification_revision(&self) -> u64 {
+        u64::from(self.fault == "array" && self.changed.load(Ordering::Relaxed))
+    }
     fn content_type(&self) -> &str {
         self.actual.content_type()
     }

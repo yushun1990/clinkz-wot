@@ -17,6 +17,14 @@ use core::sync::atomic::{AtomicBool, Ordering};
 /// Metadata/support/availability queries are bounded allocation-free passive
 /// inspection; they acquire no credentials, source documents or native I/O.
 pub trait ConsumerDataService: Send + Sync {
+    /// Revision of executable schema/media support. Support answers MUST stay
+    /// stable within a revision. Advance before changing them; never reuse a
+    /// revision while a qualified definition survives. Wrappers must preserve
+    /// invalidation by their actual dependencies. Zero declares fixed support.
+    /// Availability and resource declarations are checked separately.
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
     fn content_type(&self) -> &str;
     /// Complete executable media support, separately qualified for each used
     /// scalar request/response role, for every supported schema. Collection and
@@ -114,6 +122,7 @@ pub struct ConsumerDataPolicy {
 pub trait ConsumerAccessService: Send + Sync {
     /// Passive live dependency revision. Changing it invalidates existing
     /// bindings and unread results; rebinding qualifies the new service state.
+    /// Complete supports_security answers MUST stay stable within a revision.
     /// Revisions must not be reused while original bindings/grants remain live.
     /// Wrappers must preserve invalidation by each actual service dependency.
     fn security_revision(&self) -> u64 {
@@ -849,6 +858,8 @@ impl core::ops::Deref for PreparedConsumerContent {
 pub struct ConsumerDefinition {
     input: ConsumerDefinitionInput,
     data_policy: ConsumerDataPolicy,
+    data_revision: u64,
+    execution_revision: u64,
 }
 pub struct ConsumerDefinitionInput {
     pub content: Arc<PreparedConsumerContent>,
@@ -872,6 +883,8 @@ impl ConsumerDefinition {
         let id = input.artifact.identity();
         let actual = input.execution.identity();
         let policy = input.data.policy();
+        let data_revision = input.data.qualification_revision();
+        let execution_revision = input.execution.qualification_revision();
         if id.binding_id() != actual.binding_id()
             || id.binding_generation() != actual.binding_generation()
             || id.configuration() != actual.configuration()
@@ -889,6 +902,8 @@ impl ConsumerDefinition {
                 .content
                 .supports_data(input.data.service(), &input.content_type)
             || policy.validation_work == 0
+            || input.data.qualification_revision() != data_revision
+            || input.execution.qualification_revision() != execution_revision
         {
             return Err(BindingInputRejection::new(
                 input,
@@ -898,6 +913,8 @@ impl ConsumerDefinition {
         Ok(Self {
             input,
             data_policy: policy,
+            data_revision,
+            execution_revision,
         })
     }
     pub fn content(&self) -> &Arc<PreparedConsumerContent> {
@@ -942,23 +959,45 @@ impl ConsumerDefinition {
     pub fn data_policy(&self) -> ConsumerDataPolicy {
         self.data_policy
     }
-    /// Passive dependency checks also run after permission callbacks and at
-    /// result handoff. A new instance cannot refresh changed captured bounds.
+    /// Live dependency checks, without repeating schema/media/facet
+    /// qualification. Also checked after callbacks and at result handoff.
+    /// A new instance cannot refresh a changed definition's revisions/bounds.
     pub fn check_dependencies(&self) -> CoreResult<()> {
         if self.execution().consumer_configuration() != Some(self.configuration())
-            || self.binding().configuration() != self.configuration().configuration()
             || self.data().policy() != self.data_policy
             || !self.data().available()
-            || !self
-                .content()
-                .supports_data(self.data(), &self.input.content_type)
-            || !self.execution().supports_operation(self.operation())
-            || (self.content().uri_variables().is_dynamic()
-                && !self.execution().supports_uri_variables())
+            || self.data().qualification_revision() != self.data_revision
+            || self.execution().qualification_revision() != self.execution_revision
         {
             return Err(invalid());
         }
         Ok(())
+    }
+    /// Execute this already-qualified mapping. Request identity/operation and
+    /// native result sealing remain checked; coarse capability selection does
+    /// not run again. Native artifact interpretation stays with the Binding.
+    pub fn start_finite(
+        &self,
+        request: OutboundRequest,
+    ) -> Result<
+        HostBindingCallBox<CoreResult<InteractionOutput>>,
+        BindingInputRejection<OutboundRequest>,
+    > {
+        let checked = self.check_dependencies().and_then(|()| {
+            if request.operation() == self.operation() {
+                Ok(())
+            } else {
+                Err(invalid())
+            }
+        });
+        if let Err(error) = checked {
+            return Err(BindingInputRejection::new(
+                request,
+                BindingOperationalError::new(error),
+            ));
+        }
+        self.execution()
+            .start_prepared_finite(request, self.artifact())
     }
     /// Source-free instance dependency binding. No TD/compiler lookup or native
     /// retargeting is possible here. Logical authority is attached by the execution association.

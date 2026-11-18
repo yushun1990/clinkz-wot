@@ -533,6 +533,20 @@ the actual compiler and captured services prove complete Form support. Reusable
 semantic content does not qualify another native mapping. The finite preparation
 handoff retains exact native artifacts and actual data/execution dependencies;
 source-free instance binding supplies access policy/accounts over those owners.
+For finite prepared dispatch, `ClientBinding::qualification_revision` covers
+operation/URI support and the meaning of pure destination resolution. These
+answers MUST stay stable within a revision; a mutable implementation or wrapper
+MUST propagate a non-reused revision before changing them. Metadata and original
+resource declarations remain independently checked. `ConsumerDefinition` carries
+the qualification into Core's sealed dispatch without another coarse eligibility
+probe; direct unprepared registration calls still check operation eligibility.
+Request identity/operation, original artifact pairing, actual native admission,
+result sealing and Binding-owned representation checks remain mandatory.
+`ConsumerDataService::qualification_revision` similarly covers complete
+schema/media support, while availability and resource bounds remain live checks.
+`ConsumerAccessService::security_revision` also invalidates security support;
+credentials and current authorization are always separately obtained. Neither
+revision represents an execution grant, cache, native ABI or protocol whitelist.
 HTTP's current full-target artifact remains specialized for its target, method
 and headers. A later endpoint or changed native configuration must pass its actual
 compiler/compatibility checks; replacing an envelope identity is insufficient.
