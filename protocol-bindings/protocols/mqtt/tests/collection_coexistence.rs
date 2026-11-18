@@ -184,6 +184,10 @@ mod live {
 
     struct Access;
     impl ConsumerAccessService for Access {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn authorize_instance(
             &self,
             instance: &ConsumerInstanceRef,

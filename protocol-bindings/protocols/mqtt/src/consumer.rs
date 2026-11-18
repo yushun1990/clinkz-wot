@@ -799,6 +799,10 @@ impl Drop for MqttSubscription {
 /// Actual concrete structured JSON decoder for Consumer selection and delivery.
 pub struct MqttJsonData;
 impl ConsumerDataService for MqttJsonData {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn content_type(&self) -> &str {
         "application/json"
     }

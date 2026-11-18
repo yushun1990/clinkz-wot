@@ -8,6 +8,10 @@ use support::*;
 
 struct Access;
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
         Ok(())
     }
@@ -29,6 +33,10 @@ impl ConsumerAccessService for Access {
 }
 struct Data(Arc<AtomicBool>);
 impl ConsumerDataService for Data {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn content_type(&self) -> &str {
         "application/json"
     }

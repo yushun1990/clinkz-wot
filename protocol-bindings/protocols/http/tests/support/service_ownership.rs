@@ -43,6 +43,10 @@ impl Drop for BackedData {
     }
 }
 impl ConsumerDataService for BackedData {
+    fn qualification_revision(&self) -> u64 {
+        self.inner.qualification_revision()
+    }
+
     fn content_type(&self) -> &str {
         self.inner.content_type()
     }
@@ -79,8 +83,8 @@ impl Drop for BackedAccess {
     }
 }
 impl ConsumerAccessService for BackedAccess {
-    fn security_revision(&self) -> u64 {
-        self.inner.security_revision()
+    fn qualification_revision(&self) -> u64 {
+        self.inner.qualification_revision()
     }
     fn authorize(
         &self,
@@ -436,6 +440,10 @@ fn service_adoption_refusal_returns_the_last_raw_input_for_retry() {
 // actual HTTP services above; these services are never prepared or executed.
 struct ChangingBacking(Arc<AtomicU64>);
 impl ConsumerDataService for ChangingBacking {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn content_type(&self) -> &str {
         "application/json"
     }
@@ -453,6 +461,10 @@ impl ConsumerDataService for ChangingBacking {
     }
 }
 impl ConsumerAccessService for ChangingBacking {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
         Ok(())
     }

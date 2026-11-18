@@ -82,9 +82,10 @@ impl core::ops::Deref for Runtime {
 fn runtime(prepared: PreparedConsumer, bank: Arc<HostResourceAccounts>) -> Runtime {
     let (defs, funding) = prepared.into_execution();
     let owner = instance();
-    let inner = StandaloneConsumerAssociation::try_new(owner.reference(), defs, funding, bank.clone())
-        .map(|association| (association, ConsumerCalls::try_new(bank, 1).unwrap()))
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let inner =
+        StandaloneConsumerAssociation::try_new(owner.reference(), defs, funding, bank.clone())
+            .map(|association| (association, ConsumerCalls::try_new(bank, 1).unwrap()))
+            .unwrap_or_else(|e| panic!("{:?}", e.error()));
     Runtime {
         inner,
         _instance: owner,
@@ -199,6 +200,8 @@ fn downstream_owned_incremental_and_http_use_one_public_selection_path_after_sou
     drop(registry);
     assert_eq!(probe.compiler_drops.load(Ordering::Relaxed), 1);
     let rt = runtime(prepared, bank.clone());
+    let read_a = rt.0.bind_property_read("a", &mut work()).unwrap();
+    let read_b = rt.0.bind_property_read("b", &mut work()).unwrap();
     let io = tokio::runtime::Builder::new_current_thread()
         .enable_io()
         .enable_time()
@@ -206,9 +209,17 @@ fn downstream_owned_incremental_and_http_use_one_public_selection_path_after_sou
         .unwrap();
     io.block_on(async {
         for name in ["a", "a", "b"] {
-            let mut call =
-                rt.0.read_property(&rt.1, name, Deadline::NONE, now(), &mut work())
-                    .unwrap();
+            let read = if name == "a" { &read_a } else { &read_b };
+            let mut call = read
+                .read(
+                    &rt.1,
+                    Deadline::NONE,
+                    now(),
+                    &mut work()
+                        .with_remaining(WorkClass::PlanningItems, 0)
+                        .with_remaining(WorkClass::BindingPolls, 1),
+                )
+                .unwrap();
             let start = Instant::now();
             let settlement = loop {
                 if let Poll::Ready(s) =
@@ -233,7 +244,7 @@ fn downstream_owned_incremental_and_http_use_one_public_selection_path_after_sou
     });
     assert_eq!(probe.starts.load(Ordering::Relaxed), 1, "no warm lowering");
     assert_eq!(probe.validates.load(Ordering::Relaxed), 2);
-    drop(rt);
+    drop((read_a, read_b, rt));
     assert_eq!(probe.programs.load(Ordering::Relaxed), 1);
     clean(&bank);
     peer.join().unwrap();
@@ -1145,6 +1156,10 @@ fn service_accounting_refuses_before_compilation_and_definition_refusal_keeps_ar
         bytes: u64,
     }
     impl ConsumerDataService for DeclaredBacking {
+        fn qualification_revision(&self) -> u64 {
+            self.inner.qualification_revision()
+        }
+
         fn content_type(&self) -> &str {
             self.inner.content_type()
         }

@@ -25,6 +25,10 @@ struct Access {
     cancels: AtomicUsize,
 }
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, op: Operation) -> CoreResult<()> {
         assert_eq!(op, Operation::ObserveAllProperties);
         Ok(())
@@ -911,6 +915,10 @@ fn collection_validator_rechecks_original_authority_after_callback_and_requires_
         calls: Arc<AtomicUsize>,
     }
     impl ConsumerDataService for RevokingData {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn content_type(&self) -> &str {
             "application/json"
         }

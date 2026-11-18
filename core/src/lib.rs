@@ -119,7 +119,7 @@ pub use interaction::{
 pub use interaction::{InteractionInput, InteractionOutput, interaction_output_backing};
 pub use operation::Operation;
 #[cfg(target_has_atomic = "ptr")]
-pub use outbound::OutboundRequest;
+pub use outbound::{OutboundDestination, OutboundRequest};
 pub use payload::{CodecInput, PayloadView};
 #[cfg(target_has_atomic = "ptr")]
 pub use payload::{Payload, PayloadCodec};

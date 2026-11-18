@@ -4,12 +4,12 @@
 include!("support/collection.rs");
 #[path = "support/allocation_meter.rs"]
 mod allocation_meter;
+#[path = "support/definition_reuse.rs"]
+mod definition_reuse;
 #[path = "support/native_occupancy.rs"]
 mod native_occupancy;
 #[path = "support/service_ownership.rs"]
 mod service_ownership;
-#[path = "support/definition_reuse.rs"]
-mod definition_reuse;
 #[global_allocator]
 static ALLOCATOR: allocation_meter::Allocator = allocation_meter::Allocator;
 
@@ -89,6 +89,10 @@ struct InstancePolicy {
     denied: Arc<AtomicBool>,
 }
 impl ConsumerAccessService for InstancePolicy {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
         Ok(())
     }
@@ -518,6 +522,9 @@ fn source_free_binding_and_warm_admission_cannot_refresh_changed_service_bounds(
         mode: Arc<std::sync::atomic::AtomicUsize>,
     }
     impl ConsumerDataService for ChangingData {
+        fn qualification_revision(&self) -> u64 {
+            self.mode.load(Ordering::Relaxed) as u64
+        }
         fn content_type(&self) -> &str {
             self.inner.content_type()
         }

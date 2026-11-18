@@ -344,7 +344,7 @@ where
             let policy = data.policy();
             let configuration = r.binding.configuration().clone();
             let access_work = r.services.access.work();
-            let revision = r.services.access.security_revision();
+            let revision = r.services.access.qualification_revision();
             if !data.available()
                 || data.content_type() != facts.content_type
                 || !schemas.supports(data.service())
@@ -416,7 +416,7 @@ where
                 || r.binding.registration_identity() != id
                 || r.binding.preparation_bounds() != bounds
                 || r.services.access.work() != access_work
-                || r.services.access.security_revision() != revision
+                || r.services.access.qualification_revision() != revision
                 || !data.available()
                 || data.content_type() != facts.content_type
                 || !schemas.supports(data.service())

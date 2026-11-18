@@ -169,6 +169,10 @@ struct DestinationPolicy {
     seen: std::sync::Mutex<Vec<String>>,
 }
 impl ConsumerAccessService for DestinationPolicy {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(
         &self,
         _: BindingRegistrationIdentity,
@@ -792,7 +796,7 @@ fn https_dynamic_resolution_uses_actual_audience_and_rejects_substituted_native_
                 None,
             )
             .unwrap()
-            .with_destination(actual.into_boxed_str())
+            .with_destination(actual.into_boxed_str().into())
             .with_security(grant);
             assert!(
                 definition.execution().start_finite(raw, artifact).is_err(),
@@ -934,3 +938,5 @@ fn dynamic_write_executes_once_and_revoked_pending_work_keeps_original_cleanup()
 
 #[path = "support/independent_capacity.rs"]
 mod independent_capacity;
+#[path = "support/prepared_read.rs"]
+mod prepared_read;

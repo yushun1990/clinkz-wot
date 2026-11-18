@@ -264,6 +264,24 @@ retargeting right. Changing values within a qualified dynamic mapping is interac
 work and requires no replacement definition. Content reuse grants no native
 artifact compatibility. Native compilation remains owned/incremental,
 and no TD, parser, semantic arena or compiler survives the completed definition.
+
+Finite definition construction qualifies complete schema/media and native
+operation/URI capability once and captures each actual service's
+`qualification_revision`. Support answers MUST remain stable within that
+revision; mutable providers and wrappers MUST advance/propagate a non-reused
+revision before changing qualified support. The revision method is required:
+implementations must explicitly declare fixed support with zero or supply live
+invalidation. A default zero is not an adoption of this contract.
+Execution compares original revisions, availability and resource declarations;
+it MUST NOT repeat complete capability qualification as a liveness test.
+Source-free instance binding cannot refresh an invalidated definition. Access
+binding captures the required `ConsumerAccessService::qualification_revision`
+covering complete security support and actual security dependencies. It replaces
+the optional `security_revision` method, including existing credential-only
+overrides, so every implementation and wrapper must explicitly adopt the combined
+contract. Dynamic permission outcomes still require fresh authorization,
+without retaining credentials or granting later permission. Revisions do not
+replace per-interaction authorization, payload validation or native checks.
 The [explicit HTTP implementation](binding-spi.md#explicit-http-definition-compilation)
 uses the existing owned compiler interface for both fresh lowering and supplied
 definition binding. A `ConsumerCompilation` job therefore denotes bounded native

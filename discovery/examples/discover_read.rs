@@ -28,6 +28,10 @@ struct Permission {
     binding: BindingId,
 }
 impl ConsumerAccessService for Permission {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(
         &self,
         binding: BindingRegistrationIdentity,

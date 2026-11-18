@@ -17,6 +17,10 @@ struct Access {
     calls: AtomicUsize,
 }
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
         Ok(())
     }
@@ -1075,6 +1079,10 @@ fn explicit_resubscribe_uses_a_fresh_clean_connection_and_never_replays_old_work
 fn revocation_during_captured_validation_fences_the_owned_native_candidate() {
     struct RevokingData(Arc<ConsumerInstance>);
     impl ConsumerDataService for RevokingData {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn content_type(&self) -> &str {
             "application/json"
         }

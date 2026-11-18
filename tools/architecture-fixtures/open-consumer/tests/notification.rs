@@ -236,6 +236,10 @@ impl NotificationParticipation for Participation {
 }
 struct EventAccess;
 impl ConsumerAccessService for EventAccess {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(
         &self,
         _: BindingRegistrationIdentity,
@@ -350,6 +354,10 @@ fn clean(bank: &HostResourceAccounts) {
 
 struct StructuredData(Arc<std::sync::atomic::AtomicUsize>);
 impl ConsumerDataService for StructuredData {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn content_type(&self) -> &str {
         "application/json"
     }
@@ -383,6 +391,10 @@ impl ConsumerDataService for StructuredData {
 }
 struct ControlAccess;
 impl ConsumerAccessService for ControlAccess {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(
         &self,
         _: BindingRegistrationIdentity,
@@ -756,6 +768,10 @@ impl ConsumerNotificationPreparation for CollectionBinding {
 }
 struct CollectionAccess;
 impl ConsumerAccessService for CollectionAccess {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, op: Operation) -> CoreResult<()> {
         assert_eq!(op, Operation::SubscribeAllEvents);
         Ok(())
@@ -923,6 +939,10 @@ fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_
 
 struct CollectionData;
 impl ConsumerDataService for CollectionData {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn content_type(&self) -> &str {
         "application/json"
     }
@@ -948,6 +968,10 @@ fn delayed_response_policy_receives_original_occurrence_and_denial_retires_the_e
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     struct ResponsePolicy(Arc<AtomicBool>, Arc<AtomicUsize>);
     impl ConsumerAccessService for ResponsePolicy {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn authorize(
             &self,
             _: BindingRegistrationIdentity,
@@ -1113,6 +1137,10 @@ fn response_validation_dependency_failure_is_irreversible_after_restoration() {
         calls: AtomicUsize,
     }
     impl ConsumerDataService for MutatingData {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn content_type(&self) -> &str {
             "application/json"
         }

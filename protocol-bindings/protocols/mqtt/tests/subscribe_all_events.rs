@@ -21,6 +21,10 @@ struct ObservedData {
     original: std::sync::Mutex<Option<std::sync::Weak<[u8]>>>,
 }
 impl ConsumerDataService for ObservedData {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn content_type(&self) -> &str {
         "application/json"
     }
@@ -136,6 +140,10 @@ struct Access {
     cancels: AtomicUsize,
 }
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, op: Operation) -> CoreResult<()> {
         assert_eq!(op, Operation::SubscribeAllEvents);
         Ok(())
@@ -1048,6 +1056,10 @@ fn collection_validator_rechecks_original_authority_after_callback_and_requires_
         calls: Arc<AtomicUsize>,
     }
     impl ConsumerDataService for RevokingData {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn content_type(&self) -> &str {
             "application/json"
         }
@@ -1364,6 +1376,10 @@ fn cursor_loss_and_stop_before_start_release_collection_without_native_effects()
 fn overlapping_distinct_filters_refuse_without_revoking_original_collection_interest() {
     struct LeafAccess;
     impl ConsumerAccessService for LeafAccess {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn authorize(
             &self,
             _: BindingRegistrationIdentity,

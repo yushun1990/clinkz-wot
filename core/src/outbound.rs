@@ -1,6 +1,85 @@
 //! Selected execution requests; no TD or selection authority.
 use crate::*;
-use alloc::{boxed::Box, collections::BTreeMap, string::String};
+use alloc::{boxed::Box, collections::BTreeMap, string::String, sync::Arc};
+
+/// Immutable protocol-opaque operand shared by a bound operation, native
+/// request and original settlement. Cloning shares bytes and their original
+/// owner; it grants no permission or native routing authority.
+#[derive(Clone)]
+pub struct OutboundDestination(Arc<DestinationStorage>);
+struct DestinationStorage {
+    value: Box<str>,
+    // Last: free the value before returning its original physical reservation.
+    #[cfg(feature = "std")]
+    _funding: Option<crate::host_accounts::HostCapacityReservation>,
+}
+impl OutboundDestination {
+    /// Complete controlled backing for at most this many destination bytes,
+    /// including the shared owner and reference counts, excluding inline handles.
+    pub fn backing_bytes(capacity: usize) -> Option<u64> {
+        (core::mem::size_of::<DestinationStorage>() as u64)
+            .checked_add((2 * core::mem::size_of::<usize>()) as u64)?
+            .checked_add(capacity as u64)
+    }
+    /// Check and transfer the reservation acquired before resolving/allocating
+    /// the value. Its kind must be EngineLiveBytesGlobalMax and its amount must
+    /// cover backing_bytes(value.len()). Refusal returns both original inputs
+    /// without altering the reservation or allocating the shared owner.
+    /// Success retains the complete reservation at its original bank until the
+    /// last destination owner releases it, independently of call capacity.
+    #[cfg(feature = "std")]
+    pub fn try_with_funding(
+        value: Box<str>,
+        funding: crate::host_accounts::HostCapacityReservation,
+    ) -> Result<
+        Self,
+        BindingInputRejection<(Box<str>, crate::host_accounts::HostCapacityReservation)>,
+    > {
+        if funding.kind() != clinkz_wot_foundation::ResourceKind::EngineLiveBytesGlobalMax
+            || Self::backing_bytes(value.len()).is_none_or(|bytes| funding.amount() < bytes)
+        {
+            return Err(BindingInputRejection::new(
+                (value, funding),
+                BindingOperationalError::new(CoreError::Validation(ErrorContext::new(
+                    ErrorPhase::Admission,
+                    RetryClass::Never,
+                ))),
+            ));
+        }
+        Ok(Self(Arc::new(DestinationStorage {
+            value,
+            _funding: Some(funding),
+        })))
+    }
+}
+impl From<Box<str>> for OutboundDestination {
+    /// Caller-funded value/owner. Finite dynamic admission prepays this backing
+    /// with its complete call and keeps it through native/result disposal.
+    fn from(value: Box<str>) -> Self {
+        Self(Arc::new(DestinationStorage {
+            value,
+            #[cfg(feature = "std")]
+            _funding: None,
+        }))
+    }
+}
+impl core::ops::Deref for OutboundDestination {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.0.value
+    }
+}
+impl core::fmt::Debug for OutboundDestination {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(&self.0.value, f)
+    }
+}
+impl PartialEq for OutboundDestination {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.value == other.0.value
+    }
+}
+impl Eq for OutboundDestination {}
 /// Owned execution envelope for an already-selected finite Consumer operation.
 ///
 /// Static target and protocol facts remain in the immutable binding artifact.
@@ -36,7 +115,7 @@ pub struct OutboundRequest {
     operation: Operation,
     input: Option<Box<Payload>>,
     uri_variables: BTreeMap<String, String>,
-    destination: Option<Box<str>>,
+    destination: Option<OutboundDestination>,
     deadline: Option<Deadline>,
     security: Option<crate::security::OutboundSecurity>,
     responses: crate::execution::responses::FiniteResponseShape,
@@ -179,7 +258,7 @@ impl OutboundRequest {
     /// Exact native resolution authorized for this call. This opaque operand
     /// contains no routing logic or logical identity. Native start verifies it
     /// against its own artifact and variable operands before any I/O.
-    pub fn with_destination(mut self, destination: Box<str>) -> Self {
+    pub fn with_destination(mut self, destination: OutboundDestination) -> Self {
         self.destination = Some(destination);
         self
     }

@@ -27,6 +27,10 @@ struct Permission {
     allowed: Arc<AtomicBool>,
 }
 impl ConsumerAccessService for Permission {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(
         &self,
         _: BindingRegistrationIdentity,

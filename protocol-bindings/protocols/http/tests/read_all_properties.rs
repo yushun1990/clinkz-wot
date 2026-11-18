@@ -624,6 +624,10 @@ struct Data {
     lose_on_validate: bool,
 }
 impl ConsumerDataService for Data {
+    fn qualification_revision(&self) -> u64 {
+        self.inner.qualification_revision()
+    }
+
     fn content_type(&self) -> &str {
         self.inner.content_type()
     }

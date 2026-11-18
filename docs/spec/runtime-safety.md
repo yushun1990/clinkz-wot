@@ -53,6 +53,32 @@ a removed parent cannot be installed into a new registration with the same ID.
 finite operations can use transient `association` lookup; this does not migrate
 continuing Action or notification lifetimes into this finite owner.
 
+`ConsumerAssociation::bind_property_read` optionally retains one selected
+Property Read as a `ConsumerPropertyRead`. Binding resolves a fixed destination
+once using the actual captured Binding, with prepaid result backing and scratch.
+Variable templates retain per-interaction validation/resolution. Repeated reads
+perform no association/name lookup or invariant capability qualification. The
+handle retains only the selected funded mapping, original authority, instance
+bank and fixed destination; it has no call slots or revocation power. Drop is
+passive. Removal/replacement fences old handles without retargeting them; accepted
+calls/results retain their own original operands and backing after handle loss.
+The fixed destination's immutable bytes and reservation share one
+`OutboundDestination` owner across the handle, accepted work, native request and
+settlement. Engine execution clones ownership references without copying those
+bytes or recharging their backing to a work-capacity bank. The original instance
+bank's reservation lasts until the final destination reference is disposed,
+including a native request surviving the handle. Dynamic resolution creates one
+per-call destination under the call's existing lifetime funding; native request
+and settlement share it. Borrowed `&str` observations confer no ownership.
+`OutboundDestination::try_with_funding` checks that a supplied reservation is
+for `EngineLiveBytesGlobalMax` and covers `backing_bytes(value.len())` before
+allocating the shared owner. Refusal returns the identical boxed value and
+unchanged reservation for recovery; it does not debit, grow or replace funding.
+Success retains the whole supplied reservation, including any excess capacity,
+at its original bank until the last destination owner is disposed.
+Fresh dependency, permission, credential, time, capacity and actual result checks
+continue at the existing callback and handoff boundaries.
+
 One authority is retained across independently composed facets. Continuing
 Action, notification and policy services can compose with the managed instance's
 passive `ConsumerInstanceRef` after registration. Their storage/progress APIs

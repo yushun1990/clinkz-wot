@@ -67,6 +67,7 @@ struct Data {
     policy: Mutex<ConsumerDataPolicy>,
     available: AtomicBool,
     supported: AtomicBool,
+    revision: AtomicU64,
     validations: AtomicUsize,
     _backing: Vec<u8>,
 }
@@ -79,12 +80,17 @@ impl Data {
             }),
             available: AtomicBool::new(true),
             supported: AtomicBool::new(true),
+            revision: AtomicU64::new(0),
             validations: AtomicUsize::new(0),
             _backing: vec![0; bytes],
         }
     }
 }
 impl ConsumerDataService for Data {
+    fn qualification_revision(&self) -> u64 {
+        self.revision.load(Ordering::Relaxed)
+    }
+
     fn content_type(&self) -> &str {
         "application/json"
     }
@@ -131,7 +137,7 @@ impl Default for Access {
     }
 }
 impl ConsumerAccessService for Access {
-    fn security_revision(&self) -> u64 {
+    fn qualification_revision(&self) -> u64 {
         self.revision.load(Ordering::Relaxed)
     }
     fn work(&self) -> u64 {
@@ -412,8 +418,10 @@ fn prepared_data_and_native_declarations_cannot_be_refreshed_by_binding_or_admis
     data.available.store(false, Ordering::Relaxed);
     assert!(subscribe(&mut work, &a).is_err());
     data.available.store(true, Ordering::Relaxed);
+    data.revision.fetch_add(1, Ordering::Relaxed);
     data.supported.store(false, Ordering::Relaxed);
     assert!(subscribe(&mut work, &a).is_err());
+    data.revision.fetch_add(1, Ordering::Relaxed);
     data.supported.store(true, Ordering::Relaxed);
     for field in 0..2 {
         match field {

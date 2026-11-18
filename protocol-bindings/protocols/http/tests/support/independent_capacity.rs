@@ -256,6 +256,10 @@ fn late_http_result_survives_association_and_capacity_roots_and_cannot_move_to_r
 thread_local! { static REENTER: RefCell<Option<Box<dyn FnOnce()>>> = const { RefCell::new(None) }; }
 struct ReenterPolicy;
 impl ConsumerAccessService for ReenterPolicy {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
         Ok(())
     }

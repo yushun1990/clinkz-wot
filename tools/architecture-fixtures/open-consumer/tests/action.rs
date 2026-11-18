@@ -250,6 +250,10 @@ impl ConsumerActionPreparation for Compiler {
 }
 struct Access;
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, t: &str, _: Operation) -> CoreResult<()> {
         if t.starts_with("linkedudp://127.0.0.1:") {
             Ok(())
@@ -576,6 +580,10 @@ struct Representation {
     bank: Arc<HostResourceAccounts>,
 }
 impl ConsumerDataService for Representation {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn content_type(&self) -> &str {
         if self.operation == Operation::InvokeAction {
             "application/json"

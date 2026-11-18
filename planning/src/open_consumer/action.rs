@@ -321,7 +321,7 @@ impl ConsumerActionRegistry {
             r.services.check_backing()?;
             let policy = r.services.data.policy();
             let access_work = r.services.access.work();
-            let revision = r.services.access.security_revision();
+            let revision = r.services.access.qualification_revision();
             let content_type = r.services.data.content_type();
             let b = r.preparation.bounds();
             if b.work == 0 || policy.validation_work == 0 || access_work == 0 {
@@ -336,7 +336,7 @@ impl ConsumerActionRegistry {
                     || r.services.data.content_type() != content_type
                     || !action_data_supported(operation, schemas, r.services.data.service())
                     || r.services.access.work() != access_work
-                    || r.services.access.security_revision() != revision
+                    || r.services.access.qualification_revision() != revision
                     || !r
                         .services
                         .access

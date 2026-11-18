@@ -592,6 +592,10 @@ impl<C: BindingCompilerExtension + Send + Sync> RouteServerBinding for Endpoint<
 
 #[cfg(feature = "std")]
 impl<C: BindingCompilerExtension + Send + Sync> ClientBinding for Endpoint<C> {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
         operation == clinkz_wot_core::Operation::ReadProperty
     }
@@ -2134,6 +2138,10 @@ mod consumer_only_support {
 
     #[cfg(feature = "std")]
     impl<C: BindingCompilerExtension + Send + Sync> ClientBinding for CaptureClient<C> {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
             operation == clinkz_wot_core::Operation::ReadProperty
         }

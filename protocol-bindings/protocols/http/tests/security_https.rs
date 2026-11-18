@@ -208,7 +208,7 @@ fn independent_https_composition(reuse_native: bool) {
             "verified-account"
         );
         assert!(verify_a.calls.load(Ordering::Relaxed) >= 3);
-        let revision_b = access_b.security_revision();
+        let revision_b = access_b.qualification_revision();
         policy_a.revision.fetch_add(1, Ordering::AcqRel);
         access_a.replace_credentials(None).unwrap();
         assert!(
@@ -219,7 +219,7 @@ fn independent_https_composition(reuse_native: bool) {
             result_a.native_outcome(),
             ConsumerNativeOutcome::Returned(Ok(_))
         ));
-        assert_eq!(access_b.security_revision(), revision_b);
+        assert_eq!(access_b.qualification_revision(), revision_b);
         assert!(result_b.result().is_ok());
         owner_a.revoke();
         assert!(
@@ -236,7 +236,7 @@ fn independent_https_composition(reuse_native: bool) {
             result_next_b.result().is_ok(),
             "sibling credentials and authority remain independent"
         );
-        let revision_a = access_a.security_revision();
+        let revision_a = access_a.qualification_revision();
         policy_b.revision.fetch_add(1, Ordering::AcqRel);
         assert!(result_next_b.result().is_ok());
         assert!(
@@ -245,7 +245,7 @@ fn independent_https_composition(reuse_native: bool) {
                 .read_property(&client_b.1, "on", Deadline::NONE, now(0), &mut work())
                 .is_err()
         );
-        assert_eq!(access_a.security_revision(), revision_a);
+        assert_eq!(access_a.qualification_revision(), revision_a);
         drop((next_b, result_next_b));
         drop((
             call_a, client_a, client_b, owner_a, owner_b, content_b, access_a, access_b,
@@ -965,7 +965,7 @@ struct ReviewPolicy {
     change_in_instance: AtomicBool,
 }
 impl ConsumerAccessService for ReviewPolicy {
-    fn security_revision(&self) -> u64 {
+    fn qualification_revision(&self) -> u64 {
         self.revision.load(Ordering::Acquire)
     }
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
@@ -1064,6 +1064,10 @@ struct ReviewData {
     validations: Arc<std::sync::atomic::AtomicUsize>,
 }
 impl ConsumerDataService for ReviewData {
+    fn qualification_revision(&self) -> u64 {
+        self.actual.qualification_revision()
+    }
+
     fn content_type(&self) -> &str {
         self.actual.content_type()
     }
@@ -1146,7 +1150,7 @@ fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fres
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
         // Validation has finished, while the original outcome remains unread.
-        let before = access.security_revision();
+        let before = access.qualification_revision();
         policy.revision.fetch_add(1, Ordering::AcqRel);
         let result = server.exchange(&mut call).await;
         assert!(
@@ -1157,7 +1161,7 @@ fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fres
             result.native_outcome(),
             ConsumerNativeOutcome::Returned(Ok(_))
         ));
-        assert_ne!(before, access.security_revision());
+        assert_ne!(before, access.qualification_revision());
         drop((call, result));
         drop(server.server().take_settlement());
         policy.calls.store(0, Ordering::Relaxed);
@@ -1222,7 +1226,7 @@ fn wrapped_policy_changes_inside_permission_and_issuance_cannot_grant_original_w
     let binding = definition.binding();
     let target = definition.target();
     for change_in_first_callback in [false, true] {
-        let revision = access.security_revision();
+        let revision = access.qualification_revision();
         if change_in_first_callback {
             policy.change_in_authorize.store(true, Ordering::Release);
         } else {
@@ -1239,7 +1243,7 @@ fn wrapped_policy_changes_inside_permission_and_issuance_cannot_grant_original_w
                 )
                 .is_err()
         );
-        assert_ne!(access.security_revision(), revision);
+        assert_ne!(access.qualification_revision(), revision);
     }
     let grant = access
         .outbound_security(

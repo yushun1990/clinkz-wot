@@ -210,6 +210,10 @@ fn invalid_input_and_short_work_or_capacity_return_original_before_native_effect
 fn consumer_and_producer_member_permission_refuse_the_entire_group_before_effects() {
     struct AccessMembers;
     impl ConsumerAccessService for AccessMembers {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn authorize(
             &self,
             _: BindingRegistrationIdentity,
@@ -344,6 +348,10 @@ fn consumer_and_producer_member_permission_refuse_the_entire_group_before_effect
 fn selected_write_requires_its_own_data_facet_and_prepares_all_eligible_schemas() {
     struct AllMapOnly(Arc<dyn ConsumerDataService>);
     impl ConsumerDataService for AllMapOnly {
+        fn qualification_revision(&self) -> u64 {
+            self.0.qualification_revision()
+        }
+
         fn content_type(&self) -> &str {
             self.0.content_type()
         }

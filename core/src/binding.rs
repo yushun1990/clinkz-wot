@@ -3812,7 +3812,26 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for RejectedAcceptedHostCons
 /// The artifact is a scoped construction borrow only. An accepted invocation
 /// returns an owned `'static` call before its first protocol side effect; a
 /// rejected invocation returns the exact request unchanged.
+/// Previous implementations must explicitly adopt qualification invalidation:
+/// ```compile_fail,E0046
+/// use clinkz_wot_core::{binding::ClientBinding, *};
+/// struct PreviousClient;
+/// impl ClientBinding for PreviousClient {
+///     fn supports_operation(&self, _: Operation) -> bool { true }
+///     fn artifact_compatibility(&self) -> BindingArtifactCompatibility { unimplemented!() }
+///     fn invoke(&self, _: OutboundRequest, _: &BindingArtifactEnvelope<HostBindingArtifact>)
+///         -> Result<HostBindingCallBox<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>> { unimplemented!() }
+/// }
+/// ```
 pub trait ClientBinding: Send + Sync {
+    /// Passive revision of coarse operation/URI support and pure destination
+    /// meaning. Answers MUST stay stable within a revision; advance before
+    /// changes and never reuse a live definition's revision. Wrappers preserve
+    /// actual dependency invalidation.
+    /// An explicit zero declares fixed support. No default silently adopts this
+    /// contract; every implementation must choose/propagate its revision. This
+    /// grants no current execution permission.
+    fn qualification_revision(&self) -> u64;
     /// Passive coarse facet eligibility, never complete Form/schema support.
     fn supports_operation(&self, operation: Operation) -> bool;
     /// Passive metadata of the actual captured immutable Consumer policy.
@@ -4212,9 +4231,26 @@ fn start_host_consumer_finite(
     artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
 ) -> Result<HostBindingCallBox<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
 {
-    if !consumer_request_matches_registration(identity, &request, artifact)
-        || !client.is_some_and(|c| c.supports_operation(request.operation()))
-    {
+    if !client.is_some_and(|c| c.supports_operation(request.operation())) {
+        return Err(reject_consumer_request(
+            request,
+            312,
+            "Consumer request does not match the installed registration",
+        ));
+    }
+    start_prepared_host_consumer_finite(identity, client, resources, request, artifact)
+}
+
+#[cfg(feature = "std")]
+fn start_prepared_host_consumer_finite(
+    identity: BindingRegistrationIdentity,
+    client: Option<&dyn ClientBinding>,
+    resources: BindingResourceDeclarations,
+    request: OutboundRequest,
+    artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+) -> Result<HostBindingCallBox<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
+{
+    if !consumer_request_matches_registration(identity, &request, artifact) {
         return Err(reject_consumer_request(
             request,
             312,
@@ -4532,6 +4568,9 @@ pub struct HostConsumerBindingRegistration {
 }
 #[cfg(feature = "std")]
 impl HostConsumerBindingRegistration {
+    pub fn qualification_revision(&self) -> u64 {
+        self.input.client.qualification_revision()
+    }
     pub fn supports_uri_variables(&self) -> bool {
         self.input.client.supports_uri_variables()
     }
@@ -4622,6 +4661,24 @@ impl HostConsumerBindingRegistration {
         BindingInputRejection<OutboundRequest>,
     > {
         start_host_consumer_finite(
+            self.input.identity,
+            Some(&*self.input.client),
+            self.input.resources,
+            request,
+            artifact,
+        )
+    }
+
+    // Only Core's ConsumerDefinition can carry preparation proof into dispatch.
+    pub(crate) fn start_prepared_finite(
+        &self,
+        request: OutboundRequest,
+        artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+    ) -> Result<
+        HostBindingCallBox<CoreResult<InteractionOutput>>,
+        BindingInputRejection<OutboundRequest>,
+    > {
+        start_prepared_host_consumer_finite(
             self.input.identity,
             Some(&*self.input.client),
             self.input.resources,

@@ -93,6 +93,10 @@ struct Probe {
 }
 struct Data(Arc<Probe>);
 impl ConsumerDataService for Data {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn content_type(&self) -> &str {
         "application/json"
     }
@@ -120,6 +124,10 @@ impl ConsumerDataService for Data {
 }
 struct Access;
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
         Ok(())
     }
@@ -1150,7 +1158,7 @@ struct OperationAccess {
     authorizations: AtomicUsize,
 }
 impl ConsumerAccessService for OperationAccess {
-    fn security_revision(&self) -> u64 {
+    fn qualification_revision(&self) -> u64 {
         self.revision.load(Ordering::Relaxed) as u64
     }
     fn authorize(

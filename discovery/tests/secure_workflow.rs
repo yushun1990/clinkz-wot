@@ -202,6 +202,10 @@ struct ObservedData {
     validations: Arc<AtomicUsize>,
 }
 impl ConsumerDataService for ObservedData {
+    fn qualification_revision(&self) -> u64 {
+        self.actual.qualification_revision()
+    }
+
     fn content_type(&self) -> &str {
         self.actual.content_type()
     }
