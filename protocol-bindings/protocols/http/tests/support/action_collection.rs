@@ -165,6 +165,10 @@ struct ConsumerPolicy { denied:AtomicBool, unavailable:AtomicBool, lose_on_valid
     last_body:std::sync::Mutex<Option<std::sync::Weak<[u8]>>> }
 struct Data(Arc<ConsumerPolicy>,Arc<dyn ConsumerDataService>);
 impl ConsumerDataService for Data {
+    fn qualification_revision(&self) -> u64 {
+        self.1.qualification_revision()
+    }
+
     fn content_type(&self)->&str{"application/json"}
     fn policy(&self)->ConsumerDataPolicy{self.1.policy()}
     fn available(&self)->bool{!self.0.unavailable.load(Ordering::Relaxed)}
@@ -176,6 +180,10 @@ impl ConsumerDataService for Data {
 }
 struct Access(Arc<ConsumerPolicy>,Arc<dyn ConsumerAccessService>);
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        self.1.qualification_revision()
+    }
+
     fn authorize(&self,b:BindingRegistrationIdentity,t:&str,o:Operation)->CoreResult<()>{self.1.authorize(b,t,o)}
     fn authorize_instance(&self,c:&ConsumerInstanceRef,b:BindingRegistrationIdentity,t:&str,o:Operation)->CoreResult<()>{
         self.1.authorize_instance(c,b,t,o)?; if self.0.denied.load(Ordering::Relaxed){Err(denied())}else{Ok(())}}

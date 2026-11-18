@@ -544,9 +544,14 @@ Request identity/operation, original artifact pairing, actual native admission,
 result sealing and Binding-owned representation checks remain mandatory.
 `ConsumerDataService::qualification_revision` similarly covers complete
 schema/media support, while availability and resource bounds remain live checks.
-`ConsumerAccessService::security_revision` also invalidates security support;
-credentials and current authorization are always separately obtained. Neither
-revision represents an execution grant, cache, native ABI or protocol whitelist.
+`ConsumerAccessService::qualification_revision` covers complete security support
+and its actual security dependencies; it replaces the optional
+`security_revision` method. All three provider facets require explicit revision
+methods, with no default. Fixed providers explicitly return zero; wrappers
+propagate every actual invalidation, without hashing independent revisions into
+a value that could be reused. Credentials and current authorization are always
+separately obtained. A revision represents no execution grant, cache, native ABI
+or protocol whitelist.
 HTTP's current full-target artifact remains specialized for its target, method
 and headers. A later endpoint or changed native configuration must pass its actual
 compiler/compatibility checks; replacing an envelope identity is insufficient.

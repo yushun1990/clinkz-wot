@@ -32,6 +32,11 @@ struct OwnedData {
     bank: Arc<HostResourceAccounts>,
 }
 impl ConsumerDataService for OwnedData {
+    fn qualification_revision(&self) -> u64 {
+        u64::from(self.declarations.media.load(Ordering::Relaxed)) * 2
+            + u64::from(self.declarations.unsupported.load(Ordering::Relaxed))
+    }
+
     fn content_type(&self) -> &str {
         if self.declarations.media.load(Ordering::Relaxed) {
             "text/plain"
@@ -121,7 +126,7 @@ impl ConsumerAccessService for OwnedAccess {
     ) -> CoreResult<()> {
         self.inner.authorize_instance(consumer, id, target, op)
     }
-    fn security_revision(&self) -> u64 {
+    fn qualification_revision(&self) -> u64 {
         self.declarations.revision.load(Ordering::Relaxed)
     }
     fn work(&self) -> u64 {

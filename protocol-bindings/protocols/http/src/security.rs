@@ -240,7 +240,7 @@ struct ClientState {
 impl ClientState {
     fn snapshot(&self) -> (u64, bool) {
         // Passive linked metadata is read outside the credential lock.
-        let policy_revision = self.policy.security_revision();
+        let policy_revision = self.policy.qualification_revision();
         let mut credentials = self.credentials.lock().unwrap();
         credentials.observe_policy(policy_revision);
         (credentials.revision, !credentials.exhausted)
@@ -300,7 +300,7 @@ impl HttpClientAccess {
         if target_info.uri.scheme_str() != Some("https") {
             return Err(denied(SecurityFailureReason::UnsupportedScheme));
         }
-        let policy_revision = policy.security_revision();
+        let policy_revision = policy.qualification_revision();
         Ok(Self {
             state: Arc::new(ClientState {
                 instance,
@@ -324,7 +324,7 @@ impl HttpClientAccess {
         if self.state.capabilities & 1 == 0 {
             return Err(denied(SecurityFailureReason::UnsupportedScheme));
         }
-        let policy_revision = self.state.policy.security_revision();
+        let policy_revision = self.state.policy.qualification_revision();
         let mut state = self.state.credentials.lock().unwrap();
         state.observe_policy(policy_revision);
         state.advance()?;
@@ -335,7 +335,7 @@ impl HttpClientAccess {
         if self.state.capabilities & 2 == 0 {
             return Err(denied(SecurityFailureReason::UnsupportedScheme));
         }
-        let policy_revision = self.state.policy.security_revision();
+        let policy_revision = self.state.policy.qualification_revision();
         let mut state = self.state.credentials.lock().unwrap();
         state.observe_policy(policy_revision);
         state.advance()?;
@@ -344,7 +344,7 @@ impl HttpClientAccess {
     }
 }
 impl ConsumerAccessService for HttpClientAccess {
-    fn security_revision(&self) -> u64 {
+    fn qualification_revision(&self) -> u64 {
         self.state.snapshot().0
     }
     fn supports_security(&self, requirement: &SecurityRequirement) -> bool {
@@ -453,7 +453,7 @@ impl HttpGrant {
         target: &str,
     ) -> CoreResult<Vec<(&'static str, hyper::header::HeaderValue)>> {
         self.check(target)?;
-        let policy_revision = self.state.policy.security_revision();
+        let policy_revision = self.state.policy.qualification_revision();
         let mut credentials = self.state.credentials.lock().unwrap();
         credentials.observe_policy(policy_revision);
         if credentials.exhausted || credentials.revision != self.revision {
@@ -741,6 +741,10 @@ mod tests {
 
     struct Policy;
     impl ConsumerAccessService for Policy {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn authorize(
             &self,
             _: BindingRegistrationIdentity,

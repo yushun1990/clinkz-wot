@@ -249,6 +249,10 @@ impl Drop for Call {
 }
 
 impl binding::ClientBinding for Client {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
         matches!(
             operation,
@@ -799,6 +803,10 @@ impl HttpConsumerConfig {
 }
 struct HttpConsumerData;
 impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn supports_schema(&self, _: &clinkz_wot_core::data_schema::PreparedSchema) -> bool {
         true
     }
@@ -882,6 +890,10 @@ impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
 }
 struct HttpConsumerAccess(HttpConsumerConfig);
 impl clinkz_wot_core::consumer::ConsumerAccessService for HttpConsumerAccess {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize_instance(
         &self,
         _consumer: &clinkz_wot_core::consumer::ConsumerInstanceRef,

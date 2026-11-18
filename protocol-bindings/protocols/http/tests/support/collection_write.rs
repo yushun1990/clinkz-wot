@@ -360,6 +360,10 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
     use std::sync::atomic::AtomicUsize;
     struct CountAccess(Access, Arc<AtomicUsize>);
     impl ConsumerAccessService for CountAccess {
+        fn qualification_revision(&self) -> u64 {
+            self.0.qualification_revision()
+        }
+
         fn authorize(
             &self,
             b: BindingRegistrationIdentity,

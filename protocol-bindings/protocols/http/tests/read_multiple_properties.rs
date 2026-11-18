@@ -577,6 +577,10 @@ struct SelectedService {
     lose_on_result: bool,
 }
 impl ConsumerDataService for SelectedService {
+    fn qualification_revision(&self) -> u64 {
+        self.actual.qualification_revision()
+    }
+
     fn content_type(&self) -> &str {
         self.actual.content_type()
     }
@@ -836,6 +840,10 @@ fn escaping_expansion_refuses_with_funded_cleanup_before_native_start() {
 fn authorization_service_loss_fences_each_admission_boundary() {
     struct AccessChangesData(Arc<AtomicBool>, std::sync::atomic::AtomicUsize, usize);
     impl ConsumerAccessService for AccessChangesData {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn authorize(
             &self,
             _: BindingRegistrationIdentity,
@@ -1024,6 +1032,10 @@ struct ReviewAccess {
     validated: Arc<std::sync::atomic::AtomicUsize>,
 }
 impl ConsumerAccessService for ReviewAccess {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
         Ok(())
     }

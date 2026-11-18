@@ -62,7 +62,7 @@ impl Definition {
     }
     fn check_dependencies(&self) -> CoreResult<()> {
         self.input.definition.check_dependencies()?;
-        if self.input.access.security_revision() != self.input.security_revision
+        if self.input.access.qualification_revision() != self.input.security_revision
             || self.input.access.work() != self.access_work
             || self.input.access.retained_bytes() != self.input.access.backing_bytes()
         {
@@ -221,7 +221,7 @@ impl Definition {
         control: &CallControl,
         input: Option<Payload>,
         variables: &[(&str, &str)],
-        destination: &str,
+        destination: &OutboundDestination,
         deadline: Option<Deadline>,
         budget: &mut WorkBudget,
     ) -> Result<
@@ -284,7 +284,7 @@ impl Definition {
             ));
         }
         let request = request
-            .with_destination(destination.into())
+            .with_destination(destination.clone())
             .with_security(security)
             .with_responses(self.input.definition.content().response_shape());
         self.input.definition.start_finite(request).map_err(|e| {
@@ -321,7 +321,7 @@ pub struct ConsumerPropertyRead {
     authority: Rc<AssociationAuthority>,
     definition: Arc<Definition>,
     bank: Arc<HostResourceAccounts>,
-    destination: Option<alloc::boxed::Box<str>>,
+    destination: Option<OutboundDestination>,
     _funding: Vec<HostCapacityReservation>,
 }
 impl ConsumerPropertyRead {
@@ -349,7 +349,7 @@ impl ConsumerPropertyRead {
             &self.authority,
             self.definition.clone(),
             self.bank.clone(),
-            self.destination.as_deref(),
+            self.destination.as_ref(),
             calls,
             CallInput::Value(None),
             variables,
@@ -727,7 +727,7 @@ struct CallWork {
     refused_transfer: Option<CleanupTransferRequest>,
     selection: Option<collection::PropertySelection>,
     deadline: Deadline,
-    destination: alloc::boxed::Box<str>,
+    destination: OutboundDestination,
     variables: Vec<(alloc::boxed::Box<str>, alloc::boxed::Box<str>)>,
     input: Option<Payload>,
     _funding: Vec<HostCapacityReservation>,
@@ -1060,19 +1060,20 @@ impl ConsumerAssociation {
         definition.check_dependencies()?;
         let mapping = &definition.input.definition;
         let fixed = !mapping.content().uri_variables().is_dynamic();
-        let target_bytes = if fixed {
-            mapping.configuration().target_capacity() as u64
-        } else {
-            0
-        };
         let funding = reserve(
             &bank,
             &[(
                 K::EngineLiveBytesGlobalMax,
-                core::mem::size_of::<ConsumerPropertyRead>() as u64 + 128 + target_bytes,
+                core::mem::size_of::<ConsumerPropertyRead>() as u64 + 128,
             )],
         )?;
         let destination = if fixed {
+            let bytes =
+                OutboundDestination::backing_bytes(mapping.configuration().target_capacity())
+                    .ok_or_else(invalid)?;
+            let backing = bank
+                .reserve(K::EngineLiveBytesGlobalMax, bytes)
+                .ok_or_else(busy)?;
             let temporary = mapping.resources().transient().peak_bytes();
             if temporary
                 > bank
@@ -1098,7 +1099,7 @@ impl ConsumerAssociation {
             if destination.len() > mapping.configuration().target_capacity() {
                 return Err(invalid());
             }
-            Some(destination)
+            Some(OutboundDestination::with_funding(destination, backing))
         } else {
             None
         };
@@ -1120,7 +1121,7 @@ impl ConsumerAssociation {
         authority: &Rc<AssociationAuthority>,
         definition: Arc<Definition>,
         association_bank: Arc<HostResourceAccounts>,
-        bound_destination: Option<&str>,
+        bound_destination: Option<&OutboundDestination>,
         calls: &ConsumerCalls,
         input: CallInput<'_>,
         variables: &[(&str, &str)],
@@ -1222,9 +1223,13 @@ impl ConsumerAssociation {
                 .and_then(|n| n.checked_add(media.checked_mul(2)?))
                 .and_then(|n| n.checked_add(core::mem::size_of::<Call>() as u64 + 256))
                 .and_then(|n| {
-                    n.checked_add(
-                        (definition.configuration().target_capacity() as u64).checked_mul(2)?,
-                    )
+                    n.checked_add(if bound_destination.is_some() {
+                        0
+                    } else {
+                        OutboundDestination::backing_bytes(
+                            definition.configuration().target_capacity(),
+                        )?
+                    })
                 })
                 .and_then(|n| {
                     n.checked_add(if variables.is_empty() {
@@ -1286,16 +1291,18 @@ impl ConsumerAssociation {
             }
             definition.check_dependencies()?;
             let destination = match bound_destination {
-                Some(destination) => destination.into(),
+                Some(destination) => destination.clone(),
                 None => {
                     if !pay(budget, W::BindingPolls, 1) {
                         return Err(busy());
                     }
-                    definition.input.definition.execution().resolve_target(
-                        definition.input.definition.target(),
-                        variables,
-                        definition.input.definition.artifact(),
-                    )?
+                    OutboundDestination::from(
+                        definition.input.definition.execution().resolve_target(
+                            definition.input.definition.target(),
+                            variables,
+                            definition.input.definition.artifact(),
+                        )?,
+                    )
                 }
             };
             if destination.len() > definition.configuration().target_capacity() {

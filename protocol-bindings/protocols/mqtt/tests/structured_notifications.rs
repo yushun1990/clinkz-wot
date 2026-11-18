@@ -15,6 +15,10 @@ type Consumer = NotificationFixture<MqttNotificationConsumer>;
 #[derive(Default)]
 struct Access(AtomicBool);
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
         Ok(())
     }
@@ -140,6 +144,10 @@ fn raw_limits() -> RawNotificationLimits {
 fn actual_services_work_schema_backing_and_complete_final_advertisement_are_qualified() {
     struct TypeOnly;
     impl ConsumerDataService for TypeOnly {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn content_type(&self) -> &str {
             "application/json"
         }
@@ -686,6 +694,10 @@ fn independent_native_peer_cannot_deliver_invalid_nested_data_or_bypass_fresh_po
     use broker::*;
     struct ChangingPolicy(AtomicBool);
     impl ConsumerDataService for ChangingPolicy {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn content_type(&self) -> &str {
             "application/json"
         }

@@ -142,6 +142,10 @@ impl PollClientBinding for Client {
 }
 #[cfg(feature = "std")]
 impl binding::ClientBinding for Client {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
         operation == clinkz_wot_core::Operation::ReadProperty
     }

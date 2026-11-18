@@ -451,6 +451,10 @@ impl Fixture {
 }
 struct Access(Arc<AtomicBool>);
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
         if self.0.load(Ordering::Relaxed) {
             Err(denied())

@@ -21,6 +21,13 @@ fn repeated_bound_reads_need_no_lookup_qualification_or_fixed_resolution() {
             .unwrap();
         let result = settle(&mut call);
         assert_eq!(result.result().unwrap().data().unwrap().body, b"7");
+        let original = h.probe.resolved_destination.load(Ordering::Relaxed);
+        assert_eq!(result.destination().as_ptr() as usize, original);
+        assert_eq!(h.probe.native_destination.load(Ordering::Relaxed), original);
+        assert_eq!(
+            h.probe.permission_destination.load(Ordering::Relaxed),
+            original
+        );
         drop((result, call));
     }
     assert_eq!(h.probe.starts.load(Ordering::Relaxed), 3);
@@ -29,6 +36,47 @@ fn repeated_bound_reads_need_no_lookup_qualification_or_fixed_resolution() {
     assert_eq!(h.probe.qualifications.load(Ordering::Relaxed), 0);
     drop(read);
     dispose(h);
+}
+
+#[test]
+fn fixed_destination_keeps_its_original_bank_across_independent_call_capacity() {
+    let h = harness(1, None);
+    let read = bound(&h);
+    let original = h.bank.clone();
+    let before = original
+        .account(ResourceKind::EngineLiveBytesGlobalMax)
+        .used();
+    let work_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let calls = ConsumerCalls::try_new(work_bank.clone(), 1).unwrap();
+    let mut call = read
+        .read(&calls, Deadline::NONE, now(), &mut work())
+        .unwrap();
+    assert_eq!(
+        original
+            .account(ResourceKind::EngineLiveBytesGlobalMax)
+            .used(),
+        before
+    );
+    assert_eq!(
+        original
+            .account(ResourceKind::PendingHandlerCallsGlobalMax)
+            .used(),
+        1
+    );
+    let result = settle(&mut call);
+    let pointer = h.probe.resolved_destination.load(Ordering::Relaxed);
+    drop((read, h, call, calls));
+    assert_eq!(result.destination().as_ptr() as usize, pointer);
+    assert!(
+        original
+            .account(ResourceKind::EngineLiveBytesGlobalMax)
+            .used()
+            > 0
+    );
+    assert!(work_bank.account(ResourceKind::CleanupBytesMax).used() > 0);
+    drop(result);
+    clean(&original);
+    clean(&work_bank);
 }
 
 #[test]
@@ -54,6 +102,23 @@ fn binding_refuses_short_credit_funding_and_reentrant_removal_without_leaks() {
         )
         .unwrap();
     assert!(h.rt.0.bind_property_read("level", &mut work()).is_err());
+    assert_eq!(h.probe.resolutions.load(Ordering::Relaxed), 0);
+    drop(pressure);
+    assert_eq!(usage(&h.bank), baseline);
+    // The handle header fits, but the separately retained destination owner
+    // does not. Its failed reservation must refund the partial header debit.
+    let account = h.bank.account(ResourceKind::EngineLiveBytesGlobalMax);
+    let header = core::mem::size_of::<ConsumerPropertyRead>() as u64 + 128;
+    let pressure = h
+        .bank
+        .reserve(
+            ResourceKind::EngineLiveBytesGlobalMax,
+            account.limit() - account.used() - header,
+        )
+        .unwrap();
+    let pressured = usage(&h.bank);
+    assert!(h.rt.0.bind_property_read("level", &mut work()).is_err());
+    assert_eq!(usage(&h.bank), pressured);
     assert_eq!(h.probe.resolutions.load(Ordering::Relaxed), 0);
     drop(pressure);
     assert_eq!(usage(&h.bank), baseline);
@@ -168,6 +233,10 @@ fn configuration_replacement_cannot_retarget_an_old_bound_read() {
     ));
     let result = settle(&mut call);
     assert!(result.result().is_err());
+    assert_eq!(
+        result.destination().as_ptr() as usize,
+        original_probe.resolved_destination.load(Ordering::Relaxed)
+    );
     assert_eq!(original_probe.polls.load(Ordering::Relaxed), 0);
     let mut next_call = next
         .read(&other_calls, Deadline::NONE, now(), &mut work())
@@ -207,6 +276,10 @@ fn bound_handle_drop_is_passive_and_close_retains_original_late_result() {
     hook(Edge::Validate, move || association.0.begin_close());
     let result = settle(&mut call);
     assert!(result.result().is_err());
+    assert_eq!(
+        result.destination().as_ptr() as usize,
+        h.probe.resolved_destination.load(Ordering::Relaxed)
+    );
     assert!(
         matches!(result.native_outcome(), ConsumerNativeOutcome::Returned(Ok(output))
         if output.data().unwrap().body == b"7")

@@ -89,6 +89,10 @@ struct InstancePolicy {
     denied: Arc<AtomicBool>,
 }
 impl ConsumerAccessService for InstancePolicy {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
         Ok(())
     }

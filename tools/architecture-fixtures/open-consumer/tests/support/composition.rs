@@ -461,6 +461,10 @@ fn instance_and_operation_policy_and_callback_revocation_are_checked_before_effe
         revoke: std::sync::atomic::AtomicBool,
     }
     impl ConsumerAccessService for Scope {
+        fn qualification_revision(&self) -> u64 {
+            self.inner.qualification_revision()
+        }
+
         fn authorize(
             &self,
             id: BindingRegistrationIdentity,
@@ -549,6 +553,10 @@ fn input_and_result_codec_callbacks_recheck_both_authority_and_changed_policy() 
         denied: Option<Arc<Probe>>,
     }
     impl ConsumerDataService for RevokeData {
+        fn qualification_revision(&self) -> u64 {
+            self.inner.qualification_revision()
+        }
+
         fn content_type(&self) -> &str {
             self.inner.content_type()
         }
@@ -1131,6 +1139,10 @@ fn closing_finite_facet_keeps_same_consumers_notification_live_and_callback_revo
 
 struct ObserveAccess;
 impl ConsumerAccessService for ObserveAccess {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(
         &self,
         id: BindingRegistrationIdentity,

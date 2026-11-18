@@ -267,6 +267,10 @@ mod standard_schema {
         seen: Arc<AtomicUsize>,
     }
     impl binding::ClientBinding for SchemaClient {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
     fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool { operation == clinkz_wot_core::Operation::ReadProperty }
         fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
             COMPAT

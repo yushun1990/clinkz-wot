@@ -83,7 +83,7 @@ impl<B: ConsumerNotificationBinding> CapturedServices<B> {
         self.definition.check_dependencies()?;
         if self.access.work() != self.access_work
             || self.access.retained_bytes() != self.access.backing_bytes()
-            || self.access.security_revision() != self.security_revision
+            || self.access.qualification_revision() != self.security_revision
             || !self
                 .access
                 .supports_security(&clinkz_wot_core::security::SecurityRequirement::NOSEC)
@@ -257,7 +257,7 @@ impl<B: ConsumerNotificationBinding> ConsumerNotificationAssociation<B> {
         )>,
     > {
         let access_work = access.work();
-        let security_revision = access.security_revision();
+        let security_revision = access.qualification_revision();
         let build = (|| {
             definition.check_dependencies()?;
             if !consumer.is_current()
@@ -279,7 +279,7 @@ impl<B: ConsumerNotificationBinding> ConsumerNotificationAssociation<B> {
             definition.check_dependencies()?;
             if !consumer.is_current()
                 || access.work() != access_work
-                || access.security_revision() != security_revision
+                || access.qualification_revision() != security_revision
                 || access.retained_bytes() != access.backing_bytes()
             {
                 return Err(invalid());

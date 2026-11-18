@@ -84,6 +84,10 @@ struct Policy {
 }
 struct Data(Arc<Policy>, Arc<dyn ConsumerDataService>);
 impl ConsumerDataService for Data {
+    fn qualification_revision(&self) -> u64 {
+        self.1.qualification_revision()
+    }
+
     fn content_type(&self) -> &str {
         "application/json"
     }
@@ -107,6 +111,10 @@ impl ConsumerDataService for Data {
 }
 struct Access(Arc<Policy>, Arc<dyn ConsumerAccessService>);
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, b: BindingRegistrationIdentity, t: &str, o: Operation) -> CoreResult<()> {
         self.1.authorize(b, t, o)
     }
@@ -645,6 +653,10 @@ impl ConsumerActionPreparation for TracedPreparation {
 }
 struct TypesOnly(Arc<dyn ConsumerDataService>);
 impl ConsumerDataService for TypesOnly {
+    fn qualification_revision(&self) -> u64 {
+        self.0.qualification_revision()
+    }
+
     fn content_type(&self) -> &str {
         self.0.content_type()
     }

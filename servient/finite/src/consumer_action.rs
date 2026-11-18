@@ -54,7 +54,7 @@ impl CapturedAccess {
     fn check(&self) -> CoreResult<()> {
         if self.owner.work() != self.work
             || self.work == 0
-            || self.owner.security_revision() != self.revision
+            || self.owner.qualification_revision() != self.revision
             || self.owner.retained_bytes() != self.owner.backing_bytes()
             || !self
                 .owner
@@ -218,7 +218,7 @@ impl ConsumerActionAssociation {
         .map(|owner| {
             owner.map(|owner| CapturedAccess {
                 work: owner.work(),
-                revision: owner.security_revision(),
+                revision: owner.qualification_revision(),
                 owner,
             })
         });

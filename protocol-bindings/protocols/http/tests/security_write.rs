@@ -604,6 +604,10 @@ fn cancellation_before_network_or_after_effects_releases_original_resources() {
 thread_local! { static ACCESS_HOOK: RefCell<Option<Box<dyn FnOnce()>>> = const { RefCell::new(None) }; }
 struct CallbackPolicy;
 impl ConsumerAccessService for CallbackPolicy {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize_instance(
         &self,
         _: &ConsumerInstanceRef,

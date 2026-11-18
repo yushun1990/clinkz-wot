@@ -29,6 +29,10 @@ struct Access {
 }
 struct PreparationAccess;
 impl ConsumerAccessService for PreparationAccess {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
         Ok(())
     }
@@ -49,6 +53,10 @@ impl ConsumerAccessService for PreparationAccess {
     }
 }
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
         Ok(())
     }

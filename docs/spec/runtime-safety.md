@@ -62,6 +62,14 @@ handle retains only the selected funded mapping, original authority, instance
 bank and fixed destination; it has no call slots or revocation power. Drop is
 passive. Removal/replacement fences old handles without retargeting them; accepted
 calls/results retain their own original operands and backing after handle loss.
+The fixed destination's immutable bytes and reservation share one
+`OutboundDestination` owner across the handle, accepted work, native request and
+settlement. Engine execution clones ownership references without copying those
+bytes or recharging their backing to a work-capacity bank. The original instance
+bank's reservation lasts until the final destination reference is disposed,
+including a native request surviving the handle. Dynamic resolution creates one
+per-call destination under the call's existing lifetime funding; native request
+and settlement share it. Borrowed `&str` observations confer no ownership.
 Fresh dependency, permission, credential, time, capacity and actual result checks
 continue at the existing callback and handoff boundaries.
 

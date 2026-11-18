@@ -315,6 +315,10 @@ fn producer_validates_declared_nested_output_before_delivery() {
 
 struct TypeOnly(Arc<dyn ConsumerDataService>);
 impl ConsumerDataService for TypeOnly {
+    fn qualification_revision(&self) -> u64 {
+        self.0.qualification_revision()
+    }
+
     fn content_type(&self) -> &str {
         self.0.content_type()
     }

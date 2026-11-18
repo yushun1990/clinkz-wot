@@ -6,6 +6,10 @@ use support::*;
 
 struct Access;
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, op: Operation) -> CoreResult<()> {
         assert_eq!(op, Operation::ObserveAllProperties);
         Ok(())
@@ -224,6 +228,10 @@ fn root_selection_is_independent_of_leaf_mappings_and_observable_hint() {
 fn scalar_only_data_services_short_work_and_ambiguous_registrations_refuse_without_io() {
     struct ScalarOnly;
     impl ConsumerDataService for ScalarOnly {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn content_type(&self) -> &str {
             "application/json"
         }

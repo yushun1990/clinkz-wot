@@ -293,6 +293,10 @@ struct Policy {
     denied: Arc<AtomicBool>,
 }
 impl ConsumerAccessService for Policy {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(
         &self,
         _: BindingRegistrationIdentity,

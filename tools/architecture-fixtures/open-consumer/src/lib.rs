@@ -76,6 +76,10 @@ struct Client {
     probe: Arc<Probe>,
 }
 impl binding::ClientBinding for Client {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn supports_operation(&self, operation: Operation) -> bool {
         matches!(
             operation,
@@ -342,6 +346,10 @@ pub fn execution(id: u16, probe: Arc<Probe>) -> HostConsumerBindingRegistration 
 }
 struct Data(Arc<Probe>);
 impl ConsumerDataService for Data {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn supports_property_write_selection(&self, _: &collection::PropertyCollectionSchema) -> bool {
         true
     }
@@ -388,6 +396,10 @@ impl ConsumerDataService for Data {
 }
 struct Access(Arc<Probe>);
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize_instance(
         &self,
         _consumer: &ConsumerInstanceRef,

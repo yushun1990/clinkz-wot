@@ -6,6 +6,10 @@ use support::*;
 
 struct Access;
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, op: Operation) -> CoreResult<()> {
         assert_eq!(op, Operation::SubscribeAllEvents);
         Ok(())
@@ -294,6 +298,10 @@ fn root_retains_exact_per_event_schemas_independently_of_leaf_forms_and_source_t
 fn actual_services_ambiguity_short_credit_and_root_source_coverage_are_checked_without_io() {
     struct NoBoolean;
     impl ConsumerDataService for NoBoolean {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn content_type(&self) -> &str {
             "application/json"
         }

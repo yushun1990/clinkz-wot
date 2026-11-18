@@ -9,6 +9,10 @@ use support::*;
 
 struct PropertyAccess;
 impl ConsumerAccessService for PropertyAccess {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, op: Operation) -> CoreResult<()> {
         assert_eq!(op, Operation::ObserveProperty);
         Ok(())

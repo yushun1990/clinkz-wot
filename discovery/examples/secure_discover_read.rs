@@ -67,7 +67,7 @@ impl ConsumerAccessService for Permission {
             })
         }
     }
-    fn security_revision(&self) -> u64 {
+    fn qualification_revision(&self) -> u64 {
         self.revision.load(Ordering::Acquire)
     }
     fn authorize_instance(

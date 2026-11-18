@@ -823,6 +823,10 @@ fn missing_status_service_or_unsupported_description_never_falls_back_to_leaf_qu
     }
     struct Scalar(Arc<dyn ConsumerDataService>);
     impl ConsumerDataService for Scalar {
+        fn qualification_revision(&self) -> u64 {
+            self.0.qualification_revision()
+        }
+
         fn content_type(&self) -> &str {
             "application/json"
         }

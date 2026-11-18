@@ -716,6 +716,10 @@ mod reply_bus {
     }
     struct Client(ConsumerBindingConfiguration);
     impl binding::ClientBinding for Client {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+
         fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
             operation == clinkz_wot_core::Operation::ReadProperty
         }

@@ -597,6 +597,10 @@ impl Fixture {
 }
 struct Access(Arc<AtomicBool>);
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
         if self.0.load(Ordering::Relaxed) {
             Err(denied())
@@ -1101,6 +1105,10 @@ fn verify_collection_cleanup(operation: Operation) {
         supported: bool,
     }
     impl ConsumerDataService for DataProbe {
+        fn qualification_revision(&self) -> u64 {
+            self.actual.qualification_revision()
+        }
+
         fn content_type(&self) -> &str {
             self.actual.content_type()
         }

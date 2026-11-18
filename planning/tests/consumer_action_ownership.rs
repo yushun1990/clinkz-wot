@@ -28,6 +28,10 @@ fn unsupported() -> CoreError {
 }
 struct Data(Box<str>);
 impl ConsumerDataService for Data {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn content_type(&self) -> &str {
         &self.0
     }
@@ -46,6 +50,10 @@ impl ConsumerDataService for Data {
 }
 struct Access;
 impl ConsumerAccessService for Access {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
         Ok(())
     }

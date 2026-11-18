@@ -39,8 +39,9 @@ this task does not optimize it or prescribe a universal native artifact.
 Retain the result of qualification with an explicit invalidation contract,
 instead of repeating the qualification algorithm. Finite data/native capability
 answers are stable within a non-reused qualification revision. Availability and
-original resource declarations remain separate passive checks. Access already
-has a non-reused security revision, which also covers security support. Changed
+original resource declarations remain separate passive checks. Access requires
+an explicitly adopted qualification revision covering security support and live
+security dependencies. Changed
 support invalidates the old definition; binding cannot refresh it. A revision
 is dependency evidence, never permission or a cache key.
 
@@ -69,3 +70,47 @@ real HTTP and independent datagram calls must preserve actual Binding execution.
 Changed revisions/declarations, callback-time invalidation, denial, replacement,
 short work/funding, late/unread results and final release must still be checked.
 No milestone/gate status or general runtime/profile/reuse claim follows.
+
+## Required adoption and destination ownership reassessment
+
+At `5d7796e`, the data/native qualification methods default to zero, and the
+existing optional access `security_revision` is repurposed to cover security
+support. Source-compatible mutable providers can therefore withdraw support
+without invalidating a prepared definition. This weakens the old execution
+support checks. Three minimal providers in
+`http/tests/support/qualification_adoption.rs` demonstrate native admission after
+schema, operation or NoSec security support withdrawal. The failing reproduction
+is retained at `4d8d120`; migrated tests also exercise unread-result refusal.
+
+Require explicit `qualification_revision` methods on all three provider facets.
+Access's required method replaces its optional `security_revision`, so even an
+old credential-only override cannot silently adopt the additional support
+contract. Explicit zero is appropriate for fixed providers; wrappers must retain
+actual invalidation. Compiler-enforced adoption is preferable here to a fallback
+full support walk, silent trust or runtime rejection of previously supported
+providers. The necessary implementation migrations change no operation meaning.
+This remains a trusted provider contract, not enforcement against an implementer
+that deliberately reports a false revision.
+
+The fixed destination originally had three separate byte owners: the bound
+handle's Box, `start_selected`'s per-call Box, and `Definition::start`'s native
+request Box. Distinct lifetimes require owners, not byte copies:
+
+| Owner | Required retention |
+| --- | --- |
+| Bound Read | Selected fixed destination, with no call slot or permission grant |
+| Accepted finite work | Original destination for later authorization, cleanup and settlement after handle/configuration loss |
+| Native request | Stable owned operand independent of the construction borrow, including cancellation and rejection |
+| Settlement | Original destination after native retirement and association/capacity-root disposal |
+| Physical reservation | The original bank's charge until the final reference, independently of native retirement or logical revocation |
+
+One immutable `OutboundDestination` shares the bytes and original reservation
+through those lifetimes. A fixed operand is funded once at binding; per-call
+capacity pays its reference/control/request/result obligations, not another copy
+of fixed bytes. Dynamic resolution still creates one per-interaction operand and
+shares it between work and native request under original call funding. Reference
+count operations, call/capacity admission, fresh policy/credentials, actual
+payload validation and native serialization/I/O remain real costs. Bindings may
+retain their own parsed/encoded/security representations; this correction does
+not optimize or standardize them. Pointer-identity and final-reservation-release
+regressions establish ownership without benchmark measurements.

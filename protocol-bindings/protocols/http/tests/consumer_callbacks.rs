@@ -116,7 +116,7 @@ impl Drop for Access {
     }
 }
 impl ConsumerAccessService for Access {
-    fn security_revision(&self) -> u64 {
+    fn qualification_revision(&self) -> u64 {
         self.1.access_revision.load(Ordering::Acquire)
     }
     fn supports_security(&self, requirement: &security::SecurityRequirement) -> bool {
@@ -133,6 +133,9 @@ impl ConsumerAccessService for Access {
         t: &str,
         o: Operation,
     ) -> CoreResult<()> {
+        self.1
+            .permission_destination
+            .store(t.as_ptr() as usize, Ordering::Relaxed);
         fire(Edge::Access);
         self.0.authorize_instance(c, b, t, o)
     }
@@ -156,6 +159,9 @@ impl ConsumerAccessService for Access {
 }
 #[derive(Default)]
 struct Probe {
+    resolved_destination: AtomicUsize,
+    native_destination: AtomicUsize,
+    permission_destination: AtomicUsize,
     qualifications: AtomicUsize,
     resolutions: AtomicUsize,
     validations: AtomicUsize,
@@ -199,7 +205,11 @@ impl binding::ClientBinding for LocalClient {
         if !variables.is_empty() || target.len() > self.configuration.target_capacity() {
             return Err(invalid());
         }
-        Ok(target.into())
+        let destination: Box<str> = target.into();
+        self.probe
+            .resolved_destination
+            .store(destination.as_ptr() as usize, Ordering::Relaxed);
+        Ok(destination)
     }
     fn invoke(
         &self,
@@ -209,6 +219,11 @@ impl binding::ClientBinding for LocalClient {
         HostBindingCallBox<CoreResult<InteractionOutput>>,
         BindingInputRejection<OutboundRequest>,
     > {
+        if let Some(destination) = request.destination() {
+            self.probe
+                .native_destination
+                .store(destination.as_ptr() as usize, Ordering::Relaxed);
+        }
         self.probe.starts.fetch_add(1, Ordering::Relaxed);
         fire(Edge::Start);
         HostBindingCallBox::try_new(LocalCall {

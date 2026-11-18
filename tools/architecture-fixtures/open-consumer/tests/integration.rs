@@ -1156,6 +1156,10 @@ fn service_accounting_refuses_before_compilation_and_definition_refusal_keeps_ar
         bytes: u64,
     }
     impl ConsumerDataService for DeclaredBacking {
+        fn qualification_revision(&self) -> u64 {
+            self.inner.qualification_revision()
+        }
+
         fn content_type(&self) -> &str {
             self.inner.content_type()
         }

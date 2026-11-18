@@ -546,6 +546,10 @@ impl Drop for HostClient {
 }
 #[cfg(feature = "std")]
 impl binding::ClientBinding for HostClient {
+    fn qualification_revision(&self) -> u64 {
+        0
+    }
+
     fn supports_operation(&self, operation: clinkz_wot_core::Operation) -> bool {
         operation == clinkz_wot_core::Operation::ReadProperty
     }

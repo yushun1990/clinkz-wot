@@ -398,6 +398,12 @@ shared continuing-family capacity, constrained execution or broader reuse.
 The optional bound Property Read is a funded selected-operation handle over the
 same finite call owner. [Runtime Safety](../spec/runtime-safety.md) owns its
 authority, destination and release contract.
+The destination now shares immutable bytes and original physical funding with
+native requests and settlements. Core's `outbound_destination` regression checks
+final-owner funding; the callback fixture checks identical pointers through
+resolution, permission, native construction and retained results. Required SPI
+revision adoption is checked by compile-fail cases and the mutable-support
+counterexamples in `qualification_adoption.rs`.
 `cargo test --locked -p clinkz-wot-binding-http --test consumer_callbacks --test uri_variables`
 includes fixed/variable real HTTP, zero lookup credit, support/resolution
 counters, original revision/bound changes, callback revocation, binding refusal,

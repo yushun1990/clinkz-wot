@@ -541,13 +541,13 @@ fn api_key_rotation_cancellation_and_shared_meaning_keep_original_instance_fundi
             Some(&content),
         );
         assert!(Arc::ptr_eq(&content, &shared));
-        let revision_b = access_b.security_revision();
+        let revision_b = access_b.qualification_revision();
         let mut call_a = read_secure(&client_a);
         until(&mut server, &mut call_a, RawFiniteState::Delivering).await;
         access_a.replace_api_key(None).unwrap();
         let result_a = server.exchange(&mut call_a).await;
         assert!(result_a.result().is_err());
-        assert_eq!(access_b.security_revision(), revision_b);
+        assert_eq!(access_b.qualification_revision(), revision_b);
         drop(server.server().take_settlement());
         let mut call_b = read_secure(&client_b);
         let result_b = server.exchange(&mut call_b).await;

@@ -16,15 +16,24 @@ use core::sync::atomic::{AtomicBool, Ordering};
 /// Callbacks are trusted, pure and bounded by their captured declared policy.
 /// Metadata/support/availability queries are bounded allocation-free passive
 /// inspection; they acquire no credentials, source documents or native I/O.
+/// Implementations must explicitly adopt qualification invalidation:
+/// ```compile_fail,E0046
+/// use clinkz_wot_core::{consumer::*, data_schema::PreparedSchema, *};
+/// struct PreviousData;
+/// impl ConsumerDataService for PreviousData {
+///     fn content_type(&self) -> &str { "application/json" }
+///     fn policy(&self) -> ConsumerDataPolicy { unimplemented!() }
+///     fn validate(&self, _: &PreparedSchema, _: &Payload) -> CoreResult<()> { Ok(()) }
+/// }
+/// ```
 pub trait ConsumerDataService: Send + Sync {
     /// Revision of executable schema/media support. Support answers MUST stay
     /// stable within a revision. Advance before changing them; never reuse a
     /// revision while a qualified definition survives. Wrappers must preserve
-    /// invalidation by their actual dependencies. Zero declares fixed support.
+    /// invalidation by their actual dependencies. An explicit zero declares
+    /// fixed support; there is no default or implicit adoption of this contract.
     /// Availability and resource declarations are checked separately.
-    fn qualification_revision(&self) -> u64 {
-        0
-    }
+    fn qualification_revision(&self) -> u64;
     fn content_type(&self) -> &str;
     /// Complete executable media support, separately qualified for each used
     /// scalar request/response role, for every supported schema. Collection and
@@ -119,15 +128,29 @@ pub struct ConsumerDataPolicy {
 
 /// Actual destination/authorization policy, selected before compilation. NoSec
 /// means no protocol credential, not permission to contact every destination.
+/// Existing credential-only revisions do not implicitly adopt qualification:
+/// ```compile_fail
+/// use clinkz_wot_core::{consumer::*, *};
+/// struct PreviousAccess;
+/// impl ConsumerAccessService for PreviousAccess {
+///     fn security_revision(&self) -> u64 { 0 }
+///     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> { Ok(()) }
+///     fn authorize_instance(&self, _: &ConsumerInstanceRef, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> { Ok(()) }
+///     fn retained_bytes(&self) -> u64 { 0 }
+///     fn work(&self) -> u64 { 1 }
+/// }
+/// ```
 pub trait ConsumerAccessService: Send + Sync {
-    /// Passive live dependency revision. Changing it invalidates existing
-    /// bindings and unread results; rebinding qualifies the new service state.
-    /// Complete supports_security answers MUST stay stable within a revision.
+    /// Required passive revision of complete security support AND its live
+    /// dependencies. Changes invalidate bindings and unread results; rebinding
+    /// qualifies the new service state. Complete supports_security answers MUST
+    /// stay stable within a revision. An explicit zero declares fixed support
+    /// and dependencies, not a lasting permission grant. Authorization remains
+    /// fresh. This replaces the optional security_revision contract so existing
+    /// credential-only overrides cannot silently adopt support invalidation.
     /// Revisions must not be reused while original bindings/grants remain live.
     /// Wrappers must preserve invalidation by each actual service dependency.
-    fn security_revision(&self) -> u64 {
-        0
-    }
+    fn qualification_revision(&self) -> u64;
     /// Passive complete requirement qualification. Existing services explicitly
     /// support NoSec only. Scheme names alone do not qualify parameters.
     fn supports_security(&self, requirement: &crate::security::SecurityRequirement) -> bool {
@@ -1016,7 +1039,7 @@ impl ConsumerDefinition {
         )>,
     > {
         let access_work = access.work();
-        let security_revision = access.security_revision();
+        let security_revision = access.qualification_revision();
         let checked = (|| {
             if access_work == 0 {
                 return Err(invalid());
@@ -1032,7 +1055,7 @@ impl ConsumerDefinition {
                 access.authorize(self.binding(), self.target(), self.operation())?;
             }
             self.check_dependencies()?;
-            if access.security_revision() != security_revision
+            if access.qualification_revision() != security_revision
                 || access.work() != access_work
                 || access.retained_bytes() != access.backing_bytes()
             {

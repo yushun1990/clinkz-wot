@@ -380,6 +380,10 @@ fn captured_map_service_validates_the_whole_input_and_service_loss_fences_native
         lose_on_validate: bool,
     }
     impl ConsumerDataService for Data {
+        fn qualification_revision(&self) -> u64 {
+            self.actual.qualification_revision()
+        }
+
         fn content_type(&self) -> &str {
             self.actual.content_type()
         }
