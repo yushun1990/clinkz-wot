@@ -240,6 +240,14 @@ with independent network availability and peer caches. [Publication contract](..
 
 ## Admission, failure and independent cleanup
 
+A Producer can bind many notification start mappings to one native participant.
+Bound mapping storage by the records or bytes retained and fund the work to
+qualify and bind them. Reserve participant slots for the native participations
+the publication requires. An exhausted resource justifies a capacity refusal
+only when the publication or interaction needs more of that resource, including
+shared backing or work credit. Host route capture and publication binding
+currently compare the mapping count to the 32-participant ceiling. [Route capture](../servient/src/producer_composition.rs#L94) · [Publication binding](../servient/finite/src/publication.rs#L113)
+
 Before acceptance, the Binding owns an offered packet, stream or SDK slot,
 its bounded buffering and its native refusal path. It can wait for capacity,
 apply its documented loss/refusal policy, or lend a complete offer. An Engine
@@ -669,6 +677,14 @@ independently implemented Binding.
   provider uniqueness, is true under one effective configuration through local
   commit. A changing competitor cannot open ingress by supplying incompatible
   negative answers. A source-free install verifies the same deployment claim.
+- Fund 33 distinct, supported notification start mappings and supply one
+  native participant slot. A single participant serves all 33. Keep an
+  independent finite-call pool full and fund the notification's own work.
+  The composed Producer must publish the complete TD and deliver an Event
+  through the 33rd mapping to its intended peer. Reduce only mapping capacity
+  to 32 and publication must refuse for mapping capacity. Separately, fund all
+  33 mappings and require a second native participant. That refusal must
+  identify participant capacity. Both refusals leave ingress closed.
 - Through an independent mapping, a public Consumer sends the callback address,
   validates the Producer-chosen setup ID and uses it on its separate cancellation
   Form. A malformed setup reply preserves remote uncertainty and local cleanup.
