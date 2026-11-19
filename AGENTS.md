@@ -165,24 +165,23 @@ specification, or permission to overstate compliance.
    Keep protocol vocabulary interpretation within concrete Bindings rather
    than adding protocol cases to the Engine.
 
-2. **Prove architecture through real execution.** ADRs, design arguments,
-   synthetic fixtures, and passing CI can expose errors but cannot alone prove
-   a usable or reliable runtime. For claims about interoperability, resource
-   ownership, cancellation, cleanup, or protocol neutrality, seek focused
-   executable Rust integration with actual protocol I/O and representative
-   failure paths. Scope evidence to the claim: do not demand hardware,
-   end-to-end deployment, or broad conformance evidence for a change that makes
-   no such claim. Favor a working, testable vertical slice over additional
-   speculative proofs.
+2. **Test architectural assumptions through real execution.** Select architecture
+   work using the [architecture evolution principles](ARCHITECTURE_GOVERNANCE.md#architecture-evolution).
+   A working vertical slice can test a specific assumption about the selected
+   capability. For claims about interoperability, resource ownership,
+   cancellation, cleanup, or protocol neutrality, seek focused executable Rust
+   integration with actual protocol I/O and representative failure paths.
+   Scope the evidence to the claim. Hardware, end-to-end deployment and broad
+   conformance evidence matter when a claim depends on them.
 
 3. **Keep pre-v1 redesign freedom.** Existing APIs, plan abstractions,
    compiler types, accepted ADRs, and prior implementation effort have no
    presumption of design correctness. When evidence shows a boundary is wrong,
    prefer correcting, deleting, or replacing it over preserving it through
    compatibility layers. Evaluate simpler alternatives and real migration
-   costs; deliberately supersede affected accepted contracts and retain
-   relevant correctness/evidence obligations. This does not justify churn
-   without an identified defect, credible counterexample, or clear
+   costs. Deliberately supersede affected accepted contracts and retain
+   relevant correctness/evidence obligations. Ground redesign in an unmet
+   requirement, an identified defect, a credible counterexample, or a clear
    simplification benefit.
 
 ## Implementation Judgment

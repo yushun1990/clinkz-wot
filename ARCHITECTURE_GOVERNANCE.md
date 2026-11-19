@@ -58,6 +58,35 @@ AI requests Owner clarification only when a choice depends on project goals,
 product trade-offs, real-world constraints, unacceptable directions, or an
 irreversible external commitment that repository evidence cannot resolve.
 
+## Architecture evolution
+
+Start with the complete W3C WoT interaction model and the Engine's
+[enduring product goals](docs/architecture/00-system-goals-and-context.md).
+Consider both WoT roles across Properties, Actions, Events and described
+collections. Account for protocol independence, third-party Binding
+extensibility, resource ownership and lifecycle on Host and constrained
+deployments. A required interaction stays in scope for design even when
+none of the current Bindings can demonstrate it.
+
+Derive responsibilities, interfaces, invariants and dependencies from those
+requirements before mapping them to existing code. Evaluate Consumer,
+Producer, Planning, Core, Servient and Bindings as one system. Follow the
+handoffs to find missing or competing owners, contradictory lifecycle
+guarantees and unnecessary coupling. Compare credible alternatives, including
+moving a responsibility or removing an abstraction whose work belongs elsewhere.
+
+Choose implementation order by working back from a product capability to its
+architectural dependencies. Give a foundational boundary priority when a
+required interaction depends on it, even if every current fixture passes.
+Independent capabilities can proceed when their own prerequisites are ready.
+
+Use tests, fixtures and real protocol integrations to challenge assumptions,
+uncover constraints and validate implementations. Trace a failure to the
+requirement it affects before changing priorities. Correct a local deviation
+at its owner. If a real interaction or deployment constraint contradicts the
+design, revise the architecture through existing change control and reconsider
+the affected dependencies. Limit implementation claims to the scope exercised.
+
 ## Active Architecture Target
 
 The target in this tree is v6.0, the semantic Engine over Binding-owned native
@@ -203,8 +232,9 @@ Reopening must:
 
 ## Relationship to Planning and Execution
 
-This document defines how architecture remains coherent. It does not decide what
-work runs next.
+Architectural dependencies guide implementation order. The roadmap and work
+packages record durable ordering and admission. The active task session
+selects the concrete change.
 
 Use:
 
