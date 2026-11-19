@@ -76,8 +76,10 @@ loading a hand-maintained continuation file:
    that scope.
 4. Inspect current implementation and executable evidence before asserting
    status or selecting a source-changing action.
-5. Derive the next engineering objective from project goals, roadmap,
-   authority, implementation gaps, and evidence.
+5. Derive the next engineering objective from project goals, the roadmap and
+   accepted authority. Use gaps and failures to locate implementation work or
+   identify an assumption to revisit. Select architecture work using the
+   [architecture evolution principles](ARCHITECTURE_GOVERNANCE.md#architecture-evolution).
 
 Remote branch, pull-request, merge, and CI facts are read from Git/GitHub when
 they matter. They are not cached as repository governance state.
@@ -100,11 +102,11 @@ be made internally consistent.
 
 For architecture-sensitive decisions, the AI technical lead challenges the
 problem framing before selecting a remedy. Reconstruct relevant accepted
-authority, prior architecture reviews, and unresolved workspace investigations;
-distinguish shared semantics and ownership invariants from platform- or
-representation-specific mechanisms; and compare local repair with a narrower
-boundary correction. Rejecting a broad redesign does not by itself reject an
-applicable principle identified by that redesign. A non-authoritative review
+authority, prior architecture reviews, and unresolved workspace investigations.
+Distinguish shared semantics and ownership invariants from platform- or
+representation-specific mechanisms. Compare local repair with changing or
+removing the affected abstraction. A broader redesign may contain an applicable
+principle even if its overall design is rejected. A non-authoritative review
 is evidence to examine, not permission to bypass accepted contracts.
 
 Keep material alternatives and their disposition in the existing decision,
@@ -116,15 +118,13 @@ through the applicable architecture process. Questioning an accepted design is
 permitted and expected when new evidence justifies it; silently diverging from
 it is not.
 
-### Binding-Driven Architecture Feedback
+### Feedback from Binding Integrations
 
-Evaluate the Engine and SPI against the enduring protocol-independent W3C WoT
-goal, not merely whether the current implementation can pass review. Each
-substantive Binding integration is an opportunity to test the semantic model,
-public API, ownership boundaries, and the assumptions behind them. A limitation
-matters regardless of which PR introduced it. Existing code, prior ADRs,
-passing tests, and independent acceptance are evidence of scoped correctness,
-not proof that the underlying architecture is the right one.
+Use substantive Binding integrations to test how the Engine and SPI support
+the selected WoT capability. Challenge assumptions about the semantic model,
+public API and ownership boundaries. A limitation matters regardless of which
+PR introduced it. Weigh existing code, prior ADRs, passing tests and
+independent acceptance within the scope of the claims they support.
 
 Distinguish inherent protocol or remote-effect uncertainty, a deliberately
 unsupported combination, and a structural Engine/SPI limitation. In particular,
@@ -141,13 +141,12 @@ boundary without moving protocol-native mechanics into Core as a workaround.
 When a concrete, relevant Binding or WoT counterexample exposes a structural
 gap, evaluate correction or replacement of the Engine/SPI abstraction against
 local adaptation, and migrate any changed architecture through its existing
-authority process. Do not postpone a known design defect because its current
-Binding can work around it; do not build speculative universal abstractions for
-unproven cases. Choose capability work partly for the architectural assumptions
-it can challenge. Reviews assess architectural fitness separately from
-implementation correctness and must not treat a successful PR as settling a
-broader design question. This feedback loop adds no new gate, approval stage,
-or parallel governance artifact.
+authority process. A Binding workaround leaves the structural gap open. Judge
+its priority by the capabilities that depend on the boundary. Ground any
+generalization in a WoT or product requirement. Choose an integration that can
+falsify the assumption in question. In the existing review, assess how the
+boundary serves the intended system and which implementation claims the
+integration substantiates.
 
 ## Capability Allocation: Max, XHigh, and High
 
@@ -221,11 +220,12 @@ implementation conversation's summary or conclusion is correct.
 
 For architecture-sensitive acceptance, independently challenge the problem
 definition and selected direction, not only the correctness of the proposed
-change. Compare relevant earlier investigations and credible narrower
-alternatives. Evidence that a defect exists does not establish that its
-proposed remedy or abstraction boundary is the right one. State explicitly
-when a review accepts only a scoped finding or implementation and leaves a
-successor architecture decision unproven. This adds no universal review stage.
+change. Compare relevant earlier investigations and credible ways to assign
+the affected responsibilities. A reproduced defect establishes the behavior
+to explain. Evaluate the proposed remedy against the system's requirements.
+State explicitly when a review accepts only a scoped finding or implementation
+and leaves a successor architecture decision unproven. This adds no universal
+review stage.
 
 ## Gate Status Authority
 
