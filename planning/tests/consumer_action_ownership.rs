@@ -73,7 +73,10 @@ impl ConsumerAccessService for Access {
         0
     }
 }
-struct Compiler(Arc<AtomicUsize>);
+struct Compiler {
+    calls: Arc<AtomicUsize>,
+    temporary_bytes: u64,
+}
 impl ConsumerActionPreparation for Compiler {
     fn identity(&self) -> BindingRegistrationIdentity {
         identity()
@@ -81,7 +84,7 @@ impl ConsumerActionPreparation for Compiler {
     fn bounds(&self) -> ConsumerPreparationBounds {
         ConsumerPreparationBounds {
             work: 1,
-            temporary_bytes: 0,
+            temporary_bytes: self.temporary_bytes,
             retained_bytes: 0,
         }
     }
@@ -90,7 +93,7 @@ impl ConsumerActionPreparation for Compiler {
         input: ConsumerActionPreparationInput<'_>,
     ) -> CoreResult<Option<Box<dyn ConsumerActionMapping>>> {
         assert_eq!(input.operation, Operation::InvokeAction);
-        self.0.fetch_add(1, Ordering::Relaxed);
+        self.calls.fetch_add(1, Ordering::Relaxed);
         Ok(Some(Box::new(Mapping)))
     }
 }
@@ -132,6 +135,7 @@ fn registry(
     media: &str,
     bank: &Arc<HostResourceAccounts>,
     count: &Arc<AtomicUsize>,
+    temporary_bytes: u64,
 ) -> (ConsumerActionRegistry, RetainedConsumerServices) {
     let services = RetainedConsumerServices {
         data: ConsumerServiceOwner::retain_data(Arc::new(Data(media.into())), bank)
@@ -141,8 +145,11 @@ fn registry(
             .ok()
             .unwrap(),
     };
-    let registry = ConsumerActionRegistry::try_new(vec![ConsumerActionRegistration {
-        preparation: Box::new(Compiler(count.clone())),
+    let registry = ConsumerActionRegistry::try_new_fixed(vec![ConsumerActionRegistration {
+        preparation: Box::new(Compiler {
+            calls: count.clone(),
+            temporary_bytes,
+        }),
         services: services.clone(),
     }])
     .unwrap();
@@ -192,7 +199,7 @@ fn measure(media: &str) -> u64 {
     let service_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let definition_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let count = Arc::new(AtomicUsize::new(0));
-    let (registry, services) = registry(media, &service_bank, &count);
+    let (registry, services) = registry(media, &service_bank, &count, 0);
     let original_service_charge = live(&service_bank);
     let definition = prepare(
         &registry,
@@ -252,7 +259,7 @@ fn unfunded_media_copy_refuses_before_compilation_and_refunds_partial_preparatio
     let service_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let definition_bank = Arc::new(HostResourceAccounts::new(&limits));
     let count = Arc::new(AtomicUsize::new(0));
-    let (registry, services) = registry(&large, &service_bank, &count);
+    let (registry, services) = registry(&large, &service_bank, &count, 0);
     let original_service_charge = live(&service_bank);
     let result = prepare(&registry, &large, &limits, definition_bank.clone());
     assert!(matches!(result, Err(CoreError::LimitExceeded {
@@ -267,4 +274,39 @@ fn unfunded_media_copy_refuses_before_compilation_and_refunds_partial_preparatio
     clean(&definition_bank);
     drop((registry, services));
     clean(&service_bank);
+}
+
+#[test]
+fn native_scratch_shares_the_single_paid_allowance_with_td_and_selection() {
+    let mut limits = GatewayDefaultV1::LIMITS.clone();
+    let total = 1 << 20;
+    for kind in [
+        ResourceKind::AdmissionTemporaryBytesPerOperationMax,
+        ResourceKind::AdmissionTemporaryBytesGlobalMax,
+    ] {
+        assert!(limits.set(kind, Some(total)));
+    }
+    let bank = Arc::new(HostResourceAccounts::new(&limits));
+    let count = Arc::new(AtomicUsize::new(0));
+    let attempt = |native_bytes| {
+        let (registry, _) = registry("application/json", &bank, &count, native_bytes);
+        prepare(&registry, "application/json", &limits, bank.clone())
+    };
+    let available = match attempt(total) {
+        Err(CoreError::LimitExceeded {
+            resource: ResourceKind::AdmissionTemporaryBytesPerOperationMax,
+            limit,
+            requested: Some(bytes),
+            ..
+        }) if bytes == total => limit,
+        _ => panic!("native compilation must fit beside the admitted TD and Form index"),
+    };
+    assert!(available > 0 && available < total);
+    assert_eq!(count.load(Ordering::Relaxed), 0);
+    clean(&bank);
+    assert!(attempt(available + 1).is_err());
+    assert_eq!(count.load(Ordering::Relaxed), 0);
+    drop(attempt(available).unwrap());
+    assert_eq!(count.load(Ordering::Relaxed), 1);
+    clean(&bank);
 }

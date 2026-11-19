@@ -417,17 +417,40 @@ profile; they do not acquire general caller-supplied variable support here.
 
 ## Continuing Consumer Action preparation
 
-`ConsumerActionRegistry::prepare_action` admits one Action through the common
-Basic/semantic Form walk and captures source-free invoke/query/cancel mappings.
-One paid semantic loan serves all effective operations of a Form.
-It accepts absent or false synchronicity; explicit synchronous Actions retain the
-finite facet. Each described control operation must have a supported selected
-Form; absent controls stay unavailable. Form order is the default preference,
-selectors only narrow applicability and ambiguity within a Form refuses.
-Each operation can select a different actual registration, configuration and
-access service. The control mapping explicitly proves compatibility with the
-original invoke mapping before the association can execute. Registration equality
-is neither required nor sufficient. No generic continuation URL is constructed.
+`ConsumerActionRegistry::prepare_action` admits one named Action with absent or
+false synchronicity. Explicitly synchronous Actions use the finite facet. Each
+described Query or Cancel needs a Form, an eligible provider and a native mapping
+that accepts the original Invoke continuation. An absent control stays unavailable.
+An explicit Form or Binding selector for any operation must admit a complete
+combination, including that operation.
+
+TD 1.1 allows a Consumer to choose a usable Form. ClinkZ prefers the first viable
+combination in TD Form order, comparing Invoke first, then Query, then Cancel.
+Each operation may use a different registration. For the preferred Form
+combination, exactly one assignment of actual providers must qualify. A second
+compatible assignment reports `AmbiguousBindingOwner`. An unsupported pairing
+can give way to another provider or Form during preparation. Registration order
+has no preference and execution never replays an uncertain effect through an
+alternative. [TD 1.1 Forms](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#form)
+
+The Host registry indexes the selected Action's Form coordinates and resolved
+addresses during one Basic admission and URI walk. It borrows each Form's full
+semantics on first probe and uses that loan for its applicable operations. One
+caller work budget pays for the index, qualification, comparison and disposal
+of provisional mappings. The index, semantic loan and native compiler scratch
+share one temporary reservation. Insufficient work or capacity refuses before execution.
+Only the chosen mappings, services and their original funding enter the definition.
+
+The composition owner chooses how the search observes one effective configuration.
+Use `try_new_fixed` when the inputs are immutable or all changes are serialized
+with preparation. With `try_new_revisioned`, supply a bounded passive observation
+of the whole registration set. All writers that can change native support,
+continuation compatibility, data eligibility or preparation access must participate.
+The observation returns a non-reused stable revision or `None` while changing.
+A change between the opening observation and the decision, or an observation
+during an update, refuses with `StaleHandle`. This covers the rejected alternatives
+that establish preference and uniqueness. A later competitor affects future
+searches. Each instance independently authorizes use of its selected operations.
 
 The actual `ConsumerActionPreparation` compiles pure bounded native mappings,
 while Planning prepares the same bounded structured data meaning as finite

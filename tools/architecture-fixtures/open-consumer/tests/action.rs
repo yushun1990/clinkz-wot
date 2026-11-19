@@ -37,6 +37,7 @@ struct Native {
     operation: Operation,
     media: &'static str,
     probe: Arc<NativeProbe>,
+    ascii_continuation: bool,
 }
 struct Invoke(Native);
 struct Control(Native);
@@ -81,6 +82,7 @@ impl Native {
             answered: false,
             media: self.media,
             late: None,
+            ascii_continuation: self.ascii_continuation,
             probe: self.probe.clone(),
         }))
     }
@@ -110,9 +112,12 @@ macro_rules! mapping {
                 let origin = invoke
                     .native_definition()
                     .downcast_ref::<Invoke>()
-                    .ok_or_else(invalid)?;
-                if self.0.operation == Operation::InvokeAction || origin.0.peer != self.0.peer {
-                    return Err(invalid());
+                    .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+                if self.0.operation == Operation::InvokeAction
+                    || origin.0.peer != self.0.peer
+                    || origin.0.ascii_continuation
+                {
+                    return Err(CoreError::UnsupportedOperation(context()));
                 }
                 Ok(())
             }
@@ -139,6 +144,7 @@ struct Exchange {
     media: &'static str,
     late: Option<ConsumerActionReply>,
     probe: Arc<NativeProbe>,
+    ascii_continuation: bool,
 }
 impl ConsumerActionExchange for Exchange {
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<CoreResult<ConsumerActionReply>> {
@@ -156,6 +162,9 @@ impl ConsumerActionExchange for Exchange {
                 self.answered = true;
                 self.probe.replies.fetch_add(1, Ordering::Relaxed);
                 let reply = match &data[..n] {
+                    b"ACCEPT 7" if self.ascii_continuation => {
+                        Ok(ConsumerActionReply::Accepted(Box::new(*b"7")))
+                    }
                     b"ACCEPT 7" => Ok(ConsumerActionReply::Accepted(Box::new(Token(7)))),
                     b"WAIT" => Ok(ConsumerActionReply::Pending),
                     b"STOP REQUESTED" => Ok(ConsumerActionReply::CancelRequested),
@@ -212,6 +221,7 @@ struct Compiler {
     media: &'static str,
     peer: SocketAddr,
     probe: Arc<NativeProbe>,
+    ascii_continuation: bool,
 }
 impl ConsumerActionPreparation for Compiler {
     fn identity(&self) -> BindingRegistrationIdentity {
@@ -228,8 +238,12 @@ impl ConsumerActionPreparation for Compiler {
         &self,
         input: ConsumerActionPreparationInput<'_>,
     ) -> CoreResult<Option<Box<dyn ConsumerActionMapping>>> {
-        if !input.endpoint.starts_with("linkedudp://")
-            || self.invoke != (input.operation == Operation::InvokeAction)
+        let address = input
+            .endpoint
+            .strip_prefix("linkedudp://")
+            .and_then(|target| target.split_once('/'))
+            .and_then(|(peer, _)| peer.parse::<SocketAddr>().ok());
+        if address != Some(self.peer) || self.invoke != (input.operation == Operation::InvokeAction)
         {
             return Ok(None);
         }
@@ -239,6 +253,7 @@ impl ConsumerActionPreparation for Compiler {
             endpoint: input.endpoint.into(),
             operation: input.operation,
             media: self.media,
+            ascii_continuation: self.ascii_continuation,
             probe: self.probe.clone(),
         };
         Ok(Some(if self.invoke {
@@ -302,7 +317,7 @@ fn client(
     owner: &ConsumerInstance,
 ) -> (ConsumerActionAssociation, ConsumerActions) {
     *probe.bank.lock().unwrap() = Some(bank.clone());
-    let registry = ConsumerActionRegistry::try_new(
+    let registry = ConsumerActionRegistry::try_new_fixed(
         (0..2)
             .map(|i| {
                 let mut services = services(data.clone());
@@ -319,6 +334,7 @@ fn client(
                         invoke: i == 0,
                         media: "application/json",
                         peer,
+                        ascii_continuation: false,
                         probe: probe.clone(),
                     }),
                     services: RetainedConsumerServices {
@@ -700,7 +716,7 @@ fn representation_client(
     let access = ConsumerServiceOwner::retain_access(Arc::new(Access), bank)
         .ok()
         .unwrap();
-    let registry = ConsumerActionRegistry::try_new(
+    let registry = ConsumerActionRegistry::try_new_fixed(
         operations
             .into_iter()
             .enumerate()
@@ -720,6 +736,7 @@ fn representation_client(
                         "text/plain"
                     },
                     peer,
+                    ascii_continuation: false,
                     probe: native.clone(),
                 }),
                 services: RetainedConsumerServices {
@@ -971,3 +988,6 @@ fn late_query_text_keeps_original_codec_funding_and_failure_evidence() {
         peer.join().unwrap();
     }
 }
+
+#[path = "support/action_selection.rs"]
+mod selection;

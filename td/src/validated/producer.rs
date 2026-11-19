@@ -386,26 +386,101 @@ impl<'td> ValidatedProducerCursor<'td> {
         budget: &mut WorkBudget,
         lower: impl FnOnce(&crate::semantic::ResolvedSemanticDocument<'_>, &str, &mut WorkBudget) -> T,
     ) -> Result<Option<T>, ValidatedSemanticError> {
-        use crate::semantic::{ResolvedSemanticDocument as Document, SemanticError};
         if let Some(cause) = self.cause {
             return Err(ValidatedSemanticError::Admission(cause));
         }
-        if !matches!(self.stage, Stage::Form | Stage::Done) {
+        if !matches!(self.stage, Stage::Form | Stage::Done) || self.last.is_none() {
             return Err(ValidatedSemanticError::Resolution(
-                SemanticError::UnsupportedDependency,
+                crate::semantic::SemanticError::UnsupportedDependency,
             ));
         }
-        let key_bytes = match self.last {
-            Some((owner, _)) => match owner.scope() {
-                ValidatedProducerScope::Thing => 0,
-                ValidatedProducerScope::Property(name)
-                | ValidatedProducerScope::Action(name)
-                | ValidatedProducerScope::Event(name) => name.len() as u64,
-            },
-            _ => 0,
+        let href = self.alias.unwrap_or_else(|| self.scratch.text());
+        Self::lend_form(
+            &mut self.owner,
+            self.scratch.capacity,
+            self.last,
+            scope,
+            index,
+            budget,
+            |document, _, budget| lower(document, href, budget),
+        )
+    }
+
+    /// Deduct caller-funded scratch from the configured temporary ceilings before
+    /// acquisition. It can coexist with the remaining walk and loans. The caller
+    /// retains its own backing and the cursor keeps its original TD ledger.
+    #[cfg(feature = "std")]
+    pub fn split_temporary_allowance(&mut self, bytes: u64) -> Result<(), Cause> {
+        if let Some(cause) = self.cause {
+            return Err(cause);
+        }
+        let retained = walk_temporary_bytes(&self.owner, self.scratch.capacity)?;
+        let required = add(retained, bytes, Phase::Semantics)?;
+        let kinds = [
+            R::AdmissionTemporaryBytesPerOperationMax,
+            R::PeakLiveBytesPerAdmissionMax,
+        ];
+        for kind in kinds {
+            self.owner.policy.check(kind, required, Phase::Semantics)?;
+        }
+        for kind in kinds {
+            let i = CATALOG.iter().position(|&k| k == kind).expect("TD catalog");
+            self.owner.policy.values[i] -= bytes;
+        }
+        Ok(())
+    }
+
+    /// After the coordinate/URI walk, lend the selected Form from this same
+    /// immutable admitted input. The caller retains the resolved href from
+    /// that walk. The callback receives its remaining configured temporary
+    /// allowance and supplies its own backing. TD spends its original ledger
+    /// and work budget for each loan.
+    #[cfg(feature = "std")]
+    pub fn with_indexed_form_semantics<T: 'static>(
+        &mut self,
+        scope: ValidatedProducerScope<'_>,
+        index: u32,
+        budget: &mut WorkBudget,
+        lower: impl FnOnce(&crate::semantic::ResolvedSemanticDocument<'_>, u64, &mut WorkBudget) -> T,
+    ) -> Result<Option<T>, ValidatedSemanticError> {
+        if let Some(cause) = self.cause {
+            return Err(ValidatedSemanticError::Admission(cause));
+        }
+        if self.stage != Stage::Done {
+            return Err(ValidatedSemanticError::Resolution(
+                crate::semantic::SemanticError::UnsupportedDependency,
+            ));
+        }
+        Self::lend_form(
+            &mut self.owner,
+            self.scratch.capacity,
+            None,
+            scope,
+            index,
+            budget,
+            lower,
+        )
+    }
+
+    #[cfg(feature = "std")]
+    #[allow(clippy::too_many_arguments)]
+    fn lend_form<T: 'static>(
+        owner: &mut ValidatedThingCursor<'td>,
+        uri_capacity: usize,
+        current: Option<(Owner<'td>, u32)>,
+        scope: ValidatedProducerScope<'_>,
+        index: u32,
+        budget: &mut WorkBudget,
+        lower: impl FnOnce(&crate::semantic::ResolvedSemanticDocument<'_>, u64, &mut WorkBudget) -> T,
+    ) -> Result<Option<T>, ValidatedSemanticError> {
+        use crate::semantic::{ResolvedSemanticDocument as Document, SemanticError};
+        let key_bytes = match current.map_or(scope, |(owner, _)| owner.scope()) {
+            ValidatedProducerScope::Thing => 0,
+            ValidatedProducerScope::Property(name)
+            | ValidatedProducerScope::Action(name)
+            | ValidatedProducerScope::Event(name) => name.len() as u64,
         };
-        if !self
-            .owner
+        if !owner
             .pay(
                 budget,
                 &[
@@ -418,7 +493,7 @@ impl<'td> ValidatedProducerCursor<'td> {
         {
             return Ok(None);
         }
-        if !matches!(self.last, Some((owner, i)) if owner.scope() == scope && i == index) {
+        if current.is_some_and(|(owner, i)| i != index || owner.scope() != scope) {
             return Err(ValidatedSemanticError::Resolution(
                 SemanticError::UnsupportedDependency,
             ));
@@ -426,41 +501,33 @@ impl<'td> ValidatedProducerCursor<'td> {
         let bytes = Document::capacity_bytes();
         // Only backing owned by this TD continuation is temporary capacity.
         // Retained upstream accounts still participate in aggregate live checks.
-        let frames = Layout::array::<Frame<'td>>(self.owner.stack.frames.capacity)
-            .expect("checked on acquisition")
-            .size() as u64;
-        let temporary = add(frames, self.scratch.capacity as u64, Phase::Semantics)
-            .and_then(|n| add(n, bytes, Phase::Semantics))
-            .and_then(|n| add(n, producer_inline_bytes(), Phase::Semantics))
+        let temporary = walk_temporary_bytes(owner, uri_capacity)
+            .and_then(|retained| add(retained, bytes, Phase::Semantics))
             .map_err(ValidatedSemanticError::Admission)?;
         for kind in [
             R::AdmissionTemporaryBytesPerOperationMax,
             R::AdmissionTemporaryBytesGlobalMax,
             R::PeakLiveBytesPerAdmissionMax,
         ] {
-            self.owner
+            owner
                 .policy
                 .check(kind, temporary, Phase::Semantics)
                 .map_err(ValidatedSemanticError::Admission)?;
         }
-        let live = add(
-            self.owner.stack.ledger.live_bytes(),
-            bytes,
-            Phase::Semantics,
-        )
-        .and_then(|n| add(n, producer_inline_bytes(), Phase::Semantics))
-        .map_err(ValidatedSemanticError::Admission)?;
+        let live = add(owner.stack.ledger.live_bytes(), bytes, Phase::Semantics)
+            .and_then(|n| add(n, producer_inline_bytes(), Phase::Semantics))
+            .map_err(ValidatedSemanticError::Admission)?;
         for kind in [
             R::AdmissionPeakLiveBytesGlobalMax,
             R::EngineLiveBytesGlobalMax,
         ] {
-            self.owner
+            owner
                 .policy
                 .check(kind, live, Phase::Semantics)
                 .map_err(ValidatedSemanticError::Admission)?;
         }
         for layout in Document::allocation_layouts() {
-            self.owner
+            owner
                 .policy
                 .check(
                     R::LargestContiguousAllocationBytesMax,
@@ -469,38 +536,50 @@ impl<'td> ValidatedProducerCursor<'td> {
                 )
                 .map_err(ValidatedSemanticError::Admission)?;
         }
-        let reservation = self
-            .owner
+        let reservation = owner
             .stack
             .ledger
             .try_reserve_temporary(R::AdmissionTemporaryBytesPerOperationMax, bytes)
             .ok_or(ValidatedSemanticError::Resolution(
                 SemanticError::Allocation,
             ))?;
-        let owner = match scope {
+        let form_owner = match scope {
             ValidatedProducerScope::Thing => crate::semantic::FormOwner::Thing,
             ValidatedProducerScope::Property(n) => crate::semantic::FormOwner::Property(n),
             ValidatedProducerScope::Action(n) => crate::semantic::FormOwner::Action(n),
             ValidatedProducerScope::Event(n) => crate::semantic::FormOwner::Event(n),
         };
-        let (document, used) = Document::resolve_form_metered(self.owner.thing, owner, index);
+        let (document, used) = Document::resolve_form_metered(owner.thing, form_owner, index);
         let unused = crate::semantic::RESOLUTION_WORK - used;
         budget.set_remaining(
             W::DocumentNodes,
             budget.remaining(W::DocumentNodes) + unused,
         );
-        self.owner.remaining += unused;
+        owner.remaining += unused;
         let document = document.map_err(ValidatedSemanticError::Resolution)?;
-        let result = lower(
-            &document,
-            self.alias.unwrap_or_else(|| self.scratch.text()),
-            budget,
-        );
+        let headroom = owner
+            .policy
+            .get(R::AdmissionTemporaryBytesPerOperationMax)
+            .min(owner.policy.get(R::PeakLiveBytesPerAdmissionMax))
+            - temporary;
+        let result = lower(&document, headroom, budget);
         drop(document);
         drop(reservation);
         Ok(Some(result))
     }
 }
+#[cfg(feature = "std")]
+fn walk_temporary_bytes(
+    owner: &ValidatedThingCursor<'_>,
+    uri_capacity: usize,
+) -> Result<u64, Cause> {
+    let frames = Layout::array::<Frame<'_>>(owner.stack.frames.capacity)
+        .expect("checked on acquisition")
+        .size() as u64;
+    add(frames, uri_capacity as u64, Phase::Semantics)
+        .and_then(|bytes| add(bytes, producer_inline_bytes(), Phase::Semantics))
+}
+
 fn producer_inline_bytes() -> u64 {
     2 * mem::size_of::<ValidatedProducerCursor<'static>>() as u64
 }

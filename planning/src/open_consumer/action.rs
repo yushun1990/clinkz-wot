@@ -1,9 +1,10 @@
 //! Operation-scoped continuing Action selection. Each actual native mapping
 //! compiles independently; control compatibility is checked before invocation.
 use super::*;
+use ::core::mem::size_of;
 use alloc::boxed::Box;
 use clinkz_wot_core::consumer_action::*;
-use clinkz_wot_td::semantic::{FormOwner, ResolvedSemanticDocument};
+use clinkz_wot_td::semantic::{FormOwner, ResolvedSemanticDocument, SemanticError};
 
 pub struct ConsumerActionPreparationInput<'a> {
     pub document: &'a ResolvedSemanticDocument<'a>,
@@ -14,7 +15,8 @@ pub struct ConsumerActionPreparationInput<'a> {
     pub schemas: &'a ValueSchemas,
 }
 /// Startup-linked pure native compiler. Returned mappings own their original
-/// configuration/executor, not source loans. Bounds include rollback and Drop.
+/// configuration and executor. Bounds include rollback and Drop. The BindingId
+/// identifies the registration throughout its membership in this registry.
 pub trait ConsumerActionPreparation {
     fn identity(&self) -> BindingRegistrationIdentity;
     fn bounds(&self) -> ConsumerPreparationBounds;
@@ -37,9 +39,24 @@ pub struct ConsumerActionSelectors {
 }
 pub struct ConsumerActionRegistry {
     registrations: Vec<ConsumerActionRegistration>,
+    configuration_revision: Box<dyn Fn() -> Option<u64>>,
 }
 impl ConsumerActionRegistry {
-    pub fn try_new(registrations: Vec<ConsumerActionRegistration>) -> CoreResult<Self> {
+    /// All eligibility inputs stay fixed for the duration of each search.
+    /// Intended for immutable registrations/services or externally serialized use.
+    pub fn try_new_fixed(registrations: Vec<ConsumerActionRegistration>) -> CoreResult<Self> {
+        Self::try_new_revisioned(registrations, || Some(0))
+    }
+
+    /// The composition owner supplies a passive observation costing one provider probe. It covers
+    /// *all* inputs to eligibility, including negative compiler, data, access
+    /// policy and compatibility answers. Return a stable non-reused revision,
+    /// or None during a change. Every contributing writer must participate.
+    /// A constant is valid for immutable inputs or externally serialized search.
+    pub fn try_new_revisioned(
+        registrations: Vec<ConsumerActionRegistration>,
+        configuration_revision: impl Fn() -> Option<u64> + 'static,
+    ) -> CoreResult<Self> {
         if registrations.is_empty()
             || registrations.len() > MAX_REGISTRATIONS
             || registrations.iter().enumerate().any(|(i, r)| {
@@ -55,7 +72,10 @@ impl ConsumerActionRegistry {
         {
             return Err(invalid());
         }
-        Ok(Self { registrations })
+        Ok(Self {
+            registrations,
+            configuration_revision: Box::new(configuration_revision),
+        })
     }
 
     /// Admit one continuing Action, including every described query/cancel
@@ -63,6 +83,29 @@ impl ConsumerActionRegistry {
     /// guarantee. Unsupported described controls refuse the association.
     #[allow(clippy::too_many_arguments)]
     pub fn prepare_action(
+        &self,
+        thing: &Thing,
+        name: &str,
+        selectors: ConsumerActionSelectors,
+        limits: &ResourceLimits,
+        bank: Arc<HostResourceAccounts>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ConsumerActionDefinition> {
+        let observe = |budget: &mut WorkBudget| {
+            debit(budget, W::ProviderProbes, 1)?;
+            (self.configuration_revision)().ok_or_else(|| CoreError::StaleHandle(context()))
+        };
+        let revision = observe(budget)?;
+        let result = self.search(thing, name, selectors, limits, bank, budget);
+        // Also fence unsupported and ambiguous answers, including observations
+        // of losing providers. No competitor or revision enters the definition.
+        if observe(budget)? != revision {
+            return Err(CoreError::StaleHandle(context()));
+        }
+        result
+    }
+
+    fn search(
         &self,
         thing: &Thing,
         name: &str,
@@ -114,171 +157,117 @@ impl ConsumerActionRegistry {
             }
         };
         let mut cursor = validated.into_producer();
-        // Locals unwind in reverse order: executable owners precede refunds.
-        let mut funding = Vec::new();
-        let mut selected: [Option<ConsumerActionOperation>; 3] = [None, None, None];
+        let selectors = [selectors.invoke, selectors.query, selectors.cancel];
+        let mut forms = Vec::new();
         let mut described = [false; 3];
-        let mut schemas: Option<ValueSchemas> = None;
         loop {
-            if !pay(budget, W::PlanningItems, 1) {
-                return Err(busy());
-            }
+            debit(budget, W::PlanningItems, 1)?;
+            let before = credits(budget);
             match cursor
                 .step(budget, false)
                 .map_err(crate::producer_property_read::td_error)?
             {
                 ValidatedProducerStep::Done => break,
-                ValidatedProducerStep::Pending => {}
-                ValidatedProducerStep::Ready(ValidatedProducerEvent::Scope { .. }) => {
-                    cursor.acknowledge()
+                ValidatedProducerStep::Pending if before == credits(budget) => return Err(busy()),
+                ValidatedProducerStep::Pending => continue,
+                ValidatedProducerStep::Ready(ValidatedProducerEvent::Scope {
+                    scope: ValidatedProducerScope::Action(n),
+                    forms: Some(count),
+                }) if n == name => {
+                    // Each retained resolved href fits the existing 256-byte profile.
+                    let bytes = count
+                        .checked_mul(size_of::<ActionForm>() + 256)
+                        .ok_or_else(busy)?;
+                    cursor
+                        .split_temporary_allowance(bytes as u64)
+                        .map_err(crate::producer_property_read::td_error)?;
+                    check_limit(
+                        limits,
+                        K::LargestContiguousAllocationBytesMax,
+                        (count * size_of::<ActionForm>()) as u64,
+                    )?;
+                    forms.try_reserve_exact(count).map_err(|_| busy())?;
                 }
-                ValidatedProducerStep::Ready(ValidatedProducerEvent::Form(form)) => {
-                    if form.scope != ValidatedProducerScope::Action(name) {
-                        cursor.acknowledge();
-                        continue;
-                    }
-                    let index = form.index;
-                    let ops = form.effective_operations.to_vec();
-                    let coordinates = [
-                        (0, Operation::InvokeAction, selectors.invoke),
-                        (1, Operation::QueryAction, selectors.query),
-                        (2, Operation::CancelAction, selectors.cancel),
-                    ];
-                    for (i, operation, _) in coordinates {
-                        described[i] |= ops.contains(&operation);
-                    }
-                    if coordinates.iter().all(|(i, operation, selector)| {
-                        !ops.contains(operation)
-                            || selected[*i].is_some()
-                            || selector.form.is_some_and(|f| f != index)
-                    }) {
-                        cursor.acknowledge();
-                        continue;
-                    }
-                    // Resolve common meaning once even when a native Form
-                    // supports several Action operations through distinct mappings.
-                    let result = cursor.with_form_semantics(
-                        ValidatedProducerScope::Action(name),
-                        index,
+                ValidatedProducerStep::Ready(ValidatedProducerEvent::Form(form))
+                    if form.scope == ValidatedProducerScope::Action(name) =>
+                {
+                    debit(
                         budget,
-                        |doc, endpoint, budget| -> CoreResult<()> {
-                            // Data meaning belongs to the Action, not to each
-                            // invoke/control mapping. Build it once under its
-                            // own original funding, before native selection.
-                            let owner = FormOwner::Action(name);
-                            let input = doc.affordance_schema(owner, "input");
-                            let output = doc.affordance_schema(owner, "output");
-                            let mut preparation = crate::type_schema::SchemaPreparation::default();
-                            for schema in input.into_iter().chain(output) {
-                                preparation.include(schema)?;
-                            }
-                            check_limit(
-                                limits,
-                                K::CleanupWorkItemsPerStepMax,
-                                preparation.cleanup * 2 + 4,
-                            )?;
-                            if !pay(budget, W::PlanningItems, preparation.work) {
-                                return Err(busy());
-                            }
-                            if let Some(original) = &schemas {
-                                // Qualification against another Form's loan
-                                // must not construct another constraint tree.
-                                let agrees = |actual, expected: &Option<_>| match (actual, expected)
-                                {
-                                    (None, None) => Ok(true),
-                                    (Some(a), Some(e)) => crate::type_schema::matches_schema(a, e),
-                                    _ => Ok(false),
-                                };
-                                if !agrees(input, &original.input)?
-                                    || !agrees(output, &original.output)?
-                                {
-                                    return Err(unsupported());
-                                }
-                            } else {
-                                if !pay(budget, W::CleanupItems, preparation.cleanup) {
-                                    return Err(busy());
-                                }
-                                let lease = reserve(
-                                    &bank,
-                                    &[(
-                                        K::EngineLiveBytesGlobalMax,
-                                        preparation.backing_bytes as u64,
-                                    )],
-                                )?;
-                                let prepared = ValueSchemas {
-                                    input: input
-                                        .map(crate::type_schema::prepare_schema)
-                                        .transpose()?,
-                                    output: output
-                                        .map(crate::type_schema::prepare_schema)
-                                        .transpose()?,
-                                };
-                                funding.extend(lease);
-                                schemas = Some(prepared);
-                            }
-                            for (i, operation, selector) in coordinates {
-                                if !ops.contains(&operation)
-                                    || selected[i].is_some()
-                                    || selector.form.is_some_and(|f| f != index)
-                                {
-                                    continue;
-                                }
-                                match self.select(
-                                    doc,
-                                    name,
-                                    index,
-                                    operation,
-                                    endpoint,
-                                    schemas.as_ref().unwrap(),
-                                    selector,
-                                    limits,
-                                    &bank,
-                                    budget,
-                                ) {
-                                    Ok(Some((op, mut leases))) => {
-                                        funding.append(&mut leases);
-                                        selected[i] = Some(op);
-                                    }
-                                    Ok(None) | Err(CoreError::UnsupportedOperation(_)) => {}
-                                    Err(e) => return Err(e),
-                                }
-                            }
-                            Ok(())
-                        },
-                    );
-                    match result {
-                        Ok(Some(Ok(()) | Err(CoreError::UnsupportedOperation(_)))) => {}
-                        Ok(Some(Err(e))) => return Err(e),
-                        Ok(None) => return Err(busy()),
-                        Err(ValidatedSemanticError::Admission(e)) => {
-                            return Err(crate::producer_property_read::td_error(e));
-                        }
-                        Err(ValidatedSemanticError::Resolution(
-                            clinkz_wot_td::semantic::SemanticError::Allocation,
-                        )) => return Err(busy()),
-                        Err(ValidatedSemanticError::Resolution(_)) => {}
+                        W::PlanningItems,
+                        (form.effective_operations.len() as u64)
+                            .checked_mul(OPERATIONS.len() as u64)
+                            .ok_or_else(busy)?,
+                    )?;
+                    let roles = ::core::array::from_fn(|i| {
+                        let applicable = form.effective_operations.contains(&OPERATIONS[i]);
+                        described[i] |= applicable;
+                        applicable && selectors[i].form.is_none_or(|f| f == form.index)
+                    });
+                    if roles.contains(&true) && form.resolved_href.len() <= 256 {
+                        check_limit(
+                            limits,
+                            K::LargestContiguousAllocationBytesMax,
+                            form.resolved_href.len() as u64,
+                        )?;
+                        debit(budget, W::UriBytes, form.resolved_href.len() as u64)?;
+                        debit(budget, W::CleanupItems, 1)?;
+                        forms.push(ActionForm {
+                            index: form.index,
+                            endpoint: form.resolved_href.into(),
+                            roles,
+                            candidates: Default::default(),
+                            probed: false,
+                        });
                     }
-                    cursor.acknowledge();
                 }
+                ValidatedProducerStep::Ready(_) => {}
             }
+            cursor.acknowledge();
         }
-        if selected[0].is_none() || (0..3).any(|i| described[i] && selected[i].is_none()) {
+        if !described[0]
+            || (1..3).any(|i| {
+                !described[i] && (selectors[i].binding.is_some() || selectors[i].form.is_some())
+            })
+        {
             return Err(unsupported());
         }
-        ConsumerActionDefinition::try_new(ConsumerActionDefinitionInput {
+        let mut search = ActionSearch {
+            registry: self,
+            name,
+            selectors,
+            cursor,
+            forms,
+            described,
+            schemas: None,
+            funding: Vec::new(),
+            bank: &bank,
+            limits,
+        };
+        let selected = search.choose(budget)?;
+        // Construction checks each mapping and each control's compatibility with Invoke.
+        let controls = selected[1..].iter().flatten().count() as u64;
+        debit(budget, W::ProviderProbes, 1 + 2 * controls)?;
+        let mut take = |role: usize| {
+            let (form, provider) = selected[role]?;
+            let candidate = search.forms[form].candidates[role].swap_remove(provider);
+            search.funding.extend(candidate.funding);
+            Some(candidate.operation)
+        };
+        let input = ConsumerActionDefinitionInput {
             target: AffordanceTarget::Action(Arc::from(name)),
-            schemas: schemas.ok_or_else(unsupported)?,
-            invoke: selected[0].take().unwrap(),
-            query: selected[1].take(),
-            cancel: selected[2].take(),
-            bank,
-            funding,
-        })
-        .map_err(|e| e.error().error().clone())
+            invoke: take(0).unwrap(),
+            query: take(1),
+            cancel: take(2),
+            schemas: search.schemas.take().ok_or_else(unsupported)?,
+            bank: bank.clone(),
+            funding: ::core::mem::take(&mut search.funding),
+        };
+        drop(search);
+        ConsumerActionDefinition::try_new(input).map_err(|e| e.error().error().clone())
     }
 
-    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
-    fn select(
+    #[allow(clippy::too_many_arguments)]
+    fn qualify(
         &self,
         doc: &ResolvedSemanticDocument<'_>,
         name: &str,
@@ -290,14 +279,16 @@ impl ConsumerActionRegistry {
         limits: &ResourceLimits,
         bank: &Arc<HostResourceAccounts>,
         budget: &mut WorkBudget,
-    ) -> CoreResult<Option<(ConsumerActionOperation, Vec<HostCapacityReservation>)>> {
+        temporary_headroom: u64,
+        candidates: &mut Vec<Candidate>,
+    ) -> CoreResult<()> {
         if endpoint.len() > 256 || doc.action().is_none_or(|a| a.synchronous == Some(true)) {
-            return Ok(None);
+            return Ok(());
         }
         let owner = FormOwner::Action(name);
         let facts = doc.form(owner, form).ok_or_else(unsupported)?;
         let [security] = facts.effective_security else {
-            return Ok(None);
+            return Ok(());
         };
         let security = doc.security(security).map_err(|_| unsupported())?;
         if !matches!(security.details, SecurityDetails::NoSec)
@@ -310,10 +301,11 @@ impl ConsumerActionRegistry {
                 .response_content_type
                 .is_some_and(|m| m != facts.content_type)
         {
-            return Ok(None);
+            return Ok(());
         }
-        let mut chosen = None;
+
         for r in &self.registrations {
+            debit(budget, W::ProviderProbes, 1)?;
             let id = r.preparation.identity();
             if selector.binding.is_some_and(|b| b != id.binding_id()) {
                 continue;
@@ -362,26 +354,39 @@ impl ConsumerActionRegistry {
             let authorized = r.services.access.authorize(id, endpoint, operation);
             // A policy callback cannot change the compiler allowance before entry.
             current()?;
-            if authorized.is_err() {
-                continue;
+            match authorized {
+                Ok(()) => {}
+                Err(
+                    CoreError::Security {
+                        reason:
+                            SecurityFailureReason::AuthorizationDenied
+                            | SecurityFailureReason::MissingCredentials
+                            | SecurityFailureReason::InvalidCredentials
+                            | SecurityFailureReason::UnsupportedScheme,
+                        ..
+                    }
+                    // Access implementations can reject a destination in their
+                    // native validation or Binding policy vocabulary.
+                    | CoreError::Validation(_)
+                    | CoreError::Binding(_)
+                    | CoreError::UnsupportedOperation(_),
+                ) => continue,
+                Err(e) => return Err(e),
             }
             check_limit(limits, K::PlanCompileWorkUnitsPerStepMax, b.work)?;
-            check_limit(
-                limits,
-                K::AdmissionTemporaryBytesPerOperationMax,
-                b.temporary_bytes,
-            )?;
+            if b.temporary_bytes > temporary_headroom {
+                return Err(CoreError::LimitExceeded {
+                    resource: K::AdmissionTemporaryBytesPerOperationMax,
+                    limit: temporary_headroom,
+                    requested: Some(b.temporary_bytes),
+                    observed: None,
+                    context: context(),
+                });
+            }
             check_limit(limits, K::BindingArtifactBytesPerThingMax, b.retained_bytes)?;
             if !pay(budget, W::BindingPolls, b.work) || !pay(budget, W::CleanupItems, 1) {
                 return Err(busy());
             }
-            let _temporary = reserve(
-                bank,
-                &[
-                    (K::EngineLiveBytesGlobalMax, b.temporary_bytes),
-                    (K::AdmissionTemporaryBytesGlobalMax, b.temporary_bytes),
-                ],
-            )?;
             let bytes = b
                 .retained_bytes
                 .checked_add(1024 + endpoint.len() as u64 + name.len() as u64)
@@ -412,28 +417,276 @@ impl ConsumerActionRegistry {
                 Ok(None) | Err(CoreError::UnsupportedOperation(_)) => continue,
                 Err(e) => return Err(e),
             };
-            if mapping.identity() != id || mapping.operation() != operation {
-                return Err(invalid());
-            }
-            let bounds = mapping.bounds();
-            if chosen.is_some() {
-                return Err(ambiguous());
-            }
-            chosen = Some((
-                ConsumerActionOperation {
-                    mapping,
-                    endpoint: endpoint.into(),
-                    form,
-                    data: r.services.data.clone(),
-                    data_policy: policy,
-                    content_type: content_type.into(),
-                    identity: id,
-                    operation,
-                    bounds,
-                },
+            let selected = ConsumerActionOperation {
+                bounds: mapping.bounds(),
+                mapping,
+                endpoint: endpoint.into(),
+                form,
+                data: r.services.data.clone(),
+                data_policy: policy,
+                content_type: content_type.into(),
+                identity: id,
+                operation,
+            };
+            selected.check_native_dependencies()?;
+            candidates.push(Candidate {
+                operation: selected,
                 funding,
-            ));
+            });
         }
-        Ok(chosen)
+        Ok(())
     }
+}
+
+const OPERATIONS: [Operation; 3] = [
+    Operation::InvokeAction,
+    Operation::QueryAction,
+    Operation::CancelAction,
+];
+
+struct Candidate {
+    operation: ConsumerActionOperation,
+    funding: Vec<HostCapacityReservation>,
+}
+
+struct ActionForm {
+    index: u32,
+    endpoint: Box<str>,
+    roles: [bool; 3],
+    candidates: [Vec<Candidate>; 3],
+    probed: bool,
+}
+
+type Pick = (usize, usize); // Form position, provider position within that Form and role.
+type Family = [Option<Pick>; 3];
+
+struct ActionSearch<'a, 'td> {
+    registry: &'a ConsumerActionRegistry,
+    name: &'a str,
+    selectors: [ConsumerSelector; 3],
+    cursor: ValidatedProducerCursor<'td>,
+    forms: Vec<ActionForm>,
+    described: [bool; 3],
+    schemas: Option<ValueSchemas>,
+    funding: Vec<HostCapacityReservation>,
+    bank: &'a Arc<HostResourceAccounts>,
+    limits: &'a ResourceLimits,
+}
+
+impl ActionSearch<'_, '_> {
+    // For a given Invoke the two controls depend only on its continuation.
+    // Their first compatible Forms give its best tuple without materializing
+    // a Cartesian product. Compare Form coordinates, never provider order.
+    fn choose(&mut self, budget: &mut WorkBudget) -> CoreResult<Family> {
+        for form in 0..self.forms.len() {
+            debit(budget, W::PlanningItems, 1)?;
+            if !self.forms[form].roles[0] {
+                continue;
+            }
+            self.probe(form, budget)?;
+            let mut best: Option<(Family, bool)> = None;
+            'provider: for provider in 0..self.forms[form].candidates[0].len() {
+                debit(budget, W::PlanningItems, 1)?;
+                let invoke = (form, provider);
+                let mut family = [Some(invoke), None, None];
+                let mut multiple = false;
+                for role in [1, 2] {
+                    if self.described[role] {
+                        let Some((control, ambiguous)) =
+                            self.first_control(invoke, role, budget)?
+                        else {
+                            continue 'provider;
+                        };
+                        family[role] = Some(control);
+                        multiple |= ambiguous;
+                    }
+                }
+                let rank = |f: Family| f.map(|pick| pick.map(|(form, _)| form));
+                match &mut best {
+                    Some((earlier, ambiguous)) if rank(*earlier) <= rank(family) => {
+                        *ambiguous |= rank(*earlier) == rank(family);
+                    }
+                    _ => best = Some((family, multiple)),
+                }
+            }
+            if let Some((family, multiple)) = best {
+                return if multiple {
+                    Err(CoreError::Selection {
+                        reason: SelectionFailureReason::AmbiguousBindingOwner,
+                        context: context(),
+                    })
+                } else {
+                    Ok(family)
+                };
+            }
+        }
+        Err(unsupported())
+    }
+
+    fn first_control(
+        &mut self,
+        invoke: Pick,
+        role: usize,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Option<(Pick, bool)>> {
+        for form in 0..self.forms.len() {
+            debit(budget, W::PlanningItems, 1)?;
+            if !self.forms[form].roles[role] {
+                continue;
+            }
+            self.probe(form, budget)?;
+            let origin = &self.forms[invoke.0].candidates[0][invoke.1]
+                .operation
+                .mapping;
+            let mut chosen = None;
+            for (provider, control) in self.forms[form].candidates[role].iter().enumerate() {
+                debit(budget, W::ProviderProbes, 1)?;
+                match control
+                    .operation
+                    .mapping
+                    .supports_continuation(origin.as_ref())
+                {
+                    Ok(()) => {
+                        if let Some(first) = chosen {
+                            return Ok(Some((first, true)));
+                        }
+                        chosen = Some((form, provider));
+                    }
+                    Err(CoreError::UnsupportedOperation(_)) => {}
+                    Err(e) => return Err(e),
+                }
+            }
+            if let Some(pick) = chosen {
+                return Ok(Some((pick, false)));
+            }
+        }
+        Ok(None)
+    }
+
+    fn probe(&mut self, index: usize, budget: &mut WorkBudget) -> CoreResult<()> {
+        let form = &mut self.forms[index];
+        if form.probed {
+            return Ok(());
+        }
+        let count = self.registry.registrations.len();
+        let groups = form.roles.iter().filter(|role| **role).count();
+        let per_role = count * size_of::<Candidate>();
+        check_limit(
+            self.limits,
+            K::LargestContiguousAllocationBytesMax,
+            per_role as u64,
+        )?;
+        self.cursor
+            .split_temporary_allowance((groups * per_role) as u64)
+            .map_err(crate::producer_property_read::td_error)?;
+        for (role, candidates) in form.candidates.iter_mut().enumerate() {
+            if form.roles[role] {
+                candidates.try_reserve_exact(count).map_err(|_| busy())?;
+            }
+        }
+        let result = self.cursor.with_indexed_form_semantics(
+            ValidatedProducerScope::Action(self.name),
+            form.index,
+            budget,
+            |doc, temporary_headroom, budget| -> CoreResult<()> {
+                qualify_schemas(
+                    doc,
+                    self.name,
+                    &mut self.schemas,
+                    self.limits,
+                    self.bank,
+                    &mut self.funding,
+                    budget,
+                )?;
+                for (role, operation) in OPERATIONS.into_iter().enumerate() {
+                    if form.roles[role] {
+                        self.registry.qualify(
+                            doc,
+                            self.name,
+                            form.index,
+                            operation,
+                            &form.endpoint,
+                            self.schemas.as_ref().unwrap(),
+                            self.selectors[role],
+                            self.limits,
+                            self.bank,
+                            budget,
+                            temporary_headroom,
+                            &mut form.candidates[role],
+                        )?;
+                    }
+                }
+                Ok(())
+            },
+        );
+        match result {
+            Ok(Some(Ok(()) | Err(CoreError::UnsupportedOperation(_)))) => {}
+            Ok(Some(Err(e))) => return Err(e),
+            Err(ValidatedSemanticError::Admission(e)) => {
+                return Err(crate::producer_property_read::td_error(e));
+            }
+            Ok(None)
+            | Err(ValidatedSemanticError::Resolution(
+                SemanticError::Allocation | SemanticError::Limit,
+            )) => return Err(busy()),
+            Err(ValidatedSemanticError::Resolution(
+                SemanticError::UnsupportedContext | SemanticError::UnsupportedDependency,
+            )) => {}
+        }
+        form.probed = true;
+        Ok(())
+    }
+}
+
+fn debit(budget: &mut WorkBudget, class: W, count: u64) -> CoreResult<()> {
+    budget.consume(class, count).map_err(|_| busy())
+}
+
+fn qualify_schemas(
+    doc: &ResolvedSemanticDocument<'_>,
+    name: &str,
+    schemas: &mut Option<ValueSchemas>,
+    limits: &ResourceLimits,
+    bank: &Arc<HostResourceAccounts>,
+    funding: &mut Vec<HostCapacityReservation>,
+    budget: &mut WorkBudget,
+) -> CoreResult<()> {
+    let owner = FormOwner::Action(name);
+    let input = doc.affordance_schema(owner, "input");
+    let output = doc.affordance_schema(owner, "output");
+    let mut preparation = crate::type_schema::SchemaPreparation::default();
+    for schema in input.into_iter().chain(output) {
+        preparation.include(schema)?;
+    }
+    check_limit(
+        limits,
+        K::CleanupWorkItemsPerStepMax,
+        preparation.cleanup * 2 + 4,
+    )?;
+    debit(budget, W::PlanningItems, preparation.work)?;
+    if let Some(original) = schemas {
+        let agrees = |actual, expected: &Option<_>| match (actual, expected) {
+            (None, None) => Ok(true),
+            (Some(a), Some(e)) => crate::type_schema::matches_schema(a, e),
+            _ => Ok(false),
+        };
+        if !agrees(input, &original.input)? || !agrees(output, &original.output)? {
+            return Err(unsupported());
+        }
+    } else {
+        debit(budget, W::CleanupItems, preparation.cleanup)?;
+        let lease = reserve(
+            bank,
+            &[(
+                K::EngineLiveBytesGlobalMax,
+                preparation.backing_bytes as u64,
+            )],
+        )?;
+        *schemas = Some(ValueSchemas {
+            input: input.map(crate::type_schema::prepare_schema).transpose()?,
+            output: output.map(crate::type_schema::prepare_schema).transpose()?,
+        });
+        funding.extend(lease);
+    }
+    Ok(())
 }

@@ -18,6 +18,24 @@ continues to exercise acceptance, pending/query/completion, distinct selected
 control registrations/Forms, cancellation acknowledgement and uncertainty, both
 role replacements, late results, resource refusal and original cleanup ownership.
 
+For automatic selection, a live HTTP Producer returns the same completed value
+as a pinned compatible Query in either Query Form order. Pinning the incompatible
+listener refuses before Invoke, and that listener receives zero connections.
+The external Consumer fixture registers HTTP alongside independent datagram Invoke
+and control implementations. With either registration order, it sends the original
+HTTP token to the HTTP Query and receives `42`. Removing that Query selects the
+datagram pair, whose Query receives its own token and returns `24`. Two Invoke
+providers qualify on that datagram Form. Only one returns the numeric continuation
+accepted by its control.
+[HTTP integration](../../protocol-bindings/protocols/http/tests/action_consumer.rs) · [Mixed-Binding fixture](../../tools/architecture-fixtures/open-consumer/tests/support/action_selection.rs)
+
+A reload between two competing negative compiler observations refuses selection.
+Stable competing providers report ambiguity, and short probe credit refuses before
+native start. A pinned provider and a previously selected, still-authorized
+association each complete a real datagram Invoke after a competitor becomes eligible.
+Revoking another instance of that same definition starts no exchange. The fixture
+also releases all original accounts. [Configuration and instance fixture](../../tools/architecture-fixtures/open-consumer/tests/support/action_selection.rs)
+
 The F2 counterexample now imports one actual retained data owner and one access
 owner into three operation registrations and two independently constructed
 registries. Each prepares its own definition at a separate bank. Adding 60,000
@@ -34,8 +52,10 @@ versus 4,143-byte media strings. Each definition owns a distinct media snapshot;
 its definition-bank reservation grows by exactly the 4,127-byte difference, while
 the original service-bank charge stays fixed during preparation. A definition
 bank one byte short of the complete copy reservation refuses before native
-compilation and releases partial preparation funding. Final owner disposal returns
-both banks to zero. This is preparation-only evidence, not HTTP support for that
+compilation and releases partial preparation funding. A one-MiB temporary bank
+can fund the TD, Form index and native compiler together. The compiler enters
+at its exact remaining allowance and is refused one byte above it. Final owner
+disposal returns both banks to zero. This is preparation-only evidence, not HTTP support for that
 media parameter or a native execution claim.
 
 The F3 cases prepare once, then change data backing, temporary bytes, validation
@@ -176,7 +196,9 @@ security support beyond the existing NoSec mapping. Explicit access binding may
 qualify a new policy revision for new work; it cannot retarget admitted work.
 Managed mixed HTTP/MQTT execution was outside this increment; the subsequent
 [Host turn composition](consumer-execution-composition.md) supplies its scoped
-Consumer integration. Reusable qualified Producer exposures, constrained
-continuing Actions and production qualification remain open.
+Consumer integration. TD-driven Action preparation here runs on Host. The
+[caller-owned continuing Action contract](../spec/runtime-safety.md#caller-owned-continuing-action)
+covers its separate execution path. Reusable qualified Producer exposures and
+production qualification remain open.
 Review 10's retained probe is historical against its
 recorded API; the corrected live counterexamples are these executable fixtures.
