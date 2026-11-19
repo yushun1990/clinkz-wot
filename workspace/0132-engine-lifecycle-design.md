@@ -1,6 +1,6 @@
 # Target architecture for the ClinkZ-WoT Engine
 
-Status: DISCUSSING
+Status: DECIDED
 
 A Servient should be able to expose two Things on one listener, let a request to
 the first expire after its handler runs, and serve the next request to **either**
@@ -12,13 +12,14 @@ shared. Give Servient authority over logical instances and accepted work, give
 each Binding authority over its native resources, and let each admission
 borrow or own exactly the qualified mapping, capacity and reply rights it uses.
 
-This is a proposed refinement of ADR-0025. Review 11 audited production revision
+The selected target refines ADR-0025. Review 11 audited production revision
 `d6a4c86b`. The merge at `4ad10ece` added the report. The reviews of this
 proposal exposed two places where mutually incompatible provider answers can
 produce a false claim, at Producer publication and at Consumer selection. They
 also showed why the direction of a value matters within a single exchange.
-The convergence plan distinguishes the reported behavior from the execution
-evidence still needed. [Product goals](../docs/architecture/00-system-goals-and-context.md) · [ADR-0025](../docs/ADRs/0025-semantic-engine-and-binding-runtimes.org) · [Review 11](../docs/reviews/review-11-engine-architecture-audit.md) · [Review of `7930cf58`](https://github.com/yushun1990/clinkz-wot/pull/289#pullrequestreview-5970405546) · [Review of `4933c02e`](https://github.com/yushun1990/clinkz-wot/pull/289#pullrequestreview-5970774365)
+The independent review of `2f9c2dea` recommended adopting this direction.
+Each changed boundary still needs migration into its authoritative contract
+and execution evidence from its public entry points. [Product goals](../docs/architecture/00-system-goals-and-context.md) · [ADR-0025](../docs/ADRs/0025-semantic-engine-and-binding-runtimes.org) · [Review 11](../docs/reviews/review-11-engine-architecture-audit.md) · [Review of `7930cf58`](https://github.com/yushun1990/clinkz-wot/pull/289#pullrequestreview-5970405546) · [Review of `4933c02e`](https://github.com/yushun1990/clinkz-wot/pull/289#pullrequestreview-5970774365) · [Review of `2f9c2dea`](https://github.com/yushun1990/clinkz-wot/pull/289#pullrequestreview-5971040108)
 
 ## Start with the promised interaction
 
@@ -303,6 +304,14 @@ cancellation against the original target, operation family, subscriber and
 subscription. Refusing a foreign or unauthorized cancellation preserves that
 subscription and its siblings.
 
+A delayed cancellation still carries the ID issued for the original
+subscription, even when the same subscriber uses the route again. The Binding
+must correlate the request to that subscription or treat it as stale before
+Servient can act on a live record. HTTP Actions distinguish two uses of a
+local record number with a participation nonce. A callback Binding can use its
+protocol's own discriminator, or defer reuse of an indistinguishable reference
+until earlier controls can no longer arrive. [HTTP Action wire ID](../protocol-bindings/protocols/http/src/action_producer.rs#L369) · [HTTP Action lookup](../protocol-bindings/protocols/http/src/action_producer.rs#L773)
+
 The Consumer conversation funds its expected setup result or continuation and
 cleanup before native start. Today `poll_start` returns unit and Servient can
 mark the conversation active on that result. Where a reply carries described
@@ -482,16 +491,21 @@ selected metadata previously rejected before its provider ran.
   ambiguity. Change the revision between the two competitor probes. Automatic
   selection must report ambiguity, a changed configuration or exhausted
   credit, with zero Invokes at the peer. Explicitly selecting A must execute.
-  With A alone eligible, automatic selection must also execute.
+  In a separate run, create an association by automatic selection while A
+  alone qualifies, then make B eligible. A fresh automatic search must report
+  ambiguity and an explicit choice of A must succeed. With A and its permission
+  still valid, the original association must send its Invoke to A's peer.
+  [Post-selection comparison](https://github.com/yushun1990/clinkz-wot/pull/289#discussion_r4625669978)
 - In Review 11 F3, changing only Query Form order changed preparation. Keep
   one HTTP registration, default selectors and fixed Invoke and Cancel Forms.
   Supply two individually supported Query Forms with different network
   authorities. Only one accepts the Invoke continuation. In both orders run
   Invoke and Query. Observe the original continuation at the compatible peer
-  and zero requests at the incompatible peer. Explicitly pinning the
-  incompatible Query must refuse before Invoke.
-  Retain the split-Binding execution as independent evidence that different
-  registrations can share a continuation. [F3 comparison](../docs/reviews/review-11-engine-architecture-audit.md#f3-continuing-action-selection-can-throw-away-the-usable-control-family) · [Split-Binding control](../tools/architecture-fixtures/open-consumer/tests/action.rs#L403)
+  and zero connections at the incompatible peer. Use the result from pinning
+  the compatible Query as the successful control for both automatic runs.
+  Pinning the incompatible Query must refuse before Invoke. Retain the
+  split-Binding execution as independent evidence that different registrations
+  can share a continuation. [F3 comparison](../docs/reviews/review-11-engine-architecture-audit.md#f3-continuing-action-selection-can-throw-away-the-usable-control-family) · [Live HTTP comparison](https://github.com/yushun1990/clinkz-wot/pull/289#discussion_r4625669984) · [Split-Binding control](../tools/architecture-fixtures/open-consumer/tests/action.rs#L403)
 - Use the same object schema and bytes on a real HTTP Read and Write. Accept
   the extra field on receipt. On generation, reject it with zero native
   requests and zero handler entries. Keep a conforming Write and a wrongly
@@ -580,10 +594,16 @@ withhold activation and retire the original work without guessing an ID.
 
 For an accepted callback, deliver an occurrence, accept its conforming
 application reply and reject a malformed one before application handoff.
-Replace the Thing during delivery, then observe that old replies and
-cancellations stay with their original owner through release while a sibling
-continues. Exercise the same target and occurrence checks with the existing
-broker-backed root case. One root conversation receives a Boolean `ready`
+Hold the old wire cancellation in transit and replace the Thing while a
+delivery is outstanding. Establish a successor subscription for the **same
+subscriber on the same route** before delivering the old cancellation to the
+replacement. Then emit a fresh occurrence and observe it on the successor.
+Cancel it with its own returned ID and observe its release. Late replies stay
+with the original work through retirement while a sibling continues. An empty
+successor table would mask accidental reuse of the old ID. [Replacement control](https://github.com/yushun1990/clinkz-wot/pull/289#discussion_r4625669990)
+
+Exercise the same target and occurrence checks with the existing broker-backed
+root case. One root conversation receives a Boolean `ready`
 and an integer `alarm`, rejects an unknown or wrongly typed member and stops
 once at the root. These controls permit a leaf-only callback mapping and
 broker-owned fan-out. Exercise representative continuing work with caller-supplied
@@ -621,20 +641,22 @@ review. [Authority owners](../docs/spec/authority.toml) · [Engineering prioriti
 | Does managed lookup need duplicate or anonymous TD IDs? | Use fresh local authority for independent installs. Keep the TD-ID convenience API's unique-ID rule. A requirement to recover independently revocable instances from one registry when IDs coincide or are absent would justify an application key. |
 | Which costs justify more machinery? | Choose small bounded tables and explicit progress as initial controls. Measure mapping width, payload width, quiet leases per service, funded backlogs and latency on the normal driver. Adopt a ready-work index, single-pass object API or shared maintenance turn where it improves the intended workload while preserving attribution, duplicate validation, fair progress and bounded disposal. |
 | Which deployment constraints change delivery scope? | Use the roadmap's Host-first delivery and source-free constrained execution for foundational evidence. On-device TD admission needs a specific provisioning and memory budget. A production authenticated notification profile needs a named source and trust mechanism able to attest the original occurrence. Those product commitments determine which concrete profiles to qualify. |
-| Must v1 keep an identical exclusive route continuously available through failed replacement? | The proposed baseline permits a documented service gap when the old native lease must close first. The HTTP fixture explicitly closes it before starting the successor and preserves the old result. An Owner requirement for uninterrupted service would require a Binding with a qualified native handoff and separate failed-cutover evidence. [Same-route replacement](../protocol-bindings/protocols/http/tests/composed_thing/shared_listener.rs#L260) |
+| Must v1 keep an identical exclusive route continuously available through failed replacement? | The target permits a documented service gap when the old native lease must close first. The HTTP fixture explicitly closes it before starting the successor and preserves the old result. An Owner requirement for uninterrupted service would require a Binding with a qualified native handoff and separate failed-cutover evidence. [Same-route replacement](../protocol-bindings/protocols/http/tests/composed_thing/shared_listener.rs#L260) |
 
 ## Foundation completion and product development
 
-The foundation is complete when one reviewed revision supports these claims
-through the normal public entry points and an independently implemented
-Binding. They are completion criteria for the Engine design and its execution
-model. The proposal itself is at the design-review stage.
+Foundation completion requires one independently reviewed revision to
+demonstrate the following through the normal public entry points and an
+independently implemented Binding.
 
 - A Consumer chooses across unrelated implementations under one configuration
   effective at selection. A later viable Form executes. Missing support,
   ambiguity and exhausted credit have distinct outcomes. Alternating competitors
   cannot produce an automatic Invoke when every effective configuration is
-  ambiguous. An explicit, eligible provider succeeds through the same entry.
+  ambiguous. An explicit choice of an eligible provider succeeds through the
+  same entry. A competitor becoming eligible after a valid selection changes
+  the next search. The existing association can still execute with its
+  qualified provider and current permission.
 - A continuing Action executes Invoke and the compatible Query in both orders
   of the two Query Forms from F3. Only the compatible peer receives the Query.
   Pinning the incompatible Form refuses before Invoke. Independently implemented
@@ -652,6 +674,8 @@ model. The proposal itself is at the design-review stage.
   Form. A malformed setup reply preserves remote uncertainty and local cleanup.
   The Producer can deny setup, own acceptance beyond its reply, validate an
   occurrence's application reply and retire late work after replacement.
+  After a delayed cancellation reaches the reused route, the same subscriber
+  receives a fresh occurrence on the successor and can stop it with its own ID.
   A Thing-root subscription keeps one control lifetime across differently
   typed and authorized Events. A broker-managed source can publish with the
   broker owning subscriber state.

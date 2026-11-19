@@ -32,13 +32,12 @@ Topics are retained after migration as decision history.
 
 ** DISCUSSING
 
-- [[file:0132-engine-lifecycle-design.md][0132 Target Architecture for the ClinkZ-WoT Engine]]
 - [[file:0056-target-spi-external-validation-and-cross-protocol-neutrality.md][0056 Target SPI External Validation and Conditional Protocol Independence]]
 - [[file:0083-host-zenoh-consumer-query-ownership.md][0083 Host Zenoh Consumer Query Ownership — deferred optional binding]]
 
 ** DECIDED
 
-- None.
+- [[file:0132-engine-lifecycle-design.md][0132 Target Architecture for the ClinkZ-WoT Engine]]
 
 ** MIGRATED
 
