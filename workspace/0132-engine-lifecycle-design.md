@@ -13,12 +13,12 @@ each Binding authority over its native resources, and let each admission
 borrow or own exactly the qualified mapping, capacity and reply rights it uses.
 
 This is a proposed refinement of ADR-0025. Review 11 audited production revision
-`d6a4c86b`. The merge at `4ad10ece` added the report. The independent review
-of `7930cf58` also reproduced a publication assembled across incompatible
-configurations and an HTTP Consumer sending an undescribed object member. Its
-other three findings concern which subscription lifetimes, credential audiences
-and Binding choices the architecture must represent. The convergence plan gives
-the execution evidence still needed. [Product goals](../docs/architecture/00-system-goals-and-context.md) · [ADR-0025](../docs/ADRs/0025-semantic-engine-and-binding-runtimes.org) · [Review 11](../docs/reviews/review-11-engine-architecture-audit.md) · [Independent review of the proposal](https://github.com/yushun1990/clinkz-wot/pull/289#pullrequestreview-5970405546)
+`d6a4c86b`. The merge at `4ad10ece` added the report. The reviews of this
+proposal exposed two places where mutually incompatible provider answers can
+produce a false claim, at Producer publication and at Consumer selection. They
+also showed why the direction of a value matters within a single exchange.
+The convergence plan distinguishes the reported behavior from the execution
+evidence still needed. [Product goals](../docs/architecture/00-system-goals-and-context.md) · [ADR-0025](../docs/ADRs/0025-semantic-engine-and-binding-runtimes.org) · [Review 11](../docs/reviews/review-11-engine-architecture-audit.md) · [Review of `7930cf58`](https://github.com/yushun1990/clinkz-wot/pull/289#pullrequestreview-5970405546) · [Review of `4933c02e`](https://github.com/yushun1990/clinkz-wot/pull/289#pullrequestreview-5970774365)
 
 ## Start with the promised interaction
 
@@ -52,7 +52,7 @@ authority or last use must be representable even on a deployment using one slot.
 | Logical instance and Producer publication | Servient issues the local identity and incarnation. A Consumer association attaches selected mappings and local policy. A Producer additionally associates behaviors, a final TD and its exact native participations. Replacement fences the old incarnation before admitting work on the new one. A TD `id` is an optional discovery/lookup attribute. Several views may intentionally share a revocation domain. Independently installed instances have distinct authority even when the descriptions or addresses agree. [TD 1.1 Thing](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#thing) |
 | Execution capacity | Deployment supplies bounded pools or caller slots and may impose per-instance quotas as well. Active exchanges, invocations, conversations, queued items, retained results and draining work consume the capacities they actually need. Many idle instances can share a pool. A one-opportunity pool is a valid deployment choice. |
 | Native service and participation | The Binding owns listeners, sessions, SDK buffers, routes, filters and physical release. Each participation identifies one installed contribution. A Thing can need several. Many participations can share one service when configuration, trust and account isolation permit it. A service can yield several exclusive opportunities or serialize them. Its owner decides when the last lease drains, when to retain an idle pool and when to shut it down. |
-| Admitted work | Servient accepts work for an exact incarnation, mapping and recipient, retaining authority, operands, funding and the native opportunity. A continuing Action invocation and an application-accepted Producer subscription can each outlive the establishing exchange. Deliveries, optional application replies and emission attempts have their own lifetimes. The Binding owns native correlation and progress. A Producer can emit with zero Engine-owned subscribers. |
+| Admitted work | Servient accepts work for an exact incarnation, mapping and recipient, retaining authority, operands, funding and the native opportunity. A continuing Action or notification conversation can retain a control operand beyond setup. A Producer that accepts a subscription owns its delivery obligation. Deliveries, optional application replies and emission attempts have their own lifetimes. The Binding owns native correlation and progress. A Producer can emit with zero Engine-owned subscribers. |
 | Retained result | At settlement, transfer the value or late evidence, actual backing, original attribution, effect, delivery and first cause into funded retention. Release each active permit and native lane when its own work retires. An SDK-backed value can still pin its specific buffer. Charge that buffer until the view is released. Disposal returns only the result's original charges. |
 | Retirement | Each outstanding obligation keeps one owner able to advance local close or transfer the complete funded work to an owner that acknowledges it. Stop new admissions, settle or drain original work, and reclaim each last reference independently. An old result or delayed native close can outlive a new incarnation. Neither has authority over the successor. |
 
@@ -110,16 +110,23 @@ recipient's permission still have their own checks. An extra value supplies
 no authority to act on another Property. A Producer's choice to accept
 additional input is a separate application contract. [TD 1.1 data behavior](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#behavior-data) · [Paired HTTP Read/Write observation](https://github.com/yushun1990/clinkz-wot/pull/289#discussion_r4625168387)
 
-Use one schema for common constraints. Core identifies the operation's data
-role and generating party. The Consumer generates a Write value, an Action
-input, subscription/cancellation data and an Event application response. It
-receives the Thing's values, Action outputs and Event data. The actual data
-service qualifies the used role and direction. A direction argument or separate
-encode/validate entries suffice. Already encoded caller input owes the same
+Qualify each mapped request and reply against its TD data role, generating
+party and actual data service. The same schema can describe both directions.
+In the TD webhook example the Consumer supplies `callbackURL` at establishment
+and the Thing returns `subscriptionID`. Both are members of `subscription`.
+The URI-template variant uses that returned string on a separate cancellation
+Form. An optional `dataResponse` belongs to a later occurrence. TD defines
+`readOnly` and `writeOnly` as hints. This mapping gives them a concrete
+meaning, so it must reject a caller-supplied ID on setup and validate the
+peer's ID before use. Other mappings can have an empty setup reply.
+[TD DataSchema](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#dataschema) · [TD webhook example](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#webhook-example-serialization)
+
+Core can pass the shared schema, role and direction to the codec, or use
+separate encode and validate entries. The Binding qualifies which fields and
+representations it maps in each direction. Already encoded input owes the same
 outgoing check. The current HTTP callback takes only schema and payload, and
-the object evaluator visits only described names. An outgoing implementation
-must be able to examine the supplied members or construct the value from
-checked fields. Indexing or a streaming codec remains a cost decision. [Current Consumer contract](../docs/spec/interaction-core.md?plain=1#L159) · [Object evaluator](../core/src/data_schema.rs#L336) · [HTTP validator](../protocol-bindings/protocols/http/src/lib.rs#L819)
+the object evaluator visits only described names. Checking supplied members
+or generating bytes from checked fields suffices. [Current Consumer contract](../docs/spec/interaction-core.md?plain=1#L159) · [Object evaluator](../core/src/data_schema.rs#L336) · [HTTP validator](../protocol-bindings/protocols/http/src/lib.rs#L819)
 
 **Select a complete usable alternative.** A Consumer can narrow the operation,
 Form, Binding and permitted security choices. From one ordinary preparation
@@ -142,9 +149,27 @@ order. This is ClinkZ's default preference. A tuple must satisfy fixed operands,
 services and selection policy. Registration enumeration order conveys no preference.
 An explicit selection fails if its constraints admit no complete tuple.
 Ambiguous providers for the same selected mapping refuse. Exhausting the
-allowance reports a capacity limit.
-No side effects occur during this search. After admission, an uncertain Write,
-Invoke or control never triggers automatic replay through another Form. [Action selection](../planning/src/open_consumer/action.rs#L219) · [TD security definitions](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#securityscheme) · [Downstream split Invoke/control execution](../tools/architecture-fixtures/open-consumer/tests/action.rs#L403)
+allowance reports a capacity limit. No side effects occur during this search.
+After admission, an uncertain Write, Invoke or control never triggers automatic
+replay through another Form. [Action selection](../planning/src/open_consumer/action.rs#L219) · [TD security definitions](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#securityscheme) · [Downstream split Invoke/control execution](../tools/architecture-fixtures/open-consumer/tests/action.rs#L403)
+
+**Establish one effective configuration at the Consumer selection decision.**
+Preference, ambiguity and missing support each require answers that hold
+together. For a successful choice this includes why earlier Form combinations
+failed and why the selected mapping has only one qualifying provider.
+Freezing registration identities leaves their data, access and Binding
+configurations free to change. The review observed native Invoke through A
+even though A always had a competitor. [Selection contract](../docs/spec/planning.md?plain=1#L29) · [Provider walk](../planning/src/open_consumer/action.rs#L315) · [Alternating-competitor observation](https://github.com/yushun1990/clinkz-wot/pull/289#discussion_r4625454110)
+
+Prefer one immutable view of the candidate set and the inputs that determine
+eligibility for this search. A reloadable deployment can instead order the
+decision against all relevant writers. For example, probe under a non-reused
+revision and accept only if that complete revision is still effective at the
+decision. Discard provisional work on change, then retry within the original
+allowance or refuse before native start. An explicit selector can narrow the
+set that needs checking. After selection, release the competitors. Later use
+needs the chosen dependencies and fresh instance permission. A competitor
+changing after a valid decision affects future searches.
 
 **Make qualified use valid through the first effect.** A mapping retains the
 actual service and the configuration under which qualification succeeded. Use
@@ -266,32 +291,50 @@ admits emissions. Its Consumer counterpart can send a reciprocal response.
 Neither entry gives the Producer application authority over establishment or
 cancellation. [TD Event roles](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#eventaffordance) · [Webhook example](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#webhook-example-serialization) · [Producer notification facet](../core/src/publication.rs#L86)
 
-For a mapping offering application-controlled subscriptions, the Binding
-offers the original establishment or cancellation input and any mapped reply
-opportunity. Servient checks the current publication, Event, subscriber
-authority, declared control data, filter and actual callback destination
-before the application accepts. Refusal returns the opportunity for native
-refusal and grants no delivery rights. Reserve capacity for the subscription
-and its cleanup before acceptance. It belongs to the original incarnation
-and survives the setup reply. The Binding maps any wire identifier back to
-it and owns native routing, correlation and distribution. Servient authorizes a
-cancellation against the original subscriber and subscription, and authorizes
-later callback delivery against the actual destination. A foreign ID or denied
-cancellation leaves that subscription and its siblings intact. An undelivered
-setup reply can coexist with an accepted subscription that still needs cleanup.
+For application-controlled establishment, the Binding offers the original
+request and reply opportunity. Servient checks the publication incarnation,
+Form target, operation kind, subscriber authority and declared control data,
+including any filter and actual callback destination. Reserve capacity for the
+subscription, its mapped reply and cleanup before the application accepts.
+Refusal returns the native opportunity. Acceptance binds the subscription to
+that incarnation and subscriber, even if the setup reply is lost. The Binding
+owns native routing and correlation. Servient authorizes a separately mapped
+cancellation against the original target, operation family, subscriber and
+subscription. Refusing a foreign or unauthorized cancellation preserves that
+subscription and its siblings.
 
-Each callback delivery retains its own work. Where the mapping offers an
-application reply, bind it to the original occurrence and validate the actual
-`dataResponse` role before handing it to the Producer application. A transport
-acknowledgement proves only its mapped transport outcome. On stop, revocation
-or replacement, fence new deliveries and drain late callbacks, replies and
-results with their original funding. Reuse ordinary admission and retirement
-for the control exchanges and retain only the extra subscription state that
-survives them. Publishing this mapping requires actual establishment,
-cancellation and reply support wherever the final TD promises them.
-Broker-owned MQTT needs no local subscriber table. A production
-HTTP webhook service is one possible implementation of the conditional
-contract. [MQTT control-data scope](../protocol-bindings/protocols/mqtt/src/preparation.rs#L166) · [Consumer reply fixture](../tools/architecture-fixtures/open-consumer/tests/notification.rs#L428)
+The Consumer conversation funds its expected setup result or continuation and
+cleanup before native start. Today `poll_start` returns unit and Servient can
+mark the conversation active on that result. Where a reply carries described
+data, validate and bind it to the original conversation before activation or
+delivery. The conversation can expose the checked result and retain the
+operand needed by a later Form after the caller reads it. A purely native
+correlation token can stay private to its Binding. If the request may have
+reached the Thing but the required reply is missing or malformed, fence
+delivery, retain evidence of possible
+remote establishment and keep the original cleanup owner. Attempt mapped
+cancellation only with valid operands and current authority. Local retirement
+can finish with the remote outcome unknown. [Native start](../core/src/notification.rs#L337) · [Activation](../servient/finite/src/notification.rs#L1146)
+
+Use Core's existing target and notification kind for the conversation. A leaf
+observation targets its Property and delivers its value. A leaf Event targets
+that Event. A Thing-root `subscribeallevents` establishes one conversation
+with one logical root cancellation. Only delivery identifies the particular
+Event. Check it against the original Thing's qualified members, the current
+permission for that occurrence, the actual destination and that Event's own
+`data` and optional `dataResponse` roles. Root Property observation retains
+its named Property collection semantics. A Binding can declare support for
+leaf Events alone. [TD Form operations](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#form) · [Conversation and occurrence targets](../core/src/notification.rs#L64) · [Producer sources](../servient/finite/src/notification_publication.rs#L6)
+
+Each callback delivery retains its own work. Validate an application reply
+against its original occurrence before Producer handoff. A transport
+acknowledgement supplies only its mapped transport outcome. On stop,
+revocation or replacement, fence new deliveries and drain late callbacks,
+replies and results with their original funding. Ordinary admission and
+retirement suffice for the control exchanges. Only state used after setup
+needs conversation storage. Publication qualifies every promised control and
+reply. Broker-owned MQTT can keep all remote subscriber state at the broker.
+[MQTT control-data scope](../protocol-bindings/protocols/mqtt/src/preparation.rs#L166) · [Consumer reply fixture](../tools/architecture-fixtures/open-consumer/tests/notification.rs#L428)
 
 ## Compilation reuse and the cost of scale
 
@@ -413,14 +456,14 @@ device timing, RAM and transport behavior need deployment evidence. [Caller-owne
 
 ## Convergence by dependency
 
-The earlier plan would have migrated authority across domains up front, chosen
-Host installation and work interfaces, and left caller-owned storage until the
-end. Begin with two independent questions. Can the selected services execute
-the described roles with the right authority? Can a caller-owned Producer admit
-and retire native work independently? Their results meet at whole-publication
-commit. A Producer-controlled subscription then uses both contracts and adds a
-logical lifetime between control exchanges. Action migration can proceed on
-its own dependencies. [Earlier proposal](https://github.com/yushun1990/clinkz-wot/blob/3076f23f7e0c28bd81d0d8cf8bcd5cf6c03e67bd/workspace/0132-engine-lifecycle-design.md) · [Architecture change control](../ARCHITECTURE_GOVERNANCE.md#architecture-change-control)
+Consumer selection and caller-owned Producer admission can proceed
+independently. Each role needs coherent qualification for its own decision.
+Producer publication joins whole-TD coverage with closed native installation
+and funded rollback. It can proceed while Consumer tuple selection is being
+corrected. A callback subscription joins the public Consumer's validated
+setup result to the Producer's admitted work and the later cancellation.
+It depends on both paths. Continuing Action retention and compilation reuse
+can proceed as soon as their own inputs are known. [Earlier proposal](https://github.com/yushun1990/clinkz-wot/blob/3076f23f7e0c28bd81d0d8cf8bcd5cf6c03e67bd/workspace/0132-engine-lifecycle-design.md) · [Architecture change control](../ARCHITECTURE_GOVERNANCE.md#architecture-change-control)
 
 ### Selection and qualified use
 
@@ -431,10 +474,24 @@ must execute the later viable Form in either registration order. Make both
 providers support the same selected Form and observe ambiguity. Pin a Form
 whose required service is missing and observe refusal. Exhaust search credit
 before uniqueness is known and observe a capacity refusal with no native start.
-Keep the split-Binding Invoke/control case as a separate witness to compatible
-Action selection. A downstream continuing profile must also be able to qualify
-and enforce selected metadata previously rejected before its provider ran.
+A downstream continuing profile must also be able to qualify and enforce
+selected metadata previously rejected before its provider ran.
 
+- For one Invoke Form let A always qualify. B qualifies in odd revisions and C
+  in even revisions of the same configuration. Each fixed revision must report
+  ambiguity. Change the revision between the two competitor probes. Automatic
+  selection must report ambiguity, a changed configuration or exhausted
+  credit, with zero Invokes at the peer. Explicitly selecting A must execute.
+  With A alone eligible, automatic selection must also execute.
+- In Review 11 F3, changing only Query Form order changed preparation. Keep
+  one HTTP registration, default selectors and fixed Invoke and Cancel Forms.
+  Supply two individually supported Query Forms with different network
+  authorities. Only one accepts the Invoke continuation. In both orders run
+  Invoke and Query. Observe the original continuation at the compatible peer
+  and zero requests at the incompatible peer. Explicitly pinning the
+  incompatible Query must refuse before Invoke.
+  Retain the split-Binding execution as independent evidence that different
+  registrations can share a continuation. [F3 comparison](../docs/reviews/review-11-engine-architecture-audit.md#f3-continuing-action-selection-can-throw-away-the-usable-control-family) · [Split-Binding control](../tools/architecture-fixtures/open-consumer/tests/action.rs#L403)
 - Use the same object schema and bytes on a real HTTP Read and Write. Accept
   the extra field on receipt. On generation, reject it with zero native
   requests and zero handler entries. Keep a conforming Write and a wrongly
@@ -474,9 +531,10 @@ path has its own prepayment and handoff today. [Finite Consumer close](../core/s
 
 ### Join at instance binding and publication
 
-Once both handoffs work, exercise normal finite Consumer and composed Producer
-execution from a valid TD through HTTP I/O. Change the final endpoint, cause a
-native collision and replace an instance while old work drains. For publication
+Use closed installation and full final-TD qualification to exercise composed
+Producer publication. When the finite Consumer selection is ready, join both
+normal paths over HTTP. Change the final endpoint, cause a native collision
+and replace an instance while old work drains. For publication
 consistency use two Forms and a competitor that overlaps A in configuration 1
 and B in configuration 2. Each fixed configuration must refuse ambiguity.
 Switch between probes so each Form appears unique. Ingress must stay closed.
@@ -510,18 +568,26 @@ inventory/visibility work before lookup. Advance only the supplied clock to
 expire and release a retained Producer Action. This distinguishes deployment
 control from a poll loop that still reads process time. [Producer retention clock](../servient/finite/src/action.rs#L727) · [Action control evidence](../docs/evidence/consumer-action-composition.md)
 
-Before fixing the Producer notification interface, use a downstream callback
-mapping with separate establish and cancel Forms. This depends on directional
-control data, actual destination authorization, coherent publication and funded
-work that can outlive its exchange. Deny an offered callback address before
-acceptance or callback I/O. For an accepted subscription, deliver an occurrence,
-accept a conforming application reply and reject a malformed one before
-application handoff. Cancel via the separate Form. Replace the Thing while
-another delivery or reply is outstanding. Late replies and old cancellations
-cannot reach the successor. Observe final release and service to a sibling. Preserve broker-owned
-MQTT as the independent check on fan-out, loss and stop without local subscriber
-records. Use caller-supplied time and storage for representative continuing
-work and retain the mixed Host progress controls. [Mixed Host evidence](../docs/evidence/host-execution-integration.md#real-execution-and-adversarial-evidence)
+Before fixing either notification interface, join an ordinary Consumer and
+an application-controlled Producer over a downstream callback mapping. On the
+wire, observe the Consumer supply only the callback address and receive an ID
+chosen by the Producer. Use that exact ID on the separately qualified
+URI-template cancellation Form and authorize the expanded destination.
+A caller-supplied ID must fail before native start. Deny an offered address
+before acceptance or callback I/O. Omit the ID or return one of the wrong type
+after Producer acceptance. The Consumer must report possible remote establishment,
+withhold activation and retire the original work without guessing an ID.
+
+For an accepted callback, deliver an occurrence, accept its conforming
+application reply and reject a malformed one before application handoff.
+Replace the Thing during delivery, then observe that old replies and
+cancellations stay with their original owner through release while a sibling
+continues. Exercise the same target and occurrence checks with the existing
+broker-backed root case. One root conversation receives a Boolean `ready`
+and an integer `alarm`, rejects an unknown or wrongly typed member and stops
+once at the root. These controls permit a leaf-only callback mapping and
+broker-owned fan-out. Exercise representative continuing work with caller-supplied
+time and storage and preserve the mixed Host driving case. [Root Event execution](../protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs#L1220) · [Member rejection](../protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs#L1300) · [Mixed Host evidence](../docs/evidence/host-execution-integration.md#real-execution-and-adversarial-evidence)
 
 ### Migrate authority and callers at the affected boundary
 
@@ -530,9 +596,10 @@ their existing contracts once implementation resumes. Changes to public
 ownership have a different prerequisite. Record each stable cross-domain
 decision in the ADR and affected registered owners before changing governed
 production behavior. Supersede Interaction Core's direction-independent
-validation clause. Specify whole-set commit consistency in Planning/Runtime
-Safety, per-audience use in the security/Binding contract, and conditional
-Producer subscription ownership in Core, Servient and its native handoff.
+validation clause. Specify coherent Consumer selection and whole-publication
+commit in Planning/Runtime Safety, and per-audience use in the security/Binding
+contract. Carry mapped setup replies, control targets and occurrence roles
+through Core, Servient and the native handoff in both notification roles.
 Supersede the finite Producer's one-exchange driver and mandatory queue-credit
 precheck, and shorten the MQTT writer lifetime while preserving funding for
 every accepted outcome. [Interaction Core](../docs/spec/interaction-core.md) · [Finite Producer capacity contract](../docs/spec/runtime-safety.md#finite-producer-participation-and-work-capacity) · [MQTT publication profile](../protocol-bindings/protocols/mqtt/README.md)
@@ -563,10 +630,15 @@ through the normal public entry points and an independently implemented
 Binding. They are completion criteria for the Engine design and its execution
 model. The proposal itself is at the design-review stage.
 
-- A Consumer selects across unrelated implementations through one ordinary
-  entry. On the same TD it can execute a later viable Form, explain ambiguity
-  or missing support, and report exhausted search credit. The chosen provider
-  enforces the complete selected meaning through real I/O.
+- A Consumer chooses across unrelated implementations under one configuration
+  effective at selection. A later viable Form executes. Missing support,
+  ambiguity and exhausted credit have distinct outcomes. Alternating competitors
+  cannot produce an automatic Invoke when every effective configuration is
+  ambiguous. An explicit, eligible provider succeeds through the same entry.
+- A continuing Action executes Invoke and the compatible Query in both orders
+  of the two Query Forms from F3. Only the compatible peer receives the Query.
+  Pinning the incompatible Form refuses before Invoke. Independently implemented
+  Invoke and control Bindings can also use the original continuation.
 - A Consumer accepts permitted additions to received data and prevents their
   transmission in a role that cannot generate them. Each credential is used
   only for its authorized audience and actual effect, demonstrated with two
@@ -575,11 +647,14 @@ model. The proposal itself is at the design-review stage.
   provider uniqueness, is true under one effective configuration through local
   commit. A changing competitor cannot open ingress by supplying incompatible
   negative answers. A source-free install verifies the same deployment claim.
-- Through an independent mapping, Servient and the Producer application can
-  deny a callback, own an accepted subscription beyond setup, authorize its
-  cancellation, validate a supported application reply and retire late work
-  after replacement. A broker-managed source can publish without taking on
-  that subscriber state.
+- Through an independent mapping, a public Consumer sends the callback address,
+  validates the Producer-chosen setup ID and uses it on its separate cancellation
+  Form. A malformed setup reply preserves remote uncertainty and local cleanup.
+  The Producer can deny setup, own acceptance beyond its reply, validate an
+  occurrence's application reply and retire late work after replacement.
+  A Thing-root subscription keeps one control lifetime across differently
+  typed and authorized Events. A broker-managed source can publish with the
+  broker owning subscriber state.
 - A definition can do useful invariant compilation once for compatible
   instances. Checked mapping, independent permission, actual capacity, native
   specialization and final backing release remain observable. Measured
