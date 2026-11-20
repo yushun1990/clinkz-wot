@@ -216,7 +216,7 @@ impl ConsumerActionRegistry {
                             endpoint: form.resolved_href.into(),
                             roles,
                             candidates: Default::default(),
-                            probed: false,
+                            schemas_checked: false,
                         });
                     }
                 }
@@ -249,7 +249,10 @@ impl ConsumerActionRegistry {
         debit(budget, W::ProviderProbes, 1 + 2 * controls)?;
         let mut take = |role: usize| {
             let (form, provider) = selected[role]?;
-            let candidate = search.forms[form].candidates[role].swap_remove(provider);
+            let candidates = search.forms[form].candidates[role]
+                .as_mut()
+                .expect("selected operation was probed");
+            let candidate = candidates.swap_remove(provider);
             search.funding.extend(candidate.funding);
             Some(candidate.operation)
         };
@@ -453,8 +456,17 @@ struct ActionForm {
     index: u32,
     endpoint: Box<str>,
     roles: [bool; 3],
-    candidates: [Vec<Candidate>; 3],
-    probed: bool,
+    // Some(empty) records that all eligible registrations declined this operation.
+    candidates: [Option<Vec<Candidate>>; 3],
+    schemas_checked: bool,
+}
+
+impl ActionForm {
+    fn candidates(&self, role: usize) -> &[Candidate] {
+        self.candidates[role]
+            .as_deref()
+            .expect("operation was probed")
+    }
 }
 
 type Pick = (usize, usize); // Form position, provider position within that Form and role.
@@ -483,9 +495,9 @@ impl ActionSearch<'_, '_> {
             if !self.forms[form].roles[0] {
                 continue;
             }
-            self.probe(form, budget)?;
+            self.probe_operation(form, 0, budget)?;
             let mut best: Option<(Family, bool)> = None;
-            'provider: for provider in 0..self.forms[form].candidates[0].len() {
+            'provider: for provider in 0..self.forms[form].candidates(0).len() {
                 debit(budget, W::PlanningItems, 1)?;
                 let invoke = (form, provider);
                 let mut family = [Some(invoke), None, None];
@@ -534,12 +546,12 @@ impl ActionSearch<'_, '_> {
             if !self.forms[form].roles[role] {
                 continue;
             }
-            self.probe(form, budget)?;
-            let origin = &self.forms[invoke.0].candidates[0][invoke.1]
+            self.probe_operation(form, role, budget)?;
+            let origin = &self.forms[invoke.0].candidates(0)[invoke.1]
                 .operation
                 .mapping;
             let mut chosen = None;
-            for (provider, control) in self.forms[form].candidates[role].iter().enumerate() {
+            for (provider, control) in self.forms[form].candidates(role).iter().enumerate() {
                 debit(budget, W::ProviderProbes, 1)?;
                 match control
                     .operation
@@ -563,13 +575,17 @@ impl ActionSearch<'_, '_> {
         Ok(None)
     }
 
-    fn probe(&mut self, index: usize, budget: &mut WorkBudget) -> CoreResult<()> {
+    fn probe_operation(
+        &mut self,
+        index: usize,
+        role: usize,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<()> {
         let form = &mut self.forms[index];
-        if form.probed {
+        if form.candidates[role].is_some() {
             return Ok(());
         }
         let count = self.registry.registrations.len();
-        let groups = form.roles.iter().filter(|role| **role).count();
         let per_role = count * size_of::<Candidate>();
         check_limit(
             self.limits,
@@ -577,46 +593,41 @@ impl ActionSearch<'_, '_> {
             per_role as u64,
         )?;
         self.cursor
-            .split_temporary_allowance((groups * per_role) as u64)
+            .split_temporary_allowance(per_role as u64)
             .map_err(crate::producer_property_read::td_error)?;
-        for (role, candidates) in form.candidates.iter_mut().enumerate() {
-            if form.roles[role] {
-                candidates.try_reserve_exact(count).map_err(|_| busy())?;
-            }
-        }
+        let mut candidates = Vec::new();
+        candidates.try_reserve_exact(count).map_err(|_| busy())?;
         let result = self.cursor.with_indexed_form_semantics(
             ValidatedProducerScope::Action(self.name),
             form.index,
             budget,
             |doc, temporary_headroom, budget| -> CoreResult<()> {
-                qualify_schemas(
+                if !form.schemas_checked {
+                    qualify_schemas(
+                        doc,
+                        self.name,
+                        &mut self.schemas,
+                        self.limits,
+                        self.bank,
+                        &mut self.funding,
+                        budget,
+                    )?;
+                    form.schemas_checked = true;
+                }
+                self.registry.qualify(
                     doc,
                     self.name,
-                    &mut self.schemas,
+                    form.index,
+                    OPERATIONS[role],
+                    &form.endpoint,
+                    self.schemas.as_ref().unwrap(),
+                    self.selectors[role],
                     self.limits,
                     self.bank,
-                    &mut self.funding,
                     budget,
-                )?;
-                for (role, operation) in OPERATIONS.into_iter().enumerate() {
-                    if form.roles[role] {
-                        self.registry.qualify(
-                            doc,
-                            self.name,
-                            form.index,
-                            operation,
-                            &form.endpoint,
-                            self.schemas.as_ref().unwrap(),
-                            self.selectors[role],
-                            self.limits,
-                            self.bank,
-                            budget,
-                            temporary_headroom,
-                            &mut form.candidates[role],
-                        )?;
-                    }
-                }
-                Ok(())
+                    temporary_headroom,
+                    &mut candidates,
+                )
             },
         );
         match result {
@@ -633,7 +644,7 @@ impl ActionSearch<'_, '_> {
                 SemanticError::UnsupportedContext | SemanticError::UnsupportedDependency,
             )) => {}
         }
-        form.probed = true;
+        form.candidates[role] = Some(candidates);
         Ok(())
     }
 }

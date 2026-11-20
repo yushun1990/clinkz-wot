@@ -1,4 +1,5 @@
 use super::*;
+use clinkz_wot_td::thing::Thing;
 
 // Three independent registrations use one effective deployment configuration.
 // A always qualifies, B qualifies in odd revisions, C in positive even ones.
@@ -325,11 +326,12 @@ async fn exercise_mixed_selection(http: SocketAddr, udp: SocketAddr) {
         let registry = ConsumerActionRegistry::try_new_fixed(registrations).unwrap();
         for http_control in [true, false] {
             // Controls can precede Invoke. Removing only the HTTP control
-            // leaves its Invoke individually supported but unusable.
+            // leaves its Invoke individually supported but unusable. The UDP Invoke
+            // Form has already been visited as a Query alternative for that HTTP Invoke.
             let mut forms = vec![
                 serde_json::json!({"op":"queryaction","href":format!("linkedudp://{udp}/query")}),
                 serde_json::json!({"op":"invokeaction","href":format!("http://{http}/run"),"htv:methodName":"POST"}),
-                serde_json::json!({"op":"invokeaction","href":format!("linkedudp://{udp}/run")}),
+                serde_json::json!({"op":["invokeaction","queryaction"],"href":format!("linkedudp://{udp}/run")}),
             ];
             if http_control {
                 forms.push(serde_json::json!({"op":"queryaction","href":format!("http://{http}/status{{?id}}"),"htv:methodName":"GET"}));
@@ -400,4 +402,235 @@ async fn exercise_mixed_selection(http: SocketAddr, udp: SocketAddr) {
     }
     drop((http_services, datagram_services));
     clean(&bank);
+}
+
+fn two_form_action(peer_address: SocketAddr, operations: [&[&str]; 2]) -> Thing {
+    serde_json::from_value(serde_json::json!({
+        "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"two Action Forms",
+        "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
+        "actions":{"run":{"input":{"type":"integer"},"output":{"type":"integer"},"forms":[
+            {"href":format!("linkedudp://{peer_address}/run"), "op":operations[0]},
+            {"href":format!("linkedudp://{peer_address}/control"), "op":operations[1]}
+        ]}}
+    }))
+    .unwrap()
+}
+
+fn prepare_two_forms(
+    registry: &ConsumerActionRegistry,
+    td: &Thing,
+    bank: &Arc<HostResourceAccounts>,
+    selectors: ConsumerActionSelectors,
+    limits: &ResourceLimits,
+    credit: u64,
+) -> CoreResult<ConsumerActionDefinition> {
+    registry.prepare_action(
+        td,
+        "run",
+        selectors,
+        limits,
+        bank.clone(),
+        &mut work().with_remaining(WorkClass::BindingPolls, credit),
+    )
+}
+
+#[test]
+fn query_on_a_second_invoke_form_uses_only_the_selected_operations_credit() {
+    let (peer_address, server) = peer(vec![
+        (b"INVOKE 12", b"ACCEPT 7"),
+        (b"QUERY 7", b"OUTPUT 24"),
+    ]);
+    let services_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let probe = Arc::new(NativeProbe::default());
+    let registry = datagram_registry(
+        peer_address,
+        &services_bank,
+        &probe,
+        &Arc::new(Probe::default()),
+    );
+    *probe.bank.lock().unwrap() = Some(bank.clone());
+    let td = two_form_action(
+        peer_address,
+        [&["invokeaction"], &["invokeaction", "queryaction"]],
+    );
+    let prepare = |form, credit| {
+        prepare_two_forms(
+            &registry,
+            &td,
+            &bank,
+            ConsumerActionSelectors {
+                invoke: ConsumerSelector {
+                    form,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            GatewayDefaultV1::LIMITS,
+            credit,
+        )
+    };
+    // Two operations, two registered compilers, 32 units per callback.
+    let credit = 2 * 2 * 32;
+    let pinned = prepare(Some(0), credit).expect("pinned Invoke 0 and Query 1 fit");
+    assert_eq!(
+        (
+            pinned.input().invoke.form,
+            pinned.input().query.as_ref().unwrap().form
+        ),
+        (0, 1)
+    );
+    drop(pinned);
+    clean(&bank);
+    assert!(matches!(
+        prepare(None, credit - 1),
+        Err(CoreError::Backpressure(_))
+    ));
+    clean(&bank);
+    assert!(probe.ports.lock().unwrap().is_empty());
+
+    let chosen =
+        prepare(None, credit).expect("automatic Invoke 0 and Query 1 fit the same allowance");
+    assert_eq!(
+        (
+            chosen.input().invoke.form,
+            chosen.input().query.as_ref().unwrap().form
+        ),
+        (0, 1)
+    );
+    drop(registry);
+    let owner = instance();
+    let (association, calls) = bind_datagram_action(chosen, &owner, bank.clone());
+    let handle = calls
+        .invoke_action(
+            &association,
+            Some(Payload::new(b"12".as_slice(), "application/json")),
+            Deadline::NONE,
+            now(),
+            &mut work(),
+        )
+        .ok()
+        .unwrap();
+    drive(&handle, ConsumerActionState::Pending);
+    handle.query(now(), &mut work()).unwrap();
+    drive(&handle, ConsumerActionState::Completed);
+    let settlement = handle.take_settlement(now(), &mut work()).unwrap();
+    assert_eq!(settlement.result().unwrap().data().unwrap().body, b"24");
+    server.join().unwrap();
+    drop((settlement, handle, calls, association));
+    clean(&bank);
+    clean(&services_bank);
+}
+
+#[test]
+fn compiler_failure_propagates_only_when_its_form_and_operation_are_requested() {
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let services_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let probe = Arc::new(NativeProbe {
+        fail_compilation: Some((1, Operation::CancelAction)),
+        ..Default::default()
+    });
+    let address = "127.0.0.1:9".parse().unwrap();
+    let registry = datagram_registry(address, &services_bank, &probe, &Arc::new(Probe::default()));
+    let td = two_form_action(
+        address,
+        [
+            &["invokeaction", "cancelaction"],
+            &["queryaction", "cancelaction"],
+        ],
+    );
+    let pin_cancel = ConsumerActionSelectors {
+        cancel: ConsumerSelector {
+            form: Some(1),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    assert!(matches!(
+        prepare_two_forms(
+            &registry,
+            &td,
+            &bank,
+            pin_cancel,
+            GatewayDefaultV1::LIMITS,
+            1_000_000
+        ),
+        Err(CoreError::Binding(_))
+    ));
+    clean(&bank);
+    let selected = prepare_two_forms(
+        &registry,
+        &td,
+        &bank,
+        Default::default(),
+        GatewayDefaultV1::LIMITS,
+        1_000_000,
+    )
+    .expect("Form 1 Query remains usable when its Cancel compiler fails");
+    assert_eq!(selected.input().invoke.form, 0);
+    assert_eq!(selected.input().query.as_ref().unwrap().form, 1);
+    assert_eq!(selected.input().cancel.as_ref().unwrap().form, 0);
+    assert!(probe.ports.lock().unwrap().is_empty());
+    drop((selected, registry));
+    clean(&bank);
+    clean(&services_bank);
+}
+
+#[test]
+fn an_unused_form_operation_reserves_no_candidate_storage() {
+    let address = "127.0.0.1:9".parse().unwrap();
+    let services = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let registry = datagram_registry(
+        address,
+        &services,
+        &Arc::new(NativeProbe::default()),
+        &Arc::new(Probe::default()),
+    );
+    let td = two_form_action(
+        address,
+        [&["invokeaction"], &["invokeaction", "queryaction"]],
+    );
+    let kind = ResourceKind::AdmissionTemporaryBytesPerOperationMax;
+    let fits = |invoke_form, bytes| {
+        let mut limits = GatewayDefaultV1::LIMITS.clone();
+        assert!(limits.set(kind, Some(bytes)));
+        let selectors = ConsumerActionSelectors {
+            invoke: ConsumerSelector {
+                form: invoke_form,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let result = prepare_two_forms(&registry, &td, &bank, selectors, &limits, 1_000_000);
+        let fits = match result {
+            Ok(definition) => {
+                drop(definition);
+                true
+            }
+            Err(CoreError::LimitExceeded { .. } | CoreError::Backpressure(_)) => false,
+            Err(e) => panic!("unexpected preparation error {e:?}"),
+        };
+        clean(&bank);
+        fits
+    };
+    // Discover the threshold through the public API so it follows the target's layouts.
+    let (mut low, mut high) = (0, GatewayDefaultV1::LIMITS.get(kind).unwrap());
+    assert!(fits(Some(0), high));
+    while low < high {
+        let mid = low + (high - low) / 2;
+        if fits(Some(0), mid) {
+            high = mid;
+        } else {
+            low = mid + 1;
+        }
+    }
+    assert!(
+        fits(None, low),
+        "automatic selection must fit the pinned {low}-byte allowance"
+    );
+    assert!(!fits(None, low - 1));
+    drop(registry);
+    clean(&services);
 }

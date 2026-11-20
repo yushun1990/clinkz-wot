@@ -19,6 +19,7 @@ use std::{
 };
 #[derive(Default)]
 struct NativeProbe {
+    fail_compilation: Option<(u32, Operation)>,
     close_blocked: AtomicBool,
     fail_close: AtomicBool,
     fail_with_late: AtomicBool,
@@ -247,6 +248,9 @@ impl ConsumerActionPreparation for Compiler {
         {
             return Ok(None);
         }
+        if self.probe.fail_compilation == Some((input.form, input.operation)) {
+            return Err(CoreError::Binding(context()));
+        }
         let native = Native {
             id: self.id,
             peer: self.peer,
@@ -309,15 +313,13 @@ fn invalid() -> CoreError {
 fn instance() -> ConsumerInstance {
     ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL))
 }
-fn client(
+fn datagram_registry(
     peer: SocketAddr,
-    bank: Arc<HostResourceAccounts>,
-    probe: Arc<NativeProbe>,
-    data: Arc<Probe>,
-    owner: &ConsumerInstance,
-) -> (ConsumerActionAssociation, ConsumerActions) {
-    *probe.bank.lock().unwrap() = Some(bank.clone());
-    let registry = ConsumerActionRegistry::try_new_fixed(
+    bank: &Arc<HostResourceAccounts>,
+    probe: &Arc<NativeProbe>,
+    data: &Arc<Probe>,
+) -> ConsumerActionRegistry {
+    ConsumerActionRegistry::try_new_fixed(
         (0..2)
             .map(|i| {
                 let mut services = services(data.clone());
@@ -338,10 +340,10 @@ fn client(
                         probe: probe.clone(),
                     }),
                     services: RetainedConsumerServices {
-                        data: ConsumerServiceOwner::retain_data(services.data, &bank)
+                        data: ConsumerServiceOwner::retain_data(services.data, bank)
                             .ok()
                             .unwrap(),
-                        access: ConsumerServiceOwner::retain_access(services.access, &bank)
+                        access: ConsumerServiceOwner::retain_access(services.access, bank)
                             .ok()
                             .unwrap(),
                     },
@@ -349,7 +351,17 @@ fn client(
             })
             .collect(),
     )
-    .unwrap();
+    .unwrap()
+}
+fn client(
+    peer: SocketAddr,
+    bank: Arc<HostResourceAccounts>,
+    probe: Arc<NativeProbe>,
+    data: Arc<Probe>,
+    owner: &ConsumerInstance,
+) -> (ConsumerActionAssociation, ConsumerActions) {
+    *probe.bank.lock().unwrap() = Some(bank.clone());
+    let registry = datagram_registry(peer, &bank, &probe, &data);
     let td = serde_json::from_value(serde_json::json!({"@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"native Action", "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
         "actions":{"run":{"input":{"type":"integer"}, "output":{"type":"integer"}, "forms":[
             {"href":format!("linkedudp://{peer}/action"), "op":["invokeaction","queryaction","cancelaction"]}]}}})).unwrap();
@@ -365,17 +377,26 @@ fn client(
         .unwrap();
     drop(td);
     drop(registry);
+    bind_datagram_action(d, owner, bank)
+}
+
+fn bind_datagram_action(
+    definition: ConsumerActionDefinition,
+    owner: &ConsumerInstance,
+    bank: Arc<HostResourceAccounts>,
+) -> (ConsumerActionAssociation, ConsumerActions) {
     let access = ConsumerServiceOwner::retain_access(Arc::new(Access), &bank)
         .ok()
         .unwrap();
+    let authority = ConsumerActionAccess {
+        invoke: access.clone(),
+        query: definition.input().query.as_ref().map(|_| access.clone()),
+        cancel: definition.input().cancel.as_ref().map(|_| access.clone()),
+    };
     let association = ConsumerActionAssociation::try_new(
         owner.reference(),
-        Rc::new(d),
-        ConsumerActionAccess {
-            invoke: access.clone(),
-            query: Some(access.clone()),
-            cancel: Some(access),
-        },
+        Rc::new(definition),
+        authority,
         bank.clone(),
         &mut work(),
     )

@@ -434,12 +434,19 @@ has no preference and execution never replays an uncertain effect through an
 alternative. [TD 1.1 Forms](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#form)
 
 The Host registry indexes the selected Action's Form coordinates and resolved
-addresses during one Basic admission and URI walk. It borrows each Form's full
-semantics on first probe and uses that loan for its applicable operations. One
-caller work budget pays for the index, qualification, comparison and disposal
-of provisional mappings. The index, semantic loan and native compiler scratch
-share one temporary reservation. Insufficient work or capacity refuses before execution.
-Only the chosen mappings, services and their original funding enter the definition.
+addresses during one Basic admission and URI walk. When the search needs an
+operation on a Form, it reserves candidate storage for that operation. All
+registrations allowed by its selector share one loan of the Form's resolved
+semantics. If another operation on that Form is needed, it obtains a new paid
+loan from the admitted input. A Form with all three roles takes at most three loans.
+The search reuses each completed Form/operation result, including an empty
+provider set, across candidate combinations. A compiler or capacity failure on
+a required probe propagates before I/O.
+
+One caller work budget pays for the index, qualification, comparison and
+disposal of provisional mappings. The index, semantic loan and native compiler
+scratch share one temporary reservation. Only the chosen mappings, services and
+their original funding enter the definition.
 
 The composition owner chooses how the search observes one effective configuration.
 Use `try_new_fixed` when the inputs are immutable or all changes are serialized
@@ -458,11 +465,11 @@ execution and checks the current endpoint NoSec subset. Input and output are
 independent `ValueSchemas` roles. A borrowed census prepays construction and
 rollback work, checks aggregate destruction against the cleanup-step allowance,
 and reserves variable backing before constructing the constraints. One original
-owned pair serves invoke/query/cancel selection; subsequent semantic loans compare
-borrowed assertions without rebuilding it. Each actual selected data service
-qualifies the complete schemas for its application-value roles: Invoke input
-and possible completed output, Query completed output, and no application value
-for Cancel. Query need not support the input schema. Native status/acknowledgement
+owned pair serves Invoke, Query and Cancel. Each Form checks its borrowed
+assertions against that pair once when schema qualification succeeds. Each selected
+data service qualifies the complete schemas for its application-value roles.
+Invoke qualifies input and possible completed output, Query qualifies completed
+output, and Cancel carries no application value. Query need not support the input schema. Native status/acknowledgement
 encoding is the mapping's responsibility. Different operations may retain
 different valid media and body/scratch/work policies for the same output meaning;
 Query output is never required to fit Invoke's representation or allowance.

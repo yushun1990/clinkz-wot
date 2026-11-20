@@ -29,6 +29,17 @@ providers qualify on that datagram Form. Only one returns the numeric continuati
 accepted by its control.
 [HTTP integration](../../protocol-bindings/protocols/http/tests/action_consumer.rs) · [Mixed-Binding fixture](../../tools/architecture-fixtures/open-consumer/tests/support/action_selection.rs)
 
+Two datagram Forms isolate the unit of qualification. Form 0 offers Invoke and
+Form 1 offers Invoke and Query. Pinning Invoke to Form 0 and selecting
+automatically both choose Invoke 0 and Query 1 with 128 compiler units. With
+127 units preparation refuses before I/O and releases its reservations. The
+automatically selected Query sends the original token `7` and returns `24`.
+Automatic selection also fits the minimum temporary capacity measured for the
+pinned choice and refuses one byte below that boundary. In a second case, both Forms offer Cancel. Form 1's Cancel compiler fails.
+Automatic selection uses Query 1 with Cancel 0, and pinning Cancel 1 exposes
+the original Binding error. All three regression checks failed on `005ac0b6`.
+[Downstream qualification tests](../../tools/architecture-fixtures/open-consumer/tests/support/action_selection.rs)
+
 A reload between two competing negative compiler observations refuses selection.
 Stable competing providers report ambiguity, and short probe credit refuses before
 native start. A pinned provider and a previously selected, still-authorized
