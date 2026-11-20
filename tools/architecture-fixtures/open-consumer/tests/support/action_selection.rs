@@ -299,27 +299,12 @@ async fn exercise_mixed_selection(http: SocketAddr, udp: SocketAddr) {
         }];
         // Both Invoke providers qualify for the same datagram Form. Only the
         // numeric-token provider can pair with this control implementation.
-        for (id, invoke, ascii_continuation) in
-            [(2, true, false), (3, false, false), (4, true, true)]
-        {
-            registrations.push(ConsumerActionRegistration {
-                preparation: Box::new(Compiler {
-                    id: BindingRegistrationIdentity::new(
-                        BindingId::new(id),
-                        BindingGeneration::INITIAL,
-                        configuration().configuration(),
-                        configuration().native_compatibility().unwrap(),
-                        id,
-                    ),
-                    invoke,
-                    media: "application/json",
-                    ascii_continuation,
-                    peer: udp,
-                    probe: native.clone(),
-                }),
-                services: datagram_services.clone(),
-            });
-        }
+        registrations.extend(datagram_registrations(
+            udp,
+            &native,
+            &datagram_services,
+            &TOKEN_PROVIDERS[..3],
+        ));
         if reverse {
             registrations.reverse();
         }
@@ -404,6 +389,45 @@ async fn exercise_mixed_selection(http: SocketAddr, udp: SocketAddr) {
     clean(&bank);
 }
 
+// (Binding ID, Invoke compiler, ASCII token). The two control compilers
+// accept their respective native token types on a shared control endpoint.
+const TOKEN_PROVIDERS: [(u32, bool, bool); 4] = [
+    (2, true, false),
+    (3, false, false),
+    (4, true, true),
+    (5, false, true),
+];
+
+fn datagram_registrations(
+    peer: SocketAddr,
+    native: &Arc<NativeProbe>,
+    services: &RetainedConsumerServices,
+    providers: &[(u32, bool, bool)],
+) -> Vec<ConsumerActionRegistration> {
+    providers
+        .iter()
+        .map(
+            |&(id, invoke, ascii_continuation)| ConsumerActionRegistration {
+                preparation: Box::new(Compiler {
+                    id: BindingRegistrationIdentity::new(
+                        BindingId::new(id),
+                        BindingGeneration::INITIAL,
+                        configuration().configuration(),
+                        configuration().native_compatibility().unwrap(),
+                        id,
+                    ),
+                    invoke,
+                    ascii_continuation,
+                    peer,
+                    media: "application/json",
+                    probe: native.clone(),
+                }),
+                services: services.clone(),
+            },
+        )
+        .collect()
+}
+
 fn two_form_action(peer_address: SocketAddr, operations: [&[&str]; 2]) -> Thing {
     serde_json::from_value(serde_json::json!({
         "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"two Action Forms",
@@ -416,7 +440,7 @@ fn two_form_action(peer_address: SocketAddr, operations: [&[&str]; 2]) -> Thing 
     .unwrap()
 }
 
-fn prepare_two_forms(
+fn prepare_with_credit(
     registry: &ConsumerActionRegistry,
     td: &Thing,
     bank: &Arc<HostResourceAccounts>,
@@ -455,7 +479,7 @@ fn query_on_a_second_invoke_form_uses_only_the_selected_operations_credit() {
         [&["invokeaction"], &["invokeaction", "queryaction"]],
     );
     let prepare = |form, credit| {
-        prepare_two_forms(
+        prepare_with_credit(
             &registry,
             &td,
             &bank,
@@ -499,26 +523,8 @@ fn query_on_a_second_invoke_form_uses_only_the_selected_operations_credit() {
         (0, 1)
     );
     drop(registry);
-    let owner = instance();
-    let (association, calls) = bind_datagram_action(chosen, &owner, bank.clone());
-    let handle = calls
-        .invoke_action(
-            &association,
-            Some(Payload::new(b"12".as_slice(), "application/json")),
-            Deadline::NONE,
-            now(),
-            &mut work(),
-        )
-        .ok()
-        .unwrap();
-    drive(&handle, ConsumerActionState::Pending);
-    handle.query(now(), &mut work()).unwrap();
-    drive(&handle, ConsumerActionState::Completed);
-    let settlement = handle.take_settlement(now(), &mut work()).unwrap();
-    assert_eq!(settlement.result().unwrap().data().unwrap().body, b"24");
+    execute_datagram_action(chosen, &bank);
     server.join().unwrap();
-    drop((settlement, handle, calls, association));
-    clean(&bank);
     clean(&services_bank);
 }
 
@@ -548,7 +554,7 @@ fn compiler_failure_propagates_only_when_its_form_and_operation_are_requested() 
     };
 
     assert!(matches!(
-        prepare_two_forms(
+        prepare_with_credit(
             &registry,
             &td,
             &bank,
@@ -559,7 +565,7 @@ fn compiler_failure_propagates_only_when_its_form_and_operation_are_requested() 
         Err(CoreError::Binding(_))
     ));
     clean(&bank);
-    let selected = prepare_two_forms(
+    let selected = prepare_with_credit(
         &registry,
         &td,
         &bank,
@@ -603,7 +609,7 @@ fn an_unused_form_operation_reserves_no_candidate_storage() {
             },
             ..Default::default()
         };
-        let result = prepare_two_forms(&registry, &td, &bank, selectors, &limits, 1_000_000);
+        let result = prepare_with_credit(&registry, &td, &bank, selectors, &limits, 1_000_000);
         let fits = match result {
             Ok(definition) => {
                 drop(definition);
@@ -632,5 +638,384 @@ fn an_unused_form_operation_reserves_no_candidate_storage() {
     );
     assert!(!fits(None, low - 1));
     drop(registry);
+    clean(&services);
+}
+
+fn execute_datagram_action(chosen: ConsumerActionDefinition, bank: &Arc<HostResourceAccounts>) {
+    let has_cancel = chosen.input().cancel.is_some();
+    let owner = instance();
+    let (association, calls) = bind_datagram_action(chosen, &owner, bank.clone());
+    let handle = calls
+        .invoke_action(
+            &association,
+            Some(Payload::new(b"12".as_slice(), "application/json")),
+            Deadline::NONE,
+            now(),
+            &mut work(),
+        )
+        .ok()
+        .unwrap();
+    drive(&handle, ConsumerActionState::Pending);
+    if has_cancel {
+        handle.request_cancel(now(), &mut work()).unwrap();
+        drive(&handle, ConsumerActionState::Pending);
+    }
+    handle.query(now(), &mut work()).unwrap();
+    drive(&handle, ConsumerActionState::Completed);
+    let settlement = handle.take_settlement(now(), &mut work()).unwrap();
+    assert_eq!(settlement.result().unwrap().data().unwrap().body, b"24");
+    drop((settlement, handle, calls, association));
+    clean(bank);
+}
+
+fn control_forms(peer: SocketAddr, forms: &[(&str, &str)]) -> Thing {
+    let forms: Vec<_> = forms
+        .iter()
+        .map(|(op, path)| {
+            serde_json::json!({
+                "href": format!("linkedudp://{peer}/{path}"), "op":op,
+            })
+        })
+        .collect();
+    serde_json::from_value(serde_json::json!({
+        "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"competing datagram mappings",
+        "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
+        "actions":{"run":{"input":{"type":"integer"},"output":{"type":"integer"},"forms":forms}}
+    }))
+    .unwrap()
+}
+
+fn competing_registry(
+    peer: SocketAddr,
+    native: &Arc<NativeProbe>,
+    service_bank: &Arc<HostResourceAccounts>,
+    providers: &[(u32, bool, bool)],
+    reverse: bool,
+) -> ConsumerActionRegistry {
+    let services = RetainedConsumerServices {
+        data: ConsumerServiceOwner::retain_data(
+            services(Arc::new(Probe::default())).data,
+            service_bank,
+        )
+        .ok()
+        .unwrap(),
+        access: ConsumerServiceOwner::retain_access(Arc::new(Access), service_bank)
+            .ok()
+            .unwrap(),
+    };
+    let mut registrations = datagram_registrations(peer, native, &services, providers);
+    if reverse {
+        registrations.reverse();
+    }
+    ConsumerActionRegistry::try_new_fixed(registrations).unwrap()
+}
+
+#[test]
+fn preferred_query_executes_before_a_later_failing_query_in_either_registration_order() {
+    let (address, server) = peer(vec![
+        (b"INVOKE 12", b"ACCEPT 7"),
+        (b"QUERY 7", b"OUTPUT 24"),
+        (b"INVOKE 12", b"ACCEPT 7"),
+        (b"QUERY 7", b"OUTPUT 24"),
+    ]);
+    let services = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let probe = Arc::new(NativeProbe {
+        fail_compilation: Some((2, Operation::QueryAction)),
+        ..Default::default()
+    });
+    *probe.bank.lock().unwrap() = Some(bank.clone());
+    let td = control_forms(
+        address,
+        &[
+            ("invokeaction", "run"),
+            ("queryaction", "numeric"),
+            ("queryaction", "late"),
+        ],
+    );
+    for reverse in [false, true] {
+        let registry =
+            competing_registry(address, &probe, &services, &TOKEN_PROVIDERS[..3], reverse);
+        let select = |form, credit| {
+            prepare_with_credit(
+                &registry,
+                &td,
+                &bank,
+                ConsumerActionSelectors {
+                    query: ConsumerSelector {
+                        form,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                GatewayDefaultV1::LIMITS,
+                credit,
+            )
+        };
+        let check_pair = |d: &ConsumerActionDefinition| {
+            assert_eq!(d.input().invoke.identity.binding_id(), BindingId::new(2));
+            assert_eq!(d.input().query.as_ref().unwrap().form, 1);
+        };
+        let credit = 2 * 3 * 32;
+        let pinned = select(Some(1), credit).unwrap();
+        check_pair(&pinned);
+        drop(pinned);
+        clean(&bank);
+        assert!(matches!(
+            select(Some(2), 1_000_000),
+            Err(CoreError::Binding(_))
+        ));
+        clean(&bank);
+        let chosen = select(None, 1_000_000).expect("later Query cannot change the preferred pair");
+        check_pair(&chosen);
+        drop(chosen);
+        clean(&bank);
+        assert!(matches!(
+            select(None, credit - 1),
+            Err(CoreError::Backpressure(_))
+        ));
+        clean(&bank);
+        execute_datagram_action(select(None, credit).unwrap(), &bank);
+    }
+    server.join().unwrap();
+    clean(&services);
+}
+
+#[test]
+fn query_preference_precedes_cancel_preference_across_invoke_providers() {
+    let (address, server) = peer(vec![
+        (b"INVOKE 12", b"ACCEPT 7"),
+        (b"CANCEL 7", b"STOP REQUESTED"),
+        (b"QUERY 7", b"OUTPUT 24"),
+        (b"INVOKE 12", b"ACCEPT 7"),
+        (b"CANCEL 7", b"STOP REQUESTED"),
+        (b"QUERY 7", b"OUTPUT 24"),
+    ]);
+    let services = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let td = control_forms(
+        address,
+        &[
+            ("invokeaction", "run"),
+            ("queryaction", "ascii"),
+            ("queryaction", "numeric"),
+            ("cancelaction", "numeric"),
+            ("cancelaction", "ascii"),
+        ],
+    );
+    for reverse in [false, true] {
+        // Query 1 with Cancel 4 outranks Query 2 with Cancel 3.
+        let probe = Arc::new(NativeProbe {
+            fail_compilation: Some((2, Operation::QueryAction)),
+            ..Default::default()
+        });
+        *probe.bank.lock().unwrap() = Some(bank.clone());
+        let registry = competing_registry(address, &probe, &services, &TOKEN_PROVIDERS, reverse);
+        let chosen = prepare_with_credit(
+            &registry,
+            &td,
+            &bank,
+            Default::default(),
+            GatewayDefaultV1::LIMITS,
+            4 * 4 * 32,
+        )
+        .unwrap();
+        assert_eq!(
+            chosen.input().invoke.identity.binding_id(),
+            BindingId::new(4)
+        );
+        assert_eq!(chosen.input().query.as_ref().unwrap().form, 1);
+        assert_eq!(chosen.input().cancel.as_ref().unwrap().form, 4);
+        execute_datagram_action(chosen, &bank);
+        drop(registry);
+
+        // A hard error at Cancel 4 can invalidate the earlier Query prefix.
+        // Pinning the later Query establishes a viable lower-ranked combination.
+        let probe = Arc::new(NativeProbe {
+            fail_compilation: Some((4, Operation::CancelAction)),
+            ..Default::default()
+        });
+        let registry = competing_registry(address, &probe, &services, &TOKEN_PROVIDERS, reverse);
+        let prepare = |selectors| {
+            registry.prepare_action(
+                &td,
+                "run",
+                selectors,
+                GatewayDefaultV1::LIMITS,
+                bank.clone(),
+                &mut work(),
+            )
+        };
+        let pinned = prepare(ConsumerActionSelectors {
+            query: ConsumerSelector {
+                form: Some(2),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(pinned.input().cancel.as_ref().unwrap().form, 3);
+        drop(pinned);
+        clean(&bank);
+        assert!(matches!(
+            prepare(Default::default()),
+            Err(CoreError::Binding(_))
+        ));
+        assert!(probe.ports.lock().unwrap().is_empty());
+        clean(&bank);
+    }
+    server.join().unwrap();
+    clean(&services);
+}
+
+#[test]
+fn only_complete_assignments_at_the_preferred_forms_count_for_ambiguity() {
+    let address = "127.0.0.1:9".parse().unwrap();
+    let services = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let probe = Arc::new(NativeProbe::default());
+    for reverse in [false, true] {
+        let registry = competing_registry(address, &probe, &services, &TOKEN_PROVIDERS, reverse);
+        let prepare = |registry: &ConsumerActionRegistry, forms: &[(&str, &str)], selectors| {
+            registry.prepare_action(
+                &control_forms(address, forms),
+                "run",
+                selectors,
+                GatewayDefaultV1::LIMITS,
+                bank.clone(),
+                &mut work(),
+            )
+        };
+        let both = [
+            ("invokeaction", "run"),
+            ("queryaction", "both"),
+            ("cancelaction", "both"),
+        ];
+        let ambiguous = |result| {
+            assert!(matches!(
+                result,
+                Err(CoreError::Selection {
+                    reason: SelectionFailureReason::AmbiguousBindingOwner,
+                    ..
+                })
+            ))
+        };
+        // Two Invoke providers each give exactly one complete assignment.
+        ambiguous(prepare(&registry, &both, Default::default()));
+        clean(&bank);
+        // With Query absent or tied, the first compatible Cancel decides.
+        // Exactly enough compiler credit for that tuple excludes a standby Cancel.
+        for with_query in [false, true] {
+            let mut forms = vec![("invokeaction", "run")];
+            if with_query {
+                forms.push(("queryaction", "both"));
+            }
+            let first_cancel = forms.len() as u32;
+            forms.extend([("cancelaction", "ascii"), ("cancelaction", "numeric")]);
+            let selected = prepare_with_credit(
+                &registry,
+                &control_forms(address, &forms),
+                &bank,
+                Default::default(),
+                GatewayDefaultV1::LIMITS,
+                u64::from(first_cancel + 1) * 4 * 32,
+            )
+            .unwrap();
+            assert_eq!(
+                selected.input().invoke.identity.binding_id(),
+                BindingId::new(4)
+            );
+            assert_eq!(selected.input().query.is_some(), with_query);
+            assert_eq!(selected.input().cancel.as_ref().unwrap().form, first_cancel);
+            drop(selected);
+            clean(&bank);
+        }
+        drop(registry);
+
+        let mut providers = TOKEN_PROVIDERS.to_vec();
+        providers.push((6, false, true)); // A second independent ASCII control provider.
+        let registry = competing_registry(address, &probe, &services, &providers, reverse);
+        // Two ASCII Query mappings are immaterial when only the numeric Invoke
+        // can finish. Try both a dead-end early Query and a shared Query Form.
+        for (queries, expected) in [(["ascii", "numeric"], 2), (["both", "ascii"], 1)] {
+            let forms = [
+                ("invokeaction", "run"),
+                ("queryaction", queries[0]),
+                ("queryaction", queries[1]),
+                ("cancelaction", "numeric"),
+            ];
+            let chosen = prepare(&registry, &forms, Default::default()).unwrap();
+            assert_eq!(
+                chosen.input().invoke.identity.binding_id(),
+                BindingId::new(2)
+            );
+            assert_eq!(chosen.input().query.as_ref().unwrap().form, expected);
+            assert_eq!(chosen.input().cancel.as_ref().unwrap().form, 3);
+            drop(chosen);
+            clean(&bank);
+        }
+        // Fix both Invoke and Cancel. The two Query mappings now create a tie
+        // at the complete tuple. Pinning one of them resolves it.
+        let ascii = ConsumerSelector {
+            binding: Some(BindingId::new(5)),
+            ..Default::default()
+        };
+        let mut selectors = ConsumerActionSelectors {
+            invoke: ConsumerSelector {
+                binding: Some(BindingId::new(4)),
+                ..Default::default()
+            },
+            cancel: ascii,
+            ..Default::default()
+        };
+        ambiguous(prepare(&registry, &both, selectors));
+        clean(&bank);
+        selectors.query = ascii;
+        let unique = prepare(&registry, &both, selectors).unwrap();
+        assert_eq!(
+            unique.input().query.as_ref().unwrap().identity.binding_id(),
+            BindingId::new(5)
+        );
+        drop(unique);
+        clean(&bank);
+    }
+    assert!(probe.ports.lock().unwrap().is_empty());
+    clean(&services);
+}
+
+#[test]
+fn a_compatibility_error_from_a_possible_equal_assignment_reaches_the_caller() {
+    let address = "127.0.0.1:9".parse().unwrap();
+    let services = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let probe = Arc::new(NativeProbe {
+        fail_compatibility: Some((Operation::QueryAction, BindingId::new(4))),
+        ..Default::default()
+    });
+    let td = control_forms(address, &[("invokeaction", "run"), ("queryaction", "both")]);
+    for reverse in [false, true] {
+        let registry = competing_registry(address, &probe, &services, &TOKEN_PROVIDERS, reverse);
+        let select = |binding| {
+            registry.prepare_action(
+                &td,
+                "run",
+                ConsumerActionSelectors {
+                    invoke: ConsumerSelector {
+                        binding,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                GatewayDefaultV1::LIMITS,
+                bank.clone(),
+                &mut work(),
+            )
+        };
+        drop(select(Some(BindingId::new(2))).unwrap());
+        clean(&bank);
+        assert!(matches!(select(None), Err(CoreError::Binding(_))));
+        clean(&bank);
+    }
+    assert!(probe.ports.lock().unwrap().is_empty());
     clean(&services);
 }

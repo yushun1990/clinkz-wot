@@ -20,6 +20,7 @@ use std::{
 #[derive(Default)]
 struct NativeProbe {
     fail_compilation: Option<(u32, Operation)>,
+    fail_compatibility: Option<(Operation, BindingId)>,
     close_blocked: AtomicBool,
     fail_close: AtomicBool,
     fail_with_late: AtomicBool,
@@ -55,10 +56,12 @@ impl Native {
                 b"INVOKE 12".to_vec()
             }
             Operation::QueryAction | Operation::CancelAction if input.is_none() => {
-                let token = continuation
-                    .and_then(|t| t.downcast_ref::<Token>())
-                    .ok_or_else(invalid)?;
-                assert_eq!(token.0, 7);
+                let token = continuation.ok_or_else(invalid)?;
+                if self.ascii_continuation {
+                    assert_eq!(token.downcast_ref::<[u8; 1]>().ok_or_else(invalid)?, b"7");
+                } else {
+                    assert_eq!(token.downcast_ref::<Token>().ok_or_else(invalid)?.0, 7);
+                }
                 if self.operation == Operation::QueryAction {
                     b"QUERY 7".to_vec()
                 } else {
@@ -116,9 +119,14 @@ macro_rules! mapping {
                     .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
                 if self.0.operation == Operation::InvokeAction
                     || origin.0.peer != self.0.peer
-                    || origin.0.ascii_continuation
+                    || origin.0.ascii_continuation != self.0.ascii_continuation
                 {
                     return Err(CoreError::UnsupportedOperation(context()));
+                }
+                if self.0.probe.fail_compatibility
+                    == Some((self.0.operation, origin.0.id.binding_id()))
+                {
+                    return Err(CoreError::Binding(context()));
                 }
                 Ok(())
             }
@@ -239,12 +247,20 @@ impl ConsumerActionPreparation for Compiler {
         &self,
         input: ConsumerActionPreparationInput<'_>,
     ) -> CoreResult<Option<Box<dyn ConsumerActionMapping>>> {
-        let address = input
+        let Some((address, path)) = input
             .endpoint
             .strip_prefix("linkedudp://")
             .and_then(|target| target.split_once('/'))
-            .and_then(|(peer, _)| peer.parse::<SocketAddr>().ok());
-        if address != Some(self.peer) || self.invoke != (input.operation == Operation::InvokeAction)
+        else {
+            return Ok(None);
+        };
+        if address.parse::<SocketAddr>().ok() != Some(self.peer)
+            || self.invoke != (input.operation == Operation::InvokeAction)
+            || (!self.invoke
+                && matches!(
+                    (path, self.ascii_continuation),
+                    ("numeric", true) | ("ascii", false)
+                ))
         {
             return Ok(None);
         }

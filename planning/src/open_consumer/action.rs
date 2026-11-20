@@ -467,10 +467,42 @@ impl ActionForm {
             .as_deref()
             .expect("operation was probed")
     }
+
+    fn matching_control(
+        &self,
+        role: usize,
+        invoke: &dyn ConsumerActionMapping,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Option<(usize, bool)>> {
+        let mut first = None;
+        let mut ambiguous = false;
+        for (provider, control) in self.candidates(role).iter().enumerate() {
+            debit(budget, W::ProviderProbes, 1)?;
+            match control.operation.mapping.supports_continuation(invoke) {
+                Ok(()) => {
+                    if first.is_some() {
+                        ambiguous = true;
+                    } else {
+                        first = Some(provider);
+                    }
+                }
+                Err(CoreError::UnsupportedOperation(_)) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(first.map(|provider| (provider, ambiguous)))
+    }
 }
 
 type Pick = (usize, usize); // Form position, provider position within that Form and role.
 type Family = [Option<Pick>; 3];
+
+// One representative assignment per Invoke provider. All assignments in the
+// current prefix share its Form coordinates.
+struct ProviderAssignment {
+    providers: [usize; 3],
+    ambiguous: bool,
+}
 
 struct ActionSearch<'a, 'td> {
     registry: &'a ConsumerActionRegistry,
@@ -486,93 +518,107 @@ struct ActionSearch<'a, 'td> {
 }
 
 impl ActionSearch<'_, '_> {
-    // For a given Invoke the two controls depend only on its continuation.
-    // Their first compatible Forms give its best tuple without materializing
-    // a Cartesian product. Compare Form coordinates, never provider order.
     fn choose(&mut self, budget: &mut WorkBudget) -> CoreResult<Family> {
+        let mut assignments = self.provider_slots()?;
         for form in 0..self.forms.len() {
             debit(budget, W::PlanningItems, 1)?;
             if !self.forms[form].roles[0] {
                 continue;
             }
             self.probe_operation(form, 0, budget)?;
-            let mut best: Option<(Family, bool)> = None;
-            'provider: for provider in 0..self.forms[form].candidates(0).len() {
-                debit(budget, W::PlanningItems, 1)?;
-                let invoke = (form, provider);
-                let mut family = [Some(invoke), None, None];
-                let mut multiple = false;
-                for role in [1, 2] {
-                    if self.described[role] {
-                        let Some((control, ambiguous)) =
-                            self.first_control(invoke, role, budget)?
-                        else {
-                            continue 'provider;
-                        };
-                        family[role] = Some(control);
-                        multiple |= ambiguous;
-                    }
-                }
-                let rank = |f: Family| f.map(|pick| pick.map(|(form, _)| form));
-                match &mut best {
-                    Some((earlier, ambiguous)) if rank(*earlier) <= rank(family) => {
-                        *ambiguous |= rank(*earlier) == rank(family);
-                    }
-                    _ => best = Some((family, multiple)),
-                }
+            let count = self.forms[form].candidates(0).len();
+            if count == 0 {
+                continue;
             }
-            if let Some((family, multiple)) = best {
-                return if multiple {
-                    Err(CoreError::Selection {
-                        reason: SelectionFailureReason::AmbiguousBindingOwner,
-                        context: context(),
-                    })
-                } else {
-                    Ok(family)
-                };
+            debit(budget, W::PlanningItems, count as u64)?;
+            assignments.clear();
+            assignments.extend((0..count).map(|invoke| ProviderAssignment {
+                providers: [invoke, 0, 0],
+                ambiguous: false,
+            }));
+            if let Some(family) =
+                self.choose_controls(1, [Some(form), None, None], &mut assignments, budget)?
+            {
+                return Ok(family);
             }
         }
         Err(unsupported())
     }
 
-    fn first_control(
+    // Visit Form prefixes in preference order, carrying all surviving Invoke
+    // providers together. Described controls are the only two levels of descent.
+    fn choose_controls(
         &mut self,
-        invoke: Pick,
-        role: usize,
+        next_role: usize,
+        mut forms: [Option<usize>; 3],
+        mut remaining: &mut [ProviderAssignment],
         budget: &mut WorkBudget,
-    ) -> CoreResult<Option<(Pick, bool)>> {
+    ) -> CoreResult<Option<Family>> {
+        let Some(role) = (next_role..OPERATIONS.len()).find(|&role| self.described[role]) else {
+            return match remaining {
+                [only] if !only.ambiguous => Ok(Some(::core::array::from_fn(|i| {
+                    forms[i].map(|form| (form, only.providers[i]))
+                }))),
+                _ => Err(CoreError::Selection {
+                    reason: SelectionFailureReason::AmbiguousBindingOwner,
+                    context: context(),
+                }),
+            };
+        };
+        let invoke_form = forms[0].expect("Invoke is selected before controls");
         for form in 0..self.forms.len() {
             debit(budget, W::PlanningItems, 1)?;
             if !self.forms[form].roles[role] {
                 continue;
             }
             self.probe_operation(form, role, budget)?;
-            let origin = &self.forms[invoke.0].candidates(0)[invoke.1]
-                .operation
-                .mapping;
-            let mut chosen = None;
-            for (provider, control) in self.forms[form].candidates(role).iter().enumerate() {
-                debit(budget, W::ProviderProbes, 1)?;
-                match control
-                    .operation
-                    .mapping
-                    .supports_continuation(origin.as_ref())
+            let invokes = self.forms[invoke_form].candidates(0);
+            let control = &self.forms[form];
+            debit(budget, W::PlanningItems, remaining.len() as u64)?;
+            let mut matched = 0;
+            for i in 0..remaining.len() {
+                let path = &mut remaining[i];
+                let origin = &invokes[path.providers[0]].operation.mapping;
+                if let Some((provider, ambiguous)) =
+                    control.matching_control(role, origin.as_ref(), budget)?
                 {
-                    Ok(()) => {
-                        if let Some(first) = chosen {
-                            return Ok(Some((first, true)));
-                        }
-                        chosen = Some((form, provider));
-                    }
-                    Err(CoreError::UnsupportedOperation(_)) => {}
-                    Err(e) => return Err(e),
+                    path.providers[role] = provider;
+                    path.ambiguous |= ambiguous;
+                    remaining.swap(matched, i);
+                    matched += 1;
                 }
             }
-            if let Some(pick) = chosen {
-                return Ok(Some((pick, false)));
+            if matched == 0 {
+                continue;
             }
+            forms[role] = Some(form);
+            let (eligible, others) = remaining.split_at_mut(matched);
+            if let Some(family) = self.choose_controls(role + 1, forms, eligible, budget)? {
+                return Ok(Some(family));
+            }
+            // Every later control depends only on the original Invoke. An
+            // origin that exhausted those controls cannot gain a completion
+            // from another provider or a later Form for this role.
+            if others.is_empty() {
+                break;
+            }
+            remaining = others;
         }
         Ok(None)
+    }
+
+    // The native candidate cache and the reusable assignment slots draw from
+    // the same temporary allowance as the TD loan and compiler scratch.
+    fn provider_slots<T>(&mut self) -> CoreResult<Vec<T>> {
+        let count = self.registry.registrations.len();
+        let bytes = (count * size_of::<T>()) as u64;
+        check_limit(self.limits, K::LargestContiguousAllocationBytesMax, bytes)?;
+        self.cursor
+            .split_temporary_allowance(bytes)
+            .map_err(crate::producer_property_read::td_error)?;
+        let mut slots = Vec::new();
+        slots.try_reserve_exact(count).map_err(|_| busy())?;
+        Ok(slots)
     }
 
     fn probe_operation(
@@ -581,22 +627,11 @@ impl ActionSearch<'_, '_> {
         role: usize,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
-        let form = &mut self.forms[index];
-        if form.candidates[role].is_some() {
+        if self.forms[index].candidates[role].is_some() {
             return Ok(());
         }
-        let count = self.registry.registrations.len();
-        let per_role = count * size_of::<Candidate>();
-        check_limit(
-            self.limits,
-            K::LargestContiguousAllocationBytesMax,
-            per_role as u64,
-        )?;
-        self.cursor
-            .split_temporary_allowance(per_role as u64)
-            .map_err(crate::producer_property_read::td_error)?;
-        let mut candidates = Vec::new();
-        candidates.try_reserve_exact(count).map_err(|_| busy())?;
+        let mut candidates = self.provider_slots()?;
+        let form = &mut self.forms[index];
         let result = self.cursor.with_indexed_form_semantics(
             ValidatedProducerScope::Action(self.name),
             form.index,

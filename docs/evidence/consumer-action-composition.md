@@ -35,10 +35,27 @@ automatically both choose Invoke 0 and Query 1 with 128 compiler units. With
 127 units preparation refuses before I/O and releases its reservations. The
 automatically selected Query sends the original token `7` and returns `24`.
 Automatic selection also fits the minimum temporary capacity measured for the
-pinned choice and refuses one byte below that boundary. In a second case, both Forms offer Cancel. Form 1's Cancel compiler fails.
+pinned choice and refuses one byte below that boundary. In a second case, both
+Forms offer Cancel. Form 1's Cancel compiler fails.
 Automatic selection uses Query 1 with Cancel 0, and pinning Cancel 1 exposes
 the original Binding error. All three regression checks failed on `005ac0b6`.
 [Downstream qualification tests](../../tools/architecture-fixtures/open-consumer/tests/support/action_selection.rs)
+
+With three single-operation Forms, two Invoke providers offer distinct native
+tokens. Query 1 accepts only the numeric token. Query 2's compiler fails. On
+`6baed041` pinning Query 1 succeeds and automatic preparation returns the later
+error. In either registration order, the corrected automatic choice sends
+`QUERY 7` and receives `24` with exactly 192 compiler units. With 191 it refuses
+before I/O and refunds its reservations. Pinning Query 2 still returns its error.
+
+A second datagram TD has an earlier Query with a later compatible Cancel and a
+later Query with an earlier Cancel. The selected Invoke returns an ASCII token.
+The selected Cancel and Query send it to the peer. A hard failure compiling
+that required Cancel propagates even when pinning the later Query succeeds.
+Competing Invoke providers and competing controls for one Invoke both produce
+ambiguity at the preferred complete combination. Multiple Query providers for
+an Invoke that cannot use any Cancel leave a unique complete assignment usable.
+[Provider preference and ambiguity fixtures](../../tools/architecture-fixtures/open-consumer/tests/support/action_selection.rs)
 
 A reload between two competing negative compiler observations refuses selection.
 Stable competing providers report ambiguity, and short probe credit refuses before

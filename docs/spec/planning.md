@@ -433,6 +433,17 @@ can give way to another provider or Form during preparation. Registration order
 has no preference and execution never replays an uncertain effect through an
 alternative. [TD 1.1 Forms](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#form)
 
+For a fixed Invoke Form, compare each Query Form across all eligible Invoke
+providers before moving to the next Query. Within that prefix, compare Cancel
+Forms across all Invoke providers that can use the selected Query. Omit an
+absent control from the ordering. An earlier Query takes priority even if it
+needs a later Cancel. Multiple providers at a partial combination matter only
+if they can complete it. Each control accepts the original Invoke independently,
+so changing Query cannot rescue an Invoke for which every Cancel was ruled out.
+Preparation stops when it establishes uniqueness or ambiguity at the first
+complete Form combination. Qualification work is limited to Forms that can still
+determine preference or a tie.
+
 The Host registry indexes the selected Action's Form coordinates and resolved
 addresses during one Basic admission and URI walk. When the search needs an
 operation on a Form, it reserves candidate storage for that operation. All
@@ -440,11 +451,14 @@ registrations allowed by its selector share one loan of the Form's resolved
 semantics. If another operation on that Form is needed, it obtains a new paid
 loan from the admitted input. A Form with all three roles takes at most three loans.
 The search reuses each completed Form/operation result, including an empty
-provider set, across candidate combinations. A compiler or capacity failure on
-a required probe propagates before I/O.
+provider set, across candidate combinations. A hard compiler or continuation
+compatibility error on a required probe propagates before I/O, as does exhausted
+capacity or work.
 
 One caller work budget pays for the index, qualification, comparison and
-disposal of provisional mappings. The index, semantic loan and native compiler
+disposal of provisional mappings. The Host search reuses space for one partial
+assignment per registered provider across all Form combinations. That storage,
+the Form index, provisional candidate slots, semantic loan and native compiler
 scratch share one temporary reservation. Only the chosen mappings, services and
 their original funding enter the definition.
 
