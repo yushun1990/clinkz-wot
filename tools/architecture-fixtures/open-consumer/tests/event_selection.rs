@@ -782,3 +782,123 @@ fn an_uncoded_occurrence_on_the_selected_coded_route_fences_delivery() {
         clean(&plans);
     });
 }
+
+#[test]
+fn production_mqtt_and_downstream_udp_execute_from_one_registry() {
+    use clinkz_wot_binding_mqtt::{
+        MqttConsumerConfig, MqttConsumerService, MqttNotificationConsumer,
+    };
+    enum Route {
+        Mqtt(ConsumerNotificationDefinition<MqttNotificationConsumer>),
+        Datagram(ConsumerNotificationDefinition<Datagram>),
+    }
+
+    let peers = Peers::new();
+    let plans = bank();
+    let (mqtt, udp) = {
+        let deployment = Deployment::new(peers.addr);
+        let service = MqttConsumerService::new(
+            MqttConsumerConfig::for_loopback(peers.addr, 8192).unwrap(),
+            BindingId::new(8),
+            BindingGeneration::INITIAL,
+        )
+        .unwrap();
+        let registry = ConsumerNotificationRegistry::try_new_fixed(vec![
+            RetainedConsumerNotificationRegistration {
+                binding: deployment.datagram.clone(),
+                services: deployment.datagram_services.clone(),
+            }
+            .into_provider(Route::Datagram),
+            RetainedConsumerNotificationRegistration {
+                binding: service.binding(),
+                services: deployment.stream_services.clone(),
+            }
+            .into_provider(Route::Mqtt),
+        ])
+        .unwrap();
+        let thing = serde_json::from_value(json!({
+            "@context": ["https://www.w3.org/2022/wot/td/v1.1", {"mqv":"https://www.w3.org/2019/wot/mqtt#"}],
+            "title": "MQTT and datagram alarm", "security": "n", "securityDefinitions": {"n": {"scheme": "nosec"}},
+            "events": {"alarm": {"data": {"type": "integer"}, "forms": [
+                {"href": format!("mqtt://{}", peers.addr), "mqv:filter": "alarm", "mqv:qos": "0", "mqv:retain": false},
+                {"href": format!("testevent://{}/alarm", peers.addr), "subprotocol": "datagram", "contentCoding": "x-test-hex"}
+            ]}}
+        })).unwrap();
+        let mut limits = GatewayDefaultV1::LIMITS.clone();
+        assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));
+        let prepare = || {
+            registry
+                .prepare_notification(
+                    &thing,
+                    &alarm(),
+                    NotificationKind::Event,
+                    ConsumerSelector::default(),
+                    &limits,
+                    plans.clone(),
+                    &mut work(),
+                )
+                .unwrap()
+        };
+        let Route::Mqtt(mqtt) = prepare() else {
+            panic!("MQTT Form is preferred")
+        };
+        deployment.stream_access.missing.store(true, SeqCst);
+        let Route::Datagram(udp) = prepare() else {
+            panic!("the later UDP Form is viable")
+        };
+        assert_eq!((mqtt.input().form, udp.input().form), (0, 1));
+        (mqtt, udp)
+    };
+    peers.quiet();
+    let peer = mqtt_peer(peers.stream.try_clone().unwrap());
+    runtime().block_on(async {
+        let mut first = Conversation::start(mqtt, &plans);
+        first.until(NotificationState::Active).await;
+        first.receive(b"5").await;
+        let mut second = Conversation::start(udp, &plans);
+        second.until(NotificationState::Active).await;
+        let client = peers.packet(b"LISTEN");
+        assert_eq!(
+            first.finish(true).await.remote_cancellation,
+            RemoteCancellation::Confirmed
+        );
+        drop(peer.join().unwrap());
+        peers.datagram.send_to(b"36", client).unwrap();
+        second.receive(b"6").await;
+        drop(second.finish(true).await);
+        assert_eq!(peers.packet(b"UNLISTEN"), client);
+        clean(&plans);
+    });
+}
+
+// Independent MQTT 3.1.1 wire peer for the one QoS 0 exchange above. Every
+// packet in this fixture fits a one-byte remaining length.
+fn mqtt_peer(listener: TcpListener) -> std::thread::JoinHandle<std::net::TcpStream> {
+    use std::net::TcpStream;
+    fn packet(stream: &mut TcpStream, header: u8) -> Vec<u8> {
+        let mut prefix = [0; 2];
+        stream.read_exact(&mut prefix).unwrap();
+        assert_eq!(prefix[0], header);
+        assert!(prefix[1] < 128);
+        let mut body = vec![0; usize::from(prefix[1])];
+        stream.read_exact(&mut body).unwrap();
+        body
+    }
+    std::thread::spawn(move || {
+        listener.set_nonblocking(false).unwrap();
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(3)))
+            .unwrap();
+        assert!(packet(&mut stream, 0x10).starts_with(b"\0\x04MQTT\x04"));
+        stream.write_all(&[0x20, 2, 0, 0]).unwrap();
+        let sub = packet(&mut stream, 0x82);
+        assert_eq!(&sub[2..], b"\0\x05alarm\0");
+        stream.write_all(&[0x90, 3, sub[0], sub[1], 0]).unwrap();
+        stream.write_all(b"\x30\x08\0\x05alarm5").unwrap();
+        let stop = packet(&mut stream, 0xa2);
+        assert_eq!(&stop[2..], b"\0\x05alarm");
+        stream.write_all(&[0xb0, 2, stop[0], stop[1]]).unwrap();
+        stream
+    })
+}

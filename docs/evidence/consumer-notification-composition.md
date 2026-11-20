@@ -162,3 +162,9 @@ The same fixture exercises missing data, competing providers, a reload during
 qualification, a new competitor after selection, short work and overlapping
 mapping capacity. Original banks return to baseline on refusal and final release.
 [Selection and execution tests](../../tools/architecture-fixtures/open-consumer/tests/event_selection.rs)
+
+A second composition pairs the in-tree MQTT Binding and the downstream UDP
+Binding on the same TD. An independent MQTT 3.1.1 wire peer observes the
+subscription, delivers `5` and acknowledges unsubscribe. The selected UDP
+instance subsequently receives `6` and sends its own cancellation.
+[Mixed MQTT and datagram test](../../tools/architecture-fixtures/open-consumer/tests/event_selection.rs)

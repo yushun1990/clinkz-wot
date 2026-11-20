@@ -122,6 +122,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "clinkz-wot-binding-mqtt"
+version = "0.1.0"
+dependencies = [
+ "clinkz-wot-codec-json",
+ "clinkz-wot-core",
+ "clinkz-wot-foundation",
+ "clinkz-wot-planning",
+ "clinkz-wot-td",
+ "tokio",
+]
+
+[[package]]
 name = "clinkz-wot-codec-json"
 version = "0.1.0"
 dependencies = [
@@ -456,6 +468,7 @@ name = "independent-open-consumer"
 version = "0.1.0"
 dependencies = [
  "clinkz-wot-binding-http",
+ "clinkz-wot-binding-mqtt",
  "clinkz-wot-codec-json",
  "clinkz-wot-core",
  "clinkz-wot-foundation",

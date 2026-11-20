@@ -17,6 +17,7 @@ clinkz-wot-td = { path = "../../../td", optional = true }
 tokio = { version = "=1.52.3", features = ["rt", "time", "net"] }
 
 [dev-dependencies]
+clinkz-wot-binding-mqtt = { path = "../../../protocol-bindings/protocols/mqtt", default-features = false, features = ["prepare"] }
 clinkz-wot-servient-finite = { path = "../../../servient/finite" }
 clinkz-wot-binding-http = { path = "../../../protocol-bindings/protocols/http", default-features = false, features = ["prepare"] }
 serde_json = "1"
