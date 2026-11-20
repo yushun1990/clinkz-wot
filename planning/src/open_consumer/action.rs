@@ -117,18 +117,17 @@ impl ConsumerActionRegistry {
         if name.len() > 256 {
             return Err(unsupported());
         }
-        let common = limits
-            .get(K::AdmissionTemporaryBytesPerOperationMax)
-            .unwrap_or(0);
+        let config =
+            ValidatedThingAdmissionConfig::try_from_limits(limits).map_err(|_| invalid())?;
+        let common = config.temporary_allowance();
         let _scratch = reserve(
             &bank,
             &[
                 (K::EngineLiveBytesGlobalMax, common),
                 (K::AdmissionTemporaryBytesGlobalMax, common),
+                (K::AdmissionPeakLiveBytesGlobalMax, common),
             ],
         )?;
-        let config =
-            ValidatedThingAdmissionConfig::try_from_limits(limits).map_err(|_| invalid())?;
         let mut basic = ValidatedThingCursor::from_thing(
             thing,
             &config,
@@ -160,6 +159,7 @@ impl ConsumerActionRegistry {
         let selectors = [selectors.invoke, selectors.query, selectors.cancel];
         let mut forms = Vec::new();
         let mut described = [false; 3];
+        let mut indexed = [false; 3];
         loop {
             debit(budget, W::PlanningItems, 1)?;
             let before = credits(budget);
@@ -198,12 +198,17 @@ impl ConsumerActionRegistry {
                             .checked_mul(OPERATIONS.len() as u64)
                             .ok_or_else(busy)?,
                     )?;
+                    let bounded_href = form.resolved_href.len() <= 256;
                     let roles = ::core::array::from_fn(|i| {
                         let applicable = form.effective_operations.contains(&OPERATIONS[i]);
                         described[i] |= applicable;
-                        applicable && selectors[i].form.is_none_or(|f| f == form.index)
+                        let admitted = applicable
+                            && bounded_href
+                            && selectors[i].form.is_none_or(|f| f == form.index);
+                        indexed[i] |= admitted;
+                        admitted
                     });
-                    if roles.contains(&true) && form.resolved_href.len() <= 256 {
+                    if roles.contains(&true) {
                         check_limit(
                             limits,
                             K::LargestContiguousAllocationBytesMax,
@@ -224,9 +229,12 @@ impl ConsumerActionRegistry {
             }
             cursor.acknowledge();
         }
-        if !described[0]
+        if !indexed[0]
             || (1..3).any(|i| {
-                !described[i] && (selectors[i].binding.is_some() || selectors[i].form.is_some())
+                !indexed[i]
+                    && (described[i]
+                        || selectors[i].binding.is_some()
+                        || selectors[i].form.is_some())
             })
         {
             return Err(unsupported());
@@ -282,8 +290,8 @@ impl ConsumerActionRegistry {
         limits: &ResourceLimits,
         bank: &Arc<HostResourceAccounts>,
         budget: &mut WorkBudget,
-        temporary_headroom: u64,
-        candidates: &mut Vec<Candidate>,
+        temporary_headroom: ValidatedFormScratch,
+        mut accept: impl FnMut(Candidate, &mut WorkBudget) -> CoreResult<()>,
     ) -> CoreResult<()> {
         if endpoint.len() > 256 || doc.action().is_none_or(|a| a.synchronous == Some(true)) {
             return Ok(());
@@ -377,10 +385,10 @@ impl ConsumerActionRegistry {
                 Err(e) => return Err(e),
             }
             check_limit(limits, K::PlanCompileWorkUnitsPerStepMax, b.work)?;
-            if b.temporary_bytes > temporary_headroom {
+            if b.temporary_bytes > temporary_headroom.available_bytes {
                 return Err(CoreError::LimitExceeded {
-                    resource: K::AdmissionTemporaryBytesPerOperationMax,
-                    limit: temporary_headroom,
+                    resource: temporary_headroom.limiting_resource,
+                    limit: temporary_headroom.available_bytes,
                     requested: Some(b.temporary_bytes),
                     observed: None,
                     context: context(),
@@ -432,10 +440,13 @@ impl ConsumerActionRegistry {
                 operation,
             };
             selected.check_native_dependencies()?;
-            candidates.push(Candidate {
-                operation: selected,
-                funding,
-            });
+            accept(
+                Candidate {
+                    operation: selected,
+                    funding,
+                },
+                budget,
+            )?;
         }
         Ok(())
     }
@@ -461,36 +472,10 @@ struct ActionForm {
     schemas_checked: bool,
 }
 
-impl ActionForm {
-    fn candidates(&self, role: usize) -> &[Candidate] {
-        self.candidates[role]
-            .as_deref()
-            .expect("operation was probed")
-    }
-
-    fn matching_control(
-        &self,
-        role: usize,
-        invoke: &dyn ConsumerActionMapping,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<Option<(usize, bool)>> {
-        let mut first = None;
-        let mut ambiguous = false;
-        for (provider, control) in self.candidates(role).iter().enumerate() {
-            debit(budget, W::ProviderProbes, 1)?;
-            match control.operation.mapping.supports_continuation(invoke) {
-                Ok(()) => {
-                    if first.is_some() {
-                        ambiguous = true;
-                    } else {
-                        first = Some(provider);
-                    }
-                }
-                Err(CoreError::UnsupportedOperation(_)) => {}
-                Err(e) => return Err(e),
-            }
-        }
-        Ok(first.map(|provider| (provider, ambiguous)))
+fn ambiguous() -> CoreError {
+    CoreError::Selection {
+        reason: SelectionFailureReason::AmbiguousBindingOwner,
+        context: context(),
     }
 }
 
@@ -520,13 +505,21 @@ struct ActionSearch<'a, 'td> {
 impl ActionSearch<'_, '_> {
     fn choose(&mut self, budget: &mut WorkBudget) -> CoreResult<Family> {
         let mut assignments = self.provider_slots()?;
+        let mut invokes = self.provider_slots()?;
+        let invoke_only = !self.described[1..].contains(&true);
         for form in 0..self.forms.len() {
             debit(budget, W::PlanningItems, 1)?;
             if !self.forms[form].roles[0] {
                 continue;
             }
-            self.probe_operation(form, 0, budget)?;
-            let count = self.forms[form].candidates(0).len();
+            self.compile_operation(form, 0, budget, |candidate, _| {
+                if invoke_only && !invokes.is_empty() {
+                    return Err(ambiguous());
+                }
+                invokes.push(candidate);
+                Ok(())
+            })?;
+            let count = invokes.len();
             if count == 0 {
                 continue;
             }
@@ -536,11 +529,19 @@ impl ActionSearch<'_, '_> {
                 providers: [invoke, 0, 0],
                 ambiguous: false,
             }));
-            if let Some(family) =
-                self.choose_controls(1, [Some(form), None, None], &mut assignments, budget)?
-            {
+            if let Some(family) = self.choose_controls(
+                1,
+                [Some(form), None, None],
+                &invokes,
+                &mut assignments,
+                budget,
+            )? {
+                self.forms[form].candidates[0] = Some(invokes);
                 return Ok(family);
             }
+            // This Invoke Form can never win. Drop its mappings with their
+            // original funding and reuse the same paid slots for the next Form.
+            invokes.clear();
         }
         Err(unsupported())
     }
@@ -551,49 +552,64 @@ impl ActionSearch<'_, '_> {
         &mut self,
         next_role: usize,
         mut forms: [Option<usize>; 3],
+        invokes: &[Candidate],
         mut remaining: &mut [ProviderAssignment],
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<Family>> {
         let Some(role) = (next_role..OPERATIONS.len()).find(|&role| self.described[role]) else {
-            return match remaining {
-                [only] if !only.ambiguous => Ok(Some(::core::array::from_fn(|i| {
-                    forms[i].map(|form| (form, only.providers[i]))
-                }))),
-                _ => Err(CoreError::Selection {
-                    reason: SelectionFailureReason::AmbiguousBindingOwner,
-                    context: context(),
-                }),
+            let [only] = remaining else {
+                return Err(ambiguous());
             };
+            return Ok(Some(::core::array::from_fn(|i| {
+                forms[i].map(|form| (form, only.providers[i]))
+            })));
         };
-        let invoke_form = forms[0].expect("Invoke is selected before controls");
+        let final_control = !self.described[role + 1..].contains(&true);
         for form in 0..self.forms.len() {
             debit(budget, W::PlanningItems, 1)?;
             if !self.forms[form].roles[role] {
                 continue;
             }
-            self.probe_operation(form, role, budget)?;
-            let invokes = self.forms[invoke_form].candidates(0);
-            let control = &self.forms[form];
-            debit(budget, W::PlanningItems, remaining.len() as u64)?;
             let mut matched = 0;
-            for i in 0..remaining.len() {
-                let path = &mut remaining[i];
-                let origin = &invokes[path.providers[0]].operation.mapping;
-                if let Some((provider, ambiguous)) =
-                    control.matching_control(role, origin.as_ref(), budget)?
-                {
-                    path.providers[role] = provider;
-                    path.ambiguous |= ambiguous;
-                    remaining.swap(matched, i);
-                    matched += 1;
+            self.visit_control(form, role, budget, |provider, control, budget| {
+                for i in 0..remaining.len() {
+                    let path = &mut remaining[i];
+                    let origin = &invokes[path.providers[0]].operation.mapping;
+                    debit(budget, W::ProviderProbes, 1)?;
+                    match control
+                        .operation
+                        .mapping
+                        .supports_continuation(origin.as_ref())
+                    {
+                        Ok(()) => {}
+                        Err(CoreError::UnsupportedOperation(_)) => continue,
+                        Err(e) => return Err(e),
+                    }
+                    if final_control && (matched != 0 || path.ambiguous) {
+                        return Err(ambiguous());
+                    }
+                    if i < matched {
+                        path.ambiguous = true;
+                    } else {
+                        // Keep one representative per matching Invoke in the
+                        // prefix. The entry swapped out has already been tested
+                        // against this control provider.
+                        debit(budget, W::PlanningItems, 1)?;
+                        path.providers[role] = provider;
+                        remaining.swap(matched, i);
+                        matched += 1;
+                    }
                 }
-            }
+                Ok(())
+            })?;
             if matched == 0 {
                 continue;
             }
             forms[role] = Some(form);
             let (eligible, others) = remaining.split_at_mut(matched);
-            if let Some(family) = self.choose_controls(role + 1, forms, eligible, budget)? {
+            if let Some(family) =
+                self.choose_controls(role + 1, forms, invokes, eligible, budget)?
+            {
                 return Ok(Some(family));
             }
             // Every later control depends only on the original Invoke. An
@@ -621,16 +637,36 @@ impl ActionSearch<'_, '_> {
         Ok(slots)
     }
 
-    fn probe_operation(
+    fn visit_control(
         &mut self,
         index: usize,
         role: usize,
         budget: &mut WorkBudget,
+        mut visit: impl FnMut(usize, &Candidate, &mut WorkBudget) -> CoreResult<()>,
     ) -> CoreResult<()> {
-        if self.forms[index].candidates[role].is_some() {
+        if let Some(candidates) = &self.forms[index].candidates[role] {
+            for (provider, candidate) in candidates.iter().enumerate() {
+                visit(provider, candidate, budget)?;
+            }
             return Ok(());
         }
         let mut candidates = self.provider_slots()?;
+        self.compile_operation(index, role, budget, |candidate, budget| {
+            visit(candidates.len(), &candidate, budget)?;
+            candidates.push(candidate);
+            Ok(())
+        })?;
+        self.forms[index].candidates[role] = Some(candidates);
+        Ok(())
+    }
+
+    fn compile_operation(
+        &mut self,
+        index: usize,
+        role: usize,
+        budget: &mut WorkBudget,
+        accept: impl FnMut(Candidate, &mut WorkBudget) -> CoreResult<()>,
+    ) -> CoreResult<()> {
         let form = &mut self.forms[index];
         let result = self.cursor.with_indexed_form_semantics(
             ValidatedProducerScope::Action(self.name),
@@ -661,7 +697,7 @@ impl ActionSearch<'_, '_> {
                     self.bank,
                     budget,
                     temporary_headroom,
-                    &mut candidates,
+                    accept,
                 )
             },
         );
@@ -679,7 +715,6 @@ impl ActionSearch<'_, '_> {
                 SemanticError::UnsupportedContext | SemanticError::UnsupportedDependency,
             )) => {}
         }
-        form.candidates[role] = Some(candidates);
         Ok(())
     }
 }

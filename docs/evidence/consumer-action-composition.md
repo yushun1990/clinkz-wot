@@ -57,6 +57,16 @@ ambiguity at the preferred complete combination. Multiple Query providers for
 an Invoke that cannot use any Cancel leave a unique complete assignment usable.
 [Provider preference and ambiguity fixtures](../../tools/architecture-fixtures/open-consumer/tests/support/action_selection.rs)
 
+An exhausted Invoke offering an ASCII token releases its cleanup slot before
+the next Invoke offers a numeric token. With two cleanup slots and the pinned
+choice's temporary allowance, automatic preparation retains the numeric Invoke
+and the cached Query. Their UDP exchange returns `24`. Pinning Query to an
+Invoke-only Form spends zero compiler credit. With three Invoke registrations,
+two successful 32-unit compilers establish ambiguity at 64 units. At 63 units
+the outcome is still undecided and preparation returns backpressure. The
+fixture also checks early ambiguity when Query or Cancel completes the tuple.
+[Selection resource and ambiguity regressions](../../tools/architecture-fixtures/open-consumer/tests/support/action_selection.rs)
+
 A reload between two competing negative compiler observations refuses selection.
 Stable competing providers report ambiguity, and short probe credit refuses before
 native start. A pinned provider and a previously selected, still-authorized
@@ -80,10 +90,11 @@ versus 4,143-byte media strings. Each definition owns a distinct media snapshot;
 its definition-bank reservation grows by exactly the 4,127-byte difference, while
 the original service-bank charge stays fixed during preparation. A definition
 bank one byte short of the complete copy reservation refuses before native
-compilation and releases partial preparation funding. A one-MiB temporary bank
-can fund the TD, Form index and native compiler together. The compiler enters
-at its exact remaining allowance and is refused one byte above it. Final owner
-disposal returns both banks to zero. This is preparation-only evidence, not HTTP support for that
+compilation and releases partial preparation funding. With each admission
+temporary or peak limit set to 64 KiB in turn, the compiler allocates scratch
+at its exact remaining allowance. One extra byte refuses before compiler entry
+and identifies the limiting resource. Final owner disposal returns both banks
+to zero. This is preparation-only evidence, not HTTP support for that
 media parameter or a native execution claim.
 
 The F3 cases prepare once, then change data backing, temporary bytes, validation

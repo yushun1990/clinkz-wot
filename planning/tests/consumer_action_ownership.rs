@@ -94,6 +94,8 @@ impl ConsumerActionPreparation for Compiler {
     ) -> CoreResult<Option<Box<dyn ConsumerActionMapping>>> {
         assert_eq!(input.operation, Operation::InvokeAction);
         self.calls.fetch_add(1, Ordering::Relaxed);
+        let scratch = vec![0xa5_u8; self.temporary_bytes as usize];
+        std::hint::black_box(&scratch);
         Ok(Some(Box::new(Mapping)))
     }
 }
@@ -278,35 +280,47 @@ fn unfunded_media_copy_refuses_before_compilation_and_refunds_partial_preparatio
 
 #[test]
 fn native_scratch_shares_the_single_paid_allowance_with_td_and_selection() {
-    let mut limits = GatewayDefaultV1::LIMITS.clone();
-    let total = 1 << 20;
+    let base = GatewayDefaultV1::LIMITS.clone().with_limit(
+        ResourceKind::AdmissionTemporaryBytesPerOperationMax,
+        Some(1 << 20),
+    );
     for kind in [
         ResourceKind::AdmissionTemporaryBytesPerOperationMax,
         ResourceKind::AdmissionTemporaryBytesGlobalMax,
+        ResourceKind::PeakLiveBytesPerAdmissionMax,
+        ResourceKind::AdmissionPeakLiveBytesGlobalMax,
     ] {
-        assert!(limits.set(kind, Some(total)));
+        let ceiling = 64 * 1024;
+        let limits = base.clone().with_limit(kind, Some(ceiling));
+        let bank = Arc::new(HostResourceAccounts::new(&limits));
+        let count = Arc::new(AtomicUsize::new(0));
+        let attempt = |native_bytes| {
+            let (registry, _) = registry("application/json", &bank, &count, native_bytes);
+            prepare(&registry, "application/json", &limits, bank.clone())
+        };
+        let probe = 128 * 1024;
+        let available = match attempt(probe) {
+            Err(CoreError::LimitExceeded {
+                resource,
+                limit,
+                requested: Some(bytes),
+                ..
+            }) => {
+                assert_eq!((resource, bytes), (kind, probe));
+                limit
+            }
+            _ => panic!(
+                "compiler scratch must fit beside the TD and selection storage under {kind:?}"
+            ),
+        };
+        assert!(available > 0 && available < ceiling);
+        assert!(
+            matches!(attempt(available + 1), Err(CoreError::LimitExceeded {resource, limit, ..}) if resource == kind && limit == available)
+        );
+        assert_eq!(count.load(Ordering::Relaxed), 0);
+        clean(&bank);
+        drop(attempt(available).unwrap());
+        assert_eq!(count.load(Ordering::Relaxed), 1);
+        clean(&bank);
     }
-    let bank = Arc::new(HostResourceAccounts::new(&limits));
-    let count = Arc::new(AtomicUsize::new(0));
-    let attempt = |native_bytes| {
-        let (registry, _) = registry("application/json", &bank, &count, native_bytes);
-        prepare(&registry, "application/json", &limits, bank.clone())
-    };
-    let available = match attempt(total) {
-        Err(CoreError::LimitExceeded {
-            resource: ResourceKind::AdmissionTemporaryBytesPerOperationMax,
-            limit,
-            requested: Some(bytes),
-            ..
-        }) if bytes == total => limit,
-        _ => panic!("native compilation must fit beside the admitted TD and Form index"),
-    };
-    assert!(available > 0 && available < total);
-    assert_eq!(count.load(Ordering::Relaxed), 0);
-    clean(&bank);
-    assert!(attempt(available + 1).is_err());
-    assert_eq!(count.load(Ordering::Relaxed), 0);
-    drop(attempt(available).unwrap());
-    assert_eq!(count.load(Ordering::Relaxed), 1);
-    clean(&bank);
 }

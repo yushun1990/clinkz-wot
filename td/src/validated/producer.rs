@@ -5,6 +5,37 @@ use crate::{
     td_defaults::{FormContext, default_operations_for_context},
 };
 
+#[cfg(feature = "std")]
+const FORM_SCRATCH_LIMITS: [R; 5] = [
+    R::AdmissionTemporaryBytesPerOperationMax,
+    R::AdmissionTemporaryBytesGlobalMax,
+    R::PeakLiveBytesPerAdmissionMax,
+    R::AdmissionPeakLiveBytesGlobalMax,
+    R::EngineLiveBytesGlobalMax,
+];
+
+/// Space available for caller-backed scratch beside a live semantic loan.
+#[cfg(feature = "std")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedFormScratch {
+    /// Configured resource with the least remaining capacity.
+    pub limiting_resource: R,
+    /// Bytes the callback can use under that ceiling while the loan is live.
+    pub available_bytes: u64,
+}
+
+#[cfg(feature = "std")]
+impl ValidatedThingAdmissionConfig {
+    /// Upper bound for funding a fresh admission's shared scratch reservation.
+    pub fn temporary_allowance(&self) -> u64 {
+        FORM_SCRATCH_LIMITS
+            .into_iter()
+            .map(|kind| self.policy.get(kind))
+            .min()
+            .unwrap()
+    }
+}
+
 /// Original declaration scope, including affordances with no Forms.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ValidatedProducerScope<'a> {
@@ -414,16 +445,8 @@ impl<'td> ValidatedProducerCursor<'td> {
         if let Some(cause) = self.cause {
             return Err(cause);
         }
-        let retained = walk_temporary_bytes(&self.owner, self.scratch.capacity)?;
-        let required = add(retained, bytes, Phase::Semantics)?;
-        let kinds = [
-            R::AdmissionTemporaryBytesPerOperationMax,
-            R::PeakLiveBytesPerAdmissionMax,
-        ];
-        for kind in kinds {
-            self.owner.policy.check(kind, required, Phase::Semantics)?;
-        }
-        for kind in kinds {
+        form_scratch(&self.owner, self.scratch.capacity, bytes)?;
+        for kind in FORM_SCRATCH_LIMITS {
             let i = CATALOG.iter().position(|&k| k == kind).expect("TD catalog");
             self.owner.policy.values[i] -= bytes;
         }
@@ -432,8 +455,8 @@ impl<'td> ValidatedProducerCursor<'td> {
 
     /// After the coordinate/URI walk, lend the selected Form from this same
     /// immutable admitted input. The caller retains the resolved href from
-    /// that walk. The callback receives its remaining configured temporary
-    /// allowance and supplies its own backing. TD spends its original ledger
+    /// that walk. The callback receives the limiting resource and remaining
+    /// scratch bytes and supplies its own backing. TD spends its original ledger
     /// and work budget for each loan.
     #[cfg(feature = "std")]
     pub fn with_indexed_form_semantics<T: 'static>(
@@ -441,7 +464,11 @@ impl<'td> ValidatedProducerCursor<'td> {
         scope: ValidatedProducerScope<'_>,
         index: u32,
         budget: &mut WorkBudget,
-        lower: impl FnOnce(&crate::semantic::ResolvedSemanticDocument<'_>, u64, &mut WorkBudget) -> T,
+        lower: impl FnOnce(
+            &crate::semantic::ResolvedSemanticDocument<'_>,
+            ValidatedFormScratch,
+            &mut WorkBudget,
+        ) -> T,
     ) -> Result<Option<T>, ValidatedSemanticError> {
         if let Some(cause) = self.cause {
             return Err(ValidatedSemanticError::Admission(cause));
@@ -471,7 +498,11 @@ impl<'td> ValidatedProducerCursor<'td> {
         scope: ValidatedProducerScope<'_>,
         index: u32,
         budget: &mut WorkBudget,
-        lower: impl FnOnce(&crate::semantic::ResolvedSemanticDocument<'_>, u64, &mut WorkBudget) -> T,
+        lower: impl FnOnce(
+            &crate::semantic::ResolvedSemanticDocument<'_>,
+            ValidatedFormScratch,
+            &mut WorkBudget,
+        ) -> T,
     ) -> Result<Option<T>, ValidatedSemanticError> {
         use crate::semantic::{ResolvedSemanticDocument as Document, SemanticError};
         let key_bytes = match current.map_or(scope, |(owner, _)| owner.scope()) {
@@ -499,33 +530,8 @@ impl<'td> ValidatedProducerCursor<'td> {
             ));
         }
         let bytes = Document::capacity_bytes();
-        // Only backing owned by this TD continuation is temporary capacity.
-        // Retained upstream accounts still participate in aggregate live checks.
-        let temporary = walk_temporary_bytes(owner, uri_capacity)
-            .and_then(|retained| add(retained, bytes, Phase::Semantics))
-            .map_err(ValidatedSemanticError::Admission)?;
-        for kind in [
-            R::AdmissionTemporaryBytesPerOperationMax,
-            R::AdmissionTemporaryBytesGlobalMax,
-            R::PeakLiveBytesPerAdmissionMax,
-        ] {
-            owner
-                .policy
-                .check(kind, temporary, Phase::Semantics)
-                .map_err(ValidatedSemanticError::Admission)?;
-        }
-        let live = add(owner.stack.ledger.live_bytes(), bytes, Phase::Semantics)
-            .and_then(|n| add(n, producer_inline_bytes(), Phase::Semantics))
-            .map_err(ValidatedSemanticError::Admission)?;
-        for kind in [
-            R::AdmissionPeakLiveBytesGlobalMax,
-            R::EngineLiveBytesGlobalMax,
-        ] {
-            owner
-                .policy
-                .check(kind, live, Phase::Semantics)
-                .map_err(ValidatedSemanticError::Admission)?;
-        }
+        let headroom =
+            form_scratch(owner, uri_capacity, bytes).map_err(ValidatedSemanticError::Admission)?;
         for layout in Document::allocation_layouts() {
             owner
                 .policy
@@ -557,17 +563,51 @@ impl<'td> ValidatedProducerCursor<'td> {
         );
         owner.remaining += unused;
         let document = document.map_err(ValidatedSemanticError::Resolution)?;
-        let headroom = owner
-            .policy
-            .get(R::AdmissionTemporaryBytesPerOperationMax)
-            .min(owner.policy.get(R::PeakLiveBytesPerAdmissionMax))
-            - temporary;
         let result = lower(&document, headroom, budget);
         drop(document);
         drop(reservation);
         Ok(Some(result))
     }
 }
+#[cfg(feature = "std")]
+fn form_scratch(
+    owner: &ValidatedThingCursor<'_>,
+    uri_capacity: usize,
+    additional: u64,
+) -> Result<ValidatedFormScratch, Cause> {
+    let temporary = add(
+        walk_temporary_bytes(owner, uri_capacity)?,
+        additional,
+        Phase::Semantics,
+    )?;
+    // The global live ceilings also cover upstream backing on the original ledger.
+    let live = add(
+        owner.stack.ledger.live_bytes(),
+        producer_inline_bytes(),
+        Phase::Semantics,
+    )
+    .and_then(|bytes| add(bytes, additional, Phase::Semantics))?;
+    let mut tightest = ValidatedFormScratch {
+        limiting_resource: FORM_SCRATCH_LIMITS[0],
+        available_bytes: u64::MAX,
+    };
+    for kind in FORM_SCRATCH_LIMITS {
+        let used = match kind {
+            R::AdmissionPeakLiveBytesGlobalMax | R::EngineLiveBytesGlobalMax => live,
+            _ => temporary,
+        };
+        owner.policy.check(kind, used, Phase::Semantics)?;
+        let available = owner.policy.get(kind) - used;
+        if available < tightest.available_bytes {
+            tightest = ValidatedFormScratch {
+                limiting_resource: kind,
+                available_bytes: available,
+            };
+        }
+    }
+    Ok(tightest)
+}
+
 #[cfg(feature = "std")]
 fn walk_temporary_bytes(
     owner: &ValidatedThingCursor<'_>,
@@ -599,8 +639,6 @@ mod tests {
             .fold(WorkBudget::new(), |b, w| b.with_remaining(w, 1_000_000))
     }
     fn producer(thing: &Thing, temporary: u64) -> ValidatedProducerCursor<'_> {
-        let config =
-            ValidatedThingAdmissionConfig::try_from_limits(&GatewayDefaultV1::LIMITS).unwrap();
         let ledger = AdmissionLedger::new(
             SlotIndex::new(1),
             Generation::INITIAL,
@@ -611,6 +649,15 @@ mod tests {
             0,
             0,
         );
+        producer_with_ledger(thing, GatewayDefaultV1::LIMITS, ledger)
+    }
+
+    fn producer_with_ledger<'a>(
+        thing: &'a Thing,
+        limits: &ResourceLimits,
+        ledger: AdmissionLedger,
+    ) -> ValidatedProducerCursor<'a> {
+        let config = ValidatedThingAdmissionConfig::try_from_limits(limits).unwrap();
         let mut c = ValidatedThingCursor::from_thing(thing, &config, ledger);
         let mut cursor = loop {
             match c.step(&mut work(), false) {
@@ -628,6 +675,66 @@ mod tests {
         }
         cursor
     }
+    #[test]
+    fn indexed_scratch_accounts_for_splits_and_upstream_live_bytes_at_each_ceiling() {
+        let thing = serde_json::from_value(serde_json::json!({
+            "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"scratch",
+            "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
+            "actions":{"run":{"forms":[{"href":"test://peer/run","op":"invokeaction"}]}}
+        }))
+        .unwrap();
+        let ceiling = 64 * 1024;
+        for kind in FORM_SCRATCH_LIMITS {
+            let limits = GatewayDefaultV1::LIMITS
+                .clone()
+                .with_limit(kind, Some(ceiling));
+            let available = |upstream| {
+                let mut ledger = AdmissionLedger::new(
+                    SlotIndex::new(1),
+                    Generation::INITIAL,
+                    upstream,
+                    1 << 20,
+                    0,
+                    0,
+                    0,
+                    0,
+                );
+                ledger
+                    .try_reserve_source(R::RetainedSourceBytesPerOwnerMax, upstream)
+                    .unwrap()
+                    .commit();
+                let mut cursor = producer_with_ledger(&thing, &limits, ledger);
+                let loan = |cursor: &mut ValidatedProducerCursor<'_>| {
+                    cursor
+                        .with_indexed_form_semantics(
+                            ValidatedProducerScope::Action("run"),
+                            0,
+                            &mut work(),
+                            |_, scratch, _| scratch,
+                        )
+                        .unwrap()
+                        .unwrap()
+                };
+                let before = loan(&mut cursor);
+                assert_eq!(before.limiting_resource, kind);
+                assert!(before.available_bytes < ceiling);
+                cursor.split_temporary_allowance(4096).unwrap();
+                let after = loan(&mut cursor);
+                assert_eq!(after.limiting_resource, kind);
+                assert_eq!(before.available_bytes - after.available_bytes, 4096);
+                before.available_bytes
+            };
+            let global_live = matches!(
+                kind,
+                R::AdmissionPeakLiveBytesGlobalMax | R::EngineLiveBytesGlobalMax
+            );
+            assert_eq!(
+                available(0) - available(2048),
+                if global_live { 2048 } else { 0 }
+            );
+        }
+    }
+
     #[test]
     fn arena_and_uri_release_keep_original_ledger_on_return_refusal_and_unwind() {
         let thing: Thing = serde_json::from_str(r#"{"@context":"https://www.w3.org/2022/wot/td/v1.1","title":"paid",

@@ -685,14 +685,8 @@ fn control_forms(peer: SocketAddr, forms: &[(&str, &str)]) -> Thing {
     .unwrap()
 }
 
-fn competing_registry(
-    peer: SocketAddr,
-    native: &Arc<NativeProbe>,
-    service_bank: &Arc<HostResourceAccounts>,
-    providers: &[(u32, bool, bool)],
-    reverse: bool,
-) -> ConsumerActionRegistry {
-    let services = RetainedConsumerServices {
+fn selection_services(service_bank: &Arc<HostResourceAccounts>) -> RetainedConsumerServices {
+    RetainedConsumerServices {
         data: ConsumerServiceOwner::retain_data(
             services(Arc::new(Probe::default())).data,
             service_bank,
@@ -702,7 +696,17 @@ fn competing_registry(
         access: ConsumerServiceOwner::retain_access(Arc::new(Access), service_bank)
             .ok()
             .unwrap(),
-    };
+    }
+}
+
+fn competing_registry(
+    peer: SocketAddr,
+    native: &Arc<NativeProbe>,
+    service_bank: &Arc<HostResourceAccounts>,
+    providers: &[(u32, bool, bool)],
+    reverse: bool,
+) -> ConsumerActionRegistry {
+    let services = selection_services(service_bank);
     let mut registrations = datagram_registrations(peer, native, &services, providers);
     if reverse {
         registrations.reverse();
@@ -1017,5 +1021,248 @@ fn a_compatibility_error_from_a_possible_equal_assignment_reaches_the_caller() {
         clean(&bank);
     }
     assert!(probe.ports.lock().unwrap().is_empty());
+    clean(&services);
+}
+
+// Both operations belong to this registration. The endpoint selects the Invoke
+// token format and the Query endpoint accepts only the numeric token.
+struct EndpointTokenCompiler(Compiler);
+impl ConsumerActionPreparation for EndpointTokenCompiler {
+    fn identity(&self) -> BindingRegistrationIdentity {
+        self.0.identity()
+    }
+    fn bounds(&self) -> ConsumerPreparationBounds {
+        self.0.bounds()
+    }
+    fn compile_action(
+        &self,
+        input: ConsumerActionPreparationInput<'_>,
+    ) -> CoreResult<Option<Box<dyn ConsumerActionMapping>>> {
+        Compiler {
+            invoke: input.operation == Operation::InvokeAction,
+            ascii_continuation: input.endpoint.ends_with("/ascii"),
+            ..self.0.clone()
+        }
+        .compile_action(input)
+    }
+}
+
+#[test]
+fn exhausted_invoke_releases_its_cleanup_slot_and_reuses_its_candidate_storage() {
+    let (address, server) = peer(vec![
+        (b"INVOKE 12", b"ACCEPT 7"),
+        (b"QUERY 7", b"OUTPUT 24"),
+    ]);
+    let services = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let limits = GatewayDefaultV1::LIMITS
+        .clone()
+        .with_limit(ResourceKind::CleanupItemsMax, Some(2));
+    let bank = Arc::new(HostResourceAccounts::new(&limits));
+    let probe = Arc::new(NativeProbe::default());
+    let compiler = EndpointTokenCompiler(Compiler {
+        id: BindingRegistrationIdentity::new(
+            BindingId::new(2),
+            BindingGeneration::INITIAL,
+            configuration().configuration(),
+            configuration().native_compatibility().unwrap(),
+            0,
+        ),
+        invoke: true,
+        ascii_continuation: false,
+        peer: address,
+        media: "application/json",
+        probe: probe.clone(),
+    });
+    let registry = ConsumerActionRegistry::try_new_fixed(vec![ConsumerActionRegistration {
+        preparation: Box::new(compiler),
+        services: selection_services(&services),
+    }])
+    .unwrap();
+    let td = control_forms(
+        address,
+        &[
+            ("invokeaction", "ascii"),
+            ("invokeaction", "numeric"),
+            ("queryaction", "numeric"),
+        ],
+    );
+    let kind = ResourceKind::AdmissionTemporaryBytesPerOperationMax;
+    let prepare = |pin, bytes| {
+        prepare_with_credit(
+            &registry,
+            &td,
+            &bank,
+            ConsumerActionSelectors {
+                invoke: ConsumerSelector {
+                    form: pin,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            &limits.clone().with_limit(kind, Some(bytes)),
+            3 * 32,
+        )
+    };
+    // Calibrate the pinned pair's storage on this target. Automatic selection
+    // must fit that same allowance and reuse Query 2 after rejecting Invoke 0.
+    let (mut low, mut high) = (0, limits.get(kind).unwrap());
+    drop(prepare(Some(1), high).unwrap());
+    while low < high {
+        let mid = low + (high - low) / 2;
+        match prepare(Some(1), mid) {
+            Ok(_) => high = mid,
+            Err(CoreError::LimitExceeded { .. } | CoreError::Backpressure(_)) => low = mid + 1,
+            Err(e) => panic!("unexpected preparation error {e:?}"),
+        }
+        clean(&bank);
+    }
+    let selected = prepare(None, low).unwrap();
+    assert_eq!(
+        (
+            selected.input().invoke.form,
+            selected.input().query.as_ref().unwrap().form
+        ),
+        (1, 2)
+    );
+    assert_eq!(bank.account(ResourceKind::CleanupItemsMax).used(), 2);
+    // Execution has its own source of capacity after preparation.
+    let calls_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    *probe.bank.lock().unwrap() = Some(calls_bank.clone());
+    execute_datagram_action(selected, &calls_bank);
+    server.join().unwrap();
+    clean(&bank);
+    drop(registry);
+    clean(&services);
+}
+
+#[test]
+fn two_complete_assignments_end_native_probing_at_the_deciding_operation() {
+    let address = "127.0.0.1:9".parse().unwrap();
+    let services_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let services = selection_services(&services_bank);
+    let good = Arc::new(NativeProbe::default());
+    let forms = [
+        ("invokeaction", "run"),
+        ("queryaction", "numeric"),
+        ("cancelaction", "numeric"),
+    ];
+    for (last, operation) in [
+        Operation::InvokeAction,
+        Operation::QueryAction,
+        Operation::CancelAction,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let td = control_forms(address, &forms[..=last]);
+        let bad = Arc::new(NativeProbe {
+            fail_compilation: Some((last as u32, operation)),
+            ..Default::default()
+        });
+        let providers: &[(u32, bool, bool)] = if last == 0 {
+            &[(2, true, false), (3, true, false)]
+        } else {
+            &[(2, true, false), (3, false, false), (4, false, false)]
+        };
+        let mut registrations = datagram_registrations(address, &good, &services, providers);
+        registrations.extend(datagram_registrations(
+            address,
+            &bad,
+            &services,
+            &[(9, last == 0, false)],
+        ));
+        let registry = ConsumerActionRegistry::try_new_fixed(registrations).unwrap();
+        let binding = |id| ConsumerSelector {
+            binding: Some(BindingId::new(id)),
+            ..Default::default()
+        };
+        let mut selectors = ConsumerActionSelectors::default();
+        if last > 0 {
+            selectors.invoke = binding(2);
+        }
+        if last == 2 {
+            selectors.query = binding(3);
+        }
+        let needed = [64, 128, 160][last];
+        let prepare = |selectors, credit| {
+            let mut budget = work().with_remaining(WorkClass::BindingPolls, credit);
+            let result = registry
+                .prepare_action(
+                    &td,
+                    "run",
+                    selectors,
+                    GatewayDefaultV1::LIMITS,
+                    bank.clone(),
+                    &mut budget,
+                )
+                .map(drop);
+            clean(&bank);
+            (result, credit - budget.remaining(WorkClass::BindingPolls))
+        };
+        assert!(matches!(
+            prepare(selectors, needed - 1).0,
+            Err(CoreError::Backpressure(_))
+        ));
+        for credit in [needed, needed + 32] {
+            assert!(
+                matches!(prepare(selectors,credit),(Err(CoreError::Selection{reason: SelectionFailureReason::AmbiguousBindingOwner,..}),spent) if spent==needed)
+            );
+        }
+        // The same hard compiler error is observable when it can decide the tuple.
+        match operation {
+            Operation::InvokeAction => selectors.invoke = binding(9),
+            Operation::QueryAction => selectors.query = binding(9),
+            Operation::CancelAction => selectors.cancel = binding(9),
+            _ => unreachable!(),
+        }
+        assert!(matches!(
+            prepare(selectors, needed + 32).0,
+            Err(CoreError::Binding(_))
+        ));
+        assert!(bad.ports.lock().unwrap().is_empty());
+    }
+    drop(services);
+    clean(&services_bank);
+}
+
+#[test]
+fn a_form_pin_without_the_required_role_spends_zero_compiler_work() {
+    let address = "127.0.0.1:9".parse().unwrap();
+    let services = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let td = control_forms(
+        address,
+        &[("invokeaction", "run"), ("queryaction", "numeric")],
+    );
+    let probe = Arc::new(NativeProbe {
+        fail_compilation: Some((0, Operation::InvokeAction)),
+        ..Default::default()
+    });
+    let registry = competing_registry(address, &probe, &services, &TOKEN_PROVIDERS[..3], false);
+    for pin in [0, 2] {
+        for credit in [0, 128] {
+            let mut budget = work().with_remaining(WorkClass::BindingPolls, credit);
+            let result = registry.prepare_action(
+                &td,
+                "run",
+                ConsumerActionSelectors {
+                    query: ConsumerSelector {
+                        form: Some(pin),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                GatewayDefaultV1::LIMITS,
+                bank.clone(),
+                &mut budget,
+            );
+            assert!(matches!(result, Err(CoreError::UnsupportedOperation(_))));
+            assert_eq!(budget.remaining(WorkClass::BindingPolls), credit);
+            clean(&bank);
+        }
+    }
+    assert!(probe.ports.lock().unwrap().is_empty());
+    drop(registry);
     clean(&services);
 }

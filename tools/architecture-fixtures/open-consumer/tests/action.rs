@@ -224,6 +224,7 @@ impl Drop for Exchange {
         self.probe.live.fetch_sub(1, Ordering::Relaxed);
     }
 }
+#[derive(Clone)]
 struct Compiler {
     id: BindingRegistrationIdentity,
     invoke: bool,

@@ -60,8 +60,11 @@ security, typed affordance schemas and local-context extension associations.
 Host preparation can retain the coordinate and resolved href from the URI walk.
 After that walk completes, the cursor can lend a selected coordinate from the same
 immutable admitted Thing using the original ledger and semantic work allowance.
-The cursor can partition its temporary allowance for the caller's retained index.
-An indexed loan reports how much temporary capacity the callback can still use.
+The cursor can partition its temporary allowance for caller-owned selection
+storage. Each split counts against every applicable temporary and live ceiling.
+An indexed loan reports the tightest resource kind and the bytes available
+beside the live TD walk and semantic arena. Global admission and Engine live
+ceilings also count upstream backing on the original ledger.
 This permits selection in operation preference order even when a control Form
 precedes its Invoke in the TD. The href and semantic loan carry description facts.
 A Thing-root ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties

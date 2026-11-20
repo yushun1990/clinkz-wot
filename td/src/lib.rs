@@ -140,7 +140,7 @@ mod validated;
 pub use core::data_type;
 pub use core::data_type::AbsoluteUri;
 #[cfg(all(feature = "validated-thing", feature = "std"))]
-pub use validated::ValidatedSemanticError;
+pub use validated::{ValidatedFormScratch, ValidatedSemanticError};
 #[cfg(feature = "validated-thing")]
 pub use validated::{
     ValidatedProducerCursor, ValidatedProducerEvent, ValidatedProducerForm, ValidatedProducerScope,

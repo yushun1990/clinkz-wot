@@ -422,7 +422,8 @@ false synchronicity. Explicitly synchronous Actions use the finite facet. Each
 described Query or Cancel needs a Form, an eligible provider and a native mapping
 that accepts the original Invoke continuation. An absent control stays unavailable.
 An explicit Form or Binding selector for any operation must admit a complete
-combination, including that operation.
+combination, including that operation. Once the TD index is complete, preparation
+refuses a required operation with no admitted Form before native compilation.
 
 TD 1.1 allows a Consumer to choose a usable Form. ClinkZ prefers the first viable
 combination in TD Form order, comparing Invoke first, then Query, then Cancel.
@@ -441,8 +442,10 @@ needs a later Cancel. Multiple providers at a partial combination matter only
 if they can complete it. Each control accepts the original Invoke independently,
 so changing Query cannot rescue an Invoke for which every Cancel was ruled out.
 Preparation stops when it establishes uniqueness or ambiguity at the first
-complete Form combination. Qualification work is limited to Forms that can still
-determine preference or a tie.
+complete Form combination. Its second complete provider assignment decides
+ambiguity immediately, including when the final operation is Invoke itself.
+Qualification work is limited to alternatives that can still determine
+preference or a tie.
 
 The Host registry indexes the selected Action's Form coordinates and resolved
 addresses during one Basic admission and URI walk. When the search needs an
@@ -451,7 +454,10 @@ registrations allowed by its selector share one loan of the Form's resolved
 semantics. If another operation on that Form is needed, it obtains a new paid
 loan from the admitted input. A Form with all three roles takes at most three loans.
 The search reuses each completed Form/operation result, including an empty
-provider set, across candidate combinations. A hard compiler or continuation
+provider set, while it can still serve a candidate combination. Once an
+Invoke Form has exhausted its controls, preparation releases its mappings and
+reuses its candidate storage for the next Invoke Form. The compiled controls
+remain available to later Invoke providers. A hard compiler or continuation
 compatibility error on a required probe propagates before I/O, as does exhausted
 capacity or work.
 
@@ -459,8 +465,9 @@ One caller work budget pays for the index, qualification, comparison and
 disposal of provisional mappings. The Host search reuses space for one partial
 assignment per registered provider across all Form combinations. That storage,
 the Form index, provisional candidate slots, semantic loan and native compiler
-scratch share one temporary reservation. Only the chosen mappings, services and
-their original funding enter the definition.
+scratch share one temporary reservation. The compiler must fit the remaining
+bytes reported by the TD loan, and refusal identifies the limiting resource.
+Only the chosen mappings, services and their original funding enter the definition.
 
 The composition owner chooses how the search observes one effective configuration.
 Use `try_new_fixed` when the inputs are immutable or all changes are serialized
