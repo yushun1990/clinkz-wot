@@ -70,6 +70,13 @@ the outcome is still undecided and preparation returns backpressure. The
 fixture also checks early ambiguity when Query or Cancel completes the tuple.
 [Selection resource and ambiguity regressions](../../tools/architecture-fixtures/open-consumer/tests/support/action_selection.rs)
 
+With two Invoke Forms and eight declined Forms before each usable Query and
+Cancel, automatic selection fits the temporary peak measured for the pinned
+controls. Twenty native compiler calls cover the twenty Form/operation pairs.
+The second Invoke reuses the first Invoke’s Query probes. Its numeric token
+completes Cancel and Query over UDP and returns `24`.
+[Empty control cache regression](../../tools/architecture-fixtures/open-consumer/tests/support/action_selection.rs)
+
 A reload between two competing negative compiler observations refuses selection.
 Stable competing providers report ambiguity, and short probe credit refuses before
 native start. A pinned provider and a previously selected, still-authorized
@@ -108,6 +115,13 @@ the pair retains 72 KiB of native buffers after preparation and returns `24`
 using its original continuation. A separate case discards an incompatible
 36 KiB Invoke, reuses the funded Query and completes with the later Invoke.
 [UDP selection and accounting tests](../../tools/architecture-fixtures/open-consumer/tests/support/action_selection.rs)
+
+A closing revision observer samples three mappings with 36 KiB of native
+buffers and a structured output schema before publication. The admission peak covers their full Engine
+charge at that instant. A stable revision releases the peak at handoff. With
+a changed or unavailable revision, the native destructor observes the same
+charge before the bank returns to zero.
+[Revision and disposal regression](../../tools/architecture-fixtures/open-consumer/tests/support/action_selection.rs)
 
 The F3 cases prepare once, then change data backing, temporary bytes, validation
 work, media or schema support, or native exchange bytes, poll work, registration

@@ -98,30 +98,30 @@ impl ConsumerActionRegistry {
             (self.configuration_revision)().ok_or_else(|| CoreError::StaleHandle(context()))
         };
         let revision = observe(budget)?;
-        let result = self.search(thing, name, selectors, limits, bank, budget);
+        let admission = ActionAdmission::new(&bank, limits);
+        let result = self.search(thing, name, selectors, &admission, budget);
         // Also fence unsupported and ambiguous answers, including observations
         // of losing providers. No competitor or revision enters the definition.
         if observe(budget)? != revision {
             return Err(CoreError::StaleHandle(context()));
         }
-        result
+        result.map(|selected| selected.definition)
     }
 
-    fn search(
-        &self,
+    fn search<'a>(
+        &'a self,
         thing: &Thing,
-        name: &str,
+        name: &'a str,
         selectors: ConsumerActionSelectors,
-        limits: &ResourceLimits,
-        bank: Arc<HostResourceAccounts>,
+        admission: &'a ActionAdmission<'a>,
         budget: &mut WorkBudget,
-    ) -> CoreResult<ConsumerActionDefinition> {
+    ) -> CoreResult<ProvisionalDefinition<'a>> {
         if name.len() > 256 {
             return Err(unsupported());
         }
+        let limits = admission.limits;
         let config =
             ValidatedThingAdmissionConfig::try_from_limits(limits).map_err(|_| invalid())?;
-        let admission = ActionAdmission::new(&bank, limits);
         let mut walk = admission.temporary(0)?;
         let mut slots = admission.temporary(0)?;
         let mut basic = ValidatedThingCursor::from_thing(
@@ -270,7 +270,7 @@ impl ConsumerActionRegistry {
             forms,
             described,
             possible_forms,
-            admission: &admission,
+            admission,
             slots,
             schemas: None,
             funding: Vec::new(),
@@ -290,19 +290,25 @@ impl ConsumerActionRegistry {
             search.funding.extend(candidate.funding);
             Some(candidate.operation)
         };
-        let (schemas, _schema_peak) = search.schemas.take().ok_or_else(unsupported)?;
+        let (schemas, schema_peak) = search.schemas.take().ok_or_else(unsupported)?;
         let input = ConsumerActionDefinitionInput {
             target: AffordanceTarget::Action(Arc::from(name)),
             invoke: take(0).unwrap(),
             query: take(1),
             cancel: take(2),
             schemas,
-            bank: bank.clone(),
+            bank: admission.bank.clone(),
             funding: ::core::mem::take(&mut search.funding),
         };
         drop(search);
         drop(walk);
-        ConsumerActionDefinition::try_new(input).map_err(|e| e.error().error().clone())
+        let definition =
+            ConsumerActionDefinition::try_new(input).map_err(|e| e.error().error().clone())?;
+        Ok(ProvisionalDefinition {
+            definition,
+            _mapping_peaks: selected_peaks,
+            _schema_peak: schema_peak,
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -489,6 +495,14 @@ const OPERATIONS: [Operation; 3] = [
     Operation::CancelAction,
 ];
 
+// The closing revision observation can still refuse this definition. Field
+// order drops the rejected native mappings and schemas under their peak charges.
+struct ProvisionalDefinition<'a> {
+    definition: ConsumerActionDefinition,
+    _mapping_peaks: [Option<AdmissionBytes<'a>>; 3],
+    _schema_peak: AdmissionBytes<'a>,
+}
+
 struct Candidate<'a> {
     operation: ConsumerActionOperation,
     funding: [HostCapacityReservation; 2],
@@ -537,8 +551,8 @@ struct ActionSearch<'a, 'td> {
 
 impl<'a> ActionSearch<'a, '_> {
     fn choose(&mut self, budget: &mut WorkBudget) -> CoreResult<Family> {
-        let mut assignments = self.provider_slots()?;
-        let mut invokes = self.provider_slots()?;
+        let (mut assignments, _) = self.provider_slots()?;
+        let (mut invokes, _) = self.provider_slots()?;
         let invoke_only = !self.described[1..].contains(&true);
         for form in 0..self.forms.len() {
             debit(budget, W::PlanningItems, 1)?;
@@ -658,7 +672,9 @@ impl<'a> ActionSearch<'a, '_> {
 
     // The native candidate cache and the reusable assignment slots draw from
     // the same temporary allowance as the TD loan and compiler scratch.
-    fn provider_slots<T>(&mut self) -> CoreResult<Vec<T>> {
+    // Return the original charge alongside the allocation so it can be released
+    // when a completed negative probe retains only its marker.
+    fn provider_slots<T>(&mut self) -> CoreResult<(Vec<T>, u64)> {
         let count = self.registry.registrations.len();
         let bytes = (count * size_of::<T>()) as u64;
         check_limit(
@@ -669,7 +685,7 @@ impl<'a> ActionSearch<'a, '_> {
         self.slots.grow(bytes)?;
         let mut slots = Vec::new();
         slots.try_reserve_exact(count).map_err(|_| busy())?;
-        Ok(slots)
+        Ok((slots, bytes))
     }
 
     fn visit_control(
@@ -685,13 +701,15 @@ impl<'a> ActionSearch<'a, '_> {
             }
             return Ok(());
         }
-        let mut candidates = self.provider_slots()?;
+        let (mut candidates, slot_bytes) = self.provider_slots()?;
         self.compile_operation(index, role, budget, |candidate, budget| {
             visit(candidates.len(), &candidate, budget)?;
             candidates.push(candidate);
             Ok(())
         })?;
         if candidates.is_empty() {
+            candidates = Vec::new();
+            self.slots.release(slot_bytes);
             self.possible_forms[role] -= 1;
             if self.possible_forms[role] == 0 {
                 return Err(unsupported());

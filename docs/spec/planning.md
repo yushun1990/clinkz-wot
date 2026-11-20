@@ -455,12 +455,14 @@ registrations allowed by its selector share one loan of the Form's resolved
 semantics. If another operation on that Form is needed, it obtains a new paid
 loan from the admitted input. A Form with all three roles takes at most three loans.
 The search reuses each completed Form/operation result, including an empty
-provider set, while it can still serve a candidate combination. If every eligible
-Form for a required control has returned an empty set, every Invoke is ruled out.
+provider set, while it can still serve a candidate combination. An empty result
+releases its candidate buffer and temporary charge before the next probe. The
+Form index keeps the result so later Invokes can skip that qualification. If
+every eligible Form for a required control has returned an empty set, every
+Invoke is ruled out.
 A nonempty set whose mappings reject the current Invoke can still serve a later
-Invoke. Once an
-Invoke Form has exhausted its controls, preparation releases its mappings and
-reuses its candidate storage for the next Invoke Form. The compiled controls
+Invoke. Once an Invoke Form has exhausted its controls, preparation releases its
+mappings and reuses its candidate storage for the next Invoke Form. The compiled controls
 remain available to later Invoke providers. A hard compiler or continuation
 compatibility error on a required probe propagates before I/O, as does exhausted
 capacity or work.
@@ -474,9 +476,11 @@ and shared admission peaks also include the schemas and every still-live
 provisional mapping. Before compiler entry, its declared retained backing and
 scratch must fit together beside those owners in the original Engine bank.
 A refusal identifies the limiting resource. Discard releases each candidate's
-charge. At definition handoff the admission charges end and the chosen mappings
-and schemas keep their Engine funding. Independent service backing stays with
-its original owner.
+charge. The selected mappings and schemas keep their admission peak charges
+through the closing configuration observation. A refusal disposes of the
+provisional definition under those charges. A successful observation releases
+the admission charges at handoff and the definition keeps its Engine funding.
+Independent service backing stays with its original owner.
 
 The composition owner chooses how the search observes one effective configuration.
 Use `try_new_fixed` when the inputs are immutable or all changes are serialized

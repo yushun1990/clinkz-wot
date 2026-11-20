@@ -1383,3 +1383,195 @@ fn executable_mappings_fit_the_admission_peak_together() {
     drop(registry);
     clean(&services);
 }
+
+#[test]
+fn selected_mappings_and_schema_stay_funded_through_the_closing_revision() {
+    use ResourceKind::{AdmissionPeakLiveBytesGlobalMax, EngineLiveBytesGlobalMax};
+    use std::cell::Cell;
+    let address = "127.0.0.1:9".parse().unwrap();
+    let limits = GatewayDefaultV1::LIMITS
+        .clone()
+        .with_limit(AdmissionPeakLiveBytesGlobalMax, Some(128 << 10));
+    let services_bank = Arc::new(HostResourceAccounts::new(&limits));
+    let json = clinkz_wot_binding_http::HttpConsumerConfig::for_cleartext_ip()
+        .unwrap()
+        .consumer_services()
+        .data;
+    let services = RetainedConsumerServices {
+        data: ConsumerServiceOwner::retain_data(json, &services_bank)
+            .ok()
+            .unwrap(),
+        access: ConsumerServiceOwner::retain_access(Arc::new(Access), &services_bank)
+            .ok()
+            .unwrap(),
+    };
+    let mut td = control_forms(
+        address,
+        &[
+            ("invokeaction", "run"),
+            ("queryaction", "numeric"),
+            ("cancelaction", "numeric"),
+        ],
+    );
+    td.actions.as_mut().unwrap().get_mut("run").unwrap().output = Some(
+        serde_json::from_value(serde_json::json!({
+            "type":"object","properties":{"reading":{"type":"integer"}},"required":["reading"]
+        }))
+        .unwrap(),
+    );
+    for closing_revision in [Some(7), Some(8), None] {
+        let bank = Arc::new(HostResourceAccounts::new(&limits));
+        let native = Arc::new(NativeProbe {
+            mapping_bytes: 12 << 10,
+            ..Default::default()
+        });
+        *native.bank.lock().unwrap() = Some(bank.clone());
+        let observation = Rc::new(Cell::new(None));
+        let registry = ConsumerActionRegistry::try_new_revisioned(
+            datagram_registrations(
+                address,
+                &native,
+                &services,
+                &[(2, true, false), (3, false, false)],
+            ),
+            {
+                let bank = bank.clone();
+                let native = native.clone();
+                let observation = observation.clone();
+                let opened = Cell::new(false);
+                move || {
+                    if !opened.replace(true) {
+                        return Some(7);
+                    }
+                    observation.set(Some((
+                        native.mapping_live.load(Ordering::Relaxed),
+                        bank.account(AdmissionPeakLiveBytesGlobalMax).used(),
+                        bank.account(EngineLiveBytesGlobalMax).used(),
+                    )));
+                    closing_revision
+                }
+            },
+        )
+        .unwrap();
+        let result = registry.prepare_action(
+            &td,
+            "run",
+            Default::default(),
+            &limits,
+            bank.clone(),
+            &mut work(),
+        );
+        let (physical, peak, engine) = observation.get().unwrap();
+        assert_eq!(physical, 36 << 10);
+        assert!(engine > physical as u64);
+        assert_eq!(
+            peak, engine,
+            "the closing observer sees every provisional Engine byte"
+        );
+        assert_eq!(bank.account(AdmissionPeakLiveBytesGlobalMax).used(), 0);
+        if closing_revision == Some(7) {
+            let definition = result.unwrap();
+            assert_eq!(bank.account(EngineLiveBytesGlobalMax).used(), engine);
+            drop(definition);
+            assert_eq!(native.mapping_drop_charge.load(Ordering::Relaxed), 0);
+        } else {
+            assert!(matches!(result, Err(CoreError::StaleHandle(_))));
+            assert_eq!(
+                native.mapping_drop_charge.load(Ordering::Relaxed) as u64,
+                peak
+            );
+        }
+        assert_eq!(native.mapping_live.load(Ordering::Relaxed), 0);
+        clean(&bank);
+    }
+    drop(services);
+    clean(&services_bank);
+}
+
+#[test]
+fn empty_control_forms_reuse_the_pinned_choices_temporary_capacity() {
+    let (address, server) = peer(vec![
+        (b"INVOKE 12", b"ACCEPT 7"),
+        (b"CANCEL 7", b"STOP REQUESTED"),
+        (b"QUERY 7", b"OUTPUT 24"),
+    ]);
+    let limits = GatewayDefaultV1::LIMITS;
+    let services = Arc::new(HostResourceAccounts::new(limits));
+    let bank = Arc::new(HostResourceAccounts::new(limits));
+    let execution = Arc::new(HostResourceAccounts::new(limits));
+    let native = Arc::new(NativeProbe::default());
+    *native.bank.lock().unwrap() = Some(execution.clone());
+    let registry = endpoint_token_registry(address, &native, &services);
+    let mut forms = vec![("invokeaction", "ascii"), ("invokeaction", "numeric")];
+    for role in ["queryaction", "cancelaction"] {
+        forms.extend(std::iter::repeat_n((role, "absent"), 8));
+        forms.push((role, "numeric"));
+    }
+    let mut td = control_forms(address, &forms);
+    // The only registration declines the Forms directed to a different peer.
+    let absent =
+        clinkz_wot_td::data_type::FormHref::parse("linkedudp://127.0.0.1:0/absent").unwrap();
+    for form in &mut td
+        .actions
+        .as_mut()
+        .unwrap()
+        .get_mut("run")
+        .unwrap()
+        ._interaction
+        .forms
+    {
+        if form.href.as_str().ends_with("/absent") {
+            form.href = absent.clone();
+        }
+    }
+    let pin = |form| ConsumerSelector {
+        form: Some(form),
+        ..Default::default()
+    };
+    let pinned = ConsumerActionSelectors {
+        query: pin(10),
+        cancel: pin(19),
+        ..Default::default()
+    };
+    drop(
+        registry
+            .prepare_action(&td, "run", pinned, limits, bank.clone(), &mut work())
+            .unwrap(),
+    );
+    let paid = bank
+        .account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
+        .peak();
+    clean(&bank);
+    let limits = limits.clone().with_limit(
+        ResourceKind::AdmissionTemporaryBytesPerOperationMax,
+        Some(paid),
+    );
+    // The first Invoke rejects the numeric Query. Trying the second Invoke
+    // reuses the completed Query probes, including all eight empty results.
+    let mut budget = work().with_remaining(WorkClass::BindingPolls, forms.len() as u64 * 32);
+    let definition = registry
+        .prepare_action(
+            &td,
+            "run",
+            Default::default(),
+            &limits,
+            bank.clone(),
+            &mut budget,
+        )
+        .unwrap();
+    assert_eq!(budget.remaining(WorkClass::BindingPolls), 0);
+    let selected = definition.input();
+    assert_eq!(
+        (
+            selected.invoke.form,
+            selected.query.as_ref().unwrap().form,
+            selected.cancel.as_ref().unwrap().form
+        ),
+        (1, 10, 19)
+    );
+    execute_datagram_action(definition, &execution);
+    server.join().unwrap();
+    clean(&bank);
+    drop(registry);
+    clean(&services);
+}

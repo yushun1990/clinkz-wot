@@ -23,6 +23,7 @@ struct NativeProbe {
     mapping_bytes: usize,
     mapping_live: AtomicUsize,
     mapping_peak: AtomicUsize,
+    mapping_drop_charge: AtomicUsize,
     fail_compatibility: Option<(Operation, BindingId)>,
     close_blocked: AtomicBool,
     fail_close: AtomicBool,
@@ -46,6 +47,13 @@ struct Native {
 }
 impl Drop for Native {
     fn drop(&mut self) {
+        if let Some(bank) = self.probe.bank.lock().unwrap().as_ref() {
+            self.probe.mapping_drop_charge.store(
+                bank.account(ResourceKind::AdmissionPeakLiveBytesGlobalMax)
+                    .used() as usize,
+                Ordering::Relaxed,
+            );
+        }
         self.probe
             .mapping_live
             .fetch_sub(self.backing.len(), Ordering::Relaxed);

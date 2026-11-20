@@ -145,11 +145,14 @@ impl AdmissionBytes<'_> {
         Ok(())
     }
 
-    fn release(&mut self, bytes: u64) {
+    pub(super) fn release(&mut self, bytes: u64) {
+        self.bytes = self
+            .bytes
+            .checked_sub(bytes)
+            .expect("original admission charge");
         for lease in &mut self.owner.leases.borrow_mut()[..self.lease_count()] {
             lease.release_part(bytes);
         }
-        self.bytes -= bytes;
     }
 }
 
