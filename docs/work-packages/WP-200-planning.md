@@ -183,7 +183,7 @@ exercises same/separate banks, refusal/rollback, independent HTTPS credentials
 and policy revisions, normal/late HTTP results and exact final release. This
 does not extend retained-owner import to continuing Action or Producer
 preparation. Notification composition now imports those same physical owners
-through its own typed registry, as described below.
+through its notification registry, as described below.
 The HTTP example uses this path; method/header/context/framing and prior finite
 ownership regressions continue on the explicitly restricted inline helper.
 `InlineConsumerCompilerSupport`, `InlineConsumerCompilerRegistration`,
@@ -235,7 +235,7 @@ The finite facet keeps continuing/unspecified Action synchronicity, control oper
 additional/different response formats and unsupported schema/security assertions
 remain explicit unsupported alternatives. This is not a universal finite model
 for every WoT operation or complete Action support. Notification preparation uses
-the separate typed facet described in the
+the notification facet described in the
 [Planning contract](../spec/planning.md#open-consumer-notification-preparation).
 
 The existing registry/erasure is retained because the owned compiler is usable;
@@ -317,7 +317,7 @@ alongside common TD scratch before executing any such callback. Unknown bounds
 refuse that managed handoff; the pure caller-provisioned construction boundary
 does not implicitly fund requalification allocations.
 
-The typed notification registry also selects an observable Property's Form and
+The notification registry also selects an observable Property's Form and
 captures its own value schema, actual Binding/configuration and data/access
 services. Its PropertyValue schema variant cannot become an Event data/control
 role. [MQTT Property qualification](../../protocol-bindings/protocols/mqtt/tests/property_qualification.rs)
@@ -478,7 +478,7 @@ independent acceptance reconstructs the exact PR diff and executable evidence.
 
 ## Notification mapping reuse and service ownership
 
-The typed registry's raw startup adoption and explicit retained-owner import now
+The notification registry's raw startup adoption and explicit retained-owner import now
 fund shared actual data/access services once. Each selected mapping captures its
 original data/media/native-support declarations and checks callback changes;
 definition funding covers its own program/schema/record costs. The source-free
@@ -490,6 +490,11 @@ The [Planning contract](../spec/planning.md#open-consumer-notification-preparati
 owns exact preparation scope, and
 [notification evidence](../evidence/consumer-notification-composition.md) scopes
 executable claims. No new admission gate or package closure is introduced.
+
+A single preparation now selects an Event across independently typed native
+registrations. The external fixture exercises competing providers, Form
+preference, configuration changes and independent retirement over two transports.
+[Heterogeneous Event evidence](../evidence/consumer-notification-composition.md#heterogeneous-event-selection)
 
 ## Reusable Producer preparation
 
