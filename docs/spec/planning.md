@@ -562,7 +562,10 @@ takes a constructor from its concrete `ConsumerNotificationDefinition<B>` to
 the deployment's output `D`. An application can use the variants of its own
 enum and dispatch the selected definition to its typed conversation capacity.
 Planning calls the constructor once after a successful decision. Homogeneous
-startup adoption and retained-owner import return the concrete definition directly.
+startup adoption and retained-owner import produce a `TypedConsumerNotificationRegistry<B>`
+and return the concrete definition directly. A homogeneous registry is `Send` and
+`Sync` when its registered Binding is. A mixed registry can hold local Bindings
+and a local revision observer.
 
 Use `try_new_fixed` for immutable eligibility or a search serialized with all
 writers. With `try_new_revisioned`, the deployment supplies one bounded, passive
@@ -579,14 +582,21 @@ The notification execution profile currently qualifies fixed endpoints, the
 simple endpoint NoSec requirement and Forms without explicit response branches.
 Planning checks the actual data service's availability, media and schema
 support, and the access service's security support and destination permission.
+Present scalar roles use `supports_media` for the Form representation. Collection
+facets use the service's exact primary media. The source-free definition repeats
+the same data qualification. A denied destination determines the final error only
+if its native mapping qualifies and the search finds no authorized alternative.
 
 The TD walk, semantic arena and compiler scratch share one temporary allowance.
 The schema and both the selected and competing native mappings count toward the
 per-admission and shared live-byte peaks while they coexist. The first
 qualifying definition owns the role schemas and lends them to subsequent
-probes. Its peak reservations survive the closing observation and disposal on
-refusal. On success its original Engine and cleanup funding accompany the
-native definition. Metadata, support, clone and disposal callbacks are bounded.
+probes. Its live-byte reservations and native rollback scratch survive the
+closing observation and disposal on refusal. Sequential competing probes can
+reuse the idle rollback allowance. A successful decision releases rollback
+scratch before calling the deployment's output constructor. The original Engine
+and cleanup funding accompany the native definition. Metadata, support, clone
+and disposal callbacks are bounded.
 
 The selected `ConsumerNotificationDefinition` owns the actual Binding/program,
 configuration, family-qualified target, endpoint/Form, the actual retained data

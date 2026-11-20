@@ -54,7 +54,7 @@ fn occurrence(
 #[derive(Clone)]
 pub struct Stream {
     pub peer: SocketAddr,
-    pub compilations: Rc<Cell<usize>>,
+    pub compilations: Arc<std::sync::atomic::AtomicUsize>,
 }
 pub struct StreamSubscription {
     recipient: NotificationIdentity,
@@ -211,7 +211,12 @@ impl NotificationParticipation for DatagramSubscription {
     type Response = Infallible;
     fn poll_start(&mut self, cx: &mut Context<'_>, _: &SubscriptionInput) -> Poll<CoreResult<()>> {
         if self.socket.is_none() {
-            let socket = std::net::UdpSocket::bind("127.0.0.1:0").map_err(|_| busy())?;
+            let local = if self.program.peer.is_ipv4() {
+                std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)
+            } else {
+                std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED)
+            };
+            let socket = std::net::UdpSocket::bind((local, 0)).map_err(|_| busy())?;
             socket.connect(self.program.peer).map_err(|_| invalid())?;
             socket.set_nonblocking(true).map_err(|_| invalid())?;
             self.socket = Some(UdpSocket::from_std(socket).map_err(|_| busy())?);

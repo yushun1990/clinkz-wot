@@ -7,7 +7,6 @@ use clinkz_wot_core::security::SecurityRequirement;
 /// A startup registration participating in one bounded Form search. Construct
 /// this from the original service owners with `into_provider`.
 pub struct ConsumerNotificationProvider<D> {
-    pub(super) id: BindingId,
     pub(super) native: Box<dyn Candidate<D>>,
 }
 
@@ -23,25 +22,33 @@ where
         selected: fn(ConsumerNotificationDefinition<B>) -> D,
     ) -> ConsumerNotificationProvider<D> {
         ConsumerNotificationProvider {
+            native: Box::new(self.typed(selected)),
+        }
+    }
+
+    pub(super) fn typed<D>(
+        self,
+        selected: fn(ConsumerNotificationDefinition<B>) -> D,
+    ) -> TypedProvider<B, D> {
+        TypedProvider {
             id: self.binding.registration_identity().binding_id(),
-            native: Box::new(TypedProvider {
-                registration: self,
-                selected,
-            }),
+            registration: self,
+            selected,
         }
     }
 }
 
-struct TypedProvider<B: ConsumerNotificationBinding, D> {
+pub struct TypedProvider<B: ConsumerNotificationBinding, D> {
+    id: BindingId,
     registration: RetainedConsumerNotificationRegistration<B>,
     selected: fn(ConsumerNotificationDefinition<B>) -> D,
 }
 
 pub(super) trait Candidate<D> {
-    fn check(&self, id: BindingId) -> CoreResult<()>;
+    fn id(&self) -> BindingId;
+    fn check(&self) -> CoreResult<()>;
     fn probe<'a>(
         &self,
-        id: BindingId,
         form: &Form<'_>,
         choice: FormChoice<'a, D>,
         admission: &'a ConsumerAdmission<'a>,
@@ -63,12 +70,15 @@ pub(super) enum FormChoice<'a, D> {
 
 pub(super) struct Selected<'a, D> {
     definition: Box<dyn Definition<D>>,
-    // Field order keeps both charges live during refusal and local disposal.
+    // Native disposal precedes release of its scratch and both live-byte charges.
+    rollback: AdmissionBytes<'a>,
     _mapping_peak: AdmissionBytes<'a>,
     _schema_peak: AdmissionBytes<'a>,
 }
 impl<D> Selected<'_, D> {
     pub(super) fn handoff(self) -> D {
+        // The revision decision has committed. The deployment now owns disposal.
+        drop(self.rollback);
         self.definition.handoff()
     }
 }
@@ -95,11 +105,15 @@ impl<B: ConsumerNotificationPreparation, D: 'static> Candidate<D> for TypedProvi
 where
     B::Configuration: Clone,
 {
-    fn check(&self, id: BindingId) -> CoreResult<()> {
+    fn id(&self) -> BindingId {
+        self.id
+    }
+
+    fn check(&self) -> CoreResult<()> {
         let r = &self.registration;
         let identity = r.binding.registration_identity();
-        if identity.binding_id() != id
-            || r.binding.identity() != (id, identity.binding_generation())
+        if identity.binding_id() != self.id
+            || r.binding.identity() != (self.id, identity.binding_generation())
             || r.binding.preparation_bounds().work == 0
             || r.services.access.work() == 0
             || r.services.data.policy().validation_work == 0
@@ -111,14 +125,13 @@ where
 
     fn probe<'a>(
         &self,
-        registered_id: BindingId,
         form: &Form<'_>,
         choice: FormChoice<'a, D>,
         admission: &'a ConsumerAdmission<'a>,
         budget: &mut WorkBudget,
         denied: &mut Option<CoreError>,
     ) -> CoreResult<FormChoice<'a, D>> {
-        self.check(registered_id)?;
+        self.check()?;
         let r = &self.registration;
         let id = r.binding.registration_identity();
         let bounds = r.binding.preparation_bounds();
@@ -129,14 +142,13 @@ where
         let data_revision = data.qualification_revision();
         let access_work = access.work();
         let access_revision = access.qualification_revision();
-        let schemas = match &choice {
-            FormChoice::Open { schemas, .. } => schemas,
-            FormChoice::Selected(winner) => winner.definition.schemas(),
+        let (schemas, rollback) = match &choice {
+            FormChoice::Open { schemas, .. } => (schemas, 0),
+            FormChoice::Selected(winner) => (winner.definition.schemas(), winner.rollback.amount()),
         };
         let eligible = || {
             data.available()
-                && data.content_type() == form.facts.content_type
-                && schemas.supports(data.service())
+                && schemas.supports_data(data.service(), form.facts.content_type)
                 && access.supports_security(&SecurityRequirement::NOSEC)
         };
         if !eligible() {
@@ -145,7 +157,7 @@ where
         let current = || {
             r.services.check_backing()?;
             if r.binding.registration_identity() != id
-                || r.binding.identity() != (registered_id, id.binding_generation())
+                || r.binding.identity() != (self.id, id.binding_generation())
                 || r.binding.configuration() != native_config
                 || r.binding.preparation_bounds() != bounds
                 || data.policy() != policy
@@ -161,17 +173,14 @@ where
         debit(budget, W::ProviderProbes, access_work)?;
         let authorized = access.authorize(id, form.endpoint, schemas.kind().start_operation());
         current()?;
-        match authorized {
-            Ok(()) => {}
+        let denial = match authorized {
+            Ok(()) => None,
             Err(
                 e @ CoreError::Security {
                     reason: SecurityFailureReason::AuthorizationDenied,
                     ..
                 },
-            ) => {
-                denied.get_or_insert(e);
-                return Ok(choice);
-            }
+            ) => Some(e),
             Err(
                 CoreError::UnsupportedOperation(_)
                 | CoreError::Validation(_)
@@ -185,7 +194,7 @@ where
                 },
             ) => return Ok(choice),
             Err(e) => return Err(e),
-        }
+        };
         check_limit(
             admission.limits,
             K::PlanCompileWorkUnitsPerStepMax,
@@ -220,7 +229,9 @@ where
         let cleanup = admission.reserve_global(K::CleanupItemsMax, 1)?;
         let mut funding = Vec::new();
         funding.try_reserve_exact(3).map_err(|_| busy())?;
-        let scratch = admission.temporary(bounds.temporary_bytes)?;
+        // Compilation and local disposal are synchronous. The first winner's
+        // idle rollback allowance can fund this probe until control returns.
+        let scratch = admission.temporary(bounds.temporary_bytes.saturating_sub(rollback))?;
         let configuration = native_config.clone();
         let compiled = r
             .binding
@@ -232,7 +243,6 @@ where
                 schemas,
                 facts: &form.facts,
             });
-        drop(scratch);
         let supported = compiled.and_then(|program| {
             let Some(program) = program else {
                 return Ok(None);
@@ -241,7 +251,7 @@ where
             let paired = || {
                 binding.registration_identity() == id
                     && binding.configuration() == &configuration
-                    && binding.identity() == (registered_id, id.binding_generation())
+                    && binding.identity() == (self.id, id.binding_generation())
             };
             if !paired() {
                 return Err(invalid());
@@ -261,6 +271,10 @@ where
             Ok(None) | Err(CoreError::UnsupportedOperation(_)) => return Ok(choice),
             Err(e) => return Err(e),
         };
+        if let Some(error) = denial {
+            denied.get_or_insert(error);
+            return Ok(choice);
+        }
         let FormChoice::Open {
             schemas,
             funding: schema_engine,
@@ -300,6 +314,7 @@ where
                 definition,
                 selected: self.selected,
             }),
+            rollback: scratch,
             _mapping_peak: peak,
             _schema_peak: schema_peak,
         }))

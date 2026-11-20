@@ -622,8 +622,9 @@ impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDe
             || input.data.policy() != input.data_policy
             || input.data_policy.retained_bytes != input.data.backing_bytes()
             || input.data_policy.validation_work == 0
-            || input.data.content_type() != &*input.content_type
-            || !input.schemas.supports(input.data.service())
+            || !input
+                .schemas
+                .supports_data(input.data.service(), &input.content_type)
         {
             return Err(invalid());
         }

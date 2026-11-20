@@ -10,7 +10,7 @@ use clinkz_wot_td::semantic::{
     FormOwner, ResolvedFormFacts, ResolvedSemanticDocument, SemanticError,
 };
 pub use provider::ConsumerNotificationProvider;
-use provider::{FormChoice, Selected};
+use provider::{Candidate, FormChoice, Selected};
 
 /// Pure bounded compilation on the actual execution registration. The compiler
 /// must qualify the selected native mapping, including content coding, and
@@ -45,13 +45,25 @@ pub struct RetainedConsumerNotificationRegistration<B> {
 /// D is the deployment's selected output. A homogeneous registry returns its
 /// concrete definition directly. Mixed registrations supply constructors of a
 /// common output (for example an application enum of native definitions).
-pub struct ConsumerNotificationRegistry<D> {
-    registrations: Vec<ConsumerNotificationProvider<D>>,
-    configuration_revision: Box<dyn Fn() -> Option<u64>>,
+pub struct ConsumerNotificationRegistry<
+    D,
+    P = ConsumerNotificationProvider<D>,
+    V = Box<dyn Fn() -> Option<u64>>,
+> {
+    registrations: Vec<P>,
+    candidate: fn(&P) -> &dyn Candidate<D>,
+    configuration_revision: V,
 }
 
-impl<B: ConsumerNotificationPreparation>
-    ConsumerNotificationRegistry<ConsumerNotificationDefinition<B>>
+/// A fixed registry of one native Binding type. Its thread mobility follows
+/// the registrations it owns.
+pub type TypedConsumerNotificationRegistry<B> = ConsumerNotificationRegistry<
+    ConsumerNotificationDefinition<B>,
+    provider::TypedProvider<B, ConsumerNotificationDefinition<B>>,
+    fn() -> Option<u64>,
+>;
+
+impl<B: ConsumerNotificationPreparation> TypedConsumerNotificationRegistry<B>
 where
     B::Configuration: Clone,
 {
@@ -100,11 +112,13 @@ where
         if registrations.is_empty() || registrations.len() > MAX_REGISTRATIONS {
             return Err(invalid());
         }
-        Self::try_new_fixed(
+        Self::build(
             registrations
                 .into_iter()
-                .map(|r| r.into_provider(::core::convert::identity))
+                .map(|r| r.typed(::core::convert::identity))
                 .collect(),
+            |p| p,
+            || Some(0),
         )
     }
 }
@@ -122,18 +136,33 @@ impl<D: 'static> ConsumerNotificationRegistry<D> {
         registrations: Vec<ConsumerNotificationProvider<D>>,
         revision: impl Fn() -> Option<u64> + 'static,
     ) -> CoreResult<Self> {
+        Self::build(registrations, |p| &*p.native, Box::new(revision))
+    }
+}
+
+impl<D: 'static, P, V: Fn() -> Option<u64>> ConsumerNotificationRegistry<D, P, V> {
+    fn build(
+        registrations: Vec<P>,
+        candidate: fn(&P) -> &dyn Candidate<D>,
+        configuration_revision: V,
+    ) -> CoreResult<Self> {
         if registrations.is_empty() || registrations.len() > MAX_REGISTRATIONS {
             return Err(invalid());
         }
-        for (i, r) in registrations.iter().enumerate() {
-            r.native.check(r.id)?;
-            if registrations[..i].iter().any(|old| old.id == r.id) {
+        for (i, r) in registrations.iter().map(candidate).enumerate() {
+            r.check()?;
+            if registrations[..i]
+                .iter()
+                .map(candidate)
+                .any(|old| old.id() == r.id())
+            {
                 return Err(invalid());
             }
         }
         Ok(Self {
             registrations,
-            configuration_revision: Box::new(revision),
+            candidate,
+            configuration_revision,
         })
     }
 
@@ -151,7 +180,7 @@ impl<D: 'static> ConsumerNotificationRegistry<D> {
         budget: &mut WorkBudget,
     ) -> CoreResult<D> {
         let admission = ConsumerAdmission::new(&bank, limits);
-        at_configuration(&*self.configuration_revision, budget, |budget| {
+        at_configuration(&self.configuration_revision, budget, |budget| {
             self.search(thing, target, kind, selector, &admission, budget)
         })
         .map(Selected::handoff)
@@ -184,7 +213,7 @@ impl<D: 'static> ConsumerNotificationRegistry<D> {
                 let registration = self
                     .registrations
                     .iter()
-                    .find(|r| r.id == pin)
+                    .find(|r| (self.candidate)(r).id() == pin)
                     .ok_or_else(unsupported)?;
                 ::core::slice::from_ref(registration)
             }
@@ -219,7 +248,7 @@ impl<D: 'static> ConsumerNotificationRegistry<D> {
                         budget,
                         |doc, endpoint, budget| -> CoreResult<()> {
                             selected = Form::from_loan(doc, target, index, endpoint)?.select(
-                                candidates,
+                                candidates.iter().map(self.candidate),
                                 kind,
                                 admission,
                                 budget,
@@ -303,9 +332,9 @@ impl<'a> Form<'a> {
         })
     }
 
-    fn select<'bank, D>(
+    fn select<'bank, 'r, D: 'r>(
         &self,
-        candidates: &[ConsumerNotificationProvider<D>],
+        candidates: impl Iterator<Item = &'r dyn Candidate<D>>,
         kind: NotificationKind,
         admission: &'bank ConsumerAdmission<'bank>,
         budget: &mut WorkBudget,
@@ -314,9 +343,7 @@ impl<'a> Form<'a> {
         let mut choice = prepare_schemas(self.document, self.target, kind, admission, budget)?;
         for r in candidates {
             debit(budget, W::ProviderProbes, 1)?;
-            choice = r
-                .native
-                .probe(r.id, self, choice, admission, budget, denied)?;
+            choice = r.probe(self, choice, admission, budget, denied)?;
         }
         Ok(match choice {
             FormChoice::Open { .. } => None,

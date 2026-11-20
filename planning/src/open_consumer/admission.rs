@@ -142,6 +142,10 @@ pub(super) struct AdmissionBytes<'a> {
 }
 
 impl AdmissionBytes<'_> {
+    pub(super) fn amount(&self) -> u64 {
+        self.bytes
+    }
+
     fn lease_count(&self) -> usize {
         if self.temporary { 3 } else { 1 }
     }

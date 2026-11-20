@@ -212,6 +212,24 @@ impl NotificationSchemas {
             _ => None,
         }
     }
+    /// Qualify the representation used by these roles on the selected Form.
+    /// Named collection facets use the service's exact collection media.
+    pub fn supports_data(&self, data: &dyn ConsumerDataService, media: &str) -> bool {
+        let media_supported = match self {
+            Self::ObserveAllProperties(_) | Self::SubscribeAllEvents(_) => {
+                data.content_type() == media
+            }
+            Self::Event {
+                subscription: None,
+                data: None,
+                data_response: None,
+                cancellation: None,
+            } => true,
+            Self::PropertyValue(_) | Self::Event { .. } => data.supports_media(media),
+        };
+        media_supported && self.supports(data)
+    }
+
     /// Scalar support cannot qualify a named collection decoder.
     pub fn supports(&self, data: &dyn ConsumerDataService) -> bool {
         match self {

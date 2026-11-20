@@ -23,6 +23,9 @@ use std::{
     time::Duration,
 };
 
+#[path = "event_selection/qualification.rs"]
+mod qualification;
+
 #[derive(Default)]
 struct Access {
     missing: AtomicBool,
@@ -112,8 +115,11 @@ struct Peers {
 }
 impl Peers {
     fn new() -> Self {
+        Self::on(std::net::Ipv4Addr::LOCALHOST.into())
+    }
+    fn on(ip: std::net::IpAddr) -> Self {
         for _ in 0..16 {
-            let stream = TcpListener::bind("127.0.0.1:0").unwrap();
+            let stream = TcpListener::bind((ip, 0)).unwrap();
             let addr = stream.local_addr().unwrap();
             let datagram = match UdpSocket::bind(addr) {
                 Ok(socket) => socket,
@@ -178,7 +184,7 @@ impl Deployment {
         Self {
             stream: Stream {
                 peer,
-                compilations: Rc::default(),
+                compilations: Arc::default(),
             },
             datagram: Datagram {
                 config: DatagramConfig {
@@ -405,7 +411,10 @@ fn preferred_stream_and_later_coded_datagram_reach_their_peers_in_either_registr
             };
             assert_eq!(stream.input().form, 0);
             assert_eq!(
-                (d.stream.compilations.get(), d.datagram.compilations.get()),
+                (
+                    d.stream.compilations.load(SeqCst),
+                    d.datagram.compilations.get()
+                ),
                 (1, 1)
             );
             let SelectedEvent::Datagram(pinned) = select(
@@ -561,21 +570,22 @@ fn a_reload_fences_both_a_rejected_earlier_form_and_a_rejected_competitor() {
             revision.fetch_add(1, SeqCst);
         }));
         let closing_peak = Rc::new(Cell::new(0));
+        let closing_scratch = Rc::new(Cell::new(0));
         let registry = ConsumerNotificationRegistry::try_new_revisioned(d.providers(false), {
             let revision = d.revision.clone();
             let plans = plans.clone();
             let peak = closing_peak.clone();
+            let scratch = closing_scratch.clone();
             move || {
                 peak.set(
                     plans
                         .account(ResourceKind::AdmissionPeakLiveBytesGlobalMax)
                         .used(),
                 );
-                assert_eq!(
+                scratch.set(
                     plans
                         .account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
                         .used(),
-                    0
                 );
                 Some(revision.load(SeqCst))
             }
@@ -586,6 +596,10 @@ fn a_reload_fences_both_a_rejected_earlier_form_and_a_rejected_competitor() {
             Err(CoreError::StaleHandle(_))
         ));
         assert!(closing_peak.get() >= d.datagram.preparation_bounds().retained_bytes);
+        assert_eq!(
+            closing_scratch.get(),
+            d.datagram.preparation_bounds().temporary_bytes
+        );
         clean(&plans);
         let stable = select(&registry, &thing, pin(None, None), &plans, &mut work());
         match (first_protocol, stable) {
@@ -626,7 +640,7 @@ fn decisive_competition_pays_for_both_mappings_and_refusals_release_all_capacity
             Err(CoreError::Backpressure(_))
         ));
         assert_eq!(
-            d.stream.compilations.get() + d.datagram.compilations.get(),
+            d.stream.compilations.load(SeqCst) + d.datagram.compilations.get(),
             1
         );
         clean(&plans);
@@ -680,11 +694,15 @@ fn decisive_competition_pays_for_both_mappings_and_refusals_release_all_capacity
             })
         ));
         drop(registry);
-        d.datagram_access.denied.store(false, SeqCst);
         // Native support on this exact configured executor declines the plain
         // Form after compilation. A different registration can still execute it.
         d.datagram.config.require_hex = true;
         let registry = d.registry(reverse);
+        assert!(matches!(
+            select(&registry, &thing, pin(None, Some(72)), &plans, &mut work()),
+            Err(CoreError::UnsupportedOperation(_))
+        ));
+        d.datagram_access.denied.store(false, SeqCst);
         assert!(matches!(
             select(&registry, &thing, pin(None, None), &plans, &mut work()),
             Ok(SelectedEvent::Stream(_))

@@ -49,7 +49,8 @@ impl ConsumerNotificationPreparation for Stream {
         &self,
         input: ConsumerNotificationInput<'_>,
     ) -> CoreResult<Option<SocketAddr>> {
-        self.compilations.set(self.compilations.get() + 1);
+        self.compilations
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if !integer_event(&input)
             || input.facts.content_coding.is_some()
             || !matches!(input.facts.subprotocol, None | Some("stream"))
