@@ -1,9 +1,7 @@
 //! Operation-scoped continuing Action selection. Each actual native mapping
 //! compiles independently; control compatibility is checked before invocation.
-mod admission;
 use super::*;
 use ::core::mem::size_of;
-use admission::{ActionAdmission, AdmissionBytes};
 use alloc::boxed::Box;
 use clinkz_wot_core::consumer_action::*;
 use clinkz_wot_td::semantic::{FormOwner, ResolvedSemanticDocument, SemanticError};
@@ -93,19 +91,11 @@ impl ConsumerActionRegistry {
         bank: Arc<HostResourceAccounts>,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerActionDefinition> {
-        let observe = |budget: &mut WorkBudget| {
-            debit(budget, W::ProviderProbes, 1)?;
-            (self.configuration_revision)().ok_or_else(|| CoreError::StaleHandle(context()))
-        };
-        let revision = observe(budget)?;
-        let admission = ActionAdmission::new(&bank, limits);
-        let result = self.search(thing, name, selectors, &admission, budget);
-        // Also fence unsupported and ambiguous answers, including observations
-        // of losing providers. No competitor or revision enters the definition.
-        if observe(budget)? != revision {
-            return Err(CoreError::StaleHandle(context()));
-        }
-        result.map(|selected| selected.definition)
+        let admission = ConsumerAdmission::new(&bank, limits);
+        at_configuration(&*self.configuration_revision, budget, |budget| {
+            self.search(thing, name, selectors, &admission, budget)
+        })
+        .map(|selected| selected.definition)
     }
 
     fn search<'a>(
@@ -113,50 +103,16 @@ impl ConsumerActionRegistry {
         thing: &Thing,
         name: &'a str,
         selectors: ConsumerActionSelectors,
-        admission: &'a ActionAdmission<'a>,
+        admission: &'a ConsumerAdmission<'a>,
         budget: &mut WorkBudget,
     ) -> CoreResult<ProvisionalDefinition<'a>> {
         if name.len() > 256 {
             return Err(unsupported());
         }
         let limits = admission.limits;
-        let config =
-            ValidatedThingAdmissionConfig::try_from_limits(limits).map_err(|_| invalid())?;
         let mut walk = admission.temporary(0)?;
         let mut slots = admission.temporary(0)?;
-        let mut basic = ValidatedThingCursor::from_thing(
-            thing,
-            &config,
-            AdmissionLedger::new(
-                SlotIndex::new(0),
-                Generation::INITIAL,
-                0,
-                config.temporary_allowance(),
-                0,
-                0,
-                0,
-                0,
-            ),
-        );
-        let validated = loop {
-            walk.resize(
-                basic
-                    .next_step_temporary_bytes()
-                    .map_err(crate::producer_property_read::td_error)?,
-            )?;
-            let before = credits(budget);
-            basic = match basic.step(budget, false) {
-                ValidatedThingProgress::Complete(v) => break v,
-                ValidatedThingProgress::Pending(next) => next,
-                ValidatedThingProgress::Failed(e) => {
-                    return Err(crate::producer_property_read::td_error(e));
-                }
-            };
-            if before == credits(budget) {
-                return Err(busy());
-            }
-        };
-        let mut cursor = validated.into_producer();
+        let mut cursor = admission.admit(thing, &mut walk, budget)?;
         let selectors = [selectors.invoke, selectors.query, selectors.cancel];
         let mut forms = Vec::new();
         let mut described = [false; 3];
@@ -322,7 +278,7 @@ impl ConsumerActionRegistry {
         schemas: &ValueSchemas,
         selector: ConsumerSelector,
         budget: &mut WorkBudget,
-        admission: &'a ActionAdmission<'a>,
+        admission: &'a ConsumerAdmission<'a>,
         mut accept: impl FnMut(Candidate<'a>, &mut WorkBudget) -> CoreResult<()>,
     ) -> CoreResult<()> {
         if endpoint.len() > 256 || doc.action().is_none_or(|a| a.synchronous == Some(true)) {
@@ -543,7 +499,7 @@ struct ActionSearch<'a, 'td> {
     forms: Vec<ActionForm<'a>>,
     described: [bool; 3],
     possible_forms: [usize; 3],
-    admission: &'a ActionAdmission<'a>,
+    admission: &'a ConsumerAdmission<'a>,
     slots: AdmissionBytes<'a>,
     schemas: Option<(ValueSchemas, AdmissionBytes<'a>)>,
     funding: Vec<HostCapacityReservation>,
@@ -778,15 +734,11 @@ impl<'a> ActionSearch<'a, '_> {
     }
 }
 
-fn debit(budget: &mut WorkBudget, class: W, count: u64) -> CoreResult<()> {
-    budget.consume(class, count).map_err(|_| busy())
-}
-
 fn qualify_schemas<'a>(
     doc: &ResolvedSemanticDocument<'_>,
     name: &str,
     schemas: &mut Option<(ValueSchemas, AdmissionBytes<'a>)>,
-    admission: &'a ActionAdmission<'a>,
+    admission: &'a ConsumerAdmission<'a>,
     funding: &mut Vec<HostCapacityReservation>,
     budget: &mut WorkBudget,
 ) -> CoreResult<()> {

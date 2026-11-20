@@ -135,10 +135,13 @@ impl ConsumerNotificationPreparation for EventBinding {
             retained_bytes: 128,
         }
     }
-    fn compile_notification(
+    fn compile_notification_form(
         &self,
         input: ConsumerNotificationInput<'_>,
     ) -> CoreResult<Option<Self::Program>> {
+        if input.facts.content_coding.is_some() {
+            return Ok(None);
+        }
         assert_eq!(input.target, &AffordanceTarget::Event(Arc::from("alarm")));
         assert_eq!(input.endpoint, ENDPOINT);
         if self.0.structured {
@@ -752,10 +755,13 @@ impl ConsumerNotificationPreparation for CollectionBinding {
     fn preparation_bounds(&self) -> ConsumerPreparationBounds {
         self.0.preparation_bounds()
     }
-    fn compile_notification(
+    fn compile_notification_form(
         &self,
         input: ConsumerNotificationInput<'_>,
     ) -> CoreResult<Option<Self::Program>> {
+        if input.facts.content_coding.is_some() {
+            return Ok(None);
+        }
         assert_eq!(input.target, &AffordanceTarget::Thing);
         let NotificationSchemas::SubscribeAllEvents(s) = input.schemas else {
             panic!()

@@ -1192,7 +1192,13 @@ impl ConsumerNotificationPreparation for Observe {
             retained_bytes: 256,
         }
     }
-    fn compile_notification(&self, input: ConsumerNotificationInput<'_>) -> CoreResult<Option<()>> {
+    fn compile_notification_form(
+        &self,
+        input: ConsumerNotificationInput<'_>,
+    ) -> CoreResult<Option<()>> {
+        if input.facts.content_coding.is_some() {
+            return Ok(None);
+        }
         assert_eq!(input.target, &AffordanceTarget::Property(Arc::from("a")));
         assert_eq!(input.schemas.kind(), NotificationKind::PropertyObservation);
         assert_eq!(input.endpoint, format!("testobserve://{}", self.0.peer));
