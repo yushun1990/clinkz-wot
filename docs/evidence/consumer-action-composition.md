@@ -61,7 +61,10 @@ An exhausted Invoke offering an ASCII token releases its cleanup slot before
 the next Invoke offers a numeric token. With two cleanup slots and the pinned
 choice's temporary allowance, automatic preparation retains the numeric Invoke
 and the cached Query. Their UDP exchange returns `24`. Pinning Query to an
-Invoke-only Form spends zero compiler credit. With three Invoke registrations,
+Invoke-only Form or to an unregistered Binding spends zero compiler credit.
+With Invoke 0, Query 1 and Invoke 2, a definitive empty Query stops automatic
+selection at 64 compiler units, even if Invoke 2 would fail. A second case
+exhausts two Cancel Forms before reporting the same result. With three Invoke registrations,
 two successful 32-unit compilers establish ambiguity at 64 units. At 63 units
 the outcome is still undecided and preparation returns backpressure. The
 fixture also checks early ambiguity when Query or Cancel completes the tuple.
@@ -94,8 +97,17 @@ compilation and releases partial preparation funding. With each admission
 temporary or peak limit set to 64 KiB in turn, the compiler allocates scratch
 at its exact remaining allowance. One extra byte refuses before compiler entry
 and identifies the limiting resource. Final owner disposal returns both banks
-to zero. This is preparation-only evidence, not HTTP support for that
-media parameter or a native execution claim.
+to zero. A 1 KiB independent charge in a 64 KiB shared peak bank survives
+preparation. Raising the local temporary ceiling from 48 KiB to 1 MiB gives
+the same measured Engine peak and still admits the mapping.
+
+In the downstream UDP fixture each native mapping allocates 36 KiB. One mapping
+fits a 64 KiB admission peak. A pair is refused before the second allocation
+under either peak ceiling, with the original bank fully released. At 192 KiB
+the pair retains 72 KiB of native buffers after preparation and returns `24`
+using its original continuation. A separate case discards an incompatible
+36 KiB Invoke, reuses the funded Query and completes with the later Invoke.
+[UDP selection and accounting tests](../../tools/architecture-fixtures/open-consumer/tests/support/action_selection.rs)
 
 The F3 cases prepare once, then change data backing, temporary bytes, validation
 work, media or schema support, or native exchange bytes, poll work, registration

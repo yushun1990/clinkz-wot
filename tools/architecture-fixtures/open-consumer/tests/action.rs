@@ -20,6 +20,9 @@ use std::{
 #[derive(Default)]
 struct NativeProbe {
     fail_compilation: Option<(u32, Operation)>,
+    mapping_bytes: usize,
+    mapping_live: AtomicUsize,
+    mapping_peak: AtomicUsize,
     fail_compatibility: Option<(Operation, BindingId)>,
     close_blocked: AtomicBool,
     fail_close: AtomicBool,
@@ -31,8 +34,8 @@ struct NativeProbe {
     bank: std::sync::Mutex<Option<Arc<HostResourceAccounts>>>,
     ports: std::sync::Mutex<Vec<SocketAddr>>,
 }
-#[derive(Clone)]
 struct Native {
+    backing: Box<[u8]>,
     id: BindingRegistrationIdentity,
     peer: SocketAddr,
     endpoint: Box<str>,
@@ -40,6 +43,13 @@ struct Native {
     media: &'static str,
     probe: Arc<NativeProbe>,
     ascii_continuation: bool,
+}
+impl Drop for Native {
+    fn drop(&mut self) {
+        self.probe
+            .mapping_live
+            .fetch_sub(self.backing.len(), Ordering::Relaxed);
+    }
 }
 struct Invoke(Native);
 struct Control(Native);
@@ -241,7 +251,7 @@ impl ConsumerActionPreparation for Compiler {
         ConsumerPreparationBounds {
             work: 32,
             temporary_bytes: 256,
-            retained_bytes: 1024,
+            retained_bytes: 1024 + self.probe.mapping_bytes as u64,
         }
     }
     fn compile_action(
@@ -268,7 +278,16 @@ impl ConsumerActionPreparation for Compiler {
         if self.probe.fail_compilation == Some((input.form, input.operation)) {
             return Err(CoreError::Binding(context()));
         }
+        let backing = vec![0xa5; self.probe.mapping_bytes].into_boxed_slice();
+        let live = self
+            .probe
+            .mapping_live
+            .fetch_add(backing.len(), Ordering::Relaxed);
+        self.probe
+            .mapping_peak
+            .fetch_max(live + backing.len(), Ordering::Relaxed);
         let native = Native {
+            backing,
             id: self.id,
             peer: self.peer,
             endpoint: input.endpoint.into(),

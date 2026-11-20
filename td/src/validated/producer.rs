@@ -167,6 +167,21 @@ impl<'td> ValidatedThing<'td> {
     }
 }
 impl<'td> ValidatedProducerCursor<'td> {
+    /// Parent scratch required across the next walk step. A replacement URI
+    /// block reuses the released block's funding. After Done this is the walk
+    /// backing that stays live beside each indexed semantic loan.
+    #[cfg(feature = "std")]
+    pub fn next_step_temporary_bytes(&self) -> Result<u64, Cause> {
+        let mut capacity = self.scratch.capacity;
+        if self.stage == Stage::Allocate {
+            capacity = capacity.max(
+                self.owner
+                    .uri_block_capacity(self.current_form().href.as_str())?,
+            );
+        }
+        walk_temporary_bytes(&self.owner, capacity)
+    }
+
     pub fn acknowledge(&mut self) {
         match self.stage {
             Stage::Scope => self.stage = Stage::Forms,
@@ -620,7 +635,7 @@ fn walk_temporary_bytes(
         .and_then(|bytes| add(bytes, producer_inline_bytes(), Phase::Semantics))
 }
 
-fn producer_inline_bytes() -> u64 {
+pub(super) fn producer_inline_bytes() -> u64 {
     2 * mem::size_of::<ValidatedProducerCursor<'static>>() as u64
 }
 impl Drop for ValidatedProducerCursor<'_> {
@@ -675,6 +690,71 @@ mod tests {
         }
         cursor
     }
+    #[test]
+    fn parent_scratch_tracks_frame_growth_and_uri_replacement_step_by_step() {
+        let thing = serde_json::from_value(serde_json::json!({
+            "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"walk",
+            "base":"http://example.org/root/", "security":["n"],
+            "securityDefinitions":{"n":{"scheme":"nosec"}},
+            "actions":{"run":{"forms":[{"href":"one"},{"href":"two/longer/path"}]}}
+        }))
+        .unwrap();
+        let config =
+            ValidatedThingAdmissionConfig::try_from_limits(GatewayDefaultV1::LIMITS).unwrap();
+        let ledger = AdmissionLedger::new(
+            SlotIndex::new(1),
+            Generation::INITIAL,
+            0,
+            1 << 20,
+            0,
+            0,
+            0,
+            0,
+        );
+        let mut basic = ValidatedThingCursor::from_thing(&thing, &config, ledger);
+        let mut overlapping_frames = false;
+        let mut producer = loop {
+            let required = basic.next_step_temporary_bytes().unwrap();
+            let before = basic.stack.ledger.live_bytes();
+            let progress = basic.step(&mut work(), false);
+            let owner = match &progress {
+                ValidatedThingProgress::Pending(next) => next,
+                ValidatedThingProgress::Complete(validated) => &validated.owner,
+                ValidatedThingProgress::Failed(e) => panic!("{e:?}"),
+            };
+            let after = owner.stack.ledger.live_bytes();
+            assert_eq!(
+                required,
+                inline_bytes().max(producer_inline_bytes()) + before.max(after)
+            );
+            overlapping_frames |= owner.stack.frames.capacity > 0 && owner.stack.transfer.is_some();
+            match progress {
+                ValidatedThingProgress::Pending(next) => basic = next,
+                ValidatedThingProgress::Complete(validated) => break validated.into_producer(),
+                _ => unreachable!(),
+            }
+        };
+        assert!(overlapping_frames);
+        let mut replaced_uri = false;
+        loop {
+            let required = producer.next_step_temporary_bytes().unwrap();
+            let before = producer.owner.stack.ledger.live_bytes();
+            let old_uri = producer.scratch.capacity;
+            let done = matches!(
+                producer.step(&mut work(), false).unwrap(),
+                ValidatedProducerStep::Done
+            );
+            let after = producer.owner.stack.ledger.live_bytes();
+            assert_eq!(required, producer_inline_bytes() + before.max(after));
+            replaced_uri |= old_uri > 0 && producer.scratch.capacity > old_uri;
+            if done {
+                break;
+            }
+            producer.acknowledge();
+        }
+        assert!(replaced_uri);
+    }
+
     #[test]
     fn indexed_scratch_accounts_for_splits_and_upstream_live_bytes_at_each_ceiling() {
         let thing = serde_json::from_value(serde_json::json!({

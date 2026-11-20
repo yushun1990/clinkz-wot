@@ -423,7 +423,8 @@ described Query or Cancel needs a Form, an eligible provider and a native mappin
 that accepts the original Invoke continuation. An absent control stays unavailable.
 An explicit Form or Binding selector for any operation must admit a complete
 combination, including that operation. Once the TD index is complete, preparation
-refuses a required operation with no admitted Form before native compilation.
+refuses a required operation with no admitted Form or an explicitly selected
+Binding ID absent from the observed registry. Either result precedes native compilation.
 
 TD 1.1 allows a Consumer to choose a usable Form. ClinkZ prefers the first viable
 combination in TD Form order, comparing Invoke first, then Query, then Cancel.
@@ -454,7 +455,10 @@ registrations allowed by its selector share one loan of the Form's resolved
 semantics. If another operation on that Form is needed, it obtains a new paid
 loan from the admitted input. A Form with all three roles takes at most three loans.
 The search reuses each completed Form/operation result, including an empty
-provider set, while it can still serve a candidate combination. Once an
+provider set, while it can still serve a candidate combination. If every eligible
+Form for a required control has returned an empty set, every Invoke is ruled out.
+A nonempty set whose mappings reject the current Invoke can still serve a later
+Invoke. Once an
 Invoke Form has exhausted its controls, preparation releases its mappings and
 reuses its candidate storage for the next Invoke Form. The compiled controls
 remain available to later Invoke providers. A hard compiler or continuation
@@ -464,10 +468,15 @@ capacity or work.
 One caller work budget pays for the index, qualification, comparison and
 disposal of provisional mappings. The Host search reuses space for one partial
 assignment per registered provider across all Form combinations. That storage,
-the Form index, provisional candidate slots, semantic loan and native compiler
-scratch share one temporary reservation. The compiler must fit the remaining
-bytes reported by the TD loan, and refusal identifies the limiting resource.
-Only the chosen mappings, services and their original funding enter the definition.
+the Form index, TD walk, semantic arena and declared native compiler scratch
+draw on temporary capacity for their overlapping lifetimes. Both the per-admission
+and shared admission peaks also include the schemas and every still-live
+provisional mapping. Before compiler entry, its declared retained backing and
+scratch must fit together beside those owners in the original Engine bank.
+A refusal identifies the limiting resource. Discard releases each candidate's
+charge. At definition handoff the admission charges end and the chosen mappings
+and schemas keep their Engine funding. Independent service backing stays with
+its original owner.
 
 The composition owner chooses how the search observes one effective configuration.
 Use `try_new_fixed` when the inputs are immutable or all changes are serialized

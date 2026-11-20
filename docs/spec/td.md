@@ -57,7 +57,9 @@ contract remains a separate capability, not a prerequisite of every typed use.
 The bounded semantic loan now resolves a selected Form at Thing, Property,
 Action or Event scope, retaining original coordinates, effective operations,
 security, typed affordance schemas and local-context extension associations.
-Host preparation can retain the coordinate and resolved href from the URI walk.
+Host preparation can fund each Basic and URI-walk step from its reported
+temporary byte requirement, including inline movement, overlapping frame blocks
+and URI buffer replacement. It can retain the coordinate and resolved href from the walk.
 After that walk completes, the cursor can lend a selected coordinate from the same
 immutable admitted Thing using the original ledger and semantic work allowance.
 The cursor can partition its temporary allowance for caller-owned selection

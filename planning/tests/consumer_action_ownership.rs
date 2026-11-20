@@ -197,7 +197,7 @@ fn clean(bank: &HostResourceAccounts) {
         assert_eq!(bank.account(k).used(), 0, "{k:?}");
     }
 }
-fn measure(media: &str) -> u64 {
+fn measure(media: &str) -> (u64, u64) {
     let service_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let definition_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let count = Arc::new(AtomicUsize::new(0));
@@ -230,15 +230,20 @@ fn measure(media: &str) -> u64 {
     drop(definition);
     clean(&service_bank);
     clean(&definition_bank);
-    charge
+    (
+        charge,
+        definition_bank
+            .account(ResourceKind::EngineLiveBytesGlobalMax)
+            .peak(),
+    )
 }
 #[test]
 fn copied_media_snapshot_has_independent_definition_funding() {
     let short = "application/json";
     let large = large_media();
     assert!(large.len() > 4096);
-    let small_charge = measure(short);
-    let large_charge = measure(&large);
+    let (small_charge, _) = measure(short);
+    let (large_charge, _) = measure(&large);
     assert_eq!(
         large_charge - small_charge,
         (large.len() - short.len()) as u64
@@ -247,17 +252,11 @@ fn copied_media_snapshot_has_independent_definition_funding() {
 }
 #[test]
 fn unfunded_media_copy_refuses_before_compilation_and_refunds_partial_preparation() {
-    let short = "application/json";
     let large = large_media();
-    let required = measure(short) + (large.len() - short.len()) as u64;
-    let mut limits = GatewayDefaultV1::LIMITS.clone();
-    let scratch = limits
-        .get(ResourceKind::AdmissionTemporaryBytesPerOperationMax)
-        .unwrap();
-    assert!(limits.set(
-        ResourceKind::EngineLiveBytesGlobalMax,
-        Some(scratch + required - 1)
-    ));
+    let (required, peak) = measure(&large);
+    let limits = GatewayDefaultV1::LIMITS
+        .clone()
+        .with_limit(ResourceKind::EngineLiveBytesGlobalMax, Some(peak - 1));
     let service_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let definition_bank = Arc::new(HostResourceAccounts::new(&limits));
     let count = Arc::new(AtomicUsize::new(0));
@@ -279,7 +278,7 @@ fn unfunded_media_copy_refuses_before_compilation_and_refunds_partial_preparatio
 }
 
 #[test]
-fn native_scratch_shares_the_single_paid_allowance_with_td_and_selection() {
+fn native_scratch_fits_beside_td_selection_and_retained_backing() {
     let base = GatewayDefaultV1::LIMITS.clone().with_limit(
         ResourceKind::AdmissionTemporaryBytesPerOperationMax,
         Some(1 << 20),
@@ -323,4 +322,35 @@ fn native_scratch_shares_the_single_paid_allowance_with_td_and_selection() {
         assert_eq!(count.load(Ordering::Relaxed), 1);
         clean(&bank);
     }
+}
+
+#[test]
+fn increasing_the_scratch_ceiling_preserves_a_fit_in_an_occupied_bank() {
+    use ResourceKind::*;
+    let limits = GatewayDefaultV1::LIMITS
+        .clone()
+        .with_limit(EngineLiveBytesGlobalMax, Some(64 << 10))
+        .with_limit(AdmissionPeakLiveBytesGlobalMax, Some(64 << 10));
+    let services = Arc::new(HostResourceAccounts::new(&limits));
+    let count = Arc::new(AtomicUsize::new(0));
+    let (registry, _) = registry("application/json", &services, &count, 1024);
+    let mut peaks = Vec::new();
+    for ceiling in [48 << 10, 1 << 20] {
+        let bank = Arc::new(HostResourceAccounts::new(&limits));
+        let other = bank.reserve(AdmissionPeakLiveBytesGlobalMax, 1024).unwrap();
+        let limits = limits
+            .clone()
+            .with_limit(AdmissionTemporaryBytesPerOperationMax, Some(ceiling));
+        let definition = prepare(&registry, "application/json", &limits, bank.clone()).unwrap();
+        assert_eq!(bank.account(AdmissionPeakLiveBytesGlobalMax).used(), 1024);
+        assert_eq!(bank.account(AdmissionTemporaryBytesGlobalMax).used(), 0);
+        assert!(live(&bank) > 0);
+        peaks.push(bank.account(EngineLiveBytesGlobalMax).peak());
+        drop((definition, other));
+        clean(&bank);
+    }
+    assert_eq!(peaks[0], peaks[1]);
+    assert_eq!(count.load(Ordering::Relaxed), 2);
+    drop(registry);
+    clean(&services);
 }

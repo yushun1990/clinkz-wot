@@ -1,7 +1,9 @@
 //! Operation-scoped continuing Action selection. Each actual native mapping
 //! compiles independently; control compatibility is checked before invocation.
+mod admission;
 use super::*;
 use ::core::mem::size_of;
+use admission::{ActionAdmission, AdmissionBytes};
 use alloc::boxed::Box;
 use clinkz_wot_core::consumer_action::*;
 use clinkz_wot_td::semantic::{FormOwner, ResolvedSemanticDocument, SemanticError};
@@ -119,15 +121,9 @@ impl ConsumerActionRegistry {
         }
         let config =
             ValidatedThingAdmissionConfig::try_from_limits(limits).map_err(|_| invalid())?;
-        let common = config.temporary_allowance();
-        let _scratch = reserve(
-            &bank,
-            &[
-                (K::EngineLiveBytesGlobalMax, common),
-                (K::AdmissionTemporaryBytesGlobalMax, common),
-                (K::AdmissionPeakLiveBytesGlobalMax, common),
-            ],
-        )?;
+        let admission = ActionAdmission::new(&bank, limits);
+        let mut walk = admission.temporary(0)?;
+        let mut slots = admission.temporary(0)?;
         let mut basic = ValidatedThingCursor::from_thing(
             thing,
             &config,
@@ -135,7 +131,7 @@ impl ConsumerActionRegistry {
                 SlotIndex::new(0),
                 Generation::INITIAL,
                 0,
-                common,
+                config.temporary_allowance(),
                 0,
                 0,
                 0,
@@ -143,6 +139,11 @@ impl ConsumerActionRegistry {
             ),
         );
         let validated = loop {
+            walk.resize(
+                basic
+                    .next_step_temporary_bytes()
+                    .map_err(crate::producer_property_read::td_error)?,
+            )?;
             let before = credits(budget);
             basic = match basic.step(budget, false) {
                 ValidatedThingProgress::Complete(v) => break v,
@@ -159,10 +160,15 @@ impl ConsumerActionRegistry {
         let selectors = [selectors.invoke, selectors.query, selectors.cancel];
         let mut forms = Vec::new();
         let mut described = [false; 3];
-        let mut indexed = [false; 3];
+        let mut possible_forms = [0_usize; 3];
         loop {
             debit(budget, W::PlanningItems, 1)?;
             let before = credits(budget);
+            walk.resize(
+                cursor
+                    .next_step_temporary_bytes()
+                    .map_err(crate::producer_property_read::td_error)?,
+            )?;
             match cursor
                 .step(budget, false)
                 .map_err(crate::producer_property_read::td_error)?
@@ -174,18 +180,17 @@ impl ConsumerActionRegistry {
                     scope: ValidatedProducerScope::Action(n),
                     forms: Some(count),
                 }) if n == name => {
-                    // Each retained resolved href fits the existing 256-byte profile.
+                    // Bound the coordinate index and its 256-byte resolved hrefs
+                    // independently of the caller's Form pins.
                     let bytes = count
                         .checked_mul(size_of::<ActionForm>() + 256)
-                        .ok_or_else(busy)?;
-                    cursor
-                        .split_temporary_allowance(bytes as u64)
-                        .map_err(crate::producer_property_read::td_error)?;
+                        .ok_or_else(busy)? as u64;
                     check_limit(
                         limits,
                         K::LargestContiguousAllocationBytesMax,
                         (count * size_of::<ActionForm>()) as u64,
                     )?;
+                    slots.grow(bytes)?;
                     forms.try_reserve_exact(count).map_err(|_| busy())?;
                 }
                 ValidatedProducerStep::Ready(ValidatedProducerEvent::Form(form))
@@ -205,7 +210,7 @@ impl ConsumerActionRegistry {
                         let admitted = applicable
                             && bounded_href
                             && selectors[i].form.is_none_or(|f| f == form.index);
-                        indexed[i] |= admitted;
+                        possible_forms[i] += usize::from(admitted);
                         admitted
                     });
                     if roles.contains(&true) {
@@ -229,14 +234,32 @@ impl ConsumerActionRegistry {
             }
             cursor.acknowledge();
         }
-        if !indexed[0]
+        if possible_forms[0] == 0
             || (1..3).any(|i| {
-                !indexed[i]
+                possible_forms[i] == 0
                     && (described[i]
                         || selectors[i].binding.is_some()
                         || selectors[i].form.is_some())
             })
         {
+            return Err(unsupported());
+        }
+        // A pinned identity is a necessary condition for every complete assignment.
+        // Observe registry membership under the same revision as native support.
+        let mut pins = selectors.map(|selector| selector.binding);
+        for registration in &self.registrations {
+            if pins.iter().all(Option::is_none) {
+                break;
+            }
+            debit(budget, W::ProviderProbes, 1)?;
+            let id = registration.preparation.identity().binding_id();
+            for pin in &mut pins {
+                if *pin == Some(id) {
+                    *pin = None;
+                }
+            }
+        }
+        if pins.iter().any(Option::is_some) {
             return Err(unsupported());
         }
         let mut search = ActionSearch {
@@ -246,39 +269,44 @@ impl ConsumerActionRegistry {
             cursor,
             forms,
             described,
+            possible_forms,
+            admission: &admission,
+            slots,
             schemas: None,
             funding: Vec::new(),
-            bank: &bank,
-            limits,
         };
         let selected = search.choose(budget)?;
         // Construction checks each mapping and each control's compatibility with Invoke.
         let controls = selected[1..].iter().flatten().count() as u64;
         debit(budget, W::ProviderProbes, 1 + 2 * controls)?;
+        let mut selected_peaks = [None, None, None];
         let mut take = |role: usize| {
             let (form, provider) = selected[role]?;
             let candidates = search.forms[form].candidates[role]
                 .as_mut()
                 .expect("selected operation was probed");
             let candidate = candidates.swap_remove(provider);
+            selected_peaks[role] = Some(candidate.peak);
             search.funding.extend(candidate.funding);
             Some(candidate.operation)
         };
+        let (schemas, _schema_peak) = search.schemas.take().ok_or_else(unsupported)?;
         let input = ConsumerActionDefinitionInput {
             target: AffordanceTarget::Action(Arc::from(name)),
             invoke: take(0).unwrap(),
             query: take(1),
             cancel: take(2),
-            schemas: search.schemas.take().ok_or_else(unsupported)?,
+            schemas,
             bank: bank.clone(),
             funding: ::core::mem::take(&mut search.funding),
         };
         drop(search);
+        drop(walk);
         ConsumerActionDefinition::try_new(input).map_err(|e| e.error().error().clone())
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn qualify(
+    fn qualify<'a>(
         &self,
         doc: &ResolvedSemanticDocument<'_>,
         name: &str,
@@ -287,11 +315,9 @@ impl ConsumerActionRegistry {
         endpoint: &str,
         schemas: &ValueSchemas,
         selector: ConsumerSelector,
-        limits: &ResourceLimits,
-        bank: &Arc<HostResourceAccounts>,
         budget: &mut WorkBudget,
-        temporary_headroom: ValidatedFormScratch,
-        mut accept: impl FnMut(Candidate, &mut WorkBudget) -> CoreResult<()>,
+        admission: &'a ActionAdmission<'a>,
+        mut accept: impl FnMut(Candidate<'a>, &mut WorkBudget) -> CoreResult<()>,
     ) -> CoreResult<()> {
         if endpoint.len() > 256 || doc.action().is_none_or(|a| a.synchronous == Some(true)) {
             return Ok(());
@@ -384,17 +410,12 @@ impl ConsumerActionRegistry {
                 ) => continue,
                 Err(e) => return Err(e),
             }
-            check_limit(limits, K::PlanCompileWorkUnitsPerStepMax, b.work)?;
-            if b.temporary_bytes > temporary_headroom.available_bytes {
-                return Err(CoreError::LimitExceeded {
-                    resource: temporary_headroom.limiting_resource,
-                    limit: temporary_headroom.available_bytes,
-                    requested: Some(b.temporary_bytes),
-                    observed: None,
-                    context: context(),
-                });
-            }
-            check_limit(limits, K::BindingArtifactBytesPerThingMax, b.retained_bytes)?;
+            check_limit(admission.limits, K::PlanCompileWorkUnitsPerStepMax, b.work)?;
+            check_limit(
+                admission.limits,
+                K::BindingArtifactBytesPerThingMax,
+                b.retained_bytes,
+            )?;
             if !pay(budget, W::BindingPolls, b.work) || !pay(budget, W::CleanupItems, 1) {
                 return Err(busy());
             }
@@ -405,13 +426,21 @@ impl ConsumerActionRegistry {
                 // independent snapshot is acquired at the definition bank.
                 .and_then(|bytes| bytes.checked_add(content_type.len() as u64))
                 .ok_or_else(invalid)?;
-            let funding = reserve(
-                bank,
-                &[
-                    (K::EngineLiveBytesGlobalMax, bytes),
-                    (K::CleanupItemsMax, 1),
-                ],
-            )?;
+            let (peak, engine) = admission.retained(bytes)?;
+            let cleanup = admission
+                .bank
+                .reserve(K::CleanupItemsMax, 1)
+                .ok_or_else(|| {
+                    let account = admission.bank.account(K::CleanupItemsMax);
+                    CoreError::LimitExceeded {
+                        resource: K::CleanupItemsMax,
+                        limit: account.limit(),
+                        requested: Some(1),
+                        observed: Some(account.used()),
+                        context: context(),
+                    }
+                })?;
+            let compiler_scratch = admission.temporary(b.temporary_bytes)?;
             let compiled = r
                 .preparation
                 .compile_action(ConsumerActionPreparationInput {
@@ -422,6 +451,7 @@ impl ConsumerActionRegistry {
                     endpoint,
                     schemas,
                 });
+            drop(compiler_scratch);
             current()?;
             let mapping = match compiled {
                 Ok(Some(m)) => m,
@@ -443,7 +473,8 @@ impl ConsumerActionRegistry {
             accept(
                 Candidate {
                     operation: selected,
-                    funding,
+                    funding: [engine, cleanup],
+                    peak,
                 },
                 budget,
             )?;
@@ -458,17 +489,18 @@ const OPERATIONS: [Operation; 3] = [
     Operation::CancelAction,
 ];
 
-struct Candidate {
+struct Candidate<'a> {
     operation: ConsumerActionOperation,
-    funding: Vec<HostCapacityReservation>,
+    funding: [HostCapacityReservation; 2],
+    peak: AdmissionBytes<'a>,
 }
 
-struct ActionForm {
+struct ActionForm<'a> {
     index: u32,
     endpoint: Box<str>,
     roles: [bool; 3],
     // Some(empty) records that all eligible registrations declined this operation.
-    candidates: [Option<Vec<Candidate>>; 3],
+    candidates: [Option<Vec<Candidate<'a>>>; 3],
     schemas_checked: bool,
 }
 
@@ -494,15 +526,16 @@ struct ActionSearch<'a, 'td> {
     name: &'a str,
     selectors: [ConsumerSelector; 3],
     cursor: ValidatedProducerCursor<'td>,
-    forms: Vec<ActionForm>,
+    forms: Vec<ActionForm<'a>>,
     described: [bool; 3],
-    schemas: Option<ValueSchemas>,
+    possible_forms: [usize; 3],
+    admission: &'a ActionAdmission<'a>,
+    slots: AdmissionBytes<'a>,
+    schemas: Option<(ValueSchemas, AdmissionBytes<'a>)>,
     funding: Vec<HostCapacityReservation>,
-    bank: &'a Arc<HostResourceAccounts>,
-    limits: &'a ResourceLimits,
 }
 
-impl ActionSearch<'_, '_> {
+impl<'a> ActionSearch<'a, '_> {
     fn choose(&mut self, budget: &mut WorkBudget) -> CoreResult<Family> {
         let mut assignments = self.provider_slots()?;
         let mut invokes = self.provider_slots()?;
@@ -628,10 +661,12 @@ impl ActionSearch<'_, '_> {
     fn provider_slots<T>(&mut self) -> CoreResult<Vec<T>> {
         let count = self.registry.registrations.len();
         let bytes = (count * size_of::<T>()) as u64;
-        check_limit(self.limits, K::LargestContiguousAllocationBytesMax, bytes)?;
-        self.cursor
-            .split_temporary_allowance(bytes)
-            .map_err(crate::producer_property_read::td_error)?;
+        check_limit(
+            self.admission.limits,
+            K::LargestContiguousAllocationBytesMax,
+            bytes,
+        )?;
+        self.slots.grow(bytes)?;
         let mut slots = Vec::new();
         slots.try_reserve_exact(count).map_err(|_| busy())?;
         Ok(slots)
@@ -656,6 +691,12 @@ impl ActionSearch<'_, '_> {
             candidates.push(candidate);
             Ok(())
         })?;
+        if candidates.is_empty() {
+            self.possible_forms[role] -= 1;
+            if self.possible_forms[role] == 0 {
+                return Err(unsupported());
+            }
+        }
         self.forms[index].candidates[role] = Some(candidates);
         Ok(())
     }
@@ -665,21 +706,23 @@ impl ActionSearch<'_, '_> {
         index: usize,
         role: usize,
         budget: &mut WorkBudget,
-        accept: impl FnMut(Candidate, &mut WorkBudget) -> CoreResult<()>,
+        accept: impl FnMut(Candidate<'a>, &mut WorkBudget) -> CoreResult<()>,
     ) -> CoreResult<()> {
         let form = &mut self.forms[index];
+        let _arena = self
+            .admission
+            .temporary(ResolvedSemanticDocument::capacity_bytes())?;
         let result = self.cursor.with_indexed_form_semantics(
             ValidatedProducerScope::Action(self.name),
             form.index,
             budget,
-            |doc, temporary_headroom, budget| -> CoreResult<()> {
+            |doc, _, budget| -> CoreResult<()> {
                 if !form.schemas_checked {
                     qualify_schemas(
                         doc,
                         self.name,
                         &mut self.schemas,
-                        self.limits,
-                        self.bank,
+                        self.admission,
                         &mut self.funding,
                         budget,
                     )?;
@@ -691,12 +734,10 @@ impl ActionSearch<'_, '_> {
                     form.index,
                     OPERATIONS[role],
                     &form.endpoint,
-                    self.schemas.as_ref().unwrap(),
+                    &self.schemas.as_ref().unwrap().0,
                     self.selectors[role],
-                    self.limits,
-                    self.bank,
                     budget,
-                    temporary_headroom,
+                    self.admission,
                     accept,
                 )
             },
@@ -723,12 +764,11 @@ fn debit(budget: &mut WorkBudget, class: W, count: u64) -> CoreResult<()> {
     budget.consume(class, count).map_err(|_| busy())
 }
 
-fn qualify_schemas(
+fn qualify_schemas<'a>(
     doc: &ResolvedSemanticDocument<'_>,
     name: &str,
-    schemas: &mut Option<ValueSchemas>,
-    limits: &ResourceLimits,
-    bank: &Arc<HostResourceAccounts>,
+    schemas: &mut Option<(ValueSchemas, AdmissionBytes<'a>)>,
+    admission: &'a ActionAdmission<'a>,
     funding: &mut Vec<HostCapacityReservation>,
     budget: &mut WorkBudget,
 ) -> CoreResult<()> {
@@ -740,12 +780,12 @@ fn qualify_schemas(
         preparation.include(schema)?;
     }
     check_limit(
-        limits,
+        admission.limits,
         K::CleanupWorkItemsPerStepMax,
         preparation.cleanup * 2 + 4,
     )?;
     debit(budget, W::PlanningItems, preparation.work)?;
-    if let Some(original) = schemas {
+    if let Some((original, _)) = schemas {
         let agrees = |actual, expected: &Option<_>| match (actual, expected) {
             (None, None) => Ok(true),
             (Some(a), Some(e)) => crate::type_schema::matches_schema(a, e),
@@ -756,18 +796,15 @@ fn qualify_schemas(
         }
     } else {
         debit(budget, W::CleanupItems, preparation.cleanup)?;
-        let lease = reserve(
-            bank,
-            &[(
-                K::EngineLiveBytesGlobalMax,
-                preparation.backing_bytes as u64,
-            )],
-        )?;
-        *schemas = Some(ValueSchemas {
-            input: input.map(crate::type_schema::prepare_schema).transpose()?,
-            output: output.map(crate::type_schema::prepare_schema).transpose()?,
-        });
-        funding.extend(lease);
+        let (peak, engine) = admission.retained(preparation.backing_bytes as u64)?;
+        *schemas = Some((
+            ValueSchemas {
+                input: input.map(crate::type_schema::prepare_schema).transpose()?,
+                output: output.map(crate::type_schema::prepare_schema).transpose()?,
+            },
+            peak,
+        ));
+        funding.push(engine);
     }
     Ok(())
 }

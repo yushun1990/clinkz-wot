@@ -1047,18 +1047,11 @@ impl ConsumerActionPreparation for EndpointTokenCompiler {
     }
 }
 
-#[test]
-fn exhausted_invoke_releases_its_cleanup_slot_and_reuses_its_candidate_storage() {
-    let (address, server) = peer(vec![
-        (b"INVOKE 12", b"ACCEPT 7"),
-        (b"QUERY 7", b"OUTPUT 24"),
-    ]);
-    let services = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
-    let limits = GatewayDefaultV1::LIMITS
-        .clone()
-        .with_limit(ResourceKind::CleanupItemsMax, Some(2));
-    let bank = Arc::new(HostResourceAccounts::new(&limits));
-    let probe = Arc::new(NativeProbe::default());
+fn endpoint_token_registry(
+    address: SocketAddr,
+    probe: &Arc<NativeProbe>,
+    services: &Arc<HostResourceAccounts>,
+) -> ConsumerActionRegistry {
     let compiler = EndpointTokenCompiler(Compiler {
         id: BindingRegistrationIdentity::new(
             BindingId::new(2),
@@ -1073,11 +1066,30 @@ fn exhausted_invoke_releases_its_cleanup_slot_and_reuses_its_candidate_storage()
         media: "application/json",
         probe: probe.clone(),
     });
-    let registry = ConsumerActionRegistry::try_new_fixed(vec![ConsumerActionRegistration {
+    ConsumerActionRegistry::try_new_fixed(vec![ConsumerActionRegistration {
         preparation: Box::new(compiler),
-        services: selection_services(&services),
+        services: selection_services(services),
     }])
-    .unwrap();
+    .unwrap()
+}
+
+#[test]
+fn exhausted_invoke_releases_its_cleanup_slot_and_reuses_its_candidate_storage() {
+    let (address, server) = peer(vec![
+        (b"INVOKE 12", b"ACCEPT 7"),
+        (b"QUERY 7", b"OUTPUT 24"),
+    ]);
+    let services = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let limits = GatewayDefaultV1::LIMITS
+        .clone()
+        .with_limit(ResourceKind::CleanupItemsMax, Some(2))
+        .with_limit(ResourceKind::PeakLiveBytesPerAdmissionMax, Some(108 << 10));
+    let bank = Arc::new(HostResourceAccounts::new(&limits));
+    let probe = Arc::new(NativeProbe {
+        mapping_bytes: 36 << 10,
+        ..Default::default()
+    });
+    let registry = endpoint_token_registry(address, &probe, &services);
     let td = control_forms(
         address,
         &[
@@ -1125,6 +1137,7 @@ fn exhausted_invoke_releases_its_cleanup_slot_and_reuses_its_candidate_storage()
         (1, 2)
     );
     assert_eq!(bank.account(ResourceKind::CleanupItemsMax).used(), 2);
+    assert_eq!(probe.mapping_peak.load(Ordering::Relaxed), 72 << 10);
     // Execution has its own source of capacity after preparation.
     let calls_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     *probe.bank.lock().unwrap() = Some(calls_bank.clone());
@@ -1227,7 +1240,7 @@ fn two_complete_assignments_end_native_probing_at_the_deciding_operation() {
 }
 
 #[test]
-fn a_form_pin_without_the_required_role_spends_zero_compiler_work() {
+fn impossible_form_and_binding_pins_spend_zero_compiler_work() {
     let address = "127.0.0.1:9".parse().unwrap();
     let services = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
@@ -1240,17 +1253,18 @@ fn a_form_pin_without_the_required_role_spends_zero_compiler_work() {
         ..Default::default()
     });
     let registry = competing_registry(address, &probe, &services, &TOKEN_PROVIDERS[..3], false);
-    for pin in [0, 2] {
+    for (form, binding) in [
+        (Some(0), None),
+        (Some(2), None),
+        (Some(1), Some(BindingId::new(89))),
+    ] {
         for credit in [0, 128] {
             let mut budget = work().with_remaining(WorkClass::BindingPolls, credit);
             let result = registry.prepare_action(
                 &td,
                 "run",
                 ConsumerActionSelectors {
-                    query: ConsumerSelector {
-                        form: Some(pin),
-                        ..Default::default()
-                    },
+                    query: ConsumerSelector { form, binding },
                     ..Default::default()
                 },
                 GatewayDefaultV1::LIMITS,
@@ -1263,6 +1277,109 @@ fn a_form_pin_without_the_required_role_spends_zero_compiler_work() {
         }
     }
     assert!(probe.ports.lock().unwrap().is_empty());
+    drop(registry);
+    clean(&services);
+}
+
+#[test]
+fn empty_provider_sets_for_a_required_control_rule_out_every_later_invoke() {
+    let address = "127.0.0.1:9".parse().unwrap();
+    let services = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    for (control, count) in [("queryaction", 1), ("cancelaction", 2)] {
+        let mut forms = vec![("invokeaction", "first")];
+        forms.extend(std::iter::repeat_n((control, "numeric"), count));
+        let last = forms.len();
+        forms.push(("invokeaction", "later"));
+        let td = control_forms(address, &forms);
+        let probe = Arc::new(NativeProbe {
+            fail_compilation: Some((last as u32, Operation::InvokeAction)),
+            ..Default::default()
+        });
+        let registry = competing_registry(address, &probe, &services, &[(2, true, false)], false);
+        let decisive = 32 * last as u64;
+        for credits in [decisive - 1, decisive, decisive + 32] {
+            let mut budget = work().with_remaining(WorkClass::BindingPolls, credits);
+            let result = registry.prepare_action(
+                &td,
+                "run",
+                Default::default(),
+                GatewayDefaultV1::LIMITS,
+                bank.clone(),
+                &mut budget,
+            );
+            if credits < decisive {
+                assert!(matches!(result, Err(CoreError::Backpressure(_))));
+            } else {
+                assert!(matches!(result, Err(CoreError::UnsupportedOperation(_))));
+                assert_eq!(
+                    budget.remaining(WorkClass::BindingPolls),
+                    credits - decisive
+                );
+            }
+            clean(&bank);
+        }
+        assert!(probe.ports.lock().unwrap().is_empty());
+    }
+    clean(&services);
+}
+
+#[test]
+fn executable_mappings_fit_the_admission_peak_together() {
+    use ResourceKind::*;
+    let (address, server) = peer(vec![
+        (b"INVOKE 12", b"ACCEPT 7"),
+        (b"QUERY 7", b"OUTPUT 24"),
+    ]);
+    let services = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let calls = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let probe = Arc::new(NativeProbe {
+        mapping_bytes: 36 << 10,
+        ..Default::default()
+    });
+    *probe.bank.lock().unwrap() = Some(calls.clone());
+    let registry = endpoint_token_registry(address, &probe, &services);
+    let forms = [("invokeaction", "first"), ("queryaction", "numeric")];
+    for (kind, ceiling, count) in [
+        (PeakLiveBytesPerAdmissionMax, 64 << 10, 1),
+        (PeakLiveBytesPerAdmissionMax, 64 << 10, 2),
+        (AdmissionPeakLiveBytesGlobalMax, 64 << 10, 2),
+        (AdmissionPeakLiveBytesGlobalMax, 192 << 10, 2),
+    ] {
+        probe.mapping_peak.store(0, Ordering::Relaxed);
+        let limits = GatewayDefaultV1::LIMITS
+            .clone()
+            .with_limit(kind, Some(ceiling))
+            .with_limit(AdmissionTemporaryBytesPerOperationMax, Some(48 << 10));
+        let bank = Arc::new(HostResourceAccounts::new(&limits));
+        let td = control_forms(address, &forms[..count]);
+        let prepared = registry.prepare_action(
+            &td,
+            "run",
+            Default::default(),
+            &limits,
+            bank.clone(),
+            &mut work(),
+        );
+        assert_eq!(bank.account(AdmissionPeakLiveBytesGlobalMax).used(), 0);
+        if count == 2 && ceiling == 64 << 10 {
+            assert!(
+                matches!(prepared, Err(CoreError::LimitExceeded {resource, ..}) if resource == kind)
+            );
+            assert_eq!(probe.mapping_peak.load(Ordering::Relaxed), 36 << 10);
+        } else {
+            let definition = prepared.unwrap();
+            let physical = count * probe.mapping_bytes;
+            assert_eq!(probe.mapping_live.load(Ordering::Relaxed), physical);
+            assert!(bank.account(EngineLiveBytesGlobalMax).used() >= physical as u64);
+            if count == 2 {
+                execute_datagram_action(definition, &calls);
+            }
+        }
+        assert_eq!(probe.mapping_live.load(Ordering::Relaxed), 0);
+        clean(&bank);
+    }
+    server.join().unwrap();
     drop(registry);
     clean(&services);
 }
