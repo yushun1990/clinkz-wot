@@ -1316,7 +1316,7 @@ fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authorit
                 .ok()
                 .unwrap(),
         };
-        let registry = ConsumerActionRegistry::try_new(vec![ConsumerActionRegistration {
+        let registry = ConsumerActionRegistry::try_new_fixed(vec![ConsumerActionRegistration {
             preparation: Box::new(HttpActionConsumer::new(
                 config,
                 BindingId::new(91),

@@ -57,6 +57,9 @@ pub trait ConsumerActionMapping {
     fn operation(&self) -> Operation;
     fn bounds(&self) -> ConsumerActionBounds;
     fn native_definition(&self) -> &dyn Any;
+    /// An incompatible original Invoke declines this pair with `UnsupportedOperation`.
+    /// Other errors abort selection. This passive predicate must be stable for
+    /// immutable mappings under the effective selection configuration.
     fn supports_continuation(&self, invoke: &dyn ConsumerActionMapping) -> CoreResult<()>;
     /// Pure bounded actual destination calculation, before fresh policy checks.
     /// Start MUST use that same destination; redirects/proxies are unsupported

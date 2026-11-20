@@ -57,6 +57,18 @@ contract remains a separate capability, not a prerequisite of every typed use.
 The bounded semantic loan now resolves a selected Form at Thing, Property,
 Action or Event scope, retaining original coordinates, effective operations,
 security, typed affordance schemas and local-context extension associations.
+Host preparation can fund each Basic and URI-walk step from its reported
+temporary byte requirement, including inline movement, overlapping frame blocks
+and URI buffer replacement. It can retain the coordinate and resolved href from the walk.
+After that walk completes, the cursor can lend a selected coordinate from the same
+immutable admitted Thing using the original ledger and semantic work allowance.
+The cursor can partition its temporary allowance for caller-owned selection
+storage. Each split counts against every applicable temporary and live ceiling.
+An indexed loan reports the tightest resource kind and the bytes available
+beside the live TD walk and semantic arena. Global admission and Engine live
+ceilings also count upstream backing on the original ledger.
+This permits selection in operation preference order even when a control Form
+precedes its Invoke in the TD. The href and semantic loan carry description facts.
 A Thing-root ReadAllProperties/ReadMultipleProperties/WriteAllProperties/WriteMultipleProperties
 or ObserveAllProperties/UnobserveAllProperties Form's loan also includes
 the described Property schemas with each Property's own local context, without lending or selecting individual Forms.

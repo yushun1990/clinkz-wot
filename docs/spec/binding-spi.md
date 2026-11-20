@@ -646,8 +646,12 @@ bounds. Preparation retains the original declaration; association/capacity
 construction cannot refresh it. A shared actual mapping may serve independent
 Consumer associations, while fresh per-operation permission and admitted native
 exchanges remain independent. This grants no cross-endpoint or cross-TD reuse
-without concrete dependency qualification. Controls explicitly check compatibility with the original invoke mapping;
-different Binding implementations may share an admitted continuation contract.
+without concrete dependency qualification. A control's `supports_continuation`
+is a bounded, passive comparison with the actual Invoke mapping. An incompatible
+pair returns `UnsupportedOperation` so Planning can examine another pairing.
+Other errors propagate. The answer must stay stable under the selection
+configuration. Different Binding implementations can share a continuation
+contract, and two mappings of the same protocol can address incompatible peers.
 `destination` calculates the actual target before captured fresh authorization;
 `start` must use that same target and capture all borrowed input. Refusal permits
 no semantic effect. Refused control start does not withdraw unrelated admitted

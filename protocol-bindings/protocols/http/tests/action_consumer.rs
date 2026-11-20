@@ -164,32 +164,6 @@ fn definition(
     p: Arc<Policy>,
     separate: bool,
 ) -> CoreResult<(ConsumerActionDefinition, ConsumerActionAccess)> {
-    let config = HttpConsumerConfig::for_cleartext_ip().unwrap();
-    let actual = config.consumer_services();
-    let services = ConsumerServices {
-        data: Arc::new(Data(p.clone(), actual.data)),
-        access: Arc::new(Access(p, actual.access)),
-    };
-    let services = RetainedConsumerServices {
-        data: ConsumerServiceOwner::retain_data(services.data, &b)
-            .map_err(|e| e.error().error().clone())?,
-        access: ConsumerServiceOwner::retain_access(services.access, &b)
-            .map_err(|e| e.error().error().clone())?,
-    };
-    let count = if separate { 3 } else { 1 };
-    let registry = ConsumerActionRegistry::try_new(
-        (0..count)
-            .map(|i| ConsumerActionRegistration {
-                preparation: Box::new(HttpActionConsumer::new(
-                    config,
-                    BindingId::new(90 + i),
-                    BindingGeneration::INITIAL,
-                    i,
-                )),
-                services: services.clone(),
-            })
-            .collect(),
-    )?;
     let selector = |n| ConsumerSelector {
         binding: Some(BindingId::new(n)),
         ..Default::default()
@@ -203,6 +177,41 @@ fn definition(
     } else {
         ConsumerActionSelectors::default()
     };
+    selected_definition(text, b, p, if separate { 3 } else { 1 }, selectors)
+}
+
+fn selected_definition(
+    text: &str,
+    b: Arc<HostResourceAccounts>,
+    p: Arc<Policy>,
+    count: u32,
+    selectors: ConsumerActionSelectors,
+) -> CoreResult<(ConsumerActionDefinition, ConsumerActionAccess)> {
+    let config = HttpConsumerConfig::for_cleartext_ip().unwrap();
+    let actual = config.consumer_services();
+    let services = ConsumerServices {
+        data: Arc::new(Data(p.clone(), actual.data)),
+        access: Arc::new(Access(p, actual.access)),
+    };
+    let services = RetainedConsumerServices {
+        data: ConsumerServiceOwner::retain_data(services.data, &b)
+            .map_err(|e| e.error().error().clone())?,
+        access: ConsumerServiceOwner::retain_access(services.access, &b)
+            .map_err(|e| e.error().error().clone())?,
+    };
+    let registry = ConsumerActionRegistry::try_new_fixed(
+        (0..count)
+            .map(|i| ConsumerActionRegistration {
+                preparation: Box::new(HttpActionConsumer::new(
+                    config,
+                    BindingId::new(90 + i),
+                    BindingGeneration::INITIAL,
+                    i,
+                )),
+                services: services.clone(),
+            })
+            .collect(),
+    )?;
     let thing: Thing = serde_json::from_str(text).unwrap();
     let definition =
         registry.prepare_action(&thing, "run", selectors, &limits(), b, &mut budget())?;
@@ -680,7 +689,7 @@ fn action_meaning_is_built_once_and_actual_support_work_and_schema_bounds_still_
         if case == 1 {
             services.data = Arc::new(TypesOnly(services.data));
         }
-        let registry = ConsumerActionRegistry::try_new(vec![ConsumerActionRegistration {
+        let registry = ConsumerActionRegistry::try_new_fixed(vec![ConsumerActionRegistration {
             preparation: Box::new(TracedPreparation(
                 HttpActionConsumer::new(config, BindingId::new(90), BindingGeneration::INITIAL, 0),
                 traces.clone(),
@@ -745,8 +754,8 @@ fn action_meaning_is_built_once_and_actual_support_work_and_schema_bounds_still_
             assert!(result.is_err(), "case {case}");
             assert_eq!(
                 traces.lock().unwrap().len(),
-                usize::from(case == 1),
-                "Cancel needs no application-schema support; unsupported value roles never compile"
+                0,
+                "without a viable Invoke there is no control family to compile"
             );
         }
         drop((registry, thing));
@@ -2044,3 +2053,79 @@ fn actual_http_action_callbacks_reenter_original_owner_and_retain_fenced_complet
 
 #[path = "support/action_composition.rs"]
 mod composition;
+
+#[test]
+fn automatic_action_selects_the_compatible_query_in_both_form_orders() {
+    io().block_on(async {
+        let wrong = TcpListener::bind("127.0.0.1:0").unwrap();
+        wrong.set_nonblocking(true).unwrap();
+        let mut producer = Producer::new();
+        let bank = bank();
+        for wrong_first in [true, false] {
+            let mut text: Value = serde_json::from_str(&td(producer.address, None)).unwrap();
+            let forms = text["actions"]["run"]["forms"].as_array_mut().unwrap();
+            let mut other = forms[1].clone();
+            other["href"] = json!(format!(
+                "http://{}/status{{?id}}",
+                wrong.local_addr().unwrap()
+            ));
+            let (wrong_index, good_index) = if wrong_first { (1, 2) } else { (2, 1) };
+            forms.insert(wrong_index, other);
+            let select = |form| {
+                selected_definition(
+                    &text.to_string(),
+                    bank.clone(),
+                    Arc::new(Policy::default()),
+                    1,
+                    ConsumerActionSelectors {
+                        query: ConsumerSelector {
+                            form,
+                            binding: None,
+                        },
+                        ..Default::default()
+                    },
+                )
+            };
+            let before = producer.counts.invoked.get();
+            assert!(matches!(
+                select(Some(wrong_index as u32)),
+                Err(CoreError::UnsupportedOperation(_))
+            ));
+            let mut results = Vec::new();
+            for form in [Some(good_index), None] {
+                let owner = instance();
+                let runtime = bind(select(form).unwrap(), &owner, bank.clone(), 1);
+                producer.counts.complete.set(false);
+                let h = runtime
+                    .calls
+                    .invoke_action(
+                        &runtime.association,
+                        payload(b"12"),
+                        Deadline::NONE,
+                        now(),
+                        &mut budget(),
+                    )
+                    .ok()
+                    .unwrap();
+                producer.drive(&h, ConsumerActionState::Pending).await;
+                producer.counts.complete.set(true);
+                h.query(now(), &mut budget()).unwrap();
+                producer.drive(&h, ConsumerActionState::Completed).await;
+                let outcome = h.take_settlement(now(), &mut budget()).unwrap();
+                assert_eq!(
+                    outcome.selected_form(Operation::QueryAction),
+                    Some((definition_identity(90), good_index))
+                );
+                results.push(outcome.result().unwrap().data().unwrap().body.to_vec());
+            }
+            assert_eq!(results, [b"24", b"24"]);
+            assert_eq!(producer.counts.invoked.get(), before + 2);
+            assert_eq!(
+                wrong.accept().unwrap_err().kind(),
+                std::io::ErrorKind::WouldBlock
+            );
+            clean(&bank);
+        }
+        producer.finish();
+    });
+}

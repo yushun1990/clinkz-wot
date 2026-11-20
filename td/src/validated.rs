@@ -1436,6 +1436,48 @@ const SCHEMA_KEYS: [&str; 9] = [
 const SECURITY_KEYS: [&str; 6] = ["oneOf", "allOf", "name", "flow", "authorization", "token"];
 
 impl<'td> ValidatedThingCursor<'td> {
+    fn next_frame_capacity(&self) -> Result<Option<usize>, Cause> {
+        let frames = &self.stack.frames;
+        if frames.len + 2 <= frames.capacity {
+            return Ok(None);
+        }
+        let capacity = frames
+            .capacity
+            .max(2)
+            .checked_mul(2)
+            .ok_or(arithmetic(self.phase))?
+            .min(self.policy.frames);
+        if capacity < frames.len + 2 {
+            return Err(arithmetic(self.phase));
+        }
+        Ok(Some(capacity))
+    }
+
+    /// Parent scratch required across the next Basic step, including inline
+    /// movement through Producer handoff and both blocks during frame growth.
+    /// Excludes upstream owners.
+    #[cfg(feature = "std")]
+    pub fn next_step_temporary_bytes(&self) -> Result<u64, Cause> {
+        let second = match &self.stack.transfer {
+            Some(block) => block.capacity,
+            None => self.next_frame_capacity()?.unwrap_or(0),
+        };
+        let block_bytes = |capacity| {
+            Layout::array::<Frame<'_>>(capacity)
+                .map(|layout| layout.size() as u64)
+                .map_err(|_| arithmetic(self.phase))
+        };
+        add(
+            add(
+                inline_bytes().max(producer::producer_inline_bytes()),
+                block_bytes(self.stack.frames.capacity)?,
+                self.phase,
+            )?,
+            block_bytes(second)?,
+            self.phase,
+        )
+    }
+
     fn room(&mut self, budget: &mut WorkBudget) -> Result<bool, Cause> {
         if self.stack.transfer.is_some() {
             if !self.pay(budget, &[(W::DocumentNodes, 1)])? {
@@ -1448,18 +1490,7 @@ impl<'td> ValidatedThingCursor<'td> {
             }
             return Ok(false);
         }
-        if self.stack.frames.len + 2 > self.stack.frames.capacity {
-            let capacity = self
-                .stack
-                .frames
-                .capacity
-                .max(2)
-                .checked_mul(2)
-                .ok_or(arithmetic(self.phase))?
-                .min(self.policy.frames);
-            if capacity < self.stack.frames.len + 2 {
-                return Err(arithmetic(self.phase));
-            }
+        if let Some(capacity) = self.next_frame_capacity()? {
             // One fixed allocation action and its entire future block release.
             if !self.pay(budget, &[(W::DocumentNodes, 1), (W::CleanupItems, 1)])? {
                 return Ok(false);
@@ -3081,12 +3112,7 @@ struct Trace {
 mod tests;
 
 impl<'td> ValidatedThingCursor<'td> {
-    fn allocate_uri_block(
-        &mut self,
-        scratch: &mut UriBlock,
-        href: &str,
-        owner_bytes: u64,
-    ) -> Result<(), Cause> {
+    fn uri_block_capacity(&self, href: &str) -> Result<usize, Cause> {
         // A fixed upper bound from already inspected lengths, including merge
         // coexistence and the authority-less '/.' escape. Only the *finished*
         // target is subject to the resolved-target ceiling: reducible paths
@@ -3100,7 +3126,17 @@ impl<'td> ValidatedThingCursor<'td> {
             4,
             Phase::Semantics,
         )?;
-        let capacity = usize::try_from(bytes).map_err(|_| arithmetic(Phase::Semantics))?;
+        usize::try_from(bytes).map_err(|_| arithmetic(Phase::Semantics))
+    }
+
+    fn allocate_uri_block(
+        &mut self,
+        scratch: &mut UriBlock,
+        href: &str,
+        owner_bytes: u64,
+    ) -> Result<(), Cause> {
+        let capacity = self.uri_block_capacity(href)?;
+        let bytes = capacity as u64;
         let layout = Layout::array::<u8>(capacity).map_err(|_| arithmetic(Phase::Semantics))?;
         if capacity <= scratch.capacity {
             scratch.len = 0;

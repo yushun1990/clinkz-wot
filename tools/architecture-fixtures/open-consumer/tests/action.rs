@@ -19,6 +19,12 @@ use std::{
 };
 #[derive(Default)]
 struct NativeProbe {
+    fail_compilation: Option<(u32, Operation)>,
+    mapping_bytes: usize,
+    mapping_live: AtomicUsize,
+    mapping_peak: AtomicUsize,
+    mapping_drop_charge: AtomicUsize,
+    fail_compatibility: Option<(Operation, BindingId)>,
     close_blocked: AtomicBool,
     fail_close: AtomicBool,
     fail_with_late: AtomicBool,
@@ -29,14 +35,29 @@ struct NativeProbe {
     bank: std::sync::Mutex<Option<Arc<HostResourceAccounts>>>,
     ports: std::sync::Mutex<Vec<SocketAddr>>,
 }
-#[derive(Clone)]
 struct Native {
+    backing: Box<[u8]>,
     id: BindingRegistrationIdentity,
     peer: SocketAddr,
     endpoint: Box<str>,
     operation: Operation,
     media: &'static str,
     probe: Arc<NativeProbe>,
+    ascii_continuation: bool,
+}
+impl Drop for Native {
+    fn drop(&mut self) {
+        if let Some(bank) = self.probe.bank.lock().unwrap().as_ref() {
+            self.probe.mapping_drop_charge.store(
+                bank.account(ResourceKind::AdmissionPeakLiveBytesGlobalMax)
+                    .used() as usize,
+                Ordering::Relaxed,
+            );
+        }
+        self.probe
+            .mapping_live
+            .fetch_sub(self.backing.len(), Ordering::Relaxed);
+    }
 }
 struct Invoke(Native);
 struct Control(Native);
@@ -53,10 +74,12 @@ impl Native {
                 b"INVOKE 12".to_vec()
             }
             Operation::QueryAction | Operation::CancelAction if input.is_none() => {
-                let token = continuation
-                    .and_then(|t| t.downcast_ref::<Token>())
-                    .ok_or_else(invalid)?;
-                assert_eq!(token.0, 7);
+                let token = continuation.ok_or_else(invalid)?;
+                if self.ascii_continuation {
+                    assert_eq!(token.downcast_ref::<[u8; 1]>().ok_or_else(invalid)?, b"7");
+                } else {
+                    assert_eq!(token.downcast_ref::<Token>().ok_or_else(invalid)?.0, 7);
+                }
                 if self.operation == Operation::QueryAction {
                     b"QUERY 7".to_vec()
                 } else {
@@ -81,6 +104,7 @@ impl Native {
             answered: false,
             media: self.media,
             late: None,
+            ascii_continuation: self.ascii_continuation,
             probe: self.probe.clone(),
         }))
     }
@@ -110,9 +134,17 @@ macro_rules! mapping {
                 let origin = invoke
                     .native_definition()
                     .downcast_ref::<Invoke>()
-                    .ok_or_else(invalid)?;
-                if self.0.operation == Operation::InvokeAction || origin.0.peer != self.0.peer {
-                    return Err(invalid());
+                    .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+                if self.0.operation == Operation::InvokeAction
+                    || origin.0.peer != self.0.peer
+                    || origin.0.ascii_continuation != self.0.ascii_continuation
+                {
+                    return Err(CoreError::UnsupportedOperation(context()));
+                }
+                if self.0.probe.fail_compatibility
+                    == Some((self.0.operation, origin.0.id.binding_id()))
+                {
+                    return Err(CoreError::Binding(context()));
                 }
                 Ok(())
             }
@@ -139,6 +171,7 @@ struct Exchange {
     media: &'static str,
     late: Option<ConsumerActionReply>,
     probe: Arc<NativeProbe>,
+    ascii_continuation: bool,
 }
 impl ConsumerActionExchange for Exchange {
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<CoreResult<ConsumerActionReply>> {
@@ -156,6 +189,9 @@ impl ConsumerActionExchange for Exchange {
                 self.answered = true;
                 self.probe.replies.fetch_add(1, Ordering::Relaxed);
                 let reply = match &data[..n] {
+                    b"ACCEPT 7" if self.ascii_continuation => {
+                        Ok(ConsumerActionReply::Accepted(Box::new(*b"7")))
+                    }
                     b"ACCEPT 7" => Ok(ConsumerActionReply::Accepted(Box::new(Token(7)))),
                     b"WAIT" => Ok(ConsumerActionReply::Pending),
                     b"STOP REQUESTED" => Ok(ConsumerActionReply::CancelRequested),
@@ -206,12 +242,14 @@ impl Drop for Exchange {
         self.probe.live.fetch_sub(1, Ordering::Relaxed);
     }
 }
+#[derive(Clone)]
 struct Compiler {
     id: BindingRegistrationIdentity,
     invoke: bool,
     media: &'static str,
     peer: SocketAddr,
     probe: Arc<NativeProbe>,
+    ascii_continuation: bool,
 }
 impl ConsumerActionPreparation for Compiler {
     fn identity(&self) -> BindingRegistrationIdentity {
@@ -221,24 +259,49 @@ impl ConsumerActionPreparation for Compiler {
         ConsumerPreparationBounds {
             work: 32,
             temporary_bytes: 256,
-            retained_bytes: 1024,
+            retained_bytes: 1024 + self.probe.mapping_bytes as u64,
         }
     }
     fn compile_action(
         &self,
         input: ConsumerActionPreparationInput<'_>,
     ) -> CoreResult<Option<Box<dyn ConsumerActionMapping>>> {
-        if !input.endpoint.starts_with("linkedudp://")
+        let Some((address, path)) = input
+            .endpoint
+            .strip_prefix("linkedudp://")
+            .and_then(|target| target.split_once('/'))
+        else {
+            return Ok(None);
+        };
+        if address.parse::<SocketAddr>().ok() != Some(self.peer)
             || self.invoke != (input.operation == Operation::InvokeAction)
+            || (!self.invoke
+                && matches!(
+                    (path, self.ascii_continuation),
+                    ("numeric", true) | ("ascii", false)
+                ))
         {
             return Ok(None);
         }
+        if self.probe.fail_compilation == Some((input.form, input.operation)) {
+            return Err(CoreError::Binding(context()));
+        }
+        let backing = vec![0xa5; self.probe.mapping_bytes].into_boxed_slice();
+        let live = self
+            .probe
+            .mapping_live
+            .fetch_add(backing.len(), Ordering::Relaxed);
+        self.probe
+            .mapping_peak
+            .fetch_max(live + backing.len(), Ordering::Relaxed);
         let native = Native {
+            backing,
             id: self.id,
             peer: self.peer,
             endpoint: input.endpoint.into(),
             operation: input.operation,
             media: self.media,
+            ascii_continuation: self.ascii_continuation,
             probe: self.probe.clone(),
         };
         Ok(Some(if self.invoke {
@@ -294,15 +357,13 @@ fn invalid() -> CoreError {
 fn instance() -> ConsumerInstance {
     ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL))
 }
-fn client(
+fn datagram_registry(
     peer: SocketAddr,
-    bank: Arc<HostResourceAccounts>,
-    probe: Arc<NativeProbe>,
-    data: Arc<Probe>,
-    owner: &ConsumerInstance,
-) -> (ConsumerActionAssociation, ConsumerActions) {
-    *probe.bank.lock().unwrap() = Some(bank.clone());
-    let registry = ConsumerActionRegistry::try_new(
+    bank: &Arc<HostResourceAccounts>,
+    probe: &Arc<NativeProbe>,
+    data: &Arc<Probe>,
+) -> ConsumerActionRegistry {
+    ConsumerActionRegistry::try_new_fixed(
         (0..2)
             .map(|i| {
                 let mut services = services(data.clone());
@@ -319,13 +380,14 @@ fn client(
                         invoke: i == 0,
                         media: "application/json",
                         peer,
+                        ascii_continuation: false,
                         probe: probe.clone(),
                     }),
                     services: RetainedConsumerServices {
-                        data: ConsumerServiceOwner::retain_data(services.data, &bank)
+                        data: ConsumerServiceOwner::retain_data(services.data, bank)
                             .ok()
                             .unwrap(),
-                        access: ConsumerServiceOwner::retain_access(services.access, &bank)
+                        access: ConsumerServiceOwner::retain_access(services.access, bank)
                             .ok()
                             .unwrap(),
                     },
@@ -333,7 +395,17 @@ fn client(
             })
             .collect(),
     )
-    .unwrap();
+    .unwrap()
+}
+fn client(
+    peer: SocketAddr,
+    bank: Arc<HostResourceAccounts>,
+    probe: Arc<NativeProbe>,
+    data: Arc<Probe>,
+    owner: &ConsumerInstance,
+) -> (ConsumerActionAssociation, ConsumerActions) {
+    *probe.bank.lock().unwrap() = Some(bank.clone());
+    let registry = datagram_registry(peer, &bank, &probe, &data);
     let td = serde_json::from_value(serde_json::json!({"@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"native Action", "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
         "actions":{"run":{"input":{"type":"integer"}, "output":{"type":"integer"}, "forms":[
             {"href":format!("linkedudp://{peer}/action"), "op":["invokeaction","queryaction","cancelaction"]}]}}})).unwrap();
@@ -349,17 +421,26 @@ fn client(
         .unwrap();
     drop(td);
     drop(registry);
+    bind_datagram_action(d, owner, bank)
+}
+
+fn bind_datagram_action(
+    definition: ConsumerActionDefinition,
+    owner: &ConsumerInstance,
+    bank: Arc<HostResourceAccounts>,
+) -> (ConsumerActionAssociation, ConsumerActions) {
     let access = ConsumerServiceOwner::retain_access(Arc::new(Access), &bank)
         .ok()
         .unwrap();
+    let authority = ConsumerActionAccess {
+        invoke: access.clone(),
+        query: definition.input().query.as_ref().map(|_| access.clone()),
+        cancel: definition.input().cancel.as_ref().map(|_| access.clone()),
+    };
     let association = ConsumerActionAssociation::try_new(
         owner.reference(),
-        Rc::new(d),
-        ConsumerActionAccess {
-            invoke: access.clone(),
-            query: Some(access.clone()),
-            cancel: Some(access),
-        },
+        Rc::new(definition),
+        authority,
         bank.clone(),
         &mut work(),
     )
@@ -700,7 +781,7 @@ fn representation_client(
     let access = ConsumerServiceOwner::retain_access(Arc::new(Access), bank)
         .ok()
         .unwrap();
-    let registry = ConsumerActionRegistry::try_new(
+    let registry = ConsumerActionRegistry::try_new_fixed(
         operations
             .into_iter()
             .enumerate()
@@ -720,6 +801,7 @@ fn representation_client(
                         "text/plain"
                     },
                     peer,
+                    ascii_continuation: false,
                     probe: native.clone(),
                 }),
                 services: RetainedConsumerServices {
@@ -971,3 +1053,6 @@ fn late_query_text_keeps_original_codec_funding_and_failure_evidence() {
         peer.join().unwrap();
     }
 }
+
+#[path = "support/action_selection.rs"]
+mod selection;

@@ -178,7 +178,7 @@ impl Engine {
             .clone();
         drop((bindings, funding, registry));
         let services = retained(config.consumer_services(), &bank);
-        let registry = ConsumerActionRegistry::try_new(vec![ConsumerActionRegistration {
+        let registry = ConsumerActionRegistry::try_new_fixed(vec![ConsumerActionRegistration {
             preparation: Box::new(HttpActionConsumer::new(
                 config,
                 BindingId::new(502),

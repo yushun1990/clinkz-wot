@@ -417,17 +417,81 @@ profile; they do not acquire general caller-supplied variable support here.
 
 ## Continuing Consumer Action preparation
 
-`ConsumerActionRegistry::prepare_action` admits one Action through the common
-Basic/semantic Form walk and captures source-free invoke/query/cancel mappings.
-One paid semantic loan serves all effective operations of a Form.
-It accepts absent or false synchronicity; explicit synchronous Actions retain the
-finite facet. Each described control operation must have a supported selected
-Form; absent controls stay unavailable. Form order is the default preference,
-selectors only narrow applicability and ambiguity within a Form refuses.
-Each operation can select a different actual registration, configuration and
-access service. The control mapping explicitly proves compatibility with the
-original invoke mapping before the association can execute. Registration equality
-is neither required nor sufficient. No generic continuation URL is constructed.
+`ConsumerActionRegistry::prepare_action` admits one named Action with absent or
+false synchronicity. Explicitly synchronous Actions use the finite facet. Each
+described Query or Cancel needs a Form, an eligible provider and a native mapping
+that accepts the original Invoke continuation. An absent control stays unavailable.
+An explicit Form or Binding selector for any operation must admit a complete
+combination, including that operation. Once the TD index is complete, preparation
+refuses a required operation with no admitted Form or an explicitly selected
+Binding ID absent from the observed registry. Either result precedes native compilation.
+
+TD 1.1 allows a Consumer to choose a usable Form. ClinkZ prefers the first viable
+combination in TD Form order, comparing Invoke first, then Query, then Cancel.
+Each operation may use a different registration. For the preferred Form
+combination, exactly one assignment of actual providers must qualify. A second
+compatible assignment reports `AmbiguousBindingOwner`. An unsupported pairing
+can give way to another provider or Form during preparation. Registration order
+has no preference and execution never replays an uncertain effect through an
+alternative. [TD 1.1 Forms](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#form)
+
+For a fixed Invoke Form, compare each Query Form across all eligible Invoke
+providers before moving to the next Query. Within that prefix, compare Cancel
+Forms across all Invoke providers that can use the selected Query. Omit an
+absent control from the ordering. An earlier Query takes priority even if it
+needs a later Cancel. Multiple providers at a partial combination matter only
+if they can complete it. Each control accepts the original Invoke independently,
+so changing Query cannot rescue an Invoke for which every Cancel was ruled out.
+Preparation stops when it establishes uniqueness or ambiguity at the first
+complete Form combination. Its second complete provider assignment decides
+ambiguity immediately, including when the final operation is Invoke itself.
+Qualification work is limited to alternatives that can still determine
+preference or a tie.
+
+The Host registry indexes the selected Action's Form coordinates and resolved
+addresses during one Basic admission and URI walk. When the search needs an
+operation on a Form, it reserves candidate storage for that operation. All
+registrations allowed by its selector share one loan of the Form's resolved
+semantics. If another operation on that Form is needed, it obtains a new paid
+loan from the admitted input. A Form with all three roles takes at most three loans.
+The search reuses each completed Form/operation result, including an empty
+provider set, while it can still serve a candidate combination. An empty result
+releases its candidate buffer and temporary charge before the next probe. The
+Form index keeps the result so later Invokes can skip that qualification. If
+every eligible Form for a required control has returned an empty set, every
+Invoke is ruled out.
+A nonempty set whose mappings reject the current Invoke can still serve a later
+Invoke. Once an Invoke Form has exhausted its controls, preparation releases its
+mappings and reuses its candidate storage for the next Invoke Form. The compiled controls
+remain available to later Invoke providers. A hard compiler or continuation
+compatibility error on a required probe propagates before I/O, as does exhausted
+capacity or work.
+
+One caller work budget pays for the index, qualification, comparison and
+disposal of provisional mappings. The Host search reuses space for one partial
+assignment per registered provider across all Form combinations. That storage,
+the Form index, TD walk, semantic arena and declared native compiler scratch
+draw on temporary capacity for their overlapping lifetimes. Both the per-admission
+and shared admission peaks also include the schemas and every still-live
+provisional mapping. Before compiler entry, its declared retained backing and
+scratch must fit together beside those owners in the original Engine bank.
+A refusal identifies the limiting resource. Discard releases each candidate's
+charge. The selected mappings and schemas keep their admission peak charges
+through the closing configuration observation. A refusal disposes of the
+provisional definition under those charges. A successful observation releases
+the admission charges at handoff and the definition keeps its Engine funding.
+Independent service backing stays with its original owner.
+
+The composition owner chooses how the search observes one effective configuration.
+Use `try_new_fixed` when the inputs are immutable or all changes are serialized
+with preparation. With `try_new_revisioned`, supply a bounded passive observation
+of the whole registration set. All writers that can change native support,
+continuation compatibility, data eligibility or preparation access must participate.
+The observation returns a non-reused stable revision or `None` while changing.
+A change between the opening observation and the decision, or an observation
+during an update, refuses with `StaleHandle`. This covers the rejected alternatives
+that establish preference and uniqueness. A later competitor affects future
+searches. Each instance independently authorizes use of its selected operations.
 
 The actual `ConsumerActionPreparation` compiles pure bounded native mappings,
 while Planning prepares the same bounded structured data meaning as finite
@@ -435,11 +499,11 @@ execution and checks the current endpoint NoSec subset. Input and output are
 independent `ValueSchemas` roles. A borrowed census prepays construction and
 rollback work, checks aggregate destruction against the cleanup-step allowance,
 and reserves variable backing before constructing the constraints. One original
-owned pair serves invoke/query/cancel selection; subsequent semantic loans compare
-borrowed assertions without rebuilding it. Each actual selected data service
-qualifies the complete schemas for its application-value roles: Invoke input
-and possible completed output, Query completed output, and no application value
-for Cancel. Query need not support the input schema. Native status/acknowledgement
+owned pair serves Invoke, Query and Cancel. Each Form checks its borrowed
+assertions against that pair once when schema qualification succeeds. Each selected
+data service qualifies the complete schemas for its application-value roles.
+Invoke qualifies input and possible completed output, Query qualifies completed
+output, and Cancel carries no application value. Query need not support the input schema. Native status/acknowledgement
 encoding is the mapping's responsibility. Different operations may retain
 different valid media and body/scratch/work policies for the same output meaning;
 Query output is never required to fit Invoke's representation or allowance.

@@ -935,13 +935,18 @@ restricted aggregate regression/measurement path. HTTP SSE is not implemented.
 
 ## TD-driven continuing Consumer Actions
 
-`ConsumerActionRegistry::prepare_action` selects invoke and every described
-query/cancel operation independently. At startup, obtain the actual services
+`ConsumerActionRegistry::prepare_action` chooses the first viable Invoke and
+compatible described controls in TD Form order. Pointing a Query at another
+listener can make a later Query the first usable choice. At startup, obtain the actual services
 from `HttpConsumerConfig::consumer_services()` (or supply application services),
 then adopt their data/access backing with `ConsumerServiceOwner::retain_data` and
 `retain_access` at the original service bank. Register `HttpActionConsumer` with
 those `RetainedConsumerServices`; share the same retained owners across
-registrations and capability families. Supply an explicit 4096-unit
+registrations and capability families. An immutable or externally serialized
+composition uses `ConsumerActionRegistry::try_new_fixed`. Reloadable compositions
+can supply a shared revision as described in the
+[Planning contract](../../../docs/spec/planning.md#continuing-consumer-action-preparation).
+Supply an explicit 4096-unit
 `PlanCompileWorkUnitsPerStepMax` allowance for the bounded pure native callback.
 The shared HTTP lowering preserves the qualified Producer mapping above: bounded structured JSON,
 endpoint NoSec, cleartext IP literals, POST invoke and independent GET/DELETE

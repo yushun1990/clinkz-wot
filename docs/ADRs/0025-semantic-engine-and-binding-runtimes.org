@@ -67,6 +67,17 @@ Actual native owner retirement cannot be derived from the last logical route:
 packet/reply jobs and bounded idle pools have independent lives. Adopt owner
 policy and a final-use destruction barrier instead.
 
+For a continuing Consumer Action the usable choice is an Invoke with every
+described control able to use its original continuation. Selecting each operation
+in isolation can discard the only usable Query. Asking the caller to try separate
+registries also loses cross-Binding preference and provider ambiguity. Preparing
+every alternative up front spends work on Forms after the preferred complete
+choice. Keep the existing Action-specific native compatibility predicate. Planning
+can compare complete choices on demand in TD Form order, using one effective
+configuration for both competitors and winners. The resulting definition retains
+only the selected dependencies. Instance permission belongs to each association.
+[[https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#form][TD 1.1 Forms]] · [[file:../spec/planning.md#continuing-consumer-action-preparation][Continuing Consumer Action preparation]]
+
 Complete Producer qualification remains stronger than Consumer partial support.
 The old late-handler exception is removed. An unknown or unprepared Consumer
 candidate may refuse on first use; a published Producer Form may not first

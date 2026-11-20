@@ -79,13 +79,17 @@ impl HostResourceAccounts {
             })
     }
     pub(crate) fn try_reserve(&self, kind: K, amount: u64) -> bool {
+        self.try_reserve_up_to(kind, amount, u64::MAX)
+    }
+    fn try_reserve_up_to(&self, kind: K, amount: u64, ceiling: u64) -> bool {
         let i = kind.index();
+        let limit = self.limits[i].min(ceiling);
         let Ok(amount) = usize::try_from(amount) else {
             return false;
         };
         match self.used[i].fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
             used.checked_add(amount)
-                .filter(|next| *next as u64 <= self.limits[i])
+                .filter(|next| *next as u64 <= limit)
         }) {
             Ok(previous) => {
                 self.peak[i].fetch_max(previous + amount, Ordering::Relaxed);
@@ -122,7 +126,14 @@ impl HostCapacityReservation {
         self.amount
     }
     pub fn try_grow(&mut self, amount: u64) -> bool {
-        if self.amount.checked_add(amount).is_none() || !self.bank.try_reserve(self.kind, amount) {
+        self.try_grow_up_to(amount, u64::MAX)
+    }
+    /// Grow under both the bank's immutable limit and the caller's ceiling
+    /// on total shared use. The same atomic acquisition enforces both.
+    pub fn try_grow_up_to(&mut self, amount: u64, ceiling: u64) -> bool {
+        if self.amount.checked_add(amount).is_none()
+            || !self.bank.try_reserve_up_to(self.kind, amount, ceiling)
+        {
             return false;
         }
         self.amount += amount;
@@ -135,5 +146,33 @@ impl HostCapacityReservation {
             .checked_sub(amount)
             .expect("original reservation");
         self.bank.release(self.kind, amount);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clinkz_wot_foundation::{GatewayDefaultV1, StaticResourceProfile};
+
+    #[test]
+    fn concurrent_lease_growth_observes_a_tighter_shared_ceiling() {
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let kind = K::AdmissionPeakLiveBytesGlobalMax;
+        let other = bank.reserve(kind, 1024).unwrap();
+        let barrier = std::sync::Barrier::new(2);
+        let contender = || {
+            let mut lease = bank.reserve(kind, 0).unwrap();
+            let acquired = lease.try_grow_up_to(6144, 8192);
+            barrier.wait();
+            acquired
+        };
+        std::thread::scope(|scope| {
+            let peer = scope.spawn(contender);
+            assert_ne!(contender(), peer.join().unwrap());
+        });
+        assert_eq!(bank.account(kind).peak(), 7168);
+        assert_eq!(bank.account(kind).used(), 1024);
+        drop(other);
+        assert_eq!(bank.account(kind).used(), 0);
     }
 }

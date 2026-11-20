@@ -246,9 +246,9 @@ this composition proof and is not introduced.
 
 The [continuing Action preparation](../spec/planning.md#continuing-consumer-action-preparation)
 adds an operation-scoped reusable definition through `ConsumerActionRegistry`.
-It selects actual invoke/query/cancel mappings and services after common TD
-admission, checks native continuation compatibility and owns the complete result
-after source/compiler disposal. Missing described control support refuses the
+It selects the first complete Invoke/Query/Cancel combination through the
+registered Bindings under one effective configuration. The qualified definition
+owns the selected mappings and services after source/compiler disposal. Missing described control support refuses the
 association; absence never synthesizes a mapping. It now shares finite execution's
 bounded structured input/output meaning and borrowed census/compatibility; the
 selected NoSec and actual native/service qualifications remain explicit. Original

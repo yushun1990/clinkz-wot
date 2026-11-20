@@ -20,6 +20,7 @@ struct Declarations {
     compile_change: AtomicBool,
     authorization_change: AtomicBool,
     preparation_work: AtomicU64,
+    selection_revision: AtomicU64,
     validation_change: AtomicBool,
     starts: AtomicUsize,
     drops: AtomicUsize,
@@ -113,6 +114,9 @@ impl ConsumerAccessService for OwnedAccess {
         {
             self.declarations
                 .preparation_work
+                .fetch_add(1, Ordering::Relaxed);
+            self.declarations
+                .selection_revision
                 .fetch_add(1, Ordering::Relaxed);
         }
         result
@@ -209,6 +213,9 @@ impl ConsumerActionPreparation for CountedPreparation {
             .swap(false, Ordering::Relaxed)
         {
             self.declarations.data_work.fetch_add(1, Ordering::Relaxed);
+            self.declarations
+                .selection_revision
+                .fetch_add(1, Ordering::Relaxed);
         }
         Ok(result.map(|inner| {
             Box::new(DeclaredMapping {
@@ -277,7 +284,10 @@ fn prepare_operations(
     count: &Arc<AtomicUsize>,
 ) -> CoreResult<ConsumerActionDefinition> {
     let config = HttpConsumerConfig::for_cleartext_ip().unwrap();
-    let registry = ConsumerActionRegistry::try_new(
+    // All writes are serialized with this call except the access and compile
+    // callbacks above. Each advances its declaration's non-reused revision.
+    let writers = registrations.map(|(_, declarations)| declarations.clone());
+    let registry = ConsumerActionRegistry::try_new_revisioned(
         (0..3)
             .map(|i| ConsumerActionRegistration {
                 preparation: Box::new(CountedPreparation {
@@ -293,6 +303,11 @@ fn prepare_operations(
                 services: registrations[i as usize].0.clone(),
             })
             .collect(),
+        move || {
+            writers.iter().try_fold(0u64, |total, declarations| {
+                total.checked_add(declarations.selection_revision.load(Ordering::Relaxed))
+            })
+        },
     )?;
     let select = |id| ConsumerSelector {
         binding: Some(BindingId::new(id)),

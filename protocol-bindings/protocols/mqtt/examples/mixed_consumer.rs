@@ -138,7 +138,7 @@ fn main() {
             .ok()
             .unwrap(),
     };
-    let registry = ConsumerActionRegistry::try_new(vec![ConsumerActionRegistration {
+    let registry = ConsumerActionRegistry::try_new_fixed(vec![ConsumerActionRegistration {
         preparation: Box::new(HttpActionConsumer::new(
             config,
             BindingId::new(702),

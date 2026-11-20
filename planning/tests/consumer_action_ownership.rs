@@ -73,7 +73,10 @@ impl ConsumerAccessService for Access {
         0
     }
 }
-struct Compiler(Arc<AtomicUsize>);
+struct Compiler {
+    calls: Arc<AtomicUsize>,
+    temporary_bytes: u64,
+}
 impl ConsumerActionPreparation for Compiler {
     fn identity(&self) -> BindingRegistrationIdentity {
         identity()
@@ -81,7 +84,7 @@ impl ConsumerActionPreparation for Compiler {
     fn bounds(&self) -> ConsumerPreparationBounds {
         ConsumerPreparationBounds {
             work: 1,
-            temporary_bytes: 0,
+            temporary_bytes: self.temporary_bytes,
             retained_bytes: 0,
         }
     }
@@ -90,7 +93,9 @@ impl ConsumerActionPreparation for Compiler {
         input: ConsumerActionPreparationInput<'_>,
     ) -> CoreResult<Option<Box<dyn ConsumerActionMapping>>> {
         assert_eq!(input.operation, Operation::InvokeAction);
-        self.0.fetch_add(1, Ordering::Relaxed);
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        let scratch = vec![0xa5_u8; self.temporary_bytes as usize];
+        std::hint::black_box(&scratch);
         Ok(Some(Box::new(Mapping)))
     }
 }
@@ -132,6 +137,7 @@ fn registry(
     media: &str,
     bank: &Arc<HostResourceAccounts>,
     count: &Arc<AtomicUsize>,
+    temporary_bytes: u64,
 ) -> (ConsumerActionRegistry, RetainedConsumerServices) {
     let services = RetainedConsumerServices {
         data: ConsumerServiceOwner::retain_data(Arc::new(Data(media.into())), bank)
@@ -141,8 +147,11 @@ fn registry(
             .ok()
             .unwrap(),
     };
-    let registry = ConsumerActionRegistry::try_new(vec![ConsumerActionRegistration {
-        preparation: Box::new(Compiler(count.clone())),
+    let registry = ConsumerActionRegistry::try_new_fixed(vec![ConsumerActionRegistration {
+        preparation: Box::new(Compiler {
+            calls: count.clone(),
+            temporary_bytes,
+        }),
         services: services.clone(),
     }])
     .unwrap();
@@ -188,11 +197,11 @@ fn clean(bank: &HostResourceAccounts) {
         assert_eq!(bank.account(k).used(), 0, "{k:?}");
     }
 }
-fn measure(media: &str) -> u64 {
+fn measure(media: &str) -> (u64, u64) {
     let service_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let definition_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let count = Arc::new(AtomicUsize::new(0));
-    let (registry, services) = registry(media, &service_bank, &count);
+    let (registry, services) = registry(media, &service_bank, &count, 0);
     let original_service_charge = live(&service_bank);
     let definition = prepare(
         &registry,
@@ -221,15 +230,20 @@ fn measure(media: &str) -> u64 {
     drop(definition);
     clean(&service_bank);
     clean(&definition_bank);
-    charge
+    (
+        charge,
+        definition_bank
+            .account(ResourceKind::EngineLiveBytesGlobalMax)
+            .peak(),
+    )
 }
 #[test]
 fn copied_media_snapshot_has_independent_definition_funding() {
     let short = "application/json";
     let large = large_media();
     assert!(large.len() > 4096);
-    let small_charge = measure(short);
-    let large_charge = measure(&large);
+    let (small_charge, _) = measure(short);
+    let (large_charge, _) = measure(&large);
     assert_eq!(
         large_charge - small_charge,
         (large.len() - short.len()) as u64
@@ -238,21 +252,15 @@ fn copied_media_snapshot_has_independent_definition_funding() {
 }
 #[test]
 fn unfunded_media_copy_refuses_before_compilation_and_refunds_partial_preparation() {
-    let short = "application/json";
     let large = large_media();
-    let required = measure(short) + (large.len() - short.len()) as u64;
-    let mut limits = GatewayDefaultV1::LIMITS.clone();
-    let scratch = limits
-        .get(ResourceKind::AdmissionTemporaryBytesPerOperationMax)
-        .unwrap();
-    assert!(limits.set(
-        ResourceKind::EngineLiveBytesGlobalMax,
-        Some(scratch + required - 1)
-    ));
+    let (required, peak) = measure(&large);
+    let limits = GatewayDefaultV1::LIMITS
+        .clone()
+        .with_limit(ResourceKind::EngineLiveBytesGlobalMax, Some(peak - 1));
     let service_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let definition_bank = Arc::new(HostResourceAccounts::new(&limits));
     let count = Arc::new(AtomicUsize::new(0));
-    let (registry, services) = registry(&large, &service_bank, &count);
+    let (registry, services) = registry(&large, &service_bank, &count, 0);
     let original_service_charge = live(&service_bank);
     let result = prepare(&registry, &large, &limits, definition_bank.clone());
     assert!(matches!(result, Err(CoreError::LimitExceeded {
@@ -267,4 +275,82 @@ fn unfunded_media_copy_refuses_before_compilation_and_refunds_partial_preparatio
     clean(&definition_bank);
     drop((registry, services));
     clean(&service_bank);
+}
+
+#[test]
+fn native_scratch_fits_beside_td_selection_and_retained_backing() {
+    let base = GatewayDefaultV1::LIMITS.clone().with_limit(
+        ResourceKind::AdmissionTemporaryBytesPerOperationMax,
+        Some(1 << 20),
+    );
+    for kind in [
+        ResourceKind::AdmissionTemporaryBytesPerOperationMax,
+        ResourceKind::AdmissionTemporaryBytesGlobalMax,
+        ResourceKind::PeakLiveBytesPerAdmissionMax,
+        ResourceKind::AdmissionPeakLiveBytesGlobalMax,
+    ] {
+        let ceiling = 64 * 1024;
+        let limits = base.clone().with_limit(kind, Some(ceiling));
+        let bank = Arc::new(HostResourceAccounts::new(&limits));
+        let count = Arc::new(AtomicUsize::new(0));
+        let attempt = |native_bytes| {
+            let (registry, _) = registry("application/json", &bank, &count, native_bytes);
+            prepare(&registry, "application/json", &limits, bank.clone())
+        };
+        let probe = 128 * 1024;
+        let available = match attempt(probe) {
+            Err(CoreError::LimitExceeded {
+                resource,
+                limit,
+                requested: Some(bytes),
+                ..
+            }) => {
+                assert_eq!((resource, bytes), (kind, probe));
+                limit
+            }
+            _ => panic!(
+                "compiler scratch must fit beside the TD and selection storage under {kind:?}"
+            ),
+        };
+        assert!(available > 0 && available < ceiling);
+        assert!(
+            matches!(attempt(available + 1), Err(CoreError::LimitExceeded {resource, limit, ..}) if resource == kind && limit == available)
+        );
+        assert_eq!(count.load(Ordering::Relaxed), 0);
+        clean(&bank);
+        drop(attempt(available).unwrap());
+        assert_eq!(count.load(Ordering::Relaxed), 1);
+        clean(&bank);
+    }
+}
+
+#[test]
+fn increasing_the_scratch_ceiling_preserves_a_fit_in_an_occupied_bank() {
+    use ResourceKind::*;
+    let limits = GatewayDefaultV1::LIMITS
+        .clone()
+        .with_limit(EngineLiveBytesGlobalMax, Some(64 << 10))
+        .with_limit(AdmissionPeakLiveBytesGlobalMax, Some(64 << 10));
+    let services = Arc::new(HostResourceAccounts::new(&limits));
+    let count = Arc::new(AtomicUsize::new(0));
+    let (registry, _) = registry("application/json", &services, &count, 1024);
+    let mut peaks = Vec::new();
+    for ceiling in [48 << 10, 1 << 20] {
+        let bank = Arc::new(HostResourceAccounts::new(&limits));
+        let other = bank.reserve(AdmissionPeakLiveBytesGlobalMax, 1024).unwrap();
+        let limits = limits
+            .clone()
+            .with_limit(AdmissionTemporaryBytesPerOperationMax, Some(ceiling));
+        let definition = prepare(&registry, "application/json", &limits, bank.clone()).unwrap();
+        assert_eq!(bank.account(AdmissionPeakLiveBytesGlobalMax).used(), 1024);
+        assert_eq!(bank.account(AdmissionTemporaryBytesGlobalMax).used(), 0);
+        assert!(live(&bank) > 0);
+        peaks.push(bank.account(EngineLiveBytesGlobalMax).peak());
+        drop((definition, other));
+        clean(&bank);
+    }
+    assert_eq!(peaks[0], peaks[1]);
+    assert_eq!(count.load(Ordering::Relaxed), 2);
+    drop(registry);
+    clean(&services);
 }
