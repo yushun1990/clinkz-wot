@@ -6,7 +6,9 @@ use clinkz_wot_core::{finite::FiniteIngressBinding, producer::ProducerInstanceKe
 use clinkz_wot_planning::{
     ResolvedProducerInput,
     finite_producer::FiniteProducerCompiler,
-    producer_composition::{FormSite, ProducerCapability, ProducerOperationInput},
+    producer_composition::{
+        FormSite, ProducerCapability, ProducerOperationInput, PublicationObserver,
+    },
 };
 use std::{any::Any, cell::Cell};
 
@@ -198,6 +200,10 @@ impl HttpFiniteProducer {
 }
 
 impl FiniteProducerCompiler for HttpFiniteProducer {
+    fn observe_configuration(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        ProducerCapability::observe_configuration(self, facts)
+    }
+
     type Binding = HttpFiniteBinding;
 
     fn prepare(
@@ -265,6 +271,12 @@ impl FiniteProducerCompiler for HttpFiniteProducer {
 // Thing-root finite collection mappings. The composition selector asks it about
 // each actual Form/operation; it interprets no Action/Event lifecycle.
 impl ProducerCapability for HttpFiniteProducer {
+    fn observe_configuration(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.security
+            .as_ref()
+            .map_or(Ok(()), |security| security.observe_configuration(facts))
+    }
+
     fn identity(&self) -> (BindingId, BindingGeneration) {
         (self.id, self.generation)
     }

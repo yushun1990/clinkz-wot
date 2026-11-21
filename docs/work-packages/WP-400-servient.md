@@ -633,8 +633,8 @@ This is a bounded Host subset, not general family or production qualification.
 
 `producer_composition::ComposedProducerExposure` takes a complete pure
 `ComposedProducerInput`: actual staged instance/behavior/description, prepared
-definitions, captured immutable startup registrations and independently typed
-native participation owners. Refusal returns those same input owners. This is
+definitions, the deployment's eligible registration set and independently
+typed native participation owners. Refusal returns those same input owners. This is
 an ownership handoff after caller construction/preparation, before the managed
 participants acquire native work; it does not reuse the single-Property facade.
 
@@ -649,10 +649,13 @@ publication and one sibling's unread result/retirement cannot revoke another
 publication or refund its original shared definition.
 
 The fixed member vector admits 1..=32 participants and 1..=32 actual capability
-registrations in this manual Host slice. Final common/service/behavior coverage
-is checked before the handoff and again after closed setup. Each effective
-operation has exactly one native owner and every member covers the qualified
-exposure. The source-free publication stages two bounded original identity
+registrations in this manual Host slice. Managed admission checks the exact
+final TD and complete behavior set with the actual providers, including every
+negative match. Closed setup then checks the actual endpoint, mapping/service
+identity, native readiness and expected incumbent. Source-free installation
+pins the observed registration, provider and native facts through the local
+decision. A stale candidate retires its original members and leaves the
+incumbent current. Each effective operation has exactly one native owner. The source-free publication stages two bounded original identity
 vectors before setup, moves one into the registry at commit, and rejects changed,
 duplicate, omitted or foreign retirement sets. No allocation, native progress or
 fallible preparation is added inside the local publication commit.
@@ -666,9 +669,9 @@ Host common TD allowance plus the maximum declared peak temporary backing of
 the actual sequential support/final-check callbacks, with the overlapping Engine
 charge. Final comparison uses original definitions without a second retained
 set. Unknown bounds refuse admission and return the original owners before a
-callback or native setup; a current bound above the captured funded peak refuses
-publication before checking. It ends after final qualification and before commit,
-or on cancellation/definitive qualification failure/successful retirement/Drop.
+callback or native setup. Changes to a registered bound invalidate staged
+coverage. The conservative staging reservation ends on publication, cancellation,
+definitive qualification failure, successful retirement or disposal.
 Successful retirement ends qualification even when callers closed every typed
 native owner directly. Failed retirement and pending pure work preserve their
 applicable owners for retry. Lifetime and cleanup reservations are one shared physical
@@ -701,6 +704,11 @@ includes real two-listener HTTP and shared test-only UDP Action cases for exact
 membership, aggregate-bank saturation, scratch release, replacement/late result,
 unread acknowledgement, lost exposure/root, extracted native owners, partial
 setup failure, pending/failed cleanup and final socket/account release.
+The [coherence cases](../../protocol-bindings/protocols/http/tests/composed_thing/coherent.rs)
+exercise a competitor moving between two Forms, replacement of the eligible set
+on a staged successor, and provider or native changes in the last gate callback.
+The [HTTPS tests](../../protocol-bindings/protocols/http/tests/security_https.rs)
+also change and restore a real verifier's declared work after closed install.
 Large HTTP definition wrappers also exercise 24 MiB of original buffers through
 admission and real publication without regenerating them; declared callback
 temporaries are checked at actual bank limits before allocation, and direct

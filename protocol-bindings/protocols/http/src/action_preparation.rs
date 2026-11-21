@@ -6,7 +6,9 @@ use clinkz_wot_core::{
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
 use clinkz_wot_planning::{
-    producer_composition::{FormSite, ProducerCapability, ProducerOperationInput},
+    producer_composition::{
+        FormSite, ProducerCapability, ProducerOperationInput, PublicationObserver,
+    },
     type_schema::{matches_schema, preparation_work, prepare_schema, prepare_type_schema},
 };
 use clinkz_wot_td::semantic::{FormOwner, SemanticScope, SemanticValue, UriVariableScope};
@@ -88,6 +90,10 @@ impl HttpActionProducer {
     }
 }
 impl ProducerCapability for HttpActionProducer {
+    fn observe_configuration(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        Ok(())
+    }
+
     fn identity(&self) -> (BindingId, BindingGeneration) {
         self.identity
     }

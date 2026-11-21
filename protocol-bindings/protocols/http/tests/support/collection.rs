@@ -210,12 +210,10 @@ impl RawFiniteHandler for Behavior {
                 if let Some(value) = self.0.scalar.borrow().as_ref() {
                     return Ok(InteractionOutput::with_data(payload(value)));
                 }
+                let name = ctx.target().name().unwrap();
+                let values: Value = serde_json::from_slice(&self.0.value.borrow()).unwrap();
                 Ok(InteractionOutput::with_data(payload(
-                    if ctx.target().name() == Some("level") {
-                        b"7"
-                    } else {
-                        b"true"
-                    },
+                    &serde_json::to_vec(&values[name]).unwrap(),
                 )))
             }
             Operation::WriteProperty => {
@@ -243,7 +241,7 @@ struct Controls {
     requests: Cell<usize>,
     hold_send: Cell<bool>,
     hold_close: Cell<bool>,
-    lose_service: Cell<bool>,
+    lose_service: RefCell<PublicationState<bool>>,
 }
 struct Native {
     actual: HttpFiniteBinding,
@@ -263,6 +261,13 @@ impl FiniteIngressBinding for Native {
             .engine_backing_bytes()?
             .checked_add(size_of::<Controls>() + 2 * size_of::<usize>())
     }
+    fn qualified_operation_count(&self) -> Option<usize> {
+        self.actual.qualified_operation_count()
+    }
+    fn observe_installation(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.controls.lose_service.borrow().observe(facts)?;
+        self.actual.observe_installation(facts)
+    }
     fn prepared_for_instance(&self, key: ProducerInstanceKey) -> bool {
         self.actual.prepared_for_instance(key)
     }
@@ -277,7 +282,7 @@ impl FiniteIngressBinding for Native {
         self.actual.covers_definition(key, site, form, op, d)
     }
     fn validator(&self) -> Option<&dyn FiniteValidator> {
-        if self.controls.lose_service.get() {
+        if *self.controls.lose_service.borrow().get() {
             None
         } else {
             self.actual.validator()
@@ -349,28 +354,22 @@ fn exposure(
         .unwrap();
     let key = authority.key();
     let mut behaviors = Vec::new();
-    for (name, operation) in [
-        ("level", Operation::ReadProperty),
-        ("on", Operation::ReadProperty),
-        ("secret", Operation::WriteProperty),
-    ] {
-        if td["properties"][name]["forms"]
-            .as_array()
-            .is_some_and(|f| !f.is_empty())
-        {
+    for (name, property) in td["properties"].as_object().unwrap() {
+        let target = AffordanceTarget::Property(Arc::from(name.as_str()));
+        if property["writeOnly"] != true {
             behaviors.push(RawFiniteBehavior::new(
-                AffordanceTarget::Property(Arc::from(name)),
-                operation,
+                target.clone(),
+                Operation::ReadProperty,
                 Behavior(app.clone()),
             ));
         }
-    }
-    if td["properties"]["on"]["readOnly"] == false {
-        behaviors.push(RawFiniteBehavior::new(
-            AffordanceTarget::Property(Arc::from("on")),
-            Operation::WriteProperty,
-            Behavior(app.clone()),
-        ));
+        if property["readOnly"] != true {
+            behaviors.push(RawFiniteBehavior::new(
+                target,
+                Operation::WriteProperty,
+                Behavior(app.clone()),
+            ));
+        }
     }
     for (name, operation) in [
         ("readallproperties", Operation::ReadAllProperties),
@@ -466,7 +465,7 @@ fn exposure(
         ComposedProducerInput {
             instance,
             prepared,
-            providers: vec![provider],
+            providers: ProducerRegistrations::new(vec![provider]),
             participants: vec![OwnedProducerParticipation::finite(server)],
             expected,
             handler_backing_bytes: size_of::<Application>() + 8192,
@@ -500,7 +499,7 @@ impl Fixture {
         let bank = bank();
         let owner = RawProducerServient::try_empty(RawProducerRegistryLimits {
             instances: 1,
-            behaviors_per_instance: 8,
+            behaviors_per_instance: 16,
             target_name_bytes: 256,
         })
         .unwrap();
@@ -1027,7 +1026,7 @@ fn verify_collection_publication(operation: Operation) {
             assert!(start.elapsed() < Duration::from_secs(5));
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
-        server.controls.lose_service.set(true);
+        server.controls.lose_service.borrow_mut().replace(true);
         server.controls.hold_close.set(true);
         server.step();
         assert_eq!(server.server().state(), RawFiniteState::Closing);

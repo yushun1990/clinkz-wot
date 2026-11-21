@@ -2,7 +2,7 @@
 //! possible native lease, not a logical Thing or a general Engine resource.
 use crate::{producer::producer_unsupported, producer_validation};
 use clinkz_wot_core::publication::{
-    ClosedProducerParticipation, ProducerOwnerToken, ProducerParticipationId,
+    ClosedProducerParticipation, ProducerOwnerToken, ProducerParticipationId, PublicationObserver,
 };
 use clinkz_wot_core::{
     ActionInvocationRef, AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult,
@@ -901,6 +901,13 @@ impl HttpActionRuntime {
     }
 }
 impl ClosedProducerParticipation for HttpActionRuntime {
+    fn qualified_operation_count(&self) -> Option<usize> {
+        Some(self.definitions.len())
+    }
+    fn observe_installation(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        Ok(())
+    }
+
     fn associated_with(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         self.key == key && self.token.same_owner(owner)
     }

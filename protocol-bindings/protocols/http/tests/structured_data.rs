@@ -584,7 +584,6 @@ fn structured_collection_content_reuses_nested_constraints_without_leaf_fallback
             td["forms"] =
                 json!([{"op":"readallproperties","href":format!("http://{addr}/properties")}]);
             td["properties"]["on"]["readOnly"] = json!(true);
-            td["properties"]["on"]["forms"] = json!([]);
             td
         };
         let td_a = make(address());
@@ -601,7 +600,9 @@ fn structured_collection_content_reuses_nested_constraints_without_leaf_fallback
         let backing_b = bank();
         let accounts_a = bank();
         let accounts_b = bank();
-        let first = mappings(&td_a, &backing_a, None);
+        let mut first = mappings(&td_a, &backing_a, None);
+        first.retain(|definition| definition.content().operation() == Operation::ReadAllProperties);
+        assert_eq!(first.len(), 1);
         let second = mappings(&td_b, &backing_b, Some(first[0].content()));
         assert!(Arc::ptr_eq(first[0].content(), second[0].content()));
         let owner_a = consumer_instance();

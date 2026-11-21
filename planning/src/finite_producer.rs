@@ -3,6 +3,7 @@
 // CoreError is intentionally the exact inline, allocation-free error carrier.
 #![allow(clippy::result_large_err)]
 use crate::{ProducerPropertyReadAdmission, ProducerPropertyReadStep, ResolvedProducerInput};
+use clinkz_wot_core::publication::PublicationObserver;
 use clinkz_wot_core::{finite::FiniteIngressBinding, producer::ProducerInstanceKey, *};
 use clinkz_wot_foundation::{AdmissionLedger, ResourceKind, ResourceLimits, WorkBudget, WorkClass};
 use clinkz_wot_td::{
@@ -17,6 +18,9 @@ pub const PRODUCER_DESCRIPTION_BYTES: usize = 16_384;
 /// implement only Core's finite facet. No executor whitelist or legacy
 /// ProducerExecutor/installation ABI participates in this path.
 pub trait FiniteProducerCompiler {
+    /// Capture mutable provider dependencies through the final publication decision.
+    fn observe_configuration(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()>;
+
     type Binding: FiniteIngressBinding<Configuration: 'static> + 'static;
 
     /// Pure complete mapping construction, including actual codec/schema and

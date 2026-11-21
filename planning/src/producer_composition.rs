@@ -3,7 +3,8 @@
 //! listener. Each Form/operation can select a different registered capability.
 #![allow(clippy::result_large_err)]
 use crate::{finite_producer::PRODUCER_DESCRIPTION_BYTES, producer_property_read::td_error};
-use alloc::{boxed::Box, string::String, vec::Vec};
+use alloc::{boxed::Box, rc::Rc, string::String, vec::Vec};
+pub use clinkz_wot_core::publication::{PublicationFacts, PublicationObserver, PublicationState};
 use clinkz_wot_core::{
     BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext, ErrorPhase, Operation,
     RetryClass, producer::ProducerInstanceKey, thing::AffordanceSite,
@@ -16,6 +17,7 @@ use clinkz_wot_td::{
     thing::Thing,
 };
 use core::any::Any;
+use core::cell::RefCell;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FormSite {
@@ -86,6 +88,11 @@ pub struct ProducerOperationInput<'a> {
 /// native endpoint facts against the SAME owned definition. Native readiness,
 /// collisions and leases are checked separately before Servient publication.
 pub trait ProducerCapability {
+    /// Observe every mutable input to eligibility, lowering, final comparison
+    /// and their declared bounds before any registration is probed. Immutable
+    /// registrations contribute no facts. Per-request authority stays live.
+    fn observe_configuration(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()>;
+
     fn identity(&self) -> (BindingId, BindingGeneration);
     /// Additional retained definition footprint, including indirect backing
     /// without its own original reservation. Explicitly funded shared content
@@ -109,7 +116,8 @@ pub trait ProducerCapability {
     /// Peak additional controlled backing used by one supports/check_final
     /// callback, including any temporary definition materialization and indirect
     /// storage. These callbacks retain no new controlled backing after return;
-    /// their complete peak must fit this bound. Callbacks are sequential.
+    /// their complete peak, including during a reload, must fit this bound.
+    /// Callbacks are sequential.
     /// Managed Host qualification reserves this bound before calling them;
     /// None makes no managed resource claim.
     fn final_check_temporary_bytes(&self) -> Option<usize> {
@@ -180,6 +188,43 @@ fn semantic_error(error: ValidatedSemanticError) -> CoreError {
     }
 }
 
+type ProviderSet = Rc<[Rc<dyn ProducerCapability>]>;
+
+/// The deployment's actual eligible registrations. Replacing even an
+/// unselected registration invalidates coverage of the previous set. Existing
+/// publications retain their selected native services independently.
+#[derive(Clone)]
+pub struct ProducerRegistrations(Rc<RefCell<PublicationState<ProviderSet>>>);
+
+impl ProducerRegistrations {
+    pub fn new(providers: Vec<Rc<dyn ProducerCapability>>) -> Self {
+        Self(Rc::new(RefCell::new(PublicationState::new(
+            providers.into(),
+        ))))
+    }
+
+    pub fn replace(&self, providers: Vec<Rc<dyn ProducerCapability>>) {
+        let old = self.0.borrow_mut().replace(providers.into());
+        drop(old);
+    }
+
+    pub fn snapshot(&self, facts: &mut PublicationFacts) -> CoreResult<ProviderSet> {
+        let set = self.0.borrow();
+        set.observe(&mut facts.observer())?;
+        Ok(set.get().clone())
+    }
+}
+
+fn observe_providers(
+    providers: &[&dyn ProducerCapability],
+    facts: &mut PublicationFacts,
+) -> CoreResult<()> {
+    for provider in providers {
+        provider.observe_configuration(&mut facts.observer())?;
+    }
+    Ok(())
+}
+
 /// Pure whole-description selection. `behavior` queries the actual staged
 /// Servient registration (including query/cancel), not a nominal operation
 /// whitelist. Missing or ambiguous provider, empty op set, missing behavior,
@@ -193,6 +238,8 @@ pub fn prepare_thing(
     providers: &[&dyn ProducerCapability],
     behavior: impl Fn(ValidatedProducerScope<'_>, Operation) -> bool,
 ) -> CoreResult<PreparedThing> {
+    let mut facts = PublicationFacts::default();
+    observe_providers(providers, &mut facts)?;
     let mut operations = Vec::new();
     let mut retained_bytes = core::mem::size_of::<PreparedThing>();
     visit_thing(
@@ -247,6 +294,7 @@ pub fn prepare_thing(
             Ok(())
         },
     )?;
+    let _current = PublicationFacts::lock_current(&[&facts])?;
     Ok(PreparedThing {
         operations,
         retained_bytes,
@@ -314,7 +362,10 @@ fn visit_thing(
         match cursor.step(budget, false).map_err(td_error)? {
             ValidatedProducerStep::Done => break,
             ValidatedProducerStep::Pending => {}
-            ValidatedProducerStep::Ready(ValidatedProducerEvent::Scope { .. }) => {
+            ValidatedProducerStep::Ready(ValidatedProducerEvent::Scope { scope, forms }) => {
+                if scope != ValidatedProducerScope::Thing && forms.unwrap_or(0) == 0 {
+                    return Err(CoreError::Validation(context()));
+                }
                 cursor.acknowledge()
             }
             ValidatedProducerStep::Ready(ValidatedProducerEvent::Form(form)) => {
@@ -359,10 +410,9 @@ fn visit_thing(
     Ok(count)
 }
 
-/// Reinterpret the entire final TD against the original actual registrations.
-/// Call only after every owned participant is closed and check its physical
-/// endpoints, collision and readiness separately. This comparison cannot turn
-/// a new Form into a formerly checked operation or swap a service silently.
+/// Check the entire final TD against this fixed registration set. Callers
+/// making a publication decision use `ProducerQualification` to carry its
+/// observations through closed installation and commit.
 pub fn check_final_thing(
     description: &str,
     instance: ProducerInstanceKey,
@@ -372,49 +422,91 @@ pub fn check_final_thing(
     prepared: &PreparedThing,
     behavior: impl Fn(ValidatedProducerScope<'_>, Operation) -> bool,
 ) -> CoreResult<()> {
-    // Requalify *all* common semantics and candidates, not only the first leaf.
-    // Compare exact coordinates and selected providers, then verify their owned
-    // definition with the same final semantic input.
-    let count = visit_thing(
+    ProducerQualification::begin(providers, PublicationFacts::default())?.check_final(
         description,
         instance,
         limits,
         budget,
-        &behavior,
-        |ordinal, input, budget| {
-            let old = prepared.operations.get(ordinal).ok_or_else(unsupported)?;
-            if old.site != *input.site || old.form != input.form || old.operation != input.operation
-            {
-                return Err(unsupported());
-            }
-            let mut chosen = None;
-            for (i, provider) in providers.iter().enumerate() {
-                budget
-                    .consume(WorkClass::PlanningItems, 1)
-                    .map_err(|_| busy())?;
-                let supported = if i == old.provider {
-                    if old.binding != provider.identity() {
-                        return Err(unsupported());
-                    }
-                    provider.check_final(input, old.definition.as_ref(), budget)?
-                } else {
-                    provider.supports(input, budget)?
-                };
-                if supported {
-                    if chosen.is_some() {
-                        return Err(unsupported());
-                    }
-                    chosen = Some(i);
-                }
-            }
-            if chosen != Some(old.provider) {
-                return Err(unsupported());
-            }
-            Ok(())
-        },
+        prepared,
+        behavior,
     )?;
-    if count != prepared.operations.len() {
-        return Err(unsupported());
-    }
     Ok(())
+}
+
+/// Observations of the actual eligible set, including every competitor. Start
+/// before asking about managed scratch, then compare the exact final TD.
+pub struct ProducerQualification<'a> {
+    providers: &'a [&'a dyn ProducerCapability],
+    facts: PublicationFacts,
+}
+impl<'a> ProducerQualification<'a> {
+    pub fn begin(
+        providers: &'a [&'a dyn ProducerCapability],
+        mut facts: PublicationFacts,
+    ) -> CoreResult<Self> {
+        observe_providers(providers, &mut facts)?;
+        Ok(Self { providers, facts })
+    }
+    pub fn backing_bytes(&self) -> Option<usize> {
+        self.facts.backing_bytes()
+    }
+    pub fn check_final(
+        self,
+        description: &str,
+        instance: ProducerInstanceKey,
+        limits: &ResourceLimits,
+        budget: &mut WorkBudget,
+        prepared: &PreparedThing,
+        behavior: impl Fn(ValidatedProducerScope<'_>, Operation) -> bool,
+    ) -> CoreResult<PublicationFacts> {
+        let providers = self.providers;
+        // Requalify *all* common semantics and candidates, not only the first leaf.
+        // Compare exact coordinates and selected providers, then verify their owned
+        // definition with the same final semantic input.
+        let count = visit_thing(
+            description,
+            instance,
+            limits,
+            budget,
+            &behavior,
+            |ordinal, input, budget| {
+                let old = prepared.operations.get(ordinal).ok_or_else(unsupported)?;
+                if old.site != *input.site
+                    || old.form != input.form
+                    || old.operation != input.operation
+                {
+                    return Err(unsupported());
+                }
+                let mut chosen = None;
+                for (i, provider) in providers.iter().enumerate() {
+                    budget
+                        .consume(WorkClass::PlanningItems, 1)
+                        .map_err(|_| busy())?;
+                    let supported = if i == old.provider {
+                        if old.binding != provider.identity() {
+                            return Err(unsupported());
+                        }
+                        provider.check_final(input, old.definition.as_ref(), budget)?
+                    } else {
+                        provider.supports(input, budget)?
+                    };
+                    if supported {
+                        if chosen.is_some() {
+                            return Err(unsupported());
+                        }
+                        chosen = Some(i);
+                    }
+                }
+                if chosen != Some(old.provider) {
+                    return Err(unsupported());
+                }
+                Ok(())
+            },
+        )?;
+        if count != prepared.operations.len() {
+            return Err(unsupported());
+        }
+        drop(PublicationFacts::lock_current(&[&self.facts])?);
+        Ok(self.facts)
+    }
 }

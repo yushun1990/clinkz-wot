@@ -191,7 +191,7 @@ fn input_with_capacity(
     ComposedProducerInput {
         instance,
         prepared,
-        providers: vec![provider],
+        providers: ProducerRegistrations::new(vec![provider]),
         participants: vec![OwnedProducerParticipation::finite(runtime)],
         expected: None,
         handler_backing_bytes: std::mem::size_of::<App>(),

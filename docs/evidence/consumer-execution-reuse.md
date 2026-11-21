@@ -23,13 +23,14 @@ The implementation assessed is `89b4359c286f08b78a674fa6af3c56091d62dfb3`;
 the baseline is master `5ccd9ad`. Documentation updates do not extend the
 implementation evidence to additional capabilities or workloads.
 
-The [executable fixture](../../protocol-bindings/protocols/http/tests/reusable_execution.rs)
-uses existing fully qualified Engine HTTP Producers. Each count has independent
-loopback endpoints, actual registrations, logical authorities, policies and banks.
-The retained readable schema has sixteen members and 1,035 bytes of vector/name
-backing. Property Forms are empty in this characterization TD: its advertised
-executable operation is the root read. Every endpoint performs one native HTTP
-interaction, with complete Producer final-TD qualification and no leaf dispatch.
+The measured revision used sixteen readable members and 1,035 bytes of
+vector/name backing. It supplied empty Property Forms and exercised one root
+read per HTTP endpoint. Current Producer qualification rejects those empty
+Forms. The current fixture uses the Host's sixteen behavior slots for
+fifteen executable leaf reads and one root read. It still dispatches one root
+read per endpoint. Fresh Consumer preparation now compiles all sixteen
+operations, while content reuse selects the root. The table below describes
+the original workload. [Executable fixture](../../protocol-bindings/protocols/http/tests/reusable_execution.rs)
 
 Run with:
 

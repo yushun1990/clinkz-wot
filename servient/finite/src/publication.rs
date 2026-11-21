@@ -5,6 +5,7 @@ use clinkz_wot_core::action::{ActionRoute, ActionValidator};
 pub use clinkz_wot_core::publication::{
     ClosedProducerParticipation, ProducerOwnerToken, ProducerParticipationId,
 };
+use clinkz_wot_core::publication::{PublicationFacts, PublicationObserver};
 
 /// Bounded original-membership storage for this manually driven Host slice.
 pub const MAX_PRODUCER_PARTICIPANTS: usize = 32;
@@ -19,6 +20,12 @@ pub struct CapturedActionRoute {
     pub validator: Option<Rc<dyn ActionValidator>>,
     /// Original extra work per validation callback; zero for control routes.
     pub validation_work: u64,
+}
+
+/// Source-free route and service owners supplied by the installed Bindings.
+pub struct CapturedProducerRoutes {
+    pub actions: Vec<CapturedActionRoute>,
+    pub notifications: Vec<CapturedNotificationRoute>,
 }
 
 impl CapturedActionRoute {
@@ -267,6 +274,20 @@ impl ProducerPublication {
         }
         Ok(())
     }
+    /// Observe withdrawal even when the original native owner was moved out
+    /// of the managed exposure. A moved, still-open owner remains available.
+    pub fn reconcile_members(&self) {
+        if self.current.get()
+            && (self.participants.iter().any(|id| id.strong_count() == 0)
+                || self
+                    .gates
+                    .iter()
+                    .any(|gate| gate.upgrade().is_none_or(|g| !g.get())))
+        {
+            self.revoke();
+        }
+    }
+
     /// Fence fresh acceptance immediately. Already accepted Actions observe
     /// this same cell and request cancellation during funded progress; no
     /// application callback or native shutdown occurs here.
@@ -328,6 +349,16 @@ impl Drop for ProducerPublication {
 
 // A finite runtime contributes the passive Core publication facet.
 impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B> {
+    fn qualified_operation_count(&self) -> Option<usize> {
+        self.binding.qualified_operation_count()
+    }
+    fn observe_installation(
+        &self,
+        facts: &mut PublicationObserver<'_>,
+    ) -> clinkz_wot_core::CoreResult<()> {
+        self.binding.observe_installation(facts)
+    }
+
     fn associated_with(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         owner.matches_issuer(&self.issuer) && self.binding.prepared_for_instance(key)
     }
@@ -420,7 +451,9 @@ impl RawProducerServient {
         if !participant.associated_with(&self.participation_token(), key) {
             return Err(CoreError::StaleHandle(context()));
         }
-        if participant.native_failure().is_some() {
+        let failed = participant.native_failure().is_some();
+        let open = participant.ingress_gate().get();
+        if failed || !open {
             let id = participant.participation_id();
             let committed_member = self.instances.iter().any(|entry| {
                 entry.instance.key() == key
@@ -429,8 +462,10 @@ impl RawProducerServient {
             if committed_member {
                 self.revoke(key);
             }
-            participant.begin_retire();
-        } else if participant.ingress_gate().get() && self.description(key).is_none() {
+            if failed || committed_member {
+                participant.begin_retire();
+            }
+        } else if self.description(key).is_none() {
             participant.begin_retire();
         }
         Ok(())
@@ -526,8 +561,11 @@ impl RawProducerServient {
         instance: RawProducerInstance,
         expected: Option<ProducerInstanceKey>,
     ) -> Result<ProducerPublication, BindingInputRejection<RawProducerInstance>> {
-        if self.check_publication_input(&instance, expected).is_err() {
-            return Err(rejection(instance));
+        if let Err(error) = self.check_publication_input(&instance, expected) {
+            return Err(BindingInputRejection::new(
+                instance,
+                BindingOperationalError::new(error),
+            ));
         }
         let key = instance.key();
         Ok(ProducerPublication {
@@ -545,6 +583,36 @@ impl RawProducerServient {
             action_routes: None,
             notification_routes: None,
         })
+    }
+
+    /// Bind the caller's complete closed membership and staged routes before
+    /// ownership transfer. A linked validator may change its work declaration
+    /// during capture. Return the original instance on any such refusal.
+    pub fn prepare_composed_publication(
+        &self,
+        instance: RawProducerInstance,
+        expected: Option<ProducerInstanceKey>,
+        participants: &[&dyn ClosedProducerParticipation],
+        routes: CapturedProducerRoutes,
+    ) -> Result<ProducerPublication, BindingInputRejection<RawProducerInstance>> {
+        let mut publication = self.prepare_publication(instance, expected)?;
+        if let Err(error) = publication
+            .bind_participants(participants)
+            .and_then(|()| publication.bind_action_routes(routes.actions))
+            .and_then(|()| publication.bind_notification_routes(routes.notifications))
+        {
+            let instance = publication
+                .instance
+                .take()
+                .expect("new unpublished instance");
+            let instance =
+                Rc::into_inner(instance).expect("staging owns the only instance reference");
+            return Err(BindingInputRejection::new(
+                instance,
+                BindingOperationalError::new(error),
+            ));
+        }
+        Ok(publication)
     }
 
     /// Final passive checks precede the non-fallible local commit. The caller
@@ -568,15 +636,47 @@ impl RawProducerServient {
         publication: &mut ProducerPublication,
         participants: &mut [&mut dyn ClosedProducerParticipation],
     ) -> CoreResult<()> {
+        self.publish_if_current(
+            publication,
+            participants,
+            &PublicationFacts::default(),
+            |_, _| Ok(None),
+        )
+    }
+
+    /// Source-free installation of caller-qualified coverage. All observations
+    /// supplied by preparation and the closed native owners must still hold
+    /// together after the final linked callback and through the local commit.
+    pub fn publish_if_current(
+        &mut self,
+        publication: &mut ProducerPublication,
+        participants: &mut [&mut dyn ClosedProducerParticipation],
+        coverage: &PublicationFacts,
+        capture: impl FnOnce(
+            ProducerInstanceKey,
+            &[&mut dyn ClosedProducerParticipation],
+        ) -> CoreResult<Option<CapturedProducerRoutes>>,
+    ) -> CoreResult<()> {
         if publication.committed
             || publication.cancelled.get()
             || publication.instance.is_none()
             || publication.issuer.as_ptr() != Rc::as_ptr(&self.issuer)
             || participants.is_empty()
             || participants.len() > MAX_PRODUCER_PARTICIPANTS
-            || !participants
-                .iter()
-                .all(|p| p.ready_for(&self.participation_token(), publication.key))
+        {
+            return Err(CoreError::Validation(context()));
+        }
+        let mut installation = PublicationFacts::default();
+        for participant in participants.iter() {
+            participant.observe_installation(&mut installation.observer())?;
+        }
+        if let Some(routes) = capture(publication.key, participants)? {
+            publication.bind_action_routes(routes.actions)?;
+            publication.bind_notification_routes(routes.notifications)?;
+        }
+        if !participants
+            .iter()
+            .all(|p| p.ready_for(&self.participation_token(), publication.key))
         {
             return Err(CoreError::Validation(context()));
         }
@@ -614,6 +714,10 @@ impl RawProducerServient {
             .any(|(i, gate)| gate.get() || gates[..i].iter().any(|prior| Rc::ptr_eq(prior, gate)))
         {
             return Err(CoreError::Validation(context()));
+        }
+        let _current = PublicationFacts::lock_current(&[coverage, &installation])?;
+        if publication.cancelled.get() {
+            return Err(CoreError::Cancelled(context()));
         }
         let entry = InstanceEntry {
             instance: Rc::clone(publication.instance.as_ref().expect("uncommitted owner")),

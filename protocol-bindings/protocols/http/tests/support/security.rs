@@ -22,7 +22,7 @@ struct Verifier {
     revision: std::sync::atomic::AtomicU64,
     expected_password: &'static [u8],
     replacement_identity: AtomicBool,
-    changed_work: AtomicBool,
+    work: HttpVerifierWork,
     revoked: AtomicBool,
     calls: std::sync::atomic::AtomicUsize,
 }
@@ -52,12 +52,8 @@ impl HttpBasicVerifier for Verifier {
             scopes: vec!["property-access".into()],
         })
     }
-    fn work(&self) -> u64 {
-        if self.changed_work.load(Ordering::Acquire) {
-            2048
-        } else {
-            1024
-        }
+    fn work(&self) -> &HttpVerifierWork {
+        &self.work
     }
 }
 struct Keys {
@@ -213,8 +209,21 @@ impl SecureFixture {
         td: Value,
         operations: &[Operation],
     ) -> Self {
+        let mut fixture = Self::install_closed(security, addr, td, operations);
+        fixture
+            .exposure
+            .publish(&mut fixture.owner, &mut work())
+            .unwrap();
+        fixture
+    }
+    fn install_closed(
+        security: HttpServerSecurity,
+        addr: SocketAddr,
+        td: Value,
+        operations: &[Operation],
+    ) -> Self {
         let accounts = bank();
-        let mut owner = RawProducerServient::try_empty(RawProducerRegistryLimits {
+        let owner = RawProducerServient::try_empty(RawProducerRegistryLimits {
             instances: 1,
             behaviors_per_instance: operations.len(),
             target_name_bytes: 256,
@@ -298,7 +307,7 @@ impl SecureFixture {
             ComposedProducerInput {
                 instance,
                 prepared,
-                providers: vec![provider],
+                providers: ProducerRegistrations::new(vec![provider]),
                 participants: vec![OwnedProducerParticipation::finite(server)],
                 expected: None,
                 handler_backing_bytes: 4096,
@@ -316,7 +325,6 @@ impl SecureFixture {
             "{:?}",
             server.first_cause()
         );
-        exposure.publish(&mut owner, &mut work()).unwrap();
         Self {
             owner,
             exposure,
@@ -380,7 +388,7 @@ fn verifier_password(expected_password: &'static [u8]) -> Arc<Verifier> {
         revision: std::sync::atomic::AtomicU64::new(0),
         expected_password,
         replacement_identity: AtomicBool::new(false),
-        changed_work: AtomicBool::new(false),
+        work: HttpVerifierWork::new(1024),
         revoked: AtomicBool::new(false),
         calls: std::sync::atomic::AtomicUsize::new(0),
     })

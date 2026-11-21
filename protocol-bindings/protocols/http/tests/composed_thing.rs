@@ -122,6 +122,10 @@ fn http_read(
 
 struct UnselectedParticipant(Rc<Cell<bool>>, ProducerParticipationId, Option<Rc<dyn Any>>);
 impl ClosedProducerParticipation for UnselectedParticipant {
+    fn observe_installation(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        Ok(())
+    }
+
     fn participation_id(&self) -> &ProducerParticipationId {
         &self.1
     }
@@ -268,6 +272,10 @@ impl UdpActionProvider {
     }
 }
 impl ProducerCapability for UdpActionProvider {
+    fn observe_configuration(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        Ok(())
+    }
+
     fn identity(&self) -> (BindingId, BindingGeneration) {
         self.identity
     }
@@ -661,6 +669,10 @@ impl ActionNative {
     }
 }
 impl ClosedProducerParticipation for ActionLease {
+    fn observe_installation(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        Ok(())
+    }
+
     fn participation_id(&self) -> &ProducerParticipationId {
         &self.participation
     }

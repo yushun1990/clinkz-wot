@@ -327,7 +327,7 @@ pub(crate) fn create_from_text(
         ComposedProducerInput {
             instance,
             prepared,
-            providers,
+            providers: ProducerRegistrations::new(providers),
             participants,
             expected,
             handler_backing_bytes,

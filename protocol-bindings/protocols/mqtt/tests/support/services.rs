@@ -10,6 +10,10 @@ pub struct ServicesParticipant {
     route: NotificationRoute,
 }
 impl ClosedProducerParticipation for ServicesParticipant {
+    fn observe_installation(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.native.observe_installation(facts)
+    }
+
     fn associated_with(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         self.native.associated_with(owner, key)
     }
@@ -177,7 +181,7 @@ pub fn intercept_with_instance(
         ComposedProducerInput {
             instance,
             prepared,
-            providers: vec![Rc::new(provider.clone())],
+            providers: ProducerRegistrations::new(vec![Rc::new(provider.clone())]),
             participants: vec![OwnedProducerParticipation::new(
                 ServicesParticipant {
                     native: runtime,

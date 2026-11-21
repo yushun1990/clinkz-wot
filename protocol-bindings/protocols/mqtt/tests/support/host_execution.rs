@@ -244,7 +244,7 @@ impl Native {
             ComposedProducerInput {
                 instance,
                 prepared,
-                providers,
+                providers: ProducerRegistrations::new(providers),
                 participants,
                 expected,
                 handler_backing_bytes: std::mem::size_of::<App>(),

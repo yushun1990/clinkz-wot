@@ -1,6 +1,11 @@
 //! Producer notification publication is independent of finite exchanges and Consumer
 //! subscription conversations. Native distribution never enumerates Engine
 //! subscribers. These are manually driven Host contracts.
+mod configuration;
+pub use configuration::{
+    PublicationFacts, PublicationGuards, PublicationObserver, PublicationState,
+};
+
 use crate::{
     BindingGeneration, BindingId, BindingInputRejection, CoreError, CoreResult, Operation, Payload,
     action::{ActionRoute, ActionValidator},
@@ -196,6 +201,11 @@ impl Default for ProducerParticipationId {
 /// membership are passive; the separate Servient commit opens its ingress gate.
 /// A lease may use shared physical infrastructure without sharing logical authority.
 pub trait ClosedProducerParticipation {
+    /// Record shared mutable facts about installed endpoints, mappings, services
+    /// and readiness before final coverage checks. Exclusive native state stays
+    /// fixed under the participant loan. Wrappers forward this observation.
+    fn observe_installation(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()>;
+
     /// Native publication slots prepaid by managed admission. Servient adds
     /// its own logical publication metadata; native backing is declared below.
     /// A qualified notification contributor must declare at least one slot;

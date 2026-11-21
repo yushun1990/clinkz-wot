@@ -8,6 +8,8 @@ use clinkz_wot_servient::{
 
 type HttpRuntime = RawFiniteRuntime<HttpFiniteBinding>;
 
+#[path = "coherent.rs"]
+mod coherent;
 #[path = "execution.rs"]
 mod execution;
 #[path = "reuse.rs"]
@@ -113,7 +115,7 @@ fn http_input(
     ComposedProducerInput {
         instance,
         prepared,
-        providers,
+        providers: ProducerRegistrations::new(providers),
         participants,
         expected: None,
         handler_backing_bytes: std::mem::size_of::<Counts>(),
@@ -150,7 +152,7 @@ fn action_input(
         ComposedProducerInput {
             instance,
             prepared,
-            providers: vec![provider],
+            providers: ProducerRegistrations::new(vec![provider]),
             participants: vec![OwnedProducerParticipation::new(
                 ActionNative::lease(native, key),
                 |_, _, _, _, _| Ok(()),
@@ -573,6 +575,12 @@ impl FiniteIngressBinding for ControlledClose {
     fn engine_backing_bytes(&self) -> Option<usize> {
         self.inner.engine_backing_bytes()
     }
+    fn qualified_operation_count(&self) -> Option<usize> {
+        self.inner.qualified_operation_count()
+    }
+    fn observe_installation(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.inner.observe_installation(facts)
+    }
     fn prepared_for_instance(&self, key: ProducerInstanceKey) -> bool {
         self.inner.prepared_for_instance(key)
     }
@@ -800,6 +808,11 @@ fn moved_native_owner_keeps_funding_and_a_substitute_cannot_publish_or_retire() 
     assert!(exposure.publish(&mut owner, &mut budget()).is_err());
     assert!(exposure.publication_failure().is_some());
     assert!(!exposure.is_committed());
+    // The substitute belongs to its caller. Rollback fenced the original
+    // publication but had no authority to close this separate native owner.
+    let substitute = exposure.participant_mut::<HttpRuntime>(0).unwrap();
+    assert_eq!(substitute.state(), RawFiniteState::InstalledClosed);
+    substitute.begin_close();
     close_http(&mut exposure);
     assert!(exposure.retire(&mut owner, &mut budget()).is_err());
     drop(exposure);
@@ -1000,7 +1013,7 @@ struct ReviewDefinitionMemory {
     charge_at_peak: Cell<u64>,
     definition_allocations: Cell<usize>,
     checks: Cell<usize>,
-    check_temporary: Cell<usize>,
+    check_temporary: RefCell<PublicationState<usize>>,
 }
 impl ReviewDefinitionMemory {
     fn observe(&self) {
@@ -1048,6 +1061,11 @@ impl Drop for ReviewCheckTemporary {
     }
 }
 impl ProducerCapability for ReviewLargeProvider {
+    fn observe_configuration(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.memory.check_temporary.borrow().observe(facts)?;
+        self.inner.observe_configuration(facts)
+    }
+
     fn supports(
         &self,
         input: ProducerOperationInput<'_>,
@@ -1058,7 +1076,7 @@ impl ProducerCapability for ReviewLargeProvider {
     fn final_check_temporary_bytes(&self) -> Option<usize> {
         self.inner
             .final_check_temporary_bytes()?
-            .checked_add(self.memory.check_temporary.get())
+            .checked_add(*self.memory.check_temporary.borrow().get())
     }
     fn identity(&self) -> (BindingId, BindingGeneration) {
         self.inner.identity()
@@ -1104,12 +1122,12 @@ impl ProducerCapability for ReviewLargeProvider {
         budget
             .consume(
                 WorkClass::HandlerSteps,
-                self.memory.check_temporary.get() as u64,
+                *self.memory.check_temporary.borrow().get() as u64,
             )
             .map_err(|_| {
                 CoreError::Backpressure(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
             })?;
-        let bytes = vec![0u8; self.memory.check_temporary.get()];
+        let bytes = vec![0u8; *self.memory.check_temporary.borrow().get()];
         self.memory
             .retained
             .set(self.memory.retained.get() + bytes.capacity());
@@ -1126,6 +1144,13 @@ impl ProducerCapability for ReviewLargeProvider {
 }
 struct ReviewLargeParticipant(HttpRuntime);
 impl ClosedProducerParticipation for ReviewLargeParticipant {
+    fn qualified_operation_count(&self) -> Option<usize> {
+        self.0.qualified_operation_count()
+    }
+    fn observe_installation(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.0.observe_installation(facts)
+    }
+
     fn participation_id(&self) -> &ProducerParticipationId {
         self.0.participation_id()
     }
@@ -1187,7 +1212,7 @@ fn review_large_input(
         charge_at_peak: Cell::new(0),
         definition_allocations: Cell::new(0),
         checks: Cell::new(0),
-        check_temporary: Cell::new(0),
+        check_temporary: RefCell::new(PublicationState::new(0)),
     });
     let addresses = [tcp_addr(), tcp_addr()];
     let mut input = http_input(
@@ -1196,20 +1221,21 @@ fn review_large_input(
         addresses,
         Rc::new(Counts::default()),
     );
-    input.providers = std::mem::take(&mut input.providers)
-        .into_iter()
+    let registrations: Vec<_> = input
+        .providers
+        .snapshot(&mut PublicationFacts::default())
+        .unwrap()
+        .iter()
+        .cloned()
         .map(|inner| {
             Rc::new(ReviewLargeProvider {
                 inner,
-                memory: Rc::clone(&memory),
+                memory: memory.clone(),
             }) as Rc<dyn ProducerCapability>
         })
         .collect();
-    let providers: Vec<_> = input
-        .providers
-        .iter()
-        .map(|provider| provider.as_ref())
-        .collect();
+    input.providers.replace(registrations.clone());
+    let providers: Vec<_> = registrations.iter().map(|p| p.as_ref()).collect();
     input.prepared = prepare_thing(
         input.instance.description().unwrap(),
         input.instance.key(),
@@ -1318,14 +1344,21 @@ fn review_requalification_cannot_regenerate_unreserved_definition_backing() {
     assert!(matches!(
         exposure.publish(
             &mut owner,
-            &mut budget().with_remaining(WorkClass::BindingPolls, 0)
+            &mut budget().with_remaining(WorkClass::HandlerSteps, 0)
         ),
         Err(CoreError::Backpressure(_))
     ));
     assert_eq!(scratch(&accounts), phase_bytes);
     let before_publish_checks = memory.checks.get();
-    exposure.publish(&mut owner, &mut budget()).unwrap();
-    assert_eq!(memory.checks.get(), before_publish_checks + 2);
+    exposure
+        .publish(
+            &mut owner,
+            &mut budget()
+                .with_remaining(WorkClass::CodecInputBytes, 0)
+                .with_remaining(WorkClass::BindingPolls, 0),
+        )
+        .unwrap();
+    assert_eq!(memory.checks.get(), before_publish_checks);
     assert_eq!(memory.definition_allocations.get(), 2);
     assert_eq!(scratch(&accounts), 0);
     for (i, address) in addresses.into_iter().enumerate() {
@@ -1373,7 +1406,7 @@ fn review_callback_temporaries_are_reserved_before_any_check_or_native_setup() {
         let original = input.prepared.operations()[0]
             .definition::<ReviewLargeDefinition>()
             .unwrap() as *const _;
-        memory.check_temporary.set(temporary);
+        memory.check_temporary.borrow_mut().replace(temporary);
         let result = ComposedProducerExposure::try_new(
             &owner,
             input,
@@ -1412,7 +1445,7 @@ fn review_callback_temporaries_are_reserved_before_any_check_or_native_setup() {
                     &mut budget().with_remaining(WorkClass::HandlerSteps, 100_000_000),
                 )
                 .unwrap();
-            assert_eq!(memory.checks.get(), checks + 2);
+            assert_eq!(memory.checks.get(), checks);
             assert_eq!(memory.definition_allocations.get(), 2);
             assert_eq!(memory.unfunded_peak.get(), 0);
             assert_eq!(scratch(&accounts), 0);
@@ -1441,7 +1474,7 @@ fn review_changed_callback_allowance_fences_before_requalification() {
     .unwrap();
     review_start_large(&mut exposure);
     let checks = memory.checks.get();
-    memory.check_temporary.set(8 * 1024 * 1024);
+    memory.check_temporary.borrow_mut().replace(8 * 1024 * 1024);
     assert!(exposure.publish(&mut owner, &mut budget()).is_err());
     assert!(!exposure.is_committed());
     assert!(exposure.publication_failure().is_some());

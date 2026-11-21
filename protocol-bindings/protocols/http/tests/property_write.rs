@@ -138,7 +138,7 @@ fn denied() -> CoreError {
 struct Controls {
     hold_send: Cell<bool>,
     hold_close: Cell<bool>,
-    lose_service: Cell<bool>,
+    lose_service: RefCell<PublicationState<bool>>,
 }
 struct Native {
     actual: HttpFiniteBinding,
@@ -158,6 +158,13 @@ impl FiniteIngressBinding for Native {
             .engine_backing_bytes()?
             .checked_add(size_of::<Controls>() + 2 * size_of::<usize>())
     }
+    fn qualified_operation_count(&self) -> Option<usize> {
+        self.actual.qualified_operation_count()
+    }
+    fn observe_installation(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.controls.lose_service.borrow().observe(facts)?;
+        self.actual.observe_installation(facts)
+    }
     fn prepared_for_instance(&self, key: ProducerInstanceKey) -> bool {
         self.actual.prepared_for_instance(key)
     }
@@ -172,7 +179,7 @@ impl FiniteIngressBinding for Native {
         self.actual.covers_definition(key, site, form, op, d)
     }
     fn validator(&self) -> Option<&dyn FiniteValidator> {
-        if self.controls.lose_service.get() {
+        if *self.controls.lose_service.borrow().get() {
             None
         } else {
             self.actual.validator()
@@ -329,7 +336,7 @@ fn exposure_with_capacity(
         ComposedProducerInput {
             instance,
             prepared,
-            providers: vec![provider],
+            providers: ProducerRegistrations::new(vec![provider]),
             participants: vec![OwnedProducerParticipation::finite(server)],
             expected,
             handler_backing_bytes: size_of::<Application>() + 8192,
@@ -1352,7 +1359,7 @@ fn missing_write_behavior_native_coverage_and_collisions_refuse_complete_publica
         ComposedProducerInput {
             instance,
             prepared,
-            providers: vec![provider],
+            providers: ProducerRegistrations::new(vec![provider]),
             participants: vec![OwnedProducerParticipation::finite(server)],
             expected: None,
             handler_backing_bytes: 8192,
@@ -1594,7 +1601,7 @@ fn unread_results_and_service_loss_keep_bounded_original_owners_until_acknowledg
             server.step();
             assert!(pending.poll(&mut cx(), now(0), &mut work()).is_pending());
         }
-        server.controls.lose_service.set(true);
+        server.controls.lose_service.borrow_mut().replace(true);
         server.controls.hold_close.set(true);
         server.step();
         assert_eq!(server.server().state(), RawFiniteState::Closing);

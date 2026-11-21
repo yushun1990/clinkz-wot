@@ -1,5 +1,6 @@
 //! Deterministic source-free Engine semantics; no native transport or TD
 //! publication is inferred from these in-memory Binding observations.
+use clinkz_wot_core::publication::PublicationObserver;
 use clinkz_wot_core::{
     AcceptHint, ActionInvocationRef, AffordanceTarget, BindingGeneration, BindingId, CoreError,
     CoreResult, ErrorContext, ErrorPhase, HandlerContext, InteractionInput, InteractionOutput,
@@ -1517,6 +1518,10 @@ impl CandidateFacet {
     }
 }
 impl clinkz_wot_core::publication::ClosedProducerParticipation for CandidateFacet {
+    fn observe_installation(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        Ok(())
+    }
+
     fn associated_with(
         &self,
         token: &clinkz_wot_core::publication::ProducerOwnerToken,

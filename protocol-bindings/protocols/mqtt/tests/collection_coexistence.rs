@@ -318,7 +318,7 @@ mod live {
                 ComposedProducerInput {
                     instance,
                     prepared,
-                    providers: vec![Rc::new(mqtt), Rc::new(http)],
+                    providers: ProducerRegistrations::new(vec![Rc::new(mqtt), Rc::new(http)]),
                     participants: vec![
                         OwnedProducerParticipation::notifications(mqtt_runtime),
                         OwnedProducerParticipation::actions(http_runtime),

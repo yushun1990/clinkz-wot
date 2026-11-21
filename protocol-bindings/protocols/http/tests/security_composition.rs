@@ -10,19 +10,15 @@ struct KeyVerifier {
     revision: AtomicU64,
     revoked: AtomicBool,
     different_identity: AtomicBool,
-    changed_work: AtomicBool,
+    work: HttpVerifierWork,
     calls: AtomicUsize,
 }
 impl HttpApiKeyVerifier for KeyVerifier {
     fn revision(&self) -> u64 {
         self.revision.load(Ordering::Acquire)
     }
-    fn work(&self) -> u64 {
-        if self.changed_work.load(Ordering::Acquire) {
-            2048
-        } else {
-            1024
-        }
+    fn work(&self) -> &HttpVerifierWork {
+        &self.work
     }
     fn verify(&self, key: &[u8]) -> CoreResult<Principal> {
         self.calls.fetch_add(1, Ordering::Relaxed);
@@ -51,7 +47,7 @@ fn key_verifier() -> Arc<KeyVerifier> {
         revision: AtomicU64::new(0),
         revoked: AtomicBool::new(false),
         different_identity: AtomicBool::new(false),
-        changed_work: AtomicBool::new(false),
+        work: HttpVerifierWork::new(1024),
         calls: AtomicUsize::new(0),
     })
 }
@@ -708,7 +704,7 @@ fn a_verifier_cannot_increase_the_next_verifiers_work_and_enter_its_callback() {
             *h.borrow_mut() = Some((
                 1,
                 Box::new(move || {
-                    changed.changed_work.store(true, Ordering::Release);
+                    changed.work.set(2048);
                 }),
             ))
         });

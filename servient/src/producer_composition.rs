@@ -1,7 +1,7 @@
 //! The qualified handoff to the shared logical Servient. Preparation produces
 //! independent definitions; native setup is owned by each participating
 //! Binding; this boundary commits one final TD and behavior owner only after
-//! all participants are closed and the *whole* description is requalified.
+//! all participants are installed closed and whole-description coverage is current.
 #![allow(clippy::result_large_err)]
 pub use crate::producer_execution::{OwnedProducerParticipation, ProducerWork};
 use crate::{
@@ -17,11 +17,12 @@ use clinkz_wot_foundation::{ResourceKind as K, WorkClass};
 use clinkz_wot_foundation::{ResourceLimits, WorkBudget};
 use clinkz_wot_planning::finite_producer::PRODUCER_DESCRIPTION_BYTES;
 use clinkz_wot_planning::producer_composition::{
-    PreparedThing, ProducerCapability, check_final_thing,
+    PreparedThing, ProducerCapability, ProducerQualification, ProducerRegistrations,
+    PublicationFacts,
 };
 use clinkz_wot_servient_finite::{
-    CapturedActionRoute, CapturedNotificationRoute, ClosedProducerParticipation,
-    ProducerPublication, RawProducerServient,
+    CapturedActionRoute, CapturedNotificationRoute, CapturedProducerRoutes,
+    ClosedProducerParticipation, ProducerPublication, RawProducerServient,
 };
 use clinkz_wot_servient_finite::{MAX_PRODUCER_PARTICIPANTS, RawProducerInstance};
 use clinkz_wot_td::ValidatedProducerScope;
@@ -29,7 +30,9 @@ use core::{any::Any, mem::size_of};
 
 /// Final qualification is fallible, publication is not. Retain the prepared
 /// definitions separately from this logical publication and all physical
-/// resources. No native poll, handler, allocation or fallible callback is made
+/// resources. The borrowed registration slice fixes membership for this call.
+/// Reloadable membership in managed staging uses `ProducerRegistrations`.
+/// No native poll, handler, allocation or fallible callback is made
 /// inside the local commit; native gate acquisition is checked beforehand.
 pub fn publish_prepared_thing(
     owner: &mut RawProducerServient,
@@ -40,34 +43,43 @@ pub fn publish_prepared_thing(
     limits: &ResourceLimits,
     budget: &mut WorkBudget,
 ) -> CoreResult<()> {
-    check_prepared_thing(
-        owner,
-        publication,
-        prepared,
-        providers,
-        participants,
+    let qualification = ProducerQualification::begin(providers, PublicationFacts::default())?;
+    pay_coverage(prepared, participants.len(), budget)?;
+    let description = publication
+        .staged_description()
+        .ok_or_else(|| CoreError::Validation(context()))?;
+    let coverage = qualification.check_final(
+        description,
+        publication.key(),
         limits,
         budget,
-    )?;
-    if prepared.operations().iter().any(|o| {
-        matches!(
-            o.site,
-            clinkz_wot_planning::producer_composition::FormSite::Action(_)
-        ) || o.operation == Operation::QueryAllActions
-    }) {
-        let routes = capture_action_routes(
-            publication.key(),
-            prepared,
-            participants.iter().map(|p| &**p),
-        )?;
-        publication.bind_action_routes(routes)?;
-    }
-    publication.bind_notification_routes(capture_notification_routes(
-        publication.key(),
         prepared,
-        participants.iter().map(|p| &**p),
-    )?)?;
-    owner.publish_composed(publication, participants)
+        |scope, op| publication_supports(publication, scope, op),
+    )?;
+    if !publication.behaviors_described_by(|site, op| {
+        prepared
+            .operations()
+            .iter()
+            .any(|p| p.site.site() == site && p.operation == op)
+    }) {
+        return Err(CoreError::UnsupportedOperation(context()));
+    }
+    owner.publish_if_current(publication, participants, &coverage, |key, participants| {
+        capture_mappings(key, prepared, participants).map(Some)
+    })
+}
+
+fn capture_mappings(
+    key: ProducerInstanceKey,
+    prepared: &PreparedThing,
+    participants: &[&mut dyn ClosedProducerParticipation],
+) -> CoreResult<CapturedProducerRoutes> {
+    let members = participants.iter().map(|p| &**p);
+    check_participant_coverage(key, prepared, members.clone())?;
+    Ok(CapturedProducerRoutes {
+        actions: capture_action_routes(key, prepared, members.clone())?,
+        notifications: capture_notification_routes(key, prepared, members)?,
+    })
 }
 
 fn capture_notification_routes<'a>(
@@ -246,52 +258,24 @@ fn capture_action_routes<'a>(
     Ok(routes)
 }
 
-fn check_prepared_thing(
-    _owner: &RawProducerServient,
-    publication: &ProducerPublication,
+fn pay_coverage(
     prepared: &PreparedThing,
-    providers: &[&dyn ProducerCapability],
-    participants: &[&mut dyn ClosedProducerParticipation],
-    limits: &ResourceLimits,
+    participants: usize,
     budget: &mut WorkBudget,
 ) -> CoreResult<()> {
-    if participants.len() > MAX_PRODUCER_PARTICIPANTS {
+    if participants > MAX_PRODUCER_PARTICIPANTS {
         return Err(CoreError::Validation(context()));
     }
     let units = prepared
         .operations()
         .len()
-        .checked_mul(2 * participants.len() + 32)
+        .checked_mul(2 * participants + 32)
         .and_then(|n| u64::try_from(n).ok())
         .ok_or_else(busy)?;
     budget
         .consume(WorkClass::HandlerSteps, units)
         .map_err(|_| busy())?;
-    let description = publication
-        .staged_description()
-        .ok_or_else(|| CoreError::Validation(context()))?;
-    check_final_thing(
-        description,
-        publication.key(),
-        limits,
-        budget,
-        providers,
-        prepared,
-        |scope, op| publication_supports(publication, scope, op),
-    )?;
-    if !publication.behaviors_described_by(|site, op| {
-        prepared
-            .operations()
-            .iter()
-            .any(|prepared| prepared.site.site() == site && prepared.operation == op)
-    }) {
-        return Err(CoreError::UnsupportedOperation(context()));
-    }
-    check_participant_coverage(
-        publication.key(),
-        prepared,
-        participants.iter().map(|p| &**p),
-    )
+    Ok(())
 }
 
 fn check_participant_coverage<'a>(
@@ -369,14 +353,14 @@ fn context() -> ErrorContext {
 }
 
 /// Pure caller-provisioned owners. Construction/compilation precede this
-/// ownership handoff and acquire no native resources. Actual immutable startup
-/// registrations and the raw logical root/Action-store baseline remain
+/// ownership handoff and acquire no native resources. The deployment's startup
+/// registration backing and the raw logical root/Action-store baseline remain
 /// caller-provisioned; their references are retained here. Native participants
 /// declare their additional Engine backing, separately from SDK/OS policy.
 pub struct ComposedProducerInput {
     pub instance: RawProducerInstance,
     pub prepared: PreparedThing,
-    pub providers: Vec<Rc<dyn ProducerCapability>>,
+    pub providers: ProducerRegistrations,
     pub participants: Vec<OwnedProducerParticipation>,
     pub expected: Option<ProducerInstanceKey>,
     /// Trusted complete handler indirect backing, additional to actual handler
@@ -390,22 +374,24 @@ pub struct ComposedProducerInput {
 /// actual participant independently retains the same funding owner.
 pub struct ComposedProducerExposure {
     participants: Vec<OwnedProducerParticipation>,
-    prepared: PreparedThing,
-    providers: Vec<Rc<dyn ProducerCapability>>,
     publication: ProducerPublication,
-    limits: Arc<ResourceLimits>,
-    qualification: Option<QualificationFunding>,
-    qualification_provider_bytes: usize,
+    stage: Option<ProducerStage>,
     publication_failure: Option<CoreError>,
     _funding: Rc<Funding>,
+}
+
+struct ProducerStage {
+    prepared: PreparedThing,
+    _registrations: ProducerRegistrations,
+    coverage: PublicationFacts,
+    _qualification: QualificationFunding,
 }
 
 struct ComposedAdmission {
     funding: Rc<Funding>,
     qualification: QualificationFunding,
-    provider_bytes: usize,
-    routes: Vec<CapturedActionRoute>,
-    notification_routes: Vec<CapturedNotificationRoute>,
+    coverage: PublicationFacts,
+    routes: CapturedProducerRoutes,
 }
 
 impl ComposedProducerExposure {
@@ -419,10 +405,12 @@ impl ComposedProducerExposure {
         budget: &mut WorkBudget,
     ) -> Result<Self, BindingInputRejection<ComposedProducerInput>> {
         let admission = (|| -> CoreResult<ComposedAdmission> {
+            let mut coverage = PublicationFacts::default();
+            let registrations = input.providers.snapshot(&mut coverage)?;
             if input.participants.is_empty()
                 || input.participants.len() > MAX_PRODUCER_PARTICIPANTS
-                || input.providers.is_empty()
-                || input.providers.len() > MAX_PRODUCER_PARTICIPANTS
+                || registrations.is_empty()
+                || registrations.len() > MAX_PRODUCER_PARTICIPANTS
                 || input.prepared.operations().is_empty()
             {
                 return Err(CoreError::Validation(context()));
@@ -449,6 +437,8 @@ impl ComposedProducerExposure {
             }) {
                 return Err(CoreError::Validation(context()));
             }
+            let providers: Vec<_> = registrations.iter().map(|p| p.as_ref()).collect();
+            let qualification = ProducerQualification::begin(&providers, coverage)?;
             let routes = capture_action_routes(
                 input.instance.key(),
                 &input.prepared,
@@ -482,9 +472,7 @@ impl ComposedProducerExposure {
                     )
                 })
                 .and_then(|n| {
-                    n.checked_add(
-                        input.providers.capacity() * size_of::<Rc<dyn ProducerCapability>>(),
-                    )
+                    n.checked_add(registrations.len() * size_of::<Rc<dyn ProducerCapability>>())
                 })
                 // Original Funding, retention-pair Rc allocations and bounded
                 // temporary reference arrays used by qualification/retirement.
@@ -492,7 +480,7 @@ impl ComposedProducerExposure {
                     n.checked_add(
                         size_of::<Funding>()
                             + (input.participants.len() + 3) * 8 * size_of::<usize>()
-                            + (input.providers.len() + 2 * input.participants.len())
+                            + (registrations.len() + 2 * input.participants.len())
                                 * size_of::<&dyn ClosedProducerParticipation>(),
                     )
                 })
@@ -524,7 +512,7 @@ impl ComposedProducerExposure {
                     (K::ThingsGlobalMax, 1),
                 ],
             )?);
-            let provider_bytes = final_check_bytes(&input.providers)?;
+            let provider_bytes = final_check_bytes(&registrations)?;
             let temporary = usize::try_from(
                 limits
                     .get(K::AdmissionTemporaryBytesPerOperationMax)
@@ -533,19 +521,18 @@ impl ComposedProducerExposure {
             .ok()
             .and_then(|n| n.checked_add(PRODUCER_DESCRIPTION_BYTES * 512))
             .and_then(|n| n.checked_add(provider_bytes))
+            .and_then(|n| n.checked_add(qualification.backing_bytes()?))
             .ok_or_else(busy)?;
-            let qualification = QualificationFunding::reserve(&accounts, temporary)?;
-            let providers: Vec<_> = input.providers.iter().map(|p| p.as_ref()).collect();
+            let scratch = QualificationFunding::reserve(&accounts, temporary)?;
             let description = input
                 .instance
                 .description()
                 .ok_or_else(|| CoreError::Validation(context()))?;
-            check_final_thing(
+            let coverage = qualification.check_final(
                 description,
                 input.instance.key(),
                 &limits,
                 budget,
-                &providers,
                 &input.prepared,
                 |scope, op| match scope {
                     ValidatedProducerScope::Thing => input
@@ -570,20 +557,22 @@ impl ComposedProducerExposure {
                 &input.prepared,
                 input.participants.iter().map(|p| p.as_participation()),
             )?;
+            drop(PublicationFacts::lock_current(&[&coverage])?);
             Ok(ComposedAdmission {
                 funding,
-                qualification,
-                provider_bytes,
-                routes,
-                notification_routes,
+                qualification: scratch,
+                coverage,
+                routes: CapturedProducerRoutes {
+                    actions: routes,
+                    notifications: notification_routes,
+                },
             })
         })();
         let ComposedAdmission {
             funding,
             qualification,
-            provider_bytes: qualification_provider_bytes,
+            coverage,
             routes,
-            notification_routes,
         } = match admission {
             Ok(funding) => funding,
             Err(error) => return Err(reject(input, error)),
@@ -596,49 +585,43 @@ impl ComposedProducerExposure {
             expected,
             handler_backing_bytes,
         } = input;
-        let mut publication = match owner.prepare_publication(instance, expected) {
-            Ok(publication) => publication,
-            Err(rejection) => {
-                return Err(reject(
-                    ComposedProducerInput {
-                        instance: rejection.into_input(),
-                        prepared,
-                        providers,
-                        participants,
-                        expected,
-                        handler_backing_bytes,
-                    },
-                    CoreError::StaleHandle(context()),
-                ));
-            }
-        };
+        let refs: Vec<_> = participants.iter().map(|p| p.as_participation()).collect();
+        let mut publication =
+            match owner.prepare_composed_publication(instance, expected, &refs, routes) {
+                Ok(publication) => publication,
+                Err(rejection) => {
+                    let (instance, error) = rejection.into_parts();
+                    return Err(BindingInputRejection::new(
+                        ComposedProducerInput {
+                            instance,
+                            prepared,
+                            providers,
+                            participants,
+                            expected,
+                            handler_backing_bytes,
+                        },
+                        error,
+                    ));
+                }
+            };
         publication
             .retain_owner(funding.clone())
             .expect("new unpublished instance is exclusive");
         publication
             .bind_action_result_accounts(accounts.clone())
             .expect("new unpublished instance has no previous result bank");
-        let refs: Vec<_> = participants.iter().map(|p| p.as_participation()).collect();
-        publication
-            .bind_participants(&refs)
-            .expect("bounded unique original set checked before handoff");
-        publication
-            .bind_action_routes(routes)
-            .expect("selected services and exact Action behaviors checked before handoff");
-        publication
-            .bind_notification_routes(notification_routes)
-            .expect("selected services and exact notification sources checked before handoff");
         for participant in &mut participants {
             participant.retain_owner(funding.clone());
         }
         Ok(Self {
             participants,
-            prepared,
-            providers,
             publication,
-            limits,
-            qualification: Some(qualification),
-            qualification_provider_bytes,
+            stage: Some(ProducerStage {
+                prepared,
+                _registrations: providers,
+                coverage,
+                _qualification: qualification,
+            }),
             publication_failure: None,
             _funding: funding,
         })
@@ -678,6 +661,7 @@ impl ComposedProducerExposure {
         now: clinkz_wot_foundation::MonotonicInstant,
         mut credit: impl FnMut(usize, ProducerWork) -> WorkBudget,
     ) -> CoreResult<()> {
+        self.publication.reconcile_members();
         let key = self.key();
         let mut failure = None;
         for (index, participant) in self.participants.iter_mut().enumerate() {
@@ -704,110 +688,66 @@ impl ComposedProducerExposure {
         owner: &mut RawProducerServient,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
-        if self.qualification.is_none() || self.publication.is_committed() {
-            return Err(CoreError::Validation(context()));
-        }
-        let units = self
-            .prepared
-            .operations()
-            .len()
-            .checked_mul(2 * self.participants.len() + 32)
-            .and_then(|n| u64::try_from(n).ok())
-            .ok_or_else(busy)?;
-        budget
-            .consume(WorkClass::HandlerSteps, units)
-            .map_err(|_| busy())?;
-        // The captured allowance must still cover every actual callback before
-        // any support/check code can allocate. Growing/unknown bounds invalidate
-        // this staged qualification instead of borrowing an unfunded callback.
-        if let Err(error) = final_check_bytes(&self.providers).and_then(|bytes| {
-            if bytes <= self.qualification_provider_bytes {
-                Ok(())
-            } else {
-                Err(CoreError::Validation(context()))
-            }
-        }) {
-            self.publication_failure = Some(error.clone());
-            self.begin_close();
-            return Err(error);
-        }
-        let providers: Vec<_> = self.providers.iter().map(|p| p.as_ref()).collect();
-        let mut participants: Vec<_> = self
-            .participants
-            .iter_mut()
-            .map(|p| p.as_participation_mut())
-            .collect();
-        if !participants
-            .iter()
-            .all(|p| p.ready_for(&owner.participation_token(), self.publication.key()))
-        {
-            return Err(busy());
-        }
-        if let Err(error) = check_prepared_thing(
-            owner,
-            &self.publication,
-            &self.prepared,
-            &providers,
-            &participants,
-            &self.limits,
-            budget,
-        ) {
-            if !matches!(error, CoreError::Backpressure(_)) {
-                self.publication_failure = Some(error.clone());
-                self.publication.revoke();
-                self.qualification = None;
-                for p in &mut participants {
-                    p.begin_retire();
+        // A completed or retired exposure no longer owns a candidate.
+        let stage = self
+            .stage
+            .as_ref()
+            .ok_or_else(|| CoreError::Validation(context()))?;
+        let result = (|| {
+            pay_coverage(&stage.prepared, self.participants.len(), budget)?;
+            for participant in &self.participants {
+                if !participant.has_original_native() {
+                    return Err(CoreError::StaleHandle(context()));
+                }
+                if let Some(error) = participant.native_failure() {
+                    return Err(error.clone());
+                }
+                if participant.retired() {
+                    return Err(CoreError::Cancelled(context()));
                 }
             }
-            return Err(error);
-        }
-        // Recheck actual mapping/service selections before the local commit.
-        // A participant that changes routes while still claiming coverage must
-        // not make the staged qualified controls reachable under stale keys.
-        if let Err(error) = capture_action_routes(
-            self.publication.key(),
-            &self.prepared,
-            participants.iter().map(|p| &**p),
-        )
-        .and_then(|routes| self.publication.bind_action_routes(routes))
-        .and_then(|()| {
-            capture_notification_routes(
-                self.publication.key(),
-                &self.prepared,
-                participants.iter().map(|p| &**p),
+            // A stale candidate can roll back even while native setup is pending.
+            drop(PublicationFacts::lock_current(&[&stage.coverage])?);
+            if !self
+                .participants
+                .iter()
+                .all(|p| p.ready_for(&owner.participation_token(), self.publication.key()))
+            {
+                return Err(busy());
+            }
+            let mut participants: Vec<_> = self
+                .participants
+                .iter_mut()
+                .map(|p| p.as_participation_mut())
+                .collect();
+            owner.publish_if_current(
+                &mut self.publication,
+                &mut participants,
+                &stage.coverage,
+                |key, members| capture_mappings(key, &stage.prepared, members).map(Some),
             )
-        })
-        .and_then(|routes| self.publication.bind_notification_routes(routes))
-        {
-            self.publication_failure = Some(error.clone());
-            self.publication.revoke();
-            self.qualification = None;
-            for participant in &mut participants {
-                participant.begin_retire();
+        })();
+        match &result {
+            Ok(()) => {
+                self.stage = None;
+                self.publication.release_retired();
             }
-            return Err(error);
-        }
-        if let Err(error) = owner.publish_composed(&mut self.publication, &mut participants) {
-            self.publication_failure = Some(error.clone());
-            self.publication.revoke();
-            self.qualification = None;
-            for participant in &mut participants {
-                participant.begin_retire();
+            Err(CoreError::Backpressure(_)) => {}
+            Err(error) => {
+                self.publication_failure = Some(error.clone());
+                self.begin_close();
             }
-            return Err(error);
         }
-        // No phase scratch is retained by accepted work or unread results.
-        self.qualification = None;
-        self.publication.release_retired();
-        Ok(())
+        result
     }
 
     pub fn begin_close(&mut self) {
         self.publication.revoke();
-        self.qualification = None;
+        self.stage = None;
         for participant in &mut self.participants {
-            participant.begin_retire();
+            if participant.has_original_native() {
+                participant.begin_retire();
+            }
         }
     }
 
@@ -832,14 +772,14 @@ impl ComposedProducerExposure {
         owner.retire_composed(&mut self.publication, &participants)?;
         // Typed native close may have ended setup without begin_close() on
         // this facade. Acknowledged retirement permanently ends qualification.
-        self.qualification = None;
+        self.stage = None;
         Ok(())
     }
 }
 impl Drop for ComposedProducerExposure {
     fn drop(&mut self) {
         self.publication.revoke();
-        self.qualification = None;
+        self.stage = None;
         // Actual member Drop supplies bounded local disposal. No I/O polling,
         // application cancellation callback or completed drain is claimed here.
     }

@@ -857,23 +857,23 @@ fn characterize_shared_preparation_instance_and_active_backing_over_supported_co
     io().block_on(async {
         for shared in [true, false] {
         for count in [1, 2, 4, 8, 16, 32] {
-            // One root mapping, sixteen nontrivial named schemas. No leaf Form
-            // or individual Property work is involved in this measurement.
+            // The Host admits sixteen behaviors. Publish fifteen readable
+            // Properties and their root collection, then execute only the root.
             let tds: Vec<_> = (0..count).map(|_| {
-                let mut td = description(address());
-                for p in td["properties"].as_object_mut().unwrap().values_mut() {
-                    p["forms"] = json!([]);
-                }
-                for i in 0..14 {
+                let addr = address();
+                let mut td = description(addr);
+                td["properties"].as_object_mut().unwrap().remove("secret");
+                for i in 0..13 {
                     td["properties"][format!("calibrated_measurement_{i:02}_with_a_retained_name")] =
-                        json!({"type":"integer", "readOnly":true, "forms":[]});
+                        json!({"type":"integer", "readOnly":true,
+                            "forms":[{"href":format!("http://{addr}/m{i}")}]});
                 }
                 td
             }).collect();
             let mut servers: Vec<_> = tds.iter().map(|td| {
                 let server = Fixture::new(td.clone());
                 let mut value = json!({"level":7,"on":true});
-                for i in 0..14 { value[format!("calibrated_measurement_{i:02}_with_a_retained_name")] = json!(i); }
+                for i in 0..13 { value[format!("calibrated_measurement_{i:02}_with_a_retained_name")] = json!(i); }
                 *server.app.value.borrow_mut() = serde_json::to_vec(&value).unwrap();
                 server
             }).collect();
@@ -905,7 +905,8 @@ fn characterize_shared_preparation_instance_and_active_backing_over_supported_co
                 for (total, n) in total_work.iter_mut().zip(cost.work) { *total += n; }
             }
             let prepare_us = started.elapsed().as_micros();
-            assert_eq!(jobs, count, "exact native compilation remains per endpoint");
+            assert_eq!(first_cost.native_jobs, 16);
+            assert_eq!(jobs, if shared { 16 + count - 1 } else { 16 * count });
             let after_preparation = allocation_meter::read();
             let prepare_reservations: u64 = backing.iter().map(|b| live(b)).sum();
             let started = Instant::now();
@@ -937,7 +938,7 @@ fn characterize_shared_preparation_instance_and_active_backing_over_supported_co
             drop(results);
             assert!(weak.upgrade().is_none()); drop(weak);
             for b in accounts.iter().chain(&backing) { clean(b); }
-            assert_eq!(content_builds, if shared { 1 } else { count });
+            assert_eq!(content_builds, if shared { 16 } else { 16 * count });
             println!("reuse-cost shared={shared} n={count} content_builds={content_builds} native_jobs={jobs} member_backing={semantic_bytes} prepare_live={} prepare_allocs={} prepare_requested={} instance_live={} instance_allocs={} admitted_call_live={} prepare_reserved={prepare_reservations} instance_reserved={instance_reservations} active_reserved={active_reservations} prepare_us={prepare_us} bind_us={bind_us} first_work={:?} total_work={total_work:?}",
                 after_preparation.live-baseline.live,
                 after_preparation.allocations-baseline.allocations,

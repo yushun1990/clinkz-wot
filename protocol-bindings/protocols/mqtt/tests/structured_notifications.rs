@@ -406,7 +406,7 @@ fn native_schema_views_share_the_original_prepared_backing_and_refuse_equal_fore
             ComposedProducerInput {
                 instance,
                 prepared: equal,
-                providers: vec![Rc::new(producer.clone())],
+                providers: ProducerRegistrations::new(vec![Rc::new(producer.clone())]),
                 participants: vec![OwnedProducerParticipation::notifications(native)],
                 expected: None,
                 handler_backing_bytes: 0,
@@ -439,6 +439,10 @@ fn native_schema_views_share_the_original_prepared_backing_and_refuse_equal_fore
 fn common_event_preparation_checks_constraint_name_bytes_before_building_roles() {
     struct CommonSchema;
     impl ProducerCapability for CommonSchema {
+        fn observe_configuration(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
+            Ok(())
+        }
+
         fn identity(&self) -> (BindingId, BindingGeneration) {
             (BindingId::new(40), BindingGeneration::INITIAL)
         }
@@ -557,7 +561,7 @@ fn additional_native_definitions_cannot_borrow_selected_schema_funding() {
         ComposedProducerInput {
             instance,
             prepared,
-            providers: vec![Rc::new(producer)],
+            providers: ProducerRegistrations::new(vec![Rc::new(producer)]),
             participants: vec![OwnedProducerParticipation::notifications(native)],
             expected: None,
             handler_backing_bytes: 0,
