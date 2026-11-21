@@ -397,8 +397,9 @@ propagating failure to logical revocation. A failed uncommitted participant may
 retire its own native work before or after another participant publishes the same
 key; passive origin/key association cannot revoke that publication or its Actions.
 `step_actions` and `step_notifications` apply that boundary for their distinct
-facets. Direct native polling requires caller-driven
-reconciliation; there is no background failure propagation or automatic scheduler.
+facets. TD lookup and dispatch check the original ingress gates directly,
+including after a caller polls a native participant independently. Native cleanup
+still requires caller-driven progress.
 MQTT readiness/health/close therefore receives no logical owner. Logical
 notification publication metadata is funded by Servient; native participants
 declare native storage/alignment, data capacity and the number of publication

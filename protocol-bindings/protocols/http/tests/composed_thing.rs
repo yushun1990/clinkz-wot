@@ -368,6 +368,7 @@ fn http_action_registration_does_not_veto_a_different_bindings_action_forms() {
 
 #[derive(Default)]
 struct Counts {
+    withdraw_on_authorize: RefCell<Option<Rc<Cell<bool>>>>,
     property: Cell<usize>,
     actions: Cell<usize>,
     cancels: Cell<usize>,
@@ -377,6 +378,9 @@ struct Counts {
 struct Property(Rc<Counts>);
 impl RawFiniteHandler for Property {
     fn authorize(&self, _: &InteractionInput) -> CoreResult<()> {
+        if let Some(gate) = self.0.withdraw_on_authorize.borrow_mut().take() {
+            gate.set(false);
+        }
         Ok(())
     }
     fn handle(

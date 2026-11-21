@@ -76,14 +76,16 @@ fn native_http_candidate_has_no_application_dispatch_or_revocation_authority() {
     assert_eq!(counts.authorized.get(), 0);
     assert_eq!(counts.invoked.get(), 0);
     assert_eq!(native.records(), 0);
-    // Abandoning this candidate retires its original native opportunity. No
-    // application obligation exists, and physical close cannot revoke the Thing.
+    assert!(owner.description(key).is_some());
+    // Native close settles its own candidate. The registry observes that the
+    // published Thing has lost its required Action participant.
     native.begin_close();
     let delivery = native.take_delivery().unwrap();
     assert_eq!(delivery.exchange.unwrap().instance, key);
     assert!(!delivery.locally_written);
     assert_eq!(delivery.invocation, None);
-    assert!(owner.description(key).is_some());
+    assert!(owner.description(key).is_none());
+    assert_eq!(counts.invoked.get(), 0);
     exposure.retire(&mut owner, &mut budget()).unwrap();
     drop(candidate);
     drop(exposure);

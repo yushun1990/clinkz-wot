@@ -624,3 +624,115 @@ fn a_changed_action_service_during_handoff_returns_the_original_candidate() {
     assert!(native.borrow().socket.is_none());
     assert_empty(&accounts);
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Withdrawal {
+    BeforeRequest,
+    DuringCredit,
+    DuringAuthorization,
+}
+
+fn check_sibling_withdrawal(when: Withdrawal) {
+    let mut owner = owner();
+    let accounts = bank();
+    let addresses = [tcp_addr(), tcp_addr()];
+    let counts = Rc::new(Counts::default());
+    let input = http_input(
+        &owner,
+        key(1, Generation::INITIAL),
+        addresses,
+        counts.clone(),
+    );
+    let key = input.instance.key();
+    let op = &input.prepared.operations()[0];
+    let substitute = http_read(
+        &owner,
+        addresses[0],
+        op.definition::<HttpProducerProgram>().unwrap().clone(),
+        key,
+        "left",
+        op.binding.0,
+        FiniteValidation::Required,
+    );
+    let mut exposure =
+        ComposedProducerExposure::try_new(&owner, input, limits(), accounts.clone(), &mut budget())
+            .ok()
+            .unwrap();
+    start_http(&mut exposure);
+    exposure.publish(&mut owner, &mut budget()).unwrap();
+    let left = exposure.participant_mut::<HttpRuntime>(0).unwrap();
+    assert!(read_peer(addresses[0], &mut owner, left).starts_with(b"HTTP/1.1 200"));
+    let mut original = std::mem::replace(left, substitute);
+    match when {
+        Withdrawal::BeforeRequest => original.begin_close(),
+        Withdrawal::DuringAuthorization => {
+            counts
+                .withdraw_on_authorize
+                .replace(Some(original.ingress_gate().clone()));
+        }
+        Withdrawal::DuringCredit => {}
+    }
+    let mut peer = TcpStream::connect(addresses[1]).unwrap();
+    write!(
+        peer,
+        "GET /value HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+        addresses[1]
+    )
+    .unwrap();
+    let right = exposure.participant_mut::<HttpRuntime>(1).unwrap();
+    let end = Instant::now() + Duration::from_secs(3);
+    while right.state() != RawFiniteState::Dispatching {
+        let _ = owner.step(right, &mut cx(), &mut budget(), now()).unwrap();
+        assert!(Instant::now() < end);
+    }
+    if when == Withdrawal::DuringCredit {
+        assert!(matches!(
+            exposure.step(&mut owner, &mut cx(), now(), |i, _| {
+                if i == 1 {
+                    original.begin_close();
+                }
+                budget()
+            }),
+            Err(CoreError::StaleHandle(_))
+        ));
+    } else {
+        let _ = owner.step(right, &mut cx(), &mut budget(), now()).unwrap();
+    }
+    assert_eq!(
+        counts.property.get(),
+        1,
+        "withdrawn sibling entered the handler"
+    );
+    assert!(owner.description(key).is_none());
+    assert_eq!(
+        original.take_settlement().unwrap().delivery,
+        FiniteDelivery::Delivered
+    );
+    *exposure.participant_mut::<HttpRuntime>(0).unwrap() = original;
+    close_http(&mut exposure);
+    let settlement = exposure
+        .participant_mut::<HttpRuntime>(1)
+        .unwrap()
+        .take_settlement()
+        .unwrap();
+    assert_eq!(settlement.effect, FiniteEffect::NotInvoked);
+    drop(settlement);
+    exposure.retire(&mut owner, &mut budget()).unwrap();
+    drop(exposure);
+    assert_empty(&accounts);
+}
+
+#[test]
+fn direct_dispatch_refuses_a_request_after_an_original_member_closes() {
+    check_sibling_withdrawal(Withdrawal::BeforeRequest);
+}
+
+#[test]
+fn managed_dispatch_refuses_withdrawal_in_the_credit_callback() {
+    check_sibling_withdrawal(Withdrawal::DuringCredit);
+}
+
+#[test]
+fn dispatch_refuses_sibling_withdrawal_inside_authorization() {
+    check_sibling_withdrawal(Withdrawal::DuringAuthorization);
+}

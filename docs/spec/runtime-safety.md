@@ -1256,9 +1256,11 @@ facts are reconciled at Servient. A failed participant may fence its own ingress
 and close its native resources; it cannot revoke logical currentness or dispose
 application continuations. Servient validates the original issuer/instance
 association and exact membership in that incarnation's committed native set
-before propagating native failure or withdrawal to logical revocation. A
-managed turn also checks the original members and gates before progressing
-siblings, including an original native owner moved out through a typed loan.
+before propagating native failure or withdrawal to logical revocation. The
+registry and accepted work share the original member identities and ingress
+gates. TD lookup and fresh dispatch observe their availability, including
+withdrawal of a native owner moved out through a typed loan. Servient checks
+this permission after linked callbacks and before granting behavior entry.
 A stale, foreign or uncommitted participant cannot revoke a publication or
 cancel its accepted work.
 Uncommitted failure cleanup remains local and may precede publication. Native

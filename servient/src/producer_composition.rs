@@ -661,7 +661,6 @@ impl ComposedProducerExposure {
         now: clinkz_wot_foundation::MonotonicInstant,
         mut credit: impl FnMut(usize, ProducerWork) -> WorkBudget,
     ) -> CoreResult<()> {
-        self.publication.reconcile_members();
         let key = self.key();
         let mut failure = None;
         for (index, participant) in self.participants.iter_mut().enumerate() {

@@ -301,10 +301,7 @@ pub struct RawProducerRegistryLimits {
 }
 
 struct InstanceEntry {
-    // This is the one logical permission cell, shared with its publication
-    // guard so lost roots can revoke without a lock or native callback.
-    current: Rc<Cell<bool>>,
-    participations: Vec<Weak<()>>,
+    permission: Rc<PublicationPermission>,
     // None is explicitly raw; published Actions have captured routes/services.
     action_routes: Option<Vec<CapturedActionRoute>>,
     notification_routes: Option<Vec<CapturedNotificationRoute>>,
@@ -313,7 +310,7 @@ struct InstanceEntry {
 }
 
 struct AcceptedBehavior {
-    current: Rc<Cell<bool>>,
+    permission: Rc<PublicationPermission>,
     instance: Rc<RawProducerInstance>,
     behavior: usize,
 }
@@ -326,7 +323,7 @@ struct AcceptedBehavior {
 #[derive(Clone)]
 pub struct ProducerRevocation {
     key: ProducerInstanceKey,
-    current: Weak<Cell<bool>>,
+    permission: Weak<PublicationPermission>,
     _retained_owner: Option<Rc<dyn core::any::Any>>,
 }
 impl ProducerRevocation {
@@ -336,8 +333,8 @@ impl ProducerRevocation {
     /// Does not invoke a handler, native callback, waker or registry mutation.
     /// Original pending work observes revocation on its next funded step.
     pub fn revoke(&self) {
-        if let Some(current) = self.current.upgrade() {
-            current.set(false);
+        if let Some(permission) = self.permission.upgrade() {
+            permission.revoke();
         }
     }
 }
@@ -375,8 +372,7 @@ impl RawProducerServient {
         let mut entries = Vec::with_capacity(limits.instances);
         entries.extend(instances.into_iter().map(|instance| InstanceEntry {
             instance: Rc::new(instance),
-            current: Rc::new(Cell::new(true)),
-            participations: Vec::new(),
+            permission: Rc::new(PublicationPermission::raw()),
             action_routes: None,
             notification_routes: None,
         }));
@@ -433,16 +429,15 @@ impl RawProducerServient {
             })
     }
 
-    /// Stop new acceptance everywhere. At most 32 key probes and 128 Action
-    /// flags; no native callback, handler destruction or synchronous application
-    /// cancellation occurs here. Funded steps request cancellation afterwards.
+    /// Stop new acceptance after a bounded key lookup and original-member check.
+    /// Mark at most 128 Action flags. Funded steps request cancellation afterwards.
     pub fn revoke(&mut self, key: ProducerInstanceKey) -> bool {
         if let Some(entry) = self
             .instances
             .iter_mut()
-            .find(|entry| entry.instance.key() == key && entry.current.get())
+            .find(|entry| entry.instance.key() == key && entry.permission.is_current())
         {
-            entry.current.set(false);
+            entry.permission.revoke();
             if let Some(actions) = &mut self.actions {
                 actions.revoke(key);
             }
@@ -458,10 +453,10 @@ impl RawProducerServient {
     pub fn revocation(&self, key: ProducerInstanceKey) -> Option<ProducerRevocation> {
         self.instances
             .iter()
-            .find(|entry| entry.instance.key() == key && entry.current.get())
+            .find(|entry| entry.instance.key() == key && entry.permission.is_current())
             .map(|entry| ProducerRevocation {
                 key,
-                current: Rc::downgrade(&entry.current),
+                permission: Rc::downgrade(&entry.permission),
                 _retained_owner: entry.instance.retained_owner.clone(),
             })
     }
@@ -486,12 +481,11 @@ impl RawProducerServient {
             return Err(rejection(replacement));
         }
         self.instances[index.expect("checked entry")]
-            .current
-            .set(false);
+            .permission
+            .revoke();
         self.instances[index.expect("checked entry")] = InstanceEntry {
             instance: Rc::new(replacement),
-            current: Rc::new(Cell::new(true)),
-            participations: Vec::new(),
+            permission: Rc::new(PublicationPermission::raw()),
             action_routes: None,
             notification_routes: None,
         };
@@ -528,7 +522,9 @@ impl RawProducerServient {
         let instance_index = self
             .instances
             .iter()
-            .position(|entry| entry.instance.key() == candidate.instance && entry.current.get())
+            .position(|entry| {
+                entry.instance.key() == candidate.instance && entry.permission.is_current()
+            })
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
         let behavior_index = self.instances[instance_index]
             .instance
@@ -666,8 +662,6 @@ impl RawProducerServient {
             // ingress stays owned through refusal and native retirement.
             let current = if !runtime.pair_is_current() {
                 Err(CoreError::Validation(context()))
-            } else if !runtime.ingress_gate.get() || !self.instances[i].current.get() {
-                Err(CoreError::StaleHandle(context()))
             } else if runtime.binding.security_revision() != security_revision
                 || behavior.handler.authorization_revision() != policy_revision
             {
@@ -675,6 +669,8 @@ impl RawProducerServient {
                     reason: clinkz_wot_core::SecurityFailureReason::AuthorizationDenied,
                     context: context(),
                 })
+            } else if !runtime.ingress_gate.get() || !self.instances[i].permission.is_current() {
+                Err(CoreError::StaleHandle(context()))
             } else {
                 Ok(())
             };
@@ -685,7 +681,7 @@ impl RawProducerServient {
             // Acceptance is ordered by exclusive access to this runtime. No lock,
             // native callback, allocation or re-lookup surrounds application code.
             runtime.accepted_instance = Some(AcceptedBehavior {
-                current: self.instances[i].current.clone(),
+                permission: Rc::clone(&self.instances[i].permission),
                 instance: Rc::clone(instance),
                 behavior: b,
             });
@@ -1285,7 +1281,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                                 context: context(),
                             });
                         }
-                        if !accepted.current.get() {
+                        if !accepted.permission.is_current() {
                             return Err(CoreError::StaleHandle(context()));
                         }
                         let policy_revision = handler.authorization_revision();
@@ -1303,17 +1299,6 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                                 context: context(),
                             });
                         }
-                        // Verification and application policy are linked
-                        // callbacks: either can invalidate logical authority.
-                        // Only these final observations authorize native send.
-                        if !self.ingress_gate.get()
-                            || self
-                                .accepted_instance
-                                .as_ref()
-                                .is_none_or(|accepted| !accepted.current.get())
-                        {
-                            return Err(CoreError::StaleHandle(context()));
-                        }
                         if !self.pair_is_current() {
                             return Err(CoreError::Validation(context()));
                         }
@@ -1324,6 +1309,9 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                                 reason: clinkz_wot_core::SecurityFailureReason::AuthorizationDenied,
                                 context: context(),
                             });
+                        }
+                        if !self.ingress_gate.get() || !accepted.permission.is_current() {
+                            return Err(CoreError::StaleHandle(context()));
                         }
                         Ok(())
                     })();

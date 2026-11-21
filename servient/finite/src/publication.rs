@@ -38,20 +38,67 @@ impl CapturedActionRoute {
     }
 }
 
-/// Preallocated unpublished instance and its one logical permission cell.
+// Shared by every authority decision for one local incarnation. Weak references
+// preserve independent native lifetimes, including when an owner leaves its facade.
+pub(super) struct PublicationPermission {
+    active: Cell<bool>,
+    members: Vec<Weak<()>>,
+    gates: Vec<Weak<Cell<bool>>>,
+}
+
+impl PublicationPermission {
+    pub(super) fn raw() -> Self {
+        Self {
+            active: Cell::new(true),
+            members: Vec::new(),
+            gates: Vec::new(),
+        }
+    }
+
+    fn staged() -> Self {
+        Self {
+            active: Cell::new(false),
+            members: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
+            gates: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
+        }
+    }
+
+    pub(super) fn is_current(&self) -> bool {
+        if self.active.get()
+            && (self.members.iter().any(|id| id.strong_count() == 0)
+                || self
+                    .gates
+                    .iter()
+                    .any(|gate| gate.upgrade().is_none_or(|g| !g.get())))
+        {
+            self.close_ingress();
+        }
+        self.active.get()
+    }
+
+    pub(super) fn revoke(&self) {
+        self.active.set(false);
+    }
+
+    fn close_ingress(&self) {
+        self.revoke();
+        for gate in self.gates.iter().filter_map(Weak::upgrade) {
+            gate.set(false);
+        }
+    }
+}
+
+/// Preallocated unpublished instance and its shared logical permission.
 /// After commit, Drop revokes only this incarnation. Retained work still pins
 /// its original instance and requests cancellation on its next funded step;
 /// it cannot inherit fresh acceptance or shut down I/O.
 pub struct ProducerPublication {
-    current: Rc<Cell<bool>>,
+    permission: Rc<PublicationPermission>,
     issuer: Weak<()>,
     expected: Option<ProducerInstanceKey>,
     key: ProducerInstanceKey,
     committed: bool,
     cancelled: Cell<bool>,
-    participants: Vec<Weak<()>>,
-    registry_participants: Vec<Weak<()>>,
-    gates: Vec<Weak<Cell<bool>>>,
     action_routes: Option<Vec<CapturedActionRoute>>,
     notification_routes: Option<Vec<CapturedNotificationRoute>>,
     // Both original instances retain capacity until publication metadata ends.
@@ -62,9 +109,9 @@ pub struct ProducerPublication {
 impl ProducerPublication {
     pub fn staging_backing_bytes() -> usize {
         size_of::<Self>()
-            + 2 * MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<()>>()
+            + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<()>>()
             + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<Cell<bool>>>()
-            + size_of::<Cell<bool>>()
+            + size_of::<PublicationPermission>()
             + 2 * size_of::<usize>()
     }
 
@@ -240,10 +287,10 @@ impl ProducerPublication {
         &self,
         ids: impl ExactSizeIterator<Item = &'a ProducerParticipationId> + Clone,
     ) -> bool {
-        ids.len() == self.participants.len()
+        ids.len() == self.permission.members.len()
             && ids.clone().enumerate().all(|(i, id)| {
                 !ids.clone().take(i).any(|p| p.same_owner(id))
-                    && self.participants.iter().any(|p| id.matches(p))
+                    && self.permission.members.iter().any(|p| id.matches(p))
             })
     }
 
@@ -254,7 +301,7 @@ impl ProducerPublication {
         if ids.len() == 0 || ids.len() > MAX_PRODUCER_PARTICIPANTS {
             return Err(CoreError::Validation(context()));
         }
-        if !self.participants.is_empty() {
+        if !self.permission.members.is_empty() {
             return if self.same_participants(ids) {
                 Ok(())
             } else {
@@ -268,37 +315,19 @@ impl ProducerPublication {
         {
             return Err(CoreError::Validation(context()));
         }
-        for id in ids {
-            self.participants.push(id.downgrade());
-            self.registry_participants.push(id.downgrade());
-        }
+        Rc::get_mut(&mut self.permission)
+            .expect("unpublished permission")
+            .members
+            .extend(ids.map(ProducerParticipationId::downgrade));
         Ok(())
-    }
-    /// Observe withdrawal even when the original native owner was moved out
-    /// of the managed exposure. A moved, still-open owner remains available.
-    pub fn reconcile_members(&self) {
-        if self.current.get()
-            && (self.participants.iter().any(|id| id.strong_count() == 0)
-                || self
-                    .gates
-                    .iter()
-                    .any(|gate| gate.upgrade().is_none_or(|g| !g.get())))
-        {
-            self.revoke();
-        }
     }
 
     /// Fence fresh acceptance immediately. Already accepted Actions observe
-    /// this same cell and request cancellation during funded progress; no
+    /// this permission and request cancellation during funded progress; no
     /// application callback or native shutdown occurs here.
     pub fn revoke(&self) {
-        self.current.set(false);
         self.cancelled.set(true);
-        for gate in &self.gates {
-            if let Some(gate) = gate.upgrade() {
-                gate.set(false);
-            }
-        }
+        self.permission.close_ingress();
     }
     pub fn staged_description(&self) -> Option<&str> {
         self.instance.as_ref()?.description.as_deref()
@@ -457,7 +486,11 @@ impl RawProducerServient {
             let id = participant.participation_id();
             let committed_member = self.instances.iter().any(|entry| {
                 entry.instance.key() == key
-                    && entry.participations.iter().any(|member| id.matches(member))
+                    && entry
+                        .permission
+                        .members
+                        .iter()
+                        .any(|member| id.matches(member))
             });
             if committed_member {
                 self.revoke(key);
@@ -503,10 +536,10 @@ impl RawProducerServient {
                 + size_of::<RawProducerInstance>()
                 + size_of::<RawFiniteBehavior>()
                 + size_of::<ProducerPublication>()
-                + size_of::<Cell<bool>>()
+                + size_of::<PublicationPermission>()
                 + size_of::<Cell<bool>>()
                 + size_of::<[usize; 8]>()
-                + 2 * MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<()>>()
+                + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<()>>()
                 + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<Cell<bool>>>(),
         )
     }
@@ -514,7 +547,7 @@ impl RawProducerServient {
     pub fn description(&self, key: ProducerInstanceKey) -> Option<&str> {
         self.instances
             .iter()
-            .find(|e| e.current.get() && e.instance.key() == key)
+            .find(|e| e.instance.key() == key && e.permission.is_current())
             .and_then(|e| e.instance.description.as_deref())
     }
 
@@ -570,16 +603,13 @@ impl RawProducerServient {
         let key = instance.key();
         Ok(ProducerPublication {
             instance: Some(Rc::new(instance)),
-            current: Rc::new(Cell::new(false)),
+            permission: Rc::new(PublicationPermission::staged()),
             issuer: Rc::downgrade(&self.issuer),
             expected,
             retired: None,
             key,
             committed: false,
             cancelled: Cell::new(false),
-            participants: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
-            registry_participants: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
-            gates: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
             action_routes: None,
             notification_routes: None,
         })
@@ -719,10 +749,13 @@ impl RawProducerServient {
         if publication.cancelled.get() {
             return Err(CoreError::Cancelled(context()));
         }
+        Rc::get_mut(&mut publication.permission)
+            .expect("unpublished permission")
+            .gates
+            .extend(gates.iter().map(Rc::downgrade));
         let entry = InstanceEntry {
             instance: Rc::clone(publication.instance.as_ref().expect("uncommitted owner")),
-            current: Rc::clone(&publication.current),
-            participations: core::mem::take(&mut publication.registry_participants),
+            permission: Rc::clone(&publication.permission),
             action_routes: publication.action_routes.take(),
             notification_routes: publication.notification_routes.take(),
         };
@@ -731,7 +764,7 @@ impl RawProducerServient {
         if index == self.instances.len() {
             self.instances.push(entry);
         } else {
-            self.instances[index].current.set(false);
+            self.instances[index].permission.revoke();
             publication.retired = Some(core::mem::replace(&mut self.instances[index], entry));
             // Fixed-size bounded Action scan, no application callback. The
             // original invocation still owns its work and late settlement.
@@ -739,8 +772,7 @@ impl RawProducerServient {
                 actions.revoke(publication.expected.expect("replacement checked"));
             }
         }
-        publication.current.set(true);
-        publication.gates.extend(gates.iter().map(Rc::downgrade));
+        publication.permission.active.set(true);
         publication.committed = true;
         for gate in gates {
             gate.set(true);
@@ -758,7 +790,7 @@ impl RawProducerServient {
         if runtime.issuer.as_ptr() != Rc::as_ptr(&self.issuer) {
             return Err(CoreError::StaleHandle(context()));
         }
-        if publication.participants.is_empty() {
+        if publication.permission.members.is_empty() {
             publication.bind_participants(&[runtime])?;
         }
         self.retire_composed(publication, &[runtime])
@@ -821,10 +853,14 @@ impl RawProducerServient {
             .position(|e| e.instance.key() == key)
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
         let entry = &self.instances[index];
-        if entry.current.get()
+        if entry.permission.is_current()
             || entry.instance.notification_work.get() != 0
-            || entry.participations.is_empty()
-            || entry.participations.iter().any(|p| p.strong_count() != 0)
+            || entry.permission.members.is_empty()
+            || entry
+                .permission
+                .members
+                .iter()
+                .any(|p| p.strong_count() != 0)
             || self
                 .actions
                 .as_ref()
