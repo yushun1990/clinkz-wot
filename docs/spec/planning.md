@@ -548,24 +548,67 @@ explicit 4096-unit preparation allowance, as does the existing MQTT facet.
 
 ## Open Consumer notification preparation
 
-The typed `open_consumer::ConsumerNotificationRegistry` is the notification
-facet beside finite preparation. Its operation-scoped `prepare_notification` reuses
-common TD admission and the resolved Form loan with an explicit notification
-kind and target, selecting one named observable
-Property's observe Form, Thing-root observe-all/subscribe-all Form or Event's subscribe Form in TD order or by explicit
-selector. Unsupported alternatives
-are skipped; missing support and multiple complete actual providers refuse.
-It does not claim whole-Thing Consumer support or Producer qualification.
+Host `ConsumerNotificationRegistry<D>::prepare_notification` admits one target
+and notification kind. It visits applicable Forms in TD order and stops at the
+first viable Form. A Form or Binding pin narrows the search. Each visited Form
+lends one set of resolved facts and role schemas to every eligible registration.
+A compiler or native executor declining a candidate leaves the other providers
+on that Form eligible. A second qualified provider reports
+`AmbiguousBindingOwner`. Exhausted work or capacity refuses before native I/O.
 
-`ConsumerNotificationPreparation` extends the actual source-free notification
-Binding registration with a bounded pure compilation callback. Its schema operand
-borrows the original complete role meaning; native compilation must not rebuild
-that meaning or retain a source loan. External linked
-Bindings can implement it without a finite capability, compiler-name test or
-Core protocol case. The current eager typed facet prepays the complete declared
-callback/temporary/retained bounds and rollback; it introduces no universal
-compiler, asynchronous preparation coordinator or first-use cache. Metadata,
-support and clone/drop callbacks remain trusted finite local work.
+Registrations may have unrelated program, configuration, participation and
+response types. At startup, `RetainedConsumerNotificationRegistration::into_provider`
+takes a constructor from its concrete `ConsumerNotificationDefinition<B>` to
+the deployment's output `D`. An application can use the variants of its own
+enum and dispatch the selected definition to its typed conversation capacity.
+Planning calls the constructor once after a successful decision. Homogeneous
+startup adoption and retained-owner import produce a `TypedConsumerNotificationRegistry<B>`
+and return the concrete definition directly. A homogeneous registry is `Send` and
+`Sync` when its registered Binding is. A mixed registry can hold local Bindings
+and a local revision observer.
+
+Use `try_new_fixed` for immutable eligibility or a search serialized with all
+writers. With `try_new_revisioned`, the deployment supplies one bounded, passive
+observation covering native configuration, data and access eligibility across
+the registered set. It returns a non-reused revision or `None` during an update.
+The closing observation covers earlier rejected Forms, competing providers and
+the decision to report ambiguity or missing support. A changed or unavailable
+revision refuses with `StaleHandle`. Later searches observe later competitors.
+
+`ConsumerNotificationPreparation::compile_notification_form` qualifies the
+resolved Form on the actual source-free Binding. A provider accepting
+`contentCoding` must implement that coding for the selected data roles.
+The notification execution profile currently qualifies fixed endpoints, the
+simple endpoint NoSec requirement and Forms without explicit response branches.
+TD resolution applies the Thing's `base` to relative references. Notification
+preparation requires the resulting href to be a concrete URI with a scheme.
+It skips unexpanded templates and references that still need a base before
+destination authorization or native compilation.
+Planning checks the actual data service's availability, media and schema
+support, and the access service's security support and destination permission.
+Before native compilation, the data service must support establishment and
+occurrence delivery on the selected Form. Once the Binding qualifies its program,
+the service must also support the data for each mapped cancellation and each
+reply the program can offer, even when the caller may decline a reply. Each
+executable scalar role uses `supports_media` for the Form representation.
+Collection facets also require the service's exact primary media. The source-free
+definition repeats both checks against the retained program and service.
+Selection spends native compilation work and cleanup capacity on authorized
+candidates. If every alternative fails and a destination was denied, the search
+revisits the range of Forms containing denials on the same TD admission, work
+budget and configuration decision. A native mapping that
+qualifies with its destination denied establishes `AuthorizationDenied`.
+
+The TD walk, semantic arena and compiler scratch share one temporary allowance.
+The schema and both the selected and competing native mappings count toward the
+per-admission and shared live-byte peaks while they coexist. The first
+qualifying definition owns the role schemas and lends them to subsequent
+probes. Its live-byte reservations and native rollback scratch survive the
+closing observation and disposal on refusal. Sequential competing probes can
+reuse the idle rollback allowance. A successful decision releases rollback
+scratch before calling the deployment's output constructor. The original Engine
+and cleanup funding accompany the native definition. Metadata, support, clone
+and disposal callbacks are bounded.
 
 The selected `ConsumerNotificationDefinition` owns the actual Binding/program,
 configuration, family-qualified target, endpoint/Form, the actual retained data
@@ -578,7 +621,7 @@ the baseline. Runtime dependency checks compare against these original facts.
 Notification registries adopt raw data/access service backing once at their
 startup bank (`try_new`), recognizing aliases within that construction. Composition
 across registries imports the same `RetainedConsumerServices` through
-`try_from_retained`; configuration equality is not physical ownership. Definition
+`try_from_retained` or `into_provider`. Definition
 funding covers mapping/schema/reference records, excluding already funded service
 backing. The selected mapping retains its data owner; access policy is independently
 qualified when binding a Consumer association. Selection's destination permission
@@ -607,10 +650,10 @@ named readable collection schema; it is not a scalar Object assertion. It shares
 member backing between the definition and captured validator without copying
 names per cursor. The `Event` variant retains separate
 subscription/data/dataResponse/cancellation schemas. Neither its program nor runtime
-retains a source TD/semantic loan/compiler. Each present role requires complete
-supported schema/media meaning. Required native responses still need actual
-support/cardinality; a schema alone cannot invent it. No native I/O occurs in
-preparation. Current MQTT support and its explicit control/response refusals are
+retains a source TD/semantic loan/compiler. The Binding receives all declared
+roles when qualifying the Form. Required responses need native support at
+establishment and an actual reply opportunity on each occurrence. No native I/O
+occurs in preparation. Current MQTT support and its explicit control/response refusals are
 defined in [the MQTT subset](../../protocol-bindings/protocols/mqtt/README.md).
 
 Property selection authorizes `ObserveProperty`; captured runtime policy uses
@@ -635,14 +678,20 @@ independent schema roles in `EventCollectionSchema`. The shared semantic loan
 contains Event declarations and local contexts, without their individual Forms.
 An unrelated root operation acquires no Event schema closure. Construction and
 disposal walks and variable name/table backing are funded before construction;
-selected definitions and captured validation share the original backing. Scalar
-schema support qualifies each Event role; no full Property-map decoder is used.
+selected definitions and captured validation share the original backing. Every
+member's declared occurrence data requires scalar codec support. When the native
+program can offer replies, that check also covers every declared member
+`dataResponse`.
 The actual Binding must prove native attribution and supported control/response
-roles. The current joined control subset refuses member subscription/cancellation
-data; no common aggregate wire encoding is inferred. MQTT additionally refuses
-any member dataResponse and requires supported data for every Event, a combined
-root Form and terminal single-level wildcard. Unsupported assertions in any
-included Event refuse the whole candidate. Selection authorizes SubscribeAllEvents;
+roles. The composed root start accepts empty input. A member subscription
+schema therefore rules out every root Form. A member cancellation schema rules
+out a Form advertising `UnsubscribeAllEvents` or a native program offering
+mapped cancellation. A start-only mapping can retire locally without a codec for
+the member cancellation. Source-free definitions check the same controls against
+native support. MQTT additionally refuses any member dataResponse and requires
+supported data for every Event, a combined root Form and terminal single-level
+wildcard. An assertion outside the prepared schema model in any declared role
+refuses the whole candidate. Selection authorizes SubscribeAllEvents;
 execution retains it for establishment/delivery and UnsubscribeAllEvents for mapped
 stop. Complete Producer qualification rechecks every root/leaf Form, member role,
 source, actual native definition and final retained TD. See the

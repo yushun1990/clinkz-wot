@@ -2,7 +2,8 @@
 //! This initial Host facet is raw: it preserves data roles, not TD qualification
 //! or DataSchema validation. Native matching, ACKs and distribution stay native.
 use crate::{
-    collection::PropertyCollectionSchema, consumer::ConsumerDataService,
+    collection::PropertyCollectionSchema,
+    consumer::{ConsumerDataService, context},
     data_schema::PreparedSchema,
 };
 use alloc::{rc::Rc, sync::Arc};
@@ -13,8 +14,8 @@ use core::{
 
 use crate::consumer::ConsumerInstanceRef;
 use crate::{
-    AffordanceTarget, BindingGeneration, BindingId, BindingInputRejection, CoreResult, Operation,
-    Payload, SubscriptionId,
+    AffordanceTarget, BindingGeneration, BindingId, BindingInputRejection, CoreError, CoreResult,
+    Operation, Payload, SubscriptionId,
 };
 
 /// A retained issuer distinguishes even identical slots in different roots.
@@ -212,16 +213,73 @@ impl NotificationSchemas {
             _ => None,
         }
     }
-    /// Scalar support cannot qualify a named collection decoder.
+    /// The composed root Event has an empty start input and an empty mapped
+    /// stop input. Local retirement consumes no member cancellation data.
+    pub fn check_control_inputs(&self, mapped_stop: bool) -> CoreResult<()> {
+        if let Self::SubscribeAllEvents(collection) = self
+            && collection.members().iter().any(|member| {
+                member.subscription.is_some() || (mapped_stop && member.cancellation.is_some())
+            })
+        {
+            return Err(CoreError::UnsupportedOperation(context()));
+        }
+        Ok(())
+    }
+    /// Codec support for establishment and occurrence delivery on this Form.
+    /// Root Event controls have empty inputs (see `check_control_inputs`).
+    pub fn supports_start_data(&self, data: &dyn ConsumerDataService, media: &str) -> bool {
+        match self {
+            Self::ObserveAllProperties(collection) => {
+                data.content_type() == media && data.supports_property_map(collection)
+            }
+            Self::SubscribeAllEvents(collection) => {
+                let payloads = collection.members().iter().filter_map(|m| m.data.as_ref());
+                data.content_type() == media && supports_scalars(data, media, payloads)
+            }
+            Self::PropertyValue(_) | Self::Event { .. } => supports_scalars(
+                data,
+                media,
+                self.subscription().into_iter().chain(self.data()),
+            ),
+        }
+    }
+
+    /// Codec support for every mapped stop or reply the program can expose.
+    /// An offered reply can carry application data even when it is optional.
+    pub fn supports_optional_data(
+        &self,
+        data: &dyn ConsumerDataService,
+        media: &str,
+        support: NotificationSupport,
+    ) -> bool {
+        match self {
+            Self::SubscribeAllEvents(collection) if support.event_responses => {
+                let replies = collection
+                    .members()
+                    .iter()
+                    .filter_map(|m| m.data_response.as_ref());
+                supports_scalars(data, media, replies)
+            }
+            Self::Event { .. } => {
+                let roles = [
+                    self.data_response().filter(|_| support.event_responses),
+                    self.cancellation().filter(|_| support.cancellation),
+                ];
+                supports_scalars(data, media, roles.into_iter().flatten())
+            }
+            _ => true,
+        }
+    }
+
+    /// Codec support for every declared schema, including unused roles. A
+    /// Binding can require this when qualifying its own complete mapping.
     pub fn supports(&self, data: &dyn ConsumerDataService) -> bool {
         match self {
             Self::ObserveAllProperties(s) => data.supports_property_map(s),
-            Self::SubscribeAllEvents(s) => s.members().iter().all(|m| {
-                [&m.subscription, &m.data, &m.data_response, &m.cancellation]
-                    .into_iter()
-                    .flatten()
-                    .all(|s| data.supports_schema(s))
-            }),
+            Self::SubscribeAllEvents(s) => s
+                .members()
+                .iter()
+                .all(|m| m.schemas().all(|s| data.supports_schema(s))),
             _ => [
                 self.subscription(),
                 self.data(),
@@ -233,6 +291,16 @@ impl NotificationSchemas {
             .all(|s| data.supports_schema(s)),
         }
     }
+}
+
+fn supports_scalars<'a>(
+    data: &dyn ConsumerDataService,
+    media: &str,
+    schemas: impl Iterator<Item = &'a PreparedSchema>,
+) -> bool {
+    let mut schemas = schemas.peekable();
+    schemas.peek().is_none()
+        || (data.supports_media(media) && schemas.all(|schema| data.supports_schema(schema)))
 }
 
 /// These are different application-data roles, not protocol control packets.

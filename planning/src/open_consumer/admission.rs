@@ -1,5 +1,5 @@
 //! Temporary storage and provisional mappings share the live-byte peak of one
-//! Action admission. The Engine lease of a mapping belongs to its physical owner.
+//! Consumer admission. The Engine lease of a mapping belongs to its physical owner.
 use super::*;
 use ::core::cell::RefCell;
 
@@ -9,7 +9,7 @@ const GLOBAL: [K; 3] = [
     K::EngineLiveBytesGlobalMax,
 ];
 
-pub(super) struct ActionAdmission<'a> {
+pub(super) struct ConsumerAdmission<'a> {
     pub(super) bank: &'a Arc<HostResourceAccounts>,
     pub(super) limits: &'a ResourceLimits,
     // Peak covers everything still in preparation. The last two leases cover
@@ -17,12 +17,51 @@ pub(super) struct ActionAdmission<'a> {
     leases: RefCell<[HostCapacityReservation; 3]>,
 }
 
-impl<'a> ActionAdmission<'a> {
+impl<'a> ConsumerAdmission<'a> {
     pub(super) fn new(bank: &'a Arc<HostResourceAccounts>, limits: &'a ResourceLimits) -> Self {
         Self {
             bank,
             limits,
             leases: RefCell::new(GLOBAL.map(|k| bank.reserve(k, 0).expect("empty lease"))),
+        }
+    }
+
+    /// The caller keeps the walk charge until the last cursor borrowing this
+    /// admitted input has released its storage.
+    pub(super) fn admit<'td>(
+        &self,
+        thing: &'td Thing,
+        walk: &mut AdmissionBytes<'_>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ValidatedProducerCursor<'td>> {
+        let td_error = crate::producer_property_read::td_error;
+        let config =
+            ValidatedThingAdmissionConfig::try_from_limits(self.limits).map_err(|_| invalid())?;
+        let mut basic = ValidatedThingCursor::from_thing(
+            thing,
+            &config,
+            AdmissionLedger::new(
+                SlotIndex::new(0),
+                Generation::INITIAL,
+                0,
+                config.temporary_allowance(),
+                0,
+                0,
+                0,
+                0,
+            ),
+        );
+        loop {
+            walk.resize(basic.next_step_temporary_bytes().map_err(td_error)?)?;
+            let before = credits(budget);
+            basic = match basic.step(budget, false) {
+                ValidatedThingProgress::Complete(v) => return Ok(v.into_producer()),
+                ValidatedThingProgress::Pending(next) => next,
+                ValidatedThingProgress::Failed(e) => return Err(td_error(e)),
+            };
+            if before == credits(budget) {
+                return Err(busy());
+            }
         }
     }
 
@@ -35,12 +74,20 @@ impl<'a> ActionAdmission<'a> {
         bytes: u64,
     ) -> CoreResult<(AdmissionBytes<'_>, HostCapacityReservation)> {
         let peak = self.fund(bytes, false)?;
-        let mut engine = self
-            .bank
-            .reserve(K::EngineLiveBytesGlobalMax, 0)
-            .expect("empty lease");
-        self.grow_global(&mut engine, K::EngineLiveBytesGlobalMax, bytes)?;
-        Ok((peak, engine))
+        Ok((
+            peak,
+            self.reserve_global(K::EngineLiveBytesGlobalMax, bytes)?,
+        ))
+    }
+
+    pub(super) fn reserve_global(
+        &self,
+        kind: K,
+        amount: u64,
+    ) -> CoreResult<HostCapacityReservation> {
+        let mut lease = self.bank.reserve(kind, 0).expect("empty lease");
+        self.grow_global(&mut lease, kind, amount)?;
+        Ok(lease)
     }
 
     fn grow_global(
@@ -49,14 +96,16 @@ impl<'a> ActionAdmission<'a> {
         kind: K,
         bytes: u64,
     ) -> CoreResult<()> {
-        let ceiling = self
-            .limits
-            .get(kind)
-            .expect("checked admission configuration");
+        let ceiling = self.limits.get(kind).unwrap_or(0);
         if lease.try_grow_up_to(bytes, ceiling) {
             Ok(())
         } else {
-            Err(refused(kind, self.available(kind, 0), bytes))
+            let account = self.bank.account(kind);
+            Err(refused(
+                kind,
+                ceiling.min(account.limit()).saturating_sub(account.used()),
+                bytes,
+            ))
         }
     }
 
@@ -87,12 +136,16 @@ impl<'a> ActionAdmission<'a> {
 // Dropped with the allocation, including early returns and unwinding. A
 // retained charge ends at definition handoff; its independent Engine lease moves.
 pub(super) struct AdmissionBytes<'a> {
-    owner: &'a ActionAdmission<'a>,
+    owner: &'a ConsumerAdmission<'a>,
     bytes: u64,
     temporary: bool,
 }
 
 impl AdmissionBytes<'_> {
+    pub(super) fn amount(&self) -> u64 {
+        self.bytes
+    }
+
     fn lease_count(&self) -> usize {
         if self.temporary { 3 } else { 1 }
     }

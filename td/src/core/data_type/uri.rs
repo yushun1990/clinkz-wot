@@ -108,6 +108,10 @@ impl FormHref {
     pub fn is_template(&self) -> bool {
         matches!(self, Self::Template(_))
     }
+
+    pub(crate) fn is_absolute_uri(&self) -> bool {
+        matches!(self, Self::Reference(reference) if reference.0.has_scheme())
+    }
 }
 
 impl PartialEq<str> for FormHref {
@@ -500,10 +504,10 @@ pub(crate) mod lending {
             let FormHref::Reference(reference) = href else {
                 return Ok(Self::Alias(href.as_str()));
             };
-            let r = &reference.0;
-            if r.has_scheme() || base.is_none() {
+            if href.is_absolute_uri() || base.is_none() {
                 return Ok(Self::Alias(href.as_str()));
             }
+            let r = &reference.0;
             let base = match base.unwrap() {
                 BaseUri::Absolute(base) => base.as_uri(),
                 BaseUri::Template(_) => return Err(Error::TemplateBase),

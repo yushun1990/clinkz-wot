@@ -1,8 +1,10 @@
 //! Open startup Consumer composition. Common TD admission is shared; native
 //! compilation is portable, owned and incremental. Only completed source-free
 //! definitions cross into execution. Finite and notification lifecycles remain
-//! separate. Typed notification preparation is in the sibling facet below.
+//! separate. Notification preparation retains the selected native definition.
 mod action;
+mod admission;
+use admission::{AdmissionBytes, ConsumerAdmission};
 mod notification;
 use crate::producer_composition::FormSite;
 use crate::*;
@@ -1436,6 +1438,28 @@ fn site_target(site: &FormSite) -> Option<AffordanceTarget> {
         FormSite::Action(n) => Some(AffordanceTarget::Action(Arc::from(n.as_str()))),
         _ => None,
     }
+}
+fn debit(budget: &mut WorkBudget, class: W, count: u64) -> CoreResult<()> {
+    budget.consume(class, count).map_err(|_| busy())
+}
+
+/// The result (including its provisional owners) stays live through the decision.
+/// Rejected earlier Forms and competing providers belong to this same revision.
+fn at_configuration<T>(
+    revision: &dyn Fn() -> Option<u64>,
+    budget: &mut WorkBudget,
+    search: impl FnOnce(&mut WorkBudget) -> CoreResult<T>,
+) -> CoreResult<T> {
+    let observe = |budget: &mut WorkBudget| {
+        debit(budget, W::ProviderProbes, 1)?;
+        revision().ok_or_else(|| CoreError::StaleHandle(context()))
+    };
+    let before = observe(budget)?;
+    let result = search(budget);
+    if observe(budget)? != before {
+        return Err(CoreError::StaleHandle(context()));
+    }
+    result
 }
 fn credits(b: &WorkBudget) -> [u64; W::ALL.len()] {
     W::ALL.map(|w| b.remaining(w))

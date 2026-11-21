@@ -421,6 +421,9 @@ paths changes subscription authority versus individual occurrence refusal.
 
 The validator borrows the original Property value/map or Event role trees,
 prepays validation before native handoff and checks data before queue acceptance.
+For a composed conversation, each payload must match the selected Form's
+content type before the codec sees it. This applies to subscription input,
+occurrences, responses and mapped cancellation input, including collection data.
 The original occurrence coordinate survives staging/queueing and is supplied to
 fresh Deliver/Respond policy at acceptance, `front`, response admission and delayed
 native response send. These decisions always carry an owned item. Separate Maintain

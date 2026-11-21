@@ -55,12 +55,12 @@ impl ConsumerNotificationPreparation for Counted {
     fn preparation_bounds(&self) -> ConsumerPreparationBounds {
         self.binding.preparation_bounds()
     }
-    fn compile_notification(
+    fn compile_notification_form(
         &self,
         input: ConsumerNotificationInput<'_>,
     ) -> CoreResult<Option<Self::Program>> {
         self.lowerings.set(self.lowerings.get() + 1);
-        self.binding.compile_notification(input)
+        self.binding.compile_notification_form(input)
     }
 }
 struct Data {

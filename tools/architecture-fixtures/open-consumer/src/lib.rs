@@ -1,7 +1,10 @@
 //! Independently authored datagram finite Binding, with an owned byte-by-byte
 //! compiler. Its native protocol is `READ /path\n` -> one JSON integer datagram.
 //! Synchronous Actions add `INVOKE /path [integer]\n` and an optional result.
-//! Only the optional preparation module imports TD/Planning.
+//! The Event transports also build in runtime-only compositions.
+//! Only optional preparation imports TD/Planning.
+pub mod event;
+
 use clinkz_wot_core::{consumer::*, *};
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
 use std::{

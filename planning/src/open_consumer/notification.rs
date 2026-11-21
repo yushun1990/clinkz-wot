@@ -1,18 +1,25 @@
-//! Typed, startup-linked notification preparation over the common admitted TD.
-//! This facet deliberately does not force subscriptions through finite calls.
+//! Startup-linked notification preparation. One TD Form competes at a time.
+//! The selected definition keeps its concrete native types through handoff.
+mod provider;
 use super::*;
+use alloc::boxed::Box;
 use clinkz_wot_core::notification::{
     ConsumerNotificationBinding, NotificationKind, NotificationSchemas,
 };
-use clinkz_wot_td::semantic::ResolvedSemanticDocument;
+use clinkz_wot_td::semantic::{
+    FormOwner, ResolvedFormFacts, ResolvedSemanticDocument, SemanticError,
+};
+pub use provider::ConsumerNotificationProvider;
+use provider::{Candidate, FormChoice, Selected};
 
-/// Bounded pure compilation on the actual execution registration. Implementors
-/// may be external crates. No socket, callback, task or source loan may escape.
-/// Bounds cover the whole callback and rollback, including variable backing.
+/// Pure bounded compilation on the actual execution registration. The compiler
+/// must qualify the selected native mapping, including content coding, and
+/// return only a program whose participant can deliver the selected media.
+/// Bounds cover compilation, configuration capture and local rollback.
 pub trait ConsumerNotificationPreparation: ConsumerNotificationBinding + Clone + 'static {
     fn registration_identity(&self) -> BindingRegistrationIdentity;
     fn preparation_bounds(&self) -> ConsumerPreparationBounds;
-    fn compile_notification(
+    fn compile_notification_form(
         &self,
         input: ConsumerNotificationInput<'_>,
     ) -> CoreResult<Option<Self::Program>>;
@@ -22,11 +29,10 @@ pub struct ConsumerNotificationInput<'a> {
     pub target: &'a AffordanceTarget,
     pub form: u32,
     pub endpoint: &'a str,
+    pub facts: &'a ResolvedFormFacts<'a>,
     pub schemas: &'a NotificationSchemas,
 }
-/// A typed registry can contain many actual registrations of a linked Binding.
-/// Each selected output owns its actual executor and services. Neither protocol
-/// names nor a Core/compiler whitelist participate in selection.
+
 pub struct ConsumerNotificationRegistration<B> {
     pub binding: B,
     pub services: ConsumerServices,
@@ -35,15 +41,35 @@ pub struct RetainedConsumerNotificationRegistration<B> {
     pub binding: B,
     pub services: RetainedConsumerServices,
 }
-pub struct ConsumerNotificationRegistry<B> {
-    registrations: Vec<RetainedConsumerNotificationRegistration<B>>,
+
+/// D is the deployment's selected output. A homogeneous registry returns its
+/// concrete definition directly. Mixed registrations supply constructors of a
+/// common output (for example an application enum of native definitions).
+pub struct ConsumerNotificationRegistry<
+    D,
+    P = ConsumerNotificationProvider<D>,
+    V = Box<dyn Fn() -> Option<u64>>,
+> {
+    registrations: Vec<P>,
+    candidate: fn(&P) -> &dyn Candidate<D>,
+    configuration_revision: V,
 }
-impl<B: ConsumerNotificationPreparation> ConsumerNotificationRegistry<B>
+
+/// A fixed registry of one native Binding type. Its thread mobility follows
+/// the registrations it owns.
+pub type TypedConsumerNotificationRegistry<B> = ConsumerNotificationRegistry<
+    ConsumerNotificationDefinition<B>,
+    provider::TypedProvider<B, ConsumerNotificationDefinition<B>>,
+    fn() -> Option<u64>,
+>;
+
+impl<B: ConsumerNotificationPreparation> TypedConsumerNotificationRegistry<B>
 where
     B::Configuration: Clone,
 {
     /// Adopt raw backing once at startup, recognizing aliases within this
     /// registry. Across registries, import the same retained owners explicitly.
+    /// Eligibility must remain fixed for the duration of each search.
     pub fn try_new(
         inputs: Vec<ConsumerNotificationRegistration<B>>,
         bank: &Arc<HostResourceAccounts>,
@@ -79,31 +105,69 @@ where
         }
         Self::try_from_retained(registrations)
     }
+
     pub fn try_from_retained(
         registrations: Vec<RetainedConsumerNotificationRegistration<B>>,
     ) -> CoreResult<Self> {
-        if registrations.is_empty()
-            || registrations.len() > MAX_REGISTRATIONS
-            || registrations.iter().enumerate().any(|(i, r)| {
-                let id = r.binding.registration_identity();
-                r.binding.identity() != (id.binding_id(), id.binding_generation())
-                    || r.binding.preparation_bounds().work == 0
-                    || r.services.check_backing().is_err()
-                    || r.services.access.work() == 0
-                    || r.services.data.policy().validation_work == 0
-                    || registrations[..i]
-                        .iter()
-                        .any(|old| old.binding.identity().0 == id.binding_id())
-            })
-        {
+        if registrations.is_empty() || registrations.len() > MAX_REGISTRATIONS {
             return Err(invalid());
         }
-        Ok(Self { registrations })
+        Self::build(
+            registrations
+                .into_iter()
+                .map(|r| r.typed(::core::convert::identity))
+                .collect(),
+            |p| p,
+            || Some(0),
+        )
+    }
+}
+
+impl<D: 'static> ConsumerNotificationRegistry<D> {
+    /// Eligibility is immutable or the deployment serializes all changes with search.
+    pub fn try_new_fixed(registrations: Vec<ConsumerNotificationProvider<D>>) -> CoreResult<Self> {
+        Self::try_new_revisioned(registrations, || Some(0))
     }
 
-    /// Select one leaf or root Property/Event notification Form, in TD order by
-    /// default. Ambiguity within a Form refuses. Unsupported alternatives remain eligible for later Forms.
-    /// All control schemas are inspected separately before native compilation.
+    /// The passive, bounded observer covers every writer of eligibility, including
+    /// rejected Forms, native support, data and access. Return None during change,
+    /// and a non-reused revision when stable. Binding IDs are fixed at registration.
+    pub fn try_new_revisioned(
+        registrations: Vec<ConsumerNotificationProvider<D>>,
+        revision: impl Fn() -> Option<u64> + 'static,
+    ) -> CoreResult<Self> {
+        Self::build(registrations, |p| &*p.native, Box::new(revision))
+    }
+}
+
+impl<D: 'static, P, V: Fn() -> Option<u64>> ConsumerNotificationRegistry<D, P, V> {
+    fn build(
+        registrations: Vec<P>,
+        candidate: fn(&P) -> &dyn Candidate<D>,
+        configuration_revision: V,
+    ) -> CoreResult<Self> {
+        if registrations.is_empty() || registrations.len() > MAX_REGISTRATIONS {
+            return Err(invalid());
+        }
+        for (i, r) in registrations.iter().map(candidate).enumerate() {
+            r.check()?;
+            if registrations[..i]
+                .iter()
+                .map(candidate)
+                .any(|old| old.id() == r.id())
+            {
+                return Err(invalid());
+            }
+        }
+        Ok(Self {
+            registrations,
+            candidate,
+            configuration_revision,
+        })
+    }
+
+    /// Select the first viable Form in TD order. All allowed registrations for
+    /// that Form compete under the same decision, including earlier rejections.
     #[allow(clippy::too_many_arguments)]
     pub fn prepare_notification(
         &self,
@@ -114,127 +178,166 @@ where
         limits: &ResourceLimits,
         bank: Arc<HostResourceAccounts>,
         budget: &mut WorkBudget,
-    ) -> CoreResult<ConsumerNotificationDefinition<B>> {
-        if !kind.accepts_target(target) {
+    ) -> CoreResult<D> {
+        let admission = ConsumerAdmission::new(&bank, limits);
+        at_configuration(&self.configuration_revision, budget, |budget| {
+            self.search(thing, target, kind, selector, &admission, budget)
+        })
+        .map(Selected::handoff)
+    }
+
+    fn search<'a>(
+        &self,
+        thing: &Thing,
+        target: &AffordanceTarget,
+        kind: NotificationKind,
+        selector: ConsumerSelector,
+        admission: &'a ConsumerAdmission<'a>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Selected<'a, D>> {
+        if !kind.accepts_target(target) || target.name().is_some_and(|n| n.len() > 256) {
             return Err(unsupported());
         }
         let scope = match target {
             AffordanceTarget::Thing => ValidatedProducerScope::Thing,
-            AffordanceTarget::Property(n) => ValidatedProducerScope::Property(n.as_ref()),
-            AffordanceTarget::Event(n) => ValidatedProducerScope::Event(n.as_ref()),
+            AffordanceTarget::Property(n) => ValidatedProducerScope::Property(n),
+            AffordanceTarget::Event(n) => ValidatedProducerScope::Event(n),
             _ => return Err(unsupported()),
         };
-        if target.name().is_some_and(|n| n.len() > 256) {
-            return Err(unsupported());
-        }
-        let common = limits
-            .get(K::AdmissionTemporaryBytesPerOperationMax)
-            .unwrap_or(0);
-        let _scratch = reserve(
-            &bank,
-            &[
-                (K::EngineLiveBytesGlobalMax, common),
-                (K::AdmissionTemporaryBytesGlobalMax, common),
-            ],
-        )?;
-        let config =
-            ValidatedThingAdmissionConfig::try_from_limits(limits).map_err(|_| invalid())?;
-        let mut basic = ValidatedThingCursor::from_thing(
-            thing,
-            &config,
-            AdmissionLedger::new(
-                SlotIndex::new(0),
-                Generation::INITIAL,
-                0,
-                common,
-                0,
-                0,
-                0,
-                0,
-            ),
-        );
-        let validated = loop {
-            let before = credits(budget);
-            basic = match basic.step(budget, false) {
-                ValidatedThingProgress::Complete(v) => break v,
-                ValidatedThingProgress::Pending(next) => next,
-                ValidatedThingProgress::Failed(e) => {
-                    return Err(crate::producer_property_read::td_error(e));
-                }
-            };
-            if before == credits(budget) {
-                return Err(busy());
+        let td_error = crate::producer_property_read::td_error;
+        let mut walk = admission.temporary(0)?;
+        let mut cursor = admission.admit(thing, &mut walk, budget)?;
+        let candidates = match selector.binding {
+            Some(pin) => {
+                debit(budget, W::PlanningItems, self.registrations.len() as u64)?;
+                let registration = self
+                    .registrations
+                    .iter()
+                    .find(|r| (self.candidate)(r).id() == pin)
+                    .ok_or_else(unsupported)?;
+                ::core::slice::from_ref(registration)
             }
+            None => self.registrations.as_slice(),
         };
-        let mut cursor = validated.into_producer();
+        let mut pass = SearchPass::Select { denied: None };
         loop {
-            if !pay(budget, W::PlanningItems, 1) {
-                return Err(busy());
-            }
-            match cursor
-                .step(budget, false)
-                .map_err(crate::producer_property_read::td_error)?
-            {
-                ValidatedProducerStep::Done => return Err(unsupported()),
-                ValidatedProducerStep::Pending => {}
-                ValidatedProducerStep::Ready(ValidatedProducerEvent::Scope { .. }) => {
-                    cursor.acknowledge()
+            debit(budget, W::PlanningItems, 1)?;
+            walk.resize(cursor.next_step_temporary_bytes().map_err(td_error)?)?;
+            let before = credits(budget);
+            match cursor.step(budget, false).map_err(td_error)? {
+                ValidatedProducerStep::Done => {
+                    if pass.begin_diagnosis() {
+                        cursor.rewind();
+                        continue;
+                    }
+                    return Err(unsupported());
                 }
-                ValidatedProducerStep::Ready(ValidatedProducerEvent::Form(form)) => {
-                    let index = form.index;
-                    let eligible = form.scope == scope
-                        && form.effective_operations.contains(&kind.start_operation())
-                        && selector.form.is_none_or(|f| f == index);
-                    if !eligible {
+                ValidatedProducerStep::Pending if before == credits(budget) => return Err(busy()),
+                ValidatedProducerStep::Ready(ValidatedProducerEvent::Form(form))
+                    if form.scope == scope
+                        && selector.form.is_none_or(|f| f == form.index)
+                        && pass.visits(form.index) =>
+                {
+                    if !form.effective_operations.contains(&kind.start_operation())
+                        || !form.resolved_href_is_absolute
+                        || form.resolved_href.len() > 256
+                    {
+                        if selector.form.is_some() {
+                            return Err(unsupported());
+                        }
                         cursor.acknowledge();
                         continue;
                     }
+                    let index = form.index;
+                    let _arena = admission.temporary(ResolvedSemanticDocument::capacity_bytes())?;
+                    let mut selected = None;
                     let result = cursor.with_form_semantics(
                         scope,
                         index,
                         budget,
-                        |document, endpoint, budget| {
-                            self.select_form(
-                                document, target, kind, index, endpoint, selector, limits, &bank,
+                        |doc, endpoint, budget| -> CoreResult<()> {
+                            selected = Form::from_loan(doc, target, index, endpoint)?.select(
+                                candidates.iter().map(self.candidate),
+                                selector.form.is_some(),
+                                kind,
+                                admission,
                                 budget,
-                            )
+                                &mut pass,
+                            )?;
+                            Ok(())
                         },
                     );
-                    cursor.acknowledge();
                     match result {
-                        Ok(Some(Ok(Some(d)))) => return Ok(d),
-                        Ok(Some(Ok(None) | Err(CoreError::UnsupportedOperation(_)))) => {}
-                        Ok(Some(Err(e))) => return Err(e),
-                        Ok(None) => return Err(busy()),
-                        Err(ValidatedSemanticError::Admission(e)) => {
-                            return Err(crate::producer_property_read::td_error(e));
+                        Ok(Some(Ok(()))) => {
+                            if let Some(winner) = selected {
+                                return Ok(winner);
+                            }
                         }
-                        Err(ValidatedSemanticError::Resolution(
-                            clinkz_wot_td::semantic::SemanticError::Allocation,
+                        Ok(Some(Err(CoreError::UnsupportedOperation(_)))) => {}
+                        Ok(Some(Err(e))) => return Err(e),
+                        Err(ValidatedSemanticError::Admission(e)) => return Err(td_error(e)),
+                        Ok(None)
+                        | Err(ValidatedSemanticError::Resolution(
+                            SemanticError::Allocation | SemanticError::Limit,
                         )) => return Err(busy()),
-                        Err(ValidatedSemanticError::Resolution(_)) => {}
+                        Err(ValidatedSemanticError::Resolution(
+                            SemanticError::UnsupportedContext
+                            | SemanticError::UnsupportedDependency,
+                        )) => {}
+                    }
+                    if selector.form.is_some()
+                        || matches!(pass, SearchPass::Diagnose { last, .. } if index == last)
+                    {
+                        return Err(unsupported());
                     }
                 }
+                _ => {}
             }
+            cursor.acknowledge();
         }
     }
-    #[allow(clippy::too_many_arguments)]
-    fn select_form(
-        &self,
-        document: &ResolvedSemanticDocument<'_>,
-        target: &AffordanceTarget,
-        kind: NotificationKind,
-        index: u32,
-        endpoint: &str,
-        selector: ConsumerSelector,
-        limits: &ResourceLimits,
-        bank: &Arc<HostResourceAccounts>,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<Option<ConsumerNotificationDefinition<B>>> {
-        if endpoint.len() > 256 {
-            return Ok(None);
+}
+
+// Remember only the span containing denials. Diagnostic native work can affect
+// the answer only after authorized selection has exhausted its alternatives.
+enum SearchPass {
+    Select { denied: Option<(u32, u32)> },
+    Diagnose { first: u32, last: u32 },
+}
+impl SearchPass {
+    fn begin_diagnosis(&mut self) -> bool {
+        let Self::Select {
+            denied: Some((first, last)),
+        } = *self
+        else {
+            return false;
+        };
+        *self = Self::Diagnose { first, last };
+        true
+    }
+    fn visits(&self, form: u32) -> bool {
+        match *self {
+            Self::Select { .. } => true,
+            Self::Diagnose { first, last } => (first..=last).contains(&form),
         }
-        use clinkz_wot_td::semantic::FormOwner;
+    }
+}
+
+struct Form<'a> {
+    document: &'a ResolvedSemanticDocument<'a>,
+    target: &'a AffordanceTarget,
+    index: u32,
+    endpoint: &'a str,
+    facts: ResolvedFormFacts<'a>,
+}
+
+impl<'a> Form<'a> {
+    fn from_loan(
+        document: &'a ResolvedSemanticDocument<'a>,
+        target: &'a AffordanceTarget,
+        index: u32,
+        endpoint: &'a str,
+    ) -> CoreResult<Self> {
         let (owner, variables) = match target {
             AffordanceTarget::Thing => (FormOwner::Thing, UriVariableScope::Thing),
             AffordanceTarget::Property(n) => (FormOwner::Property(n), UriVariableScope::Property),
@@ -242,213 +345,109 @@ where
             _ => return Err(unsupported()),
         };
         let facts = document.form(owner, index).ok_or_else(unsupported)?;
-        let preparation = crate::type_schema::notification_preparation(document, target, kind)?;
-        check_limit(
-            limits,
-            K::CleanupWorkItemsPerStepMax,
-            preparation.cleanup * 2 + 4,
-        )?;
-        if !pay(budget, W::PlanningItems, preparation.work)
-            || !pay(budget, W::CleanupItems, preparation.cleanup)
-        {
-            return Err(busy());
-        }
-        // Fund the complete variable schema before construction. Its temporary
-        // reservation bridges to each selected definition's retained funding;
-        // shared Arc clones acquire no additional member/name allocation.
-        let _schema_scratch = if kind == NotificationKind::ObserveAllProperties {
-            use clinkz_wot_core::collection::PropertyCollectionSchema as S;
-            if !pay(budget, W::PlanningItems, (S::MAX_MEMBERS + 1) as u64) {
-                return Err(busy());
-            }
-            let count = crate::type_schema::readable_member_count(document)?;
-            if !pay(budget, W::PlanningItems, 2 * (count as u64 + 1)) {
-                return Err(busy());
-            }
-            let bytes = (S::backing_bound()
-                + ::core::mem::size_of::<S>()
-                + 2 * ::core::mem::size_of::<usize>()) as u64;
-            reserve(
-                bank,
-                &[
-                    (K::EngineLiveBytesGlobalMax, bytes),
-                    (K::AdmissionTemporaryBytesGlobalMax, bytes),
-                ],
-            )?
-        } else {
-            reserve(
-                bank,
-                &[
-                    (
-                        K::EngineLiveBytesGlobalMax,
-                        preparation.backing_bytes as u64,
-                    ),
-                    (
-                        K::AdmissionTemporaryBytesGlobalMax,
-                        preparation.backing_bytes as u64,
-                    ),
-                ],
-            )?
-        };
-        let _event_schema_scratch = if kind == NotificationKind::SubscribeAllEvents {
-            use clinkz_wot_core::collection::EventCollectionSchema as S;
-            if !pay(budget, W::PlanningItems, (S::MAX_MEMBERS + 1) as u64) {
-                return Err(busy());
-            }
-            let count = crate::type_schema::event_member_count(document)?;
-            if !pay(budget, W::PlanningItems, 5 * (count as u64 + 1)) {
-                return Err(busy());
-            }
-            let bytes = (S::backing_bound()
-                + ::core::mem::size_of::<S>()
-                + 2 * ::core::mem::size_of::<usize>()) as u64;
-            reserve(
-                bank,
-                &[
-                    (K::EngineLiveBytesGlobalMax, bytes),
-                    (K::AdmissionTemporaryBytesGlobalMax, bytes),
-                ],
-            )?
-        } else {
-            Vec::new()
-        };
-        let schemas = crate::type_schema::prepare_notification_schemas(document, target, kind)?;
-        // Security remains an independently qualified NoSec subset.
         let [security] = facts.effective_security else {
-            return Ok(None);
+            return Err(unsupported());
         };
         let security = document.security(security).map_err(|_| unsupported())?;
         if !matches!(security.details, SecurityDetails::NoSec)
             || security.proxy.is_some()
             || security.semantics.children().next().is_some()
             || facts.scopes.is_some()
-            || facts.content_coding.is_some()
             || facts.additional_responses
             || facts.response_content_type.is_some()
             || document.uri_variables(UriVariableScope::Thing).is_some()
             || document.uri_variables(variables).is_some()
         {
-            return Ok(None);
+            return Err(unsupported());
         }
-        let mut chosen = None;
-        for r in &self.registrations {
-            let id = r.binding.registration_identity();
-            if selector.binding.is_some_and(|b| b != id.binding_id()) {
-                continue;
-            }
-            if !pay(budget, W::ProviderProbes, 1) {
-                return Err(busy());
-            }
-            let data = &r.services.data;
-            r.services.check_backing()?;
-            let policy = data.policy();
-            let configuration = r.binding.configuration().clone();
-            let access_work = r.services.access.work();
-            let revision = r.services.access.qualification_revision();
-            if !data.available()
-                || data.content_type() != facts.content_type
-                || !schemas.supports(data.service())
-            {
-                continue;
-            }
-            if !pay(budget, W::ProviderProbes, access_work) {
-                return Err(busy());
-            }
-            if r.services
-                .access
-                .authorize(id, endpoint, kind.start_operation())
-                .is_err()
-            {
-                continue;
-            }
-            let bounds = r.binding.preparation_bounds();
-            check_limit(limits, K::PlanCompileWorkUnitsPerStepMax, bounds.work)?;
-            check_limit(
-                limits,
-                K::AdmissionTemporaryBytesPerOperationMax,
-                bounds.temporary_bytes,
-            )?;
-            check_limit(
-                limits,
-                K::BindingArtifactBytesPerThingMax,
-                bounds.retained_bytes,
-            )?;
-            if !pay(budget, W::BindingPolls, bounds.work) {
-                return Err(busy());
-            }
-            let _temporary = reserve(
-                bank,
-                &[
-                    (K::EngineLiveBytesGlobalMax, bounds.temporary_bytes),
-                    (K::AdmissionTemporaryBytesGlobalMax, bounds.temporary_bytes),
-                ],
-            )?;
-            let retained = bounds
-                .retained_bytes
-                .checked_add(
-                    1024 + endpoint.len() as u64 + target.name().map_or(0, str::len) as u64,
-                )
-                .and_then(|n| n.checked_add(schemas.retained_bytes() as u64))
-                .ok_or_else(invalid)?;
-            let funding = reserve(
-                bank,
-                &[
-                    (K::EngineLiveBytesGlobalMax, retained),
-                    (K::CleanupItemsMax, 1),
-                ],
-            )?;
-            let program = match r.binding.compile_notification(ConsumerNotificationInput {
-                document,
-                target,
-                form: index,
-                endpoint,
-                schemas: &schemas,
-            }) {
-                Ok(Some(p)) => p,
-                Ok(None) | Err(CoreError::UnsupportedOperation(_)) => continue,
-                Err(e) => return Err(e),
-            };
-            let support = r.binding.support(&program, kind)?;
-            // Callbacks cannot reset the funded admission baseline.
-            r.services.check_backing()?;
-            if data.policy() != policy
-                || r.binding.configuration() != &configuration
-                || r.binding.registration_identity() != id
-                || r.binding.preparation_bounds() != bounds
-                || r.services.access.work() != access_work
-                || r.services.access.qualification_revision() != revision
-                || !data.available()
-                || data.content_type() != facts.content_type
-                || !schemas.supports(data.service())
-            {
-                return Err(invalid());
-            }
-            if chosen.is_some() {
-                return Err(ambiguous());
-            }
-            chosen = Some((r, id, program, configuration, policy, support, funding));
-        }
-        let Some((r, id, program, configuration, data_policy, support, funding)) = chosen else {
-            return Ok(None);
-        };
-        Ok(Some(
-            ConsumerNotificationDefinition::try_new(ConsumerNotificationDefinitionInput {
-                binding: r.binding.clone(),
-                program,
-                configuration,
-                identity: id,
-                target: target.clone(),
-                endpoint: endpoint.into(),
-                form: index,
-                schemas,
-                data: r.services.data.clone(),
-                data_policy,
-                content_type: facts.content_type.into(),
-                support,
-                funding,
-                bank: bank.clone(),
-            })
-            .map_err(|e| e.error().error().clone())?,
-        ))
+        Ok(Self {
+            document,
+            target,
+            index,
+            endpoint,
+            facts,
+        })
     }
+
+    fn select<'bank, 'r, D: 'r>(
+        &self,
+        candidates: impl Iterator<Item = &'r dyn Candidate<D>> + Clone,
+        pinned_form: bool,
+        kind: NotificationKind,
+        admission: &'bank ConsumerAdmission<'bank>,
+        budget: &mut WorkBudget,
+        pass: &mut SearchPass,
+    ) -> CoreResult<Option<Selected<'bank, D>>> {
+        let mut choice = prepare_schemas(self, kind, admission, budget)?;
+        loop {
+            for r in candidates.clone() {
+                debit(budget, W::ProviderProbes, 1)?;
+                choice = r.probe(self, choice, admission, budget, pass)?;
+            }
+            match choice {
+                FormChoice::Selected(winner) => return Ok(Some(winner)),
+                // A Form pin rules out every later alternative. Its original
+                // semantic loan and role schemas can serve the diagnostic too.
+                FormChoice::Open { .. } if pinned_form && pass.begin_diagnosis() => continue,
+                FormChoice::Open { .. } => return Ok(None),
+            }
+        }
+    }
+}
+
+fn prepare_schemas<'a, D>(
+    form: &Form<'_>,
+    kind: NotificationKind,
+    admission: &'a ConsumerAdmission<'a>,
+    budget: &mut WorkBudget,
+) -> CoreResult<FormChoice<'a, D>> {
+    use ::core::mem::size_of;
+    use clinkz_wot_core::collection::{
+        EventCollectionSchema as Events, PropertyCollectionSchema as Properties,
+    };
+    let doc = form.document;
+    let preparation = crate::type_schema::notification_preparation(doc, form.target, kind)?;
+    check_limit(
+        admission.limits,
+        K::CleanupWorkItemsPerStepMax,
+        preparation.cleanup * 2 + 4,
+    )?;
+    debit(budget, W::PlanningItems, preparation.work)?;
+    debit(budget, W::CleanupItems, preparation.cleanup)?;
+    let bytes = match kind {
+        NotificationKind::ObserveAllProperties => {
+            debit(
+                budget,
+                W::PlanningItems,
+                (Properties::MAX_MEMBERS + 1) as u64,
+            )?;
+            let count = crate::type_schema::readable_member_count(doc)?;
+            debit(budget, W::PlanningItems, 2 * (count as u64 + 1))?;
+            Properties::backing_bound() + size_of::<Properties>() + 2 * size_of::<usize>()
+        }
+        NotificationKind::SubscribeAllEvents => {
+            debit(budget, W::PlanningItems, (Events::MAX_MEMBERS + 1) as u64)?;
+            let count = crate::type_schema::event_member_count(doc)?;
+            debit(budget, W::PlanningItems, 5 * (count as u64 + 1))?;
+            Events::backing_bound() + size_of::<Events>() + 2 * size_of::<usize>()
+        }
+        _ => preparation.backing_bytes,
+    };
+    let (mut peak, mut funding) = admission.retained(bytes as u64)?;
+    let schemas = crate::type_schema::prepare_notification_schemas(doc, form.target, kind)?;
+    schemas.check_control_inputs(
+        form.facts
+            .effective_operations
+            .contains(&kind.stop_operation()),
+    )?;
+    let excess = bytes
+        .checked_sub(schemas.retained_bytes())
+        .ok_or_else(invalid)? as u64;
+    peak.release(excess);
+    funding.release_part(excess);
+    Ok(FormChoice::Open {
+        schemas,
+        funding,
+        peak,
+    })
 }

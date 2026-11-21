@@ -142,3 +142,29 @@ A native MQTT topic or NoSec message cannot fill the provenance gap. General
 wildcard coalescing, tenant/credential sharing and MQTT reciprocal Event responses
 remain outside the declared mapping. Priority 3 and the broader v6 architecture
 are not complete.
+
+## Heterogeneous Event selection
+
+One downstream application registers two independently implemented Event Bindings.
+The stream subscriber opens a TCP connection and receives one-byte frames.
+The datagram subscriber registers its ephemeral UDP port and can decode a hex-coded
+occurrence before the data service validates the JSON integer. At the same
+dual-listening test endpoint either implementation can qualify a Form without
+a subprotocol. Pinning the provider executes its native control at its peer.
+[Peer implementations](../../tools/architecture-fixtures/open-consumer/src/event.rs)
+
+The public preparation tests execute the preferred stream Form and the later
+coded datagram Form in both registration orders. Removing the earlier Form's
+NoSec service makes the later Form win. Revoking the stream instance closes
+its connection while the datagram instance receives another validated value.
+Its mapped cancellation reaches the original peer and releases the port.
+The same fixture exercises missing data, competing providers, a reload during
+qualification, a new competitor after selection, short work and overlapping
+mapping capacity. Original banks return to baseline on refusal and final release.
+[Selection and execution tests](../../tools/architecture-fixtures/open-consumer/tests/event_selection.rs)
+
+A second composition pairs the in-tree MQTT Binding and the downstream UDP
+Binding on the same TD. An independent MQTT 3.1.1 wire peer observes the
+subscription, delivers `5` and acknowledges unsubscribe. The selected UDP
+instance subsequently receives `6` and sends its own cancellation.
+[Mixed MQTT and datagram test](../../tools/architecture-fixtures/open-consumer/tests/event_selection.rs)

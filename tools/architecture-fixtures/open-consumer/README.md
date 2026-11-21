@@ -44,6 +44,11 @@ notification support. The moved notification lifecycle regressions run in
 `clinkz-wot-servient-finite`, with Core/Foundation as the only normal project
 dependencies. HTTP SSE is deferred.
 
+`tests/event_selection.rs` registers the independent TCP and UDP Event
+transports from `src/event.rs` together. The runtime-only library also builds
+their concrete selected output. Enabling `prepare` adds the native Form
+compilers. [Heterogeneous Event evidence](../../../docs/evidence/consumer-notification-composition.md#heterogeneous-event-selection)
+
 `tests/notification.rs` prepares an Event with a `dataResponse` schema through
 the public typed notification registry and destroys TD/registry owners before
 execution. Its in-memory response-capable Binding verifies that the composed
