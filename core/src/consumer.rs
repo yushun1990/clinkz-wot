@@ -611,6 +611,7 @@ impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDe
     }
     pub fn check_dependencies(&self) -> CoreResult<()> {
         let input = &self.input;
+        let data = input.data.service();
         if input.binding.identity()
             != (
                 input.identity.binding_id(),
@@ -622,9 +623,10 @@ impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDe
             || input.data.policy() != input.data_policy
             || input.data_policy.retained_bytes != input.data.backing_bytes()
             || input.data_policy.validation_work == 0
+            || !input.schemas.supports_start_data(data, &input.content_type)
             || !input
                 .schemas
-                .supports_data(input.data.service(), &input.content_type)
+                .supports_optional_data(data, &input.content_type, input.support)
         {
             return Err(invalid());
         }

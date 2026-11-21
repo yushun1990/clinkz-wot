@@ -102,10 +102,61 @@ fn executable_scalar_media_qualifies_selection_and_the_surviving_definition() {
 }
 
 #[test]
+fn a_one_way_datagram_delivers_with_an_unsupported_declared_reply_schema() {
+    let peers = Peers::new();
+    let deployment = Deployment::new(peers.addr);
+    let plans = bank();
+    let mut source = td(peers.addr, &[(None, None)]);
+    source
+        .events
+        .as_mut()
+        .unwrap()
+        .get_mut("alarm")
+        .unwrap()
+        .data_response = Some(serde_json::from_value(json!({"type":"string"})).unwrap());
+    let SelectedEvent::Datagram(selected) = select(
+        &deployment.registry(false),
+        &source,
+        pin(None, None),
+        &plans,
+        &mut work(),
+    )
+    .unwrap() else {
+        panic!("only the datagram mapping accepts this declaration")
+    };
+    let input = selected.input();
+    assert!(!input.support.event_responses);
+    assert!(input.data.supports_schema(input.schemas.data().unwrap()));
+    assert!(
+        !input
+            .data
+            .supports_schema(input.schemas.data_response().unwrap())
+    );
+    runtime().block_on(exchange_digit(selected, &peers));
+    clean(&plans);
+}
+
+#[test]
 fn control_only_events_require_scalar_media_and_collections_keep_their_exact_representation() {
     let service = Media {
         primary: "application/cbor",
         json: true.into(),
+    };
+    let supports = |schemas: &NotificationSchemas, media: &str, native| {
+        schemas.supports_start_data(&service, media)
+            && schemas.supports_optional_data(&service, media, native)
+    };
+    let start = NotificationSupport {
+        event_responses: false,
+        cancellation: false,
+    };
+    let stop = NotificationSupport {
+        cancellation: true,
+        ..start
+    };
+    let replies = NotificationSupport {
+        event_responses: true,
+        ..start
     };
     let event = |cancellation| NotificationSchemas::Event {
         subscription: None,
@@ -113,21 +164,38 @@ fn control_only_events_require_scalar_media_and_collections_keep_their_exact_rep
         data_response: None,
         cancellation,
     };
-    assert!(event(None).supports_data(&service, "text/plain"));
+    assert!(supports(&event(None), "text/plain", start));
     let cancel = event(Some(data_schema::PreparedSchema::Type(
         data_schema::ValueType::Integer,
     )));
-    assert!(cancel.supports_data(&service, "application/json"));
-    assert!(!cancel.supports_data(&service, "application/cbor"));
+    assert!(supports(&cancel, "application/cbor", start));
+    assert!(supports(&cancel, "application/json", stop));
+    assert!(!supports(&cancel, "application/cbor", stop));
+
+    let constrained = data_schema::PreparedSchema::String {
+        min_length: Some(1),
+        max_length: None,
+    };
+    let cancel = event(Some(constrained.clone()));
+    assert!(supports(&cancel, "application/json", start));
+    assert!(!supports(&cancel, "application/json", stop));
+    let subscribe = NotificationSchemas::Event {
+        subscription: Some(constrained),
+        data: None,
+        data_response: None,
+        cancellation: None,
+    };
+    assert!(!subscribe.supports_start_data(&service, "application/json"));
 
     let collection = NotificationSchemas::SubscribeAllEvents(Arc::new(
         collection::EventCollectionSchema::try_new(Vec::new()).unwrap(),
     ));
-    assert!(collection.supports_data(&service, "application/cbor"));
-    assert!(!collection.supports_data(&service, "application/json"));
+    assert!(supports(&collection, "application/cbor", start));
+    assert!(!supports(&collection, "application/json", start));
 
     let integer = data_schema::PreparedSchema::Type(data_schema::ValueType::Integer);
     for (data, data_response) in [(Some(integer.clone()), None), (None, Some(integer))] {
+        let response_only = data.is_none();
         let member = collection::EventMemberSchema {
             name: "alarm".into(),
             subscription: None,
@@ -138,12 +206,16 @@ fn control_only_events_require_scalar_media_and_collections_keep_their_exact_rep
         let collection = NotificationSchemas::SubscribeAllEvents(Arc::new(
             collection::EventCollectionSchema::try_new(vec![member]).unwrap(),
         ));
-        assert!(
-            !collection.supports_data(&service, "application/cbor"),
-            "member needs a scalar codec"
+        assert_eq!(
+            supports(&collection, "application/cbor", start),
+            response_only
         );
         assert!(
-            !collection.supports_data(&service, "application/json"),
+            !supports(&collection, "application/cbor", replies),
+            "the native role needs a scalar codec"
+        );
+        assert!(
+            !supports(&collection, "application/json", start),
             "collection needs exact primary media"
         );
     }

@@ -586,12 +586,17 @@ It skips unexpanded templates and references that still need a base before
 destination authorization or native compilation.
 Planning checks the actual data service's availability, media and schema
 support, and the access service's security support and destination permission.
-Present scalar roles use `supports_media` for the Form representation. Collection
-facets use the service's exact primary media. The source-free definition repeats
-the same data qualification. Selection spends native compilation work and cleanup
-capacity on authorized candidates. If every alternative fails and a destination
-was denied, the search revisits the range of Forms containing denials on the same
-TD admission, work budget and configuration decision. A native mapping that
+Before native compilation, the data service must support establishment and
+occurrence delivery on the selected Form. Once the Binding qualifies its program,
+the service must also support the data for each mapped cancellation and each
+reply the program can offer, even when the caller may decline a reply. Each
+executable scalar role uses `supports_media` for the Form representation.
+Collection facets also require the service's exact primary media. The source-free
+definition repeats both checks against the retained program and service.
+Selection spends native compilation work and cleanup capacity on authorized
+candidates. If every alternative fails and a destination was denied, the search
+revisits the range of Forms containing denials on the same TD admission, work
+budget and configuration decision. A native mapping that
 qualifies with its destination denied establishes `AuthorizationDenied`.
 
 The TD walk, semantic arena and compiler scratch share one temporary allowance.
@@ -645,10 +650,10 @@ named readable collection schema; it is not a scalar Object assertion. It shares
 member backing between the definition and captured validator without copying
 names per cursor. The `Event` variant retains separate
 subscription/data/dataResponse/cancellation schemas. Neither its program nor runtime
-retains a source TD/semantic loan/compiler. Each present role requires complete
-supported schema/media meaning. Required native responses still need actual
-support/cardinality; a schema alone cannot invent it. No native I/O occurs in
-preparation. Current MQTT support and its explicit control/response refusals are
+retains a source TD/semantic loan/compiler. The Binding receives all declared
+roles when qualifying the Form. Required responses need native support at
+establishment and an actual reply opportunity on each occurrence. No native I/O
+occurs in preparation. Current MQTT support and its explicit control/response refusals are
 defined in [the MQTT subset](../../protocol-bindings/protocols/mqtt/README.md).
 
 Property selection authorizes `ObserveProperty`; captured runtime policy uses
@@ -673,18 +678,20 @@ independent schema roles in `EventCollectionSchema`. The shared semantic loan
 contains Event declarations and local contexts, without their individual Forms.
 An unrelated root operation acquires no Event schema closure. Construction and
 disposal walks and variable name/table backing are funded before construction;
-selected definitions and captured validation share the original backing. Scalar
-schema support qualifies each Event role. A member with data or a dataResponse
-also requires executable scalar media support for the selected representation.
+selected definitions and captured validation share the original backing. Every
+member's declared occurrence data requires scalar codec support. When the native
+program can offer replies, that check also covers every declared member
+`dataResponse`.
 The actual Binding must prove native attribution and supported control/response
 roles. The composed root start accepts empty input. A member subscription
 schema therefore rules out every root Form. A member cancellation schema rules
 out a Form advertising `UnsubscribeAllEvents` or a native program offering
-mapped cancellation. A start-only mapping can still retire locally. Source-free
-definitions check the same controls against native support. MQTT additionally refuses
-any member dataResponse and requires supported data for every Event, a combined
-root Form and terminal single-level wildcard. Unsupported assertions in any
-included Event refuse the whole candidate. Selection authorizes SubscribeAllEvents;
+mapped cancellation. A start-only mapping can retire locally without a codec for
+the member cancellation. Source-free definitions check the same controls against
+native support. MQTT additionally refuses any member dataResponse and requires
+supported data for every Event, a combined root Form and terminal single-level
+wildcard. An assertion outside the prepared schema model in any declared role
+refuses the whole candidate. Selection authorizes SubscribeAllEvents;
 execution retains it for establishment/delivery and UnsubscribeAllEvents for mapped
 stop. Complete Producer qualification rechecks every root/leaf Form, member role,
 source, actual native definition and final retained TD. See the

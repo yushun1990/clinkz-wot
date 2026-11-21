@@ -31,7 +31,6 @@ fn integer_event(input: &ConsumerNotificationInput<'_>) -> bool {
         )
         && input.schemas.subscription().is_none()
         && input.schemas.cancellation().is_none()
-        && input.schemas.data_response().is_none()
         && input
             .facts
             .effective_operations
@@ -52,6 +51,7 @@ impl ConsumerNotificationPreparation for Stream {
         self.compilations
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if !integer_event(&input)
+            || input.schemas.data_response().is_some()
             || input.facts.content_coding.is_some()
             || !matches!(input.facts.subprotocol, None | Some("stream"))
             || input.endpoint != format!("testevent://{}/alarm", self.peer)
@@ -73,6 +73,7 @@ impl ConsumerNotificationPreparation for Datagram {
         input: ConsumerNotificationInput<'_>,
     ) -> CoreResult<Option<DatagramProgram>> {
         self.compilations.set(self.compilations.get() + 1);
+        // The datagram program never offers a native reply to an occurrence.
         if !integer_event(&input)
             || !matches!(input.facts.subprotocol, None | Some("datagram"))
             || input.endpoint != format!("testevent://{}/alarm", self.config.peer)

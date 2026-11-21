@@ -19,6 +19,7 @@ const ENDPOINT: &str = "testevent://source/alarm";
 struct Responses {
     structured: bool,
     collection_structured: bool,
+    one_way: bool,
     starts: Cell<usize>,
     compiled_data: Arc<std::sync::atomic::AtomicUsize>,
     last_body: RefCell<Option<std::sync::Weak<[u8]>>>,
@@ -103,7 +104,7 @@ impl ConsumerNotificationBinding for EventBinding {
         assert!(Rc::ptr_eq(&self.0, program));
         assert_eq!(kind, NotificationKind::Event);
         Ok(NotificationSupport {
-            event_responses: true,
+            event_responses: !program.one_way,
             cancellation: self.0.structured,
         })
     }
@@ -215,7 +216,7 @@ impl NotificationParticipation for Participation {
             recipient: self.recipient.clone(),
             target,
             data: Some(payload),
-            response: Some(Response {
+            response: (!self.responses.one_way).then(|| Response {
                 responses: self.responses.clone(),
                 sent: false,
             }),
@@ -1230,15 +1231,42 @@ fn a_root_event_with_member_cancellation_can_select_a_start_only_form_and_stop_l
         {"href": COLLECTION_ENDPOINT, "op": ["subscribeallevents", "unsubscribeallevents"]},
         {"href": COLLECTION_ENDPOINT, "op": "subscribeallevents"}
     ]));
-    source["events"]["ready"]["cancellation"] = json!({"type": "integer"});
+    source["events"]["ready"]["cancellation"] = json!({"type": "array"});
     let units = EventBinding(responses.clone()).preparation_bounds().work;
     let mut budget = work().with_remaining(WorkClass::BindingPolls, units);
     let definition =
         prepare_collection(source, &responses, access.clone(), &bank, &mut budget).unwrap();
     assert_eq!(definition.input().form, 1);
     assert!(!definition.input().support.cancellation);
+    let NotificationSchemas::SubscribeAllEvents(members) = &definition.input().schemas else {
+        panic!()
+    };
+    let codec = &definition.input().data;
+    assert!(codec.supports_schema(members.member("alarm").unwrap().data.as_ref().unwrap()));
+    assert!(
+        !codec.supports_schema(
+            members
+                .member("ready")
+                .unwrap()
+                .cancellation
+                .as_ref()
+                .unwrap()
+        )
+    );
     let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
     let mut root = collection_runtime(&owner, definition, access);
+    let report = deliver_alarm_and_stop_locally(&mut root);
+    assert_eq!(report.remote_cancellation, RemoteCancellation::NotAttempted);
+    assert_eq!(responses.starts.get(), 1);
+    assert_eq!(responses.closes.get(), 1);
+    drop(report);
+    drop(root);
+    clean(&bank);
+}
+
+fn deliver_alarm_and_stop_locally(
+    root: &mut NotificationFixture<CollectionBinding>,
+) -> NotificationSettlement {
     let mut cursor = root
         .subscribe(
             SubscriptionInput(None),
@@ -1272,13 +1300,189 @@ fn a_root_event_with_member_cancellation_can_select_a_start_only_form_and_stop_l
             break;
         }
     }
-    let report = root.take_settlement(cursor.identity()).unwrap();
-    assert_eq!(report.remote_cancellation, RemoteCancellation::NotAttempted);
-    assert_eq!(responses.starts.get(), 1);
-    assert_eq!(responses.closes.get(), 1);
+    root.take_settlement(cursor.identity()).unwrap()
+}
+
+#[test]
+fn member_reply_schemas_require_a_codec_only_when_the_native_program_can_offer_replies() {
+    use serde_json::json;
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let replies = Rc::new(Responses {
+        collection_structured: true,
+        ..Responses::default()
+    });
+    let one_way = Rc::new(Responses {
+        collection_structured: true,
+        one_way: true,
+        ..Responses::default()
+    });
+    let mut source =
+        collection_source(json!([{"href": COLLECTION_ENDPOINT, "op": "subscribeallevents"}]));
+    source["events"]["alarm"]["dataResponse"] = json!({"type": "array"});
+    let prepare = |native: &Rc<Responses>, denied| {
+        prepare_collection(
+            source.clone(),
+            native,
+            Arc::new(CollectionAccess { denied }),
+            &bank,
+            &mut work(),
+        )
+    };
+    for denied in [false, true] {
+        assert!(matches!(
+            prepare(&replies, denied),
+            Err(CoreError::UnsupportedOperation(_))
+        ));
+        clean(&bank);
+    }
+    assert!(matches!(
+        prepare(&one_way, true),
+        Err(CoreError::Security {
+            reason: SecurityFailureReason::AuthorizationDenied,
+            ..
+        })
+    ));
+    clean(&bank);
+
+    // Source-free construction must qualify the actual program against the retained schemas.
+    let mut input = prepare(&one_way, false).unwrap().into_input();
+    input.binding = CollectionBinding(EventBinding(replies.clone()));
+    input.program = replies.clone();
+    input.support = input
+        .binding
+        .support(&input.program, input.schemas.kind())
+        .unwrap();
+    let refused = ConsumerNotificationDefinition::try_new(input)
+        .err()
+        .expect("reply codec unavailable");
+    assert!(Rc::ptr_eq(&refused.into_input().program, &replies));
+    clean(&bank);
+
+    let definition = prepare(&one_way, false).unwrap();
+    let NotificationSchemas::SubscribeAllEvents(members) = &definition.input().schemas else {
+        panic!()
+    };
+    assert!(
+        !definition.input().data.supports_schema(
+            members
+                .member("alarm")
+                .unwrap()
+                .data_response
+                .as_ref()
+                .unwrap()
+        )
+    );
+    let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
+    let mut root = collection_runtime(&owner, definition, Arc::default());
+    let refusal = root
+        .subscribe(
+            SubscriptionInput(None),
+            ResponseRequirement::Required,
+            NotificationOverflow::Terminate,
+            &mut work(),
+        )
+        .err()
+        .unwrap();
+    assert!(matches!(
+        refusal.error().error(),
+        CoreError::UnsupportedOperation(_)
+    ));
+    assert_eq!(one_way.starts.get(), 0);
+    drop(refusal);
+    let report = deliver_alarm_and_stop_locally(&mut root);
+    assert_eq!(report.responses_delivered, 0);
+    assert_eq!(one_way.releases.get(), 0);
+    assert_eq!(one_way.closes.get(), 1);
     drop(report);
     drop(root);
     clean(&bank);
+}
+
+#[test]
+fn a_codec_revision_change_during_native_reply_qualification_invalidates_the_search() {
+    use data_schema::{PreparedSchema, ValueType};
+    use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
+
+    struct ChangeOnReply(AtomicU64);
+    impl ConsumerDataService for ChangeOnReply {
+        fn qualification_revision(&self) -> u64 {
+            self.0.load(SeqCst)
+        }
+        fn content_type(&self) -> &str {
+            CollectionData.content_type()
+        }
+        fn supports_schema(&self, schema: &PreparedSchema) -> bool {
+            if schema == &PreparedSchema::Type(ValueType::Array) {
+                self.0.fetch_add(1, SeqCst);
+            }
+            CollectionData.supports_schema(schema)
+        }
+        fn policy(&self) -> ConsumerDataPolicy {
+            ConsumerDataPolicy {
+                retained_bytes: std::mem::size_of::<Self>() as u64,
+                ..CollectionData.policy()
+            }
+        }
+        fn validate(&self, schema: &PreparedSchema, payload: &Payload) -> CoreResult<()> {
+            CollectionData.validate(schema, payload)
+        }
+    }
+
+    let services = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let plans = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let replies = Rc::new(Responses::default());
+    let codec = Arc::new(ChangeOnReply(0.into()));
+    let registration = RetainedConsumerNotificationRegistration {
+        binding: CollectionBinding(EventBinding(replies.clone())),
+        services: RetainedConsumerServices {
+            data: ConsumerServiceOwner::retain_data(codec.clone(), &services)
+                .ok()
+                .unwrap(),
+            access: ConsumerServiceOwner::retain_access(
+                Arc::new(CollectionAccess::default()),
+                &services,
+            )
+            .ok()
+            .unwrap(),
+        },
+    };
+    let observed = codec.clone();
+    let registry = ConsumerNotificationRegistry::try_new_revisioned(
+        vec![registration.into_provider(std::convert::identity)],
+        move || Some(observed.qualification_revision()),
+    )
+    .unwrap();
+    let mut source = collection_source(
+        serde_json::json!([{"href": COLLECTION_ENDPOINT, "op": "subscribeallevents"}]),
+    );
+    source["events"]["alarm"]["dataResponse"] = serde_json::json!({"type": "array"});
+    let thing = serde_json::from_value(source).unwrap();
+    let prepare = |budget: &mut WorkBudget| {
+        registry.prepare_notification(
+            &thing,
+            &AffordanceTarget::Thing,
+            NotificationKind::SubscribeAllEvents,
+            ConsumerSelector::default(),
+            GatewayDefaultV1::LIMITS,
+            plans.clone(),
+            budget,
+        )
+    };
+    assert!(matches!(
+        prepare(&mut work().with_remaining(WorkClass::BindingPolls, 0)),
+        Err(CoreError::Backpressure(_))
+    ));
+    assert_eq!(codec.qualification_revision(), 0);
+    clean(&plans);
+    assert!(matches!(
+        prepare(&mut work()),
+        Err(CoreError::StaleHandle(_))
+    ));
+    assert_eq!(codec.qualification_revision(), 1);
+    assert_eq!(replies.starts.get(), 0);
+    clean(&plans);
+    drop(registry);
+    clean(&services);
 }
 
 #[test]
@@ -1334,8 +1538,11 @@ impl ConsumerDataService for CollectionData {
     fn content_type(&self) -> &str {
         "application/json"
     }
-    fn supports_schema(&self, _: &data_schema::PreparedSchema) -> bool {
-        true
+    fn supports_schema(&self, schema: &data_schema::PreparedSchema) -> bool {
+        !matches!(
+            schema,
+            data_schema::PreparedSchema::Type(data_schema::ValueType::Array)
+        )
     }
     fn policy(&self) -> ConsumerDataPolicy {
         ConsumerDataPolicy {
@@ -1347,6 +1554,9 @@ impl ConsumerDataService for CollectionData {
         }
     }
     fn validate(&self, s: &data_schema::PreparedSchema, p: &Payload) -> CoreResult<()> {
+        if !self.supports_schema(s) {
+            return Err(CoreError::UnsupportedOperation(context()));
+        }
         clinkz_wot_codec_json::validate_payload(s, p)
     }
 }

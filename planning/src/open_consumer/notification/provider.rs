@@ -146,9 +146,11 @@ where
             FormChoice::Open { schemas, .. } => (schemas, 0),
             FormChoice::Selected(winner) => (winner.definition.schemas(), winner.rollback.amount()),
         };
+        // Every candidate must be able to start and deliver. Optional roles
+        // depend on the program the Binding compiles for this Form.
         let eligible = || {
             data.available()
-                && schemas.supports_data(data.service(), form.facts.content_type)
+                && schemas.supports_start_data(data.service(), form.facts.content_type)
                 && access.supports_security(&SecurityRequirement::NOSEC)
         };
         if !eligible() {
@@ -264,13 +266,23 @@ where
             if !paired() {
                 return Err(invalid());
             }
-            let support = binding.support(&program, schemas.kind());
+            let support = binding
+                .support(&program, schemas.kind())
+                .and_then(|support| {
+                    schemas.check_control_inputs(support.cancellation)?;
+                    if !schemas.supports_optional_data(
+                        data.service(),
+                        form.facts.content_type,
+                        support,
+                    ) {
+                        return Err(unsupported());
+                    }
+                    Ok(support)
+                });
             if !paired() {
                 return Err(invalid());
             }
-            let support = support?;
-            schemas.check_control_inputs(support.cancellation)?;
-            Ok(Some((binding, program, support)))
+            Ok(Some((binding, program, support?)))
         });
         current()?;
         if r.binding.configuration() != &configuration {
