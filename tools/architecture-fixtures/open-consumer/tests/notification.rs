@@ -929,7 +929,10 @@ impl ConsumerNotificationPreparation for CollectionBinding {
     }
 }
 const COLLECTION_ENDPOINT: &str = "testevent://source/%7Bchannel%7D";
-struct CollectionAccess;
+#[derive(Default)]
+struct CollectionAccess {
+    denied: bool,
+}
 impl ConsumerAccessService for CollectionAccess {
     fn qualification_revision(&self) -> u64 {
         0
@@ -943,6 +946,12 @@ impl ConsumerAccessService for CollectionAccess {
     ) -> CoreResult<()> {
         assert_eq!(endpoint, COLLECTION_ENDPOINT);
         assert_eq!(op, Operation::SubscribeAllEvents);
+        if self.denied {
+            return Err(CoreError::Security {
+                reason: SecurityFailureReason::AuthorizationDenied,
+                context: context(),
+            });
+        }
         Ok(())
     }
     fn authorize_instance(
@@ -961,55 +970,54 @@ impl ConsumerAccessService for CollectionAccess {
         1
     }
 }
-#[test]
-fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_native_owner() {
-    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
-    let responses = Rc::new(Responses {
-        collection_structured: true,
-        ..Responses::default()
-    });
-    let registry = ConsumerNotificationRegistry::try_new(
+fn collection_source(forms: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "@context":"https://www.w3.org/2022/wot/td/v1.1","title":"Collection responses","base":"testevent://source/",
+        "security":"n","securityDefinitions":{"n":{"scheme":"nosec"}},
+        "events":{
+            "alarm":{"data":{"type":"object","required":["reading"],"properties":{"reading":{"type":"object","required":["level"],"properties":{"level":{"type":"integer","minimum":1,"maximum":2}}}}},"dataResponse":{"type":"string","minLength":3,"maxLength":3},"forms":[{"href":ENDPOINT}]},
+            "ready":{"data":{"type":"boolean"},"dataResponse":{"type":"integer","minimum":7,"maximum":7},"forms":[{"href":ENDPOINT}]}},
+        "forms": forms
+    })
+}
+
+fn prepare_collection(
+    source: serde_json::Value,
+    responses: &Rc<Responses>,
+    access: Arc<CollectionAccess>,
+    bank: &Arc<HostResourceAccounts>,
+    budget: &mut WorkBudget,
+) -> CoreResult<ConsumerNotificationDefinition<CollectionBinding>> {
+    ConsumerNotificationRegistry::try_new(
         vec![ConsumerNotificationRegistration {
             binding: CollectionBinding(EventBinding(responses.clone())),
             services: ConsumerServices {
                 data: Arc::new(CollectionData),
-                access: Arc::new(CollectionAccess),
+                access,
             },
         }],
-        &bank,
+        bank,
+    )?
+    .prepare_notification(
+        &serde_json::from_value(source).unwrap(),
+        &AffordanceTarget::Thing,
+        NotificationKind::SubscribeAllEvents,
+        ConsumerSelector::default(),
+        GatewayDefaultV1::LIMITS,
+        bank.clone(),
+        budget,
     )
-    .unwrap();
-    let definition = {
-        let source=serde_json::from_value(serde_json::json!({
-            "@context":"https://www.w3.org/2022/wot/td/v1.1","title":"Collection responses","base":"testevent://source/",
-            "security":"n","securityDefinitions":{"n":{"scheme":"nosec"}},
-            "events":{
-                "alarm":{"data":{"type":"object","required":["reading"],"properties":{"reading":{"type":"object","required":["level"],"properties":{"level":{"type":"integer","minimum":1,"maximum":2}}}}},"dataResponse":{"type":"string","minLength":3,"maxLength":3},"forms":[{"href":ENDPOINT}]},
-                "ready":{"data":{"type":"boolean"},"dataResponse":{"type":"integer","minimum":7,"maximum":7},"forms":[{"href":ENDPOINT}]}},
-            "forms":[
-                {"href":"testevent://source/{channel}","op":["subscribeallevents","unsubscribeallevents"]},
-                {"href":"%7Bchannel%7D","op":["subscribeallevents","unsubscribeallevents"]}]
-        })).unwrap();
-        registry
-            .prepare_notification(
-                &source,
-                &AffordanceTarget::Thing,
-                NotificationKind::SubscribeAllEvents,
-                ConsumerSelector::default(),
-                GatewayDefaultV1::LIMITS,
-                bank.clone(),
-                &mut work(),
-            )
-            .unwrap()
-    };
-    assert_eq!(definition.input().form, 1);
-    assert_eq!(&*definition.input().endpoint, COLLECTION_ENDPOINT);
-    drop(registry);
-    let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
-    let mut root = NotificationFixture::try_new(
+}
+
+fn collection_runtime(
+    owner: &ConsumerInstance,
+    definition: ConsumerNotificationDefinition<CollectionBinding>,
+    access: Arc<CollectionAccess>,
+) -> NotificationFixture<CollectionBinding> {
+    NotificationFixture::try_new(
         owner.reference(),
         definition,
-        Arc::new(CollectionAccess),
+        access,
         RawNotificationLimits {
             subscriptions: 1,
             queue_items: 2,
@@ -1020,7 +1028,27 @@ fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_
             engine_bytes: 32768,
         },
     )
-    .unwrap_or_else(|_| panic!());
+    .unwrap()
+}
+
+#[test]
+fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_native_owner() {
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let responses = Rc::new(Responses {
+        collection_structured: true,
+        ..Responses::default()
+    });
+    let access = Arc::new(CollectionAccess::default());
+    let source = collection_source(serde_json::json!([
+        {"href":"testevent://source/{channel}","op":["subscribeallevents","unsubscribeallevents"]},
+        {"href":"%7Bchannel%7D","op":["subscribeallevents","unsubscribeallevents"]}
+    ]));
+    let definition =
+        prepare_collection(source, &responses, access.clone(), &bank, &mut work()).unwrap();
+    assert_eq!(definition.input().form, 1);
+    assert_eq!(&*definition.input().endpoint, COLLECTION_ENDPOINT);
+    let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
+    let mut root = collection_runtime(&owner, definition, access);
     let mut cursor = root
         .subscribe(
             SubscriptionInput(None),
@@ -1108,6 +1136,167 @@ fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_
     drop(root);
     drop(report);
     clean(&bank);
+}
+
+#[test]
+fn root_event_controls_refuse_unusable_forms_under_allow_and_deny_policies() {
+    use serde_json::json;
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let start = json!({"href": COLLECTION_ENDPOINT, "op": "subscribeallevents"});
+    let combined =
+        json!({"href": COLLECTION_ENDPOINT, "op": ["subscribeallevents", "unsubscribeallevents"]});
+    let denied = Arc::new(CollectionAccess { denied: true });
+    assert!(matches!(
+        prepare_collection(
+            collection_source(json!([combined])),
+            &Rc::default(),
+            denied,
+            &bank,
+            &mut work()
+        ),
+        Err(CoreError::Security {
+            reason: SecurityFailureReason::AuthorizationDenied,
+            ..
+        })
+    ));
+    clean(&bank);
+    for (control, form, native_stop) in [
+        ("subscription", &start, false),
+        ("cancellation", &combined, false),
+        ("cancellation", &start, true),
+    ] {
+        let responses = Rc::new(Responses {
+            structured: native_stop,
+            ..Responses::default()
+        });
+        let mut source = collection_source(json!([form]));
+        source["events"]["alarm"][control] = json!({"type": "integer"});
+        for denied in [false, true] {
+            let access = Arc::new(CollectionAccess { denied });
+            let mut budget = work();
+            if !native_stop && !denied {
+                // The Form and member roles alone rule this candidate out.
+                budget = budget.with_remaining(WorkClass::BindingPolls, 0);
+            }
+            assert!(
+                matches!(
+                    prepare_collection(source.clone(), &responses, access, &bank, &mut budget),
+                    Err(CoreError::UnsupportedOperation(_))
+                ),
+                "{control}, native stop {native_stop}, denied {denied}"
+            );
+            assert_eq!(responses.starts.get(), 0);
+            clean(&bank);
+        }
+    }
+}
+
+#[test]
+fn a_root_event_with_member_cancellation_can_select_a_start_only_form_and_stop_locally() {
+    use serde_json::json;
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let responses = Rc::new(Responses {
+        collection_structured: true,
+        ..Responses::default()
+    });
+    let access = Arc::new(CollectionAccess::default());
+    let mut source = collection_source(json!([
+        {"href": COLLECTION_ENDPOINT, "op": ["subscribeallevents", "unsubscribeallevents"]},
+        {"href": COLLECTION_ENDPOINT, "op": "subscribeallevents"}
+    ]));
+    source["events"]["ready"]["cancellation"] = json!({"type": "integer"});
+    let units = EventBinding(responses.clone()).preparation_bounds().work;
+    let mut budget = work().with_remaining(WorkClass::BindingPolls, units);
+    let definition =
+        prepare_collection(source, &responses, access.clone(), &bank, &mut budget).unwrap();
+    assert_eq!(definition.input().form, 1);
+    assert!(!definition.input().support.cancellation);
+    let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
+    let mut root = collection_runtime(&owner, definition, access);
+    let mut cursor = root
+        .subscribe(
+            SubscriptionInput(None),
+            ResponseRequirement::None,
+            NotificationOverflow::Terminate,
+            &mut work(),
+        )
+        .ok()
+        .unwrap();
+    let mut cx = Context::from_waker(Waker::noop());
+    assert_eq!(
+        root.progress(cursor.identity(), &mut cx, &mut work())
+            .unwrap(),
+        NotificationState::Active
+    );
+    root.progress(cursor.identity(), &mut cx, &mut work())
+        .unwrap();
+    let item = root.front(&mut cursor, &mut work()).unwrap().unwrap();
+    assert_eq!(item.target, thing::AffordanceSite::Event("alarm"));
+    assert_eq!(
+        item.data.unwrap().body.as_ref(),
+        br#"{"reading":{"level":1}}"#
+    );
+    root.stop(&cursor, None, &mut work()).ok().unwrap();
+    for _ in 0..4 {
+        if root
+            .progress(cursor.identity(), &mut cx, &mut work())
+            .unwrap()
+            == NotificationState::Closed
+        {
+            break;
+        }
+    }
+    let report = root.take_settlement(cursor.identity()).unwrap();
+    assert_eq!(report.remote_cancellation, RemoteCancellation::NotAttempted);
+    assert_eq!(responses.starts.get(), 1);
+    assert_eq!(responses.closes.get(), 1);
+    drop(report);
+    drop(root);
+    clean(&bank);
+}
+
+#[test]
+fn source_free_root_definitions_return_the_native_program_for_unexecutable_member_controls() {
+    use serde_json::json;
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    for mapped_stop in [false, true] {
+        let responses = Rc::new(Responses {
+            structured: mapped_stop,
+            ..Responses::default()
+        });
+        let source = collection_source(
+            json!([{"href": COLLECTION_ENDPOINT, "op": ["subscribeallevents", "unsubscribeallevents"]}]),
+        );
+        let mut input = prepare_collection(source, &responses, Arc::default(), &bank, &mut work())
+            .unwrap()
+            .into_input();
+        assert_eq!(input.support.cancellation, mapped_stop);
+        let NotificationSchemas::SubscribeAllEvents(schema) = &input.schemas else {
+            panic!()
+        };
+        let mut members = schema.members().to_vec();
+        let control = if mapped_stop {
+            &mut members[0].cancellation
+        } else {
+            &mut members[0].subscription
+        };
+        *control = Some(data_schema::PreparedSchema::Type(
+            data_schema::ValueType::Integer,
+        ));
+        input.schemas = NotificationSchemas::SubscribeAllEvents(Arc::new(
+            collection::EventCollectionSchema::try_new(members).unwrap(),
+        ));
+        let refusal = ConsumerNotificationDefinition::try_new(input)
+            .err()
+            .expect("composed root control has no executable input");
+        assert!(matches!(
+            refusal.error().error(),
+            CoreError::UnsupportedOperation(_)
+        ));
+        assert!(Rc::ptr_eq(&refusal.into_input().program, &responses));
+        assert_eq!(responses.starts.get(), 0);
+        clean(&bank);
+    }
 }
 
 struct CollectionData;

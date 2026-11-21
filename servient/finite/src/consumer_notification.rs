@@ -136,13 +136,11 @@ impl<B: ConsumerNotificationBinding> NotificationValidation for CapturedServices
         input: &SubscriptionInput,
         budget: &mut WorkBudget,
     ) -> Result<(), NotificationValidationError> {
-        if let NotificationSchemas::SubscribeAllEvents(s) = self.schemas() {
-            // No universal aggregate control encoding is implied by TD 1.1.
-            if input.0.is_some() || s.members().iter().any(|m| m.subscription.is_some()) {
-                return Err(NotificationValidationError::Rejected(
-                    CoreError::UnsupportedOperation(context()),
-                ));
-            }
+        if matches!(self.schemas(), NotificationSchemas::SubscribeAllEvents(_)) && input.0.is_some()
+        {
+            return Err(NotificationValidationError::Rejected(
+                CoreError::UnsupportedOperation(context()),
+            ));
         }
         if self.schemas().subscription().is_some() {
             self.prepay(budget)?;
@@ -154,12 +152,11 @@ impl<B: ConsumerNotificationBinding> NotificationValidation for CapturedServices
         input: &CancellationInput,
         budget: &mut WorkBudget,
     ) -> Result<(), NotificationValidationError> {
-        if let NotificationSchemas::SubscribeAllEvents(s) = self.schemas() {
-            if input.0.is_some() || s.members().iter().any(|m| m.cancellation.is_some()) {
-                return Err(NotificationValidationError::Rejected(
-                    CoreError::UnsupportedOperation(context()),
-                ));
-            }
+        if matches!(self.schemas(), NotificationSchemas::SubscribeAllEvents(_)) && input.0.is_some()
+        {
+            return Err(NotificationValidationError::Rejected(
+                CoreError::UnsupportedOperation(context()),
+            ));
         }
         if self.schemas().cancellation().is_some() {
             self.prepay(budget)?;

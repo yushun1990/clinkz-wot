@@ -268,7 +268,9 @@ where
             if !paired() {
                 return Err(invalid());
             }
-            Ok(Some((binding, program, support?)))
+            let support = support?;
+            schemas.check_control_inputs(support.cancellation)?;
+            Ok(Some((binding, program, support)))
         });
         current()?;
         if r.binding.configuration() != &configuration {

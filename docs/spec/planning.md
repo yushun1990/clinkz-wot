@@ -675,8 +675,11 @@ selected definitions and captured validation share the original backing. Scalar
 schema support qualifies each Event role. A member with data or a dataResponse
 also requires executable scalar media support for the selected representation.
 The actual Binding must prove native attribution and supported control/response
-roles. The current joined control subset refuses member subscription/cancellation
-data; no common aggregate wire encoding is inferred. MQTT additionally refuses
+roles. The composed root start accepts empty input. A member subscription
+schema therefore rules out every root Form. A member cancellation schema rules
+out a Form advertising `UnsubscribeAllEvents` or a native program offering
+mapped cancellation. A start-only mapping can still retire locally. Source-free
+definitions check the same controls against native support. MQTT additionally refuses
 any member dataResponse and requires supported data for every Event, a combined
 root Form and terminal single-level wildcard. Unsupported assertions in any
 included Event refuse the whole candidate. Selection authorizes SubscribeAllEvents;

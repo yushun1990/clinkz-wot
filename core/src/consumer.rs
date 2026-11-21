@@ -634,7 +634,7 @@ impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDe
         if support != input.support {
             return Err(invalid());
         }
-        Ok(())
+        input.schemas.check_control_inputs(support.cancellation)
     }
     pub fn input(&self) -> &ConsumerNotificationDefinitionInput<B> {
         &self.input

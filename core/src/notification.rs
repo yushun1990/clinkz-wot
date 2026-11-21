@@ -2,7 +2,8 @@
 //! This initial Host facet is raw: it preserves data roles, not TD qualification
 //! or DataSchema validation. Native matching, ACKs and distribution stay native.
 use crate::{
-    collection::PropertyCollectionSchema, consumer::ConsumerDataService,
+    collection::PropertyCollectionSchema,
+    consumer::{ConsumerDataService, context},
     data_schema::PreparedSchema,
 };
 use alloc::{rc::Rc, sync::Arc};
@@ -13,8 +14,8 @@ use core::{
 
 use crate::consumer::ConsumerInstanceRef;
 use crate::{
-    AffordanceTarget, BindingGeneration, BindingId, BindingInputRejection, CoreResult, Operation,
-    Payload, SubscriptionId,
+    AffordanceTarget, BindingGeneration, BindingId, BindingInputRejection, CoreError, CoreResult,
+    Operation, Payload, SubscriptionId,
 };
 
 /// A retained issuer distinguishes even identical slots in different roots.
@@ -211,6 +212,18 @@ impl NotificationSchemas {
             Self::Event { cancellation, .. } => cancellation.as_ref(),
             _ => None,
         }
+    }
+    /// The composed root Event has an empty start input and an empty mapped
+    /// stop input. Local retirement consumes no member cancellation data.
+    pub fn check_control_inputs(&self, mapped_stop: bool) -> CoreResult<()> {
+        if let Self::SubscribeAllEvents(collection) = self
+            && collection.members().iter().any(|member| {
+                member.subscription.is_some() || (mapped_stop && member.cancellation.is_some())
+            })
+        {
+            return Err(CoreError::UnsupportedOperation(context()));
+        }
+        Ok(())
     }
     /// Qualify the representation used by these roles on the selected Form.
     /// Named collection facets use the service's exact collection media.

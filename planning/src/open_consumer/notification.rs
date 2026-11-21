@@ -378,7 +378,7 @@ impl<'a> Form<'a> {
         budget: &mut WorkBudget,
         pass: &mut SearchPass,
     ) -> CoreResult<Option<Selected<'bank, D>>> {
-        let mut choice = prepare_schemas(self.document, self.target, kind, admission, budget)?;
+        let mut choice = prepare_schemas(self, kind, admission, budget)?;
         loop {
             for r in candidates.clone() {
                 debit(budget, W::ProviderProbes, 1)?;
@@ -396,8 +396,7 @@ impl<'a> Form<'a> {
 }
 
 fn prepare_schemas<'a, D>(
-    doc: &ResolvedSemanticDocument<'_>,
-    target: &AffordanceTarget,
+    form: &Form<'_>,
     kind: NotificationKind,
     admission: &'a ConsumerAdmission<'a>,
     budget: &mut WorkBudget,
@@ -406,7 +405,8 @@ fn prepare_schemas<'a, D>(
     use clinkz_wot_core::collection::{
         EventCollectionSchema as Events, PropertyCollectionSchema as Properties,
     };
-    let preparation = crate::type_schema::notification_preparation(doc, target, kind)?;
+    let doc = form.document;
+    let preparation = crate::type_schema::notification_preparation(doc, form.target, kind)?;
     check_limit(
         admission.limits,
         K::CleanupWorkItemsPerStepMax,
@@ -434,7 +434,12 @@ fn prepare_schemas<'a, D>(
         _ => preparation.backing_bytes,
     };
     let (mut peak, mut funding) = admission.retained(bytes as u64)?;
-    let schemas = crate::type_schema::prepare_notification_schemas(doc, target, kind)?;
+    let schemas = crate::type_schema::prepare_notification_schemas(doc, form.target, kind)?;
+    schemas.check_control_inputs(
+        form.facts
+            .effective_operations
+            .contains(&kind.stop_operation()),
+    )?;
     let excess = bytes
         .checked_sub(schemas.retained_bytes())
         .ok_or_else(invalid)? as u64;
