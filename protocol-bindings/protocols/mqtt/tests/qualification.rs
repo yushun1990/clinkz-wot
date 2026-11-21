@@ -11,6 +11,10 @@ fn unrelated_root_operations_are_left_to_their_actual_registered_capability() {
     // no notification facet and makes no native execution claim.
     struct RootRead;
     impl ProducerCapability for RootRead {
+        fn observe_configuration(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
+            Ok(())
+        }
+
         fn identity(&self) -> (BindingId, BindingGeneration) {
             (BindingId::new(8), BindingGeneration::INITIAL)
         }

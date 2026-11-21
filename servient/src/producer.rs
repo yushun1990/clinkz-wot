@@ -4,6 +4,7 @@
 //! its runtime/dispatch/retirement owners live in `servient-finite`.
 use crate::host_accounts::{HostCapacityReservation, HostResourceAccounts};
 use alloc::{rc::Rc, sync::Arc, vec};
+use clinkz_wot_core::publication::PublicationFacts;
 use clinkz_wot_core::{finite::*, producer::*, *};
 use clinkz_wot_foundation::{MonotonicInstant, ResourceKind as K, ResourceLimits, WorkBudget};
 use clinkz_wot_planning::finite_producer::{
@@ -333,17 +334,24 @@ impl<C: FiniteProducerCompiler> ProducerServient<C> {
         }
         if was_closed && exposure.state() == RawFiniteState::InstalledClosed {
             let binding = exposure.runtime.closed_binding().expect("closed loan");
-            match qualify_property_read(
-                &exposure.description,
-                &exposure.property,
-                exposure.key(),
-                &self.limits,
-                budget,
-                |input, budget| {
-                    self.compiler
-                        .check_final(input, exposure.key(), binding, budget)
-                },
-            ) {
+            let mut coverage = PublicationFacts::default();
+            match self
+                .compiler
+                .observe_configuration(&mut coverage.observer())
+                .and_then(|()| binding.observe_installation(&mut coverage.observer()))
+                .and_then(|()| {
+                    qualify_property_read(
+                        &exposure.description,
+                        &exposure.property,
+                        exposure.key(),
+                        &self.limits,
+                        budget,
+                        |input, budget| {
+                            self.compiler
+                                .check_final(input, exposure.key(), binding, budget)
+                        },
+                    )
+                }) {
                 Err(CoreError::Backpressure(_)) => return Ok(Poll::Pending),
                 Err(error) => {
                     exposure.fence(error);
@@ -355,10 +363,12 @@ impl<C: FiniteProducerCompiler> ProducerServient<C> {
             // Release scratch outside the local publication commit; only the
             // lifetime/result/cleanup leases remain shared with behavior.
             exposure.release_qualification();
-            if let Err(error) = self
-                .logical
-                .publish(&mut exposure.publication, &mut exposure.runtime)
-            {
+            if let Err(error) = self.logical.publish_if_current(
+                &mut exposure.publication,
+                &mut [&mut exposure.runtime],
+                &coverage,
+                |_, _| Ok(None),
+            ) {
                 exposure.fence(error);
             } else {
                 exposure.publication.release_retired();

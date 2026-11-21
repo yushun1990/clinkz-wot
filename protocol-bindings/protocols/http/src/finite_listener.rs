@@ -2,6 +2,7 @@
 //! Routing and bounded buffering stay here; no logical publication or behavior
 //! handle enters this owner.
 use crate::{HttpProducerConfig, HttpProducerProgram, producer_transport::NativeConnection};
+use clinkz_wot_core::publication::{PublicationObserver, PublicationState};
 use clinkz_wot_core::{AffordanceTarget, CoreResult, Deadline};
 use clinkz_wot_foundation::MonotonicInstant;
 use std::{
@@ -42,7 +43,7 @@ struct Listener {
     leases: Vec<Routes>,
     pending: VecDeque<Head>,
     last_now: Option<MonotonicInstant>,
-    failed: bool,
+    failed: PublicationState<bool>,
 }
 struct Routes {
     id: u64,
@@ -76,7 +77,7 @@ impl HttpFiniteListener {
             leases: Vec::with_capacity(CAPACITY),
             pending: VecDeque::with_capacity(CAPACITY),
             last_now: None,
-            failed: false,
+            failed: PublicationState::new(false),
         }))))
     }
 
@@ -87,21 +88,28 @@ impl HttpFiniteListener {
 
     pub(super) fn bound_address(&self) -> Option<SocketAddr> {
         let owner = self.0.lock().unwrap();
-        if owner.failed {
+        if *owner.failed.get() {
             return None;
         }
         owner.socket.as_ref()?.local_addr().ok()
     }
 
+    pub(super) fn observe_installation(
+        &self,
+        facts: &mut PublicationObserver<'_>,
+    ) -> CoreResult<()> {
+        self.0.lock().unwrap().failed.observe(facts)
+    }
+
     pub(super) fn available(&self) -> bool {
-        !self.0.lock().unwrap().failed
+        !*self.0.lock().unwrap().failed.get()
     }
 
     pub(super) fn acquire(&self, mappings: Mappings) -> CoreResult<u64> {
         let mut owner = self.0.lock().unwrap();
         // Reserve the whole route set atomically. Identity, Property name and
         // behavior do not weaken HTTP's native method/path collision rule.
-        if owner.failed
+        if *owner.failed.get()
             || owner.leases.iter().map(|r| r.mappings.len()).sum::<usize>() + mappings.len()
                 > CAPACITY
             || owner.leases.iter().any(|routes| {
@@ -174,10 +182,10 @@ impl HttpFiniteListener {
             .last_now
             .is_some_and(|last| now.checked_duration_since(last).is_none())
         {
-            owner.failed = true;
+            owner.failed.replace(true);
         }
         owner.last_now = Some(now);
-        if owner.failed || !owner.leases.iter().any(|r| r.id == id) {
+        if *owner.failed.get() || !owner.leases.iter().any(|r| r.id == id) {
             return Err(crate::producer::producer_unsupported());
         }
         // Closed/unpolled participants cannot retain a queued socket forever.
@@ -195,7 +203,7 @@ impl HttpFiniteListener {
             match owner.socket.as_ref().unwrap().accept() {
                 Ok((stream, _)) => {
                     let Some(end) = now.checked_add_ticks(owner.timeout) else {
-                        owner.failed = true;
+                        owner.failed.replace(true);
                         return Err(crate::producer::producer_unsupported());
                     };
                     if stream.set_nonblocking(true).is_ok() {
@@ -209,7 +217,7 @@ impl HttpFiniteListener {
                 }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {}
                 Err(_) => {
-                    owner.failed = true;
+                    owner.failed.replace(true);
                     return Err(crate::producer::producer_unsupported());
                 }
             }

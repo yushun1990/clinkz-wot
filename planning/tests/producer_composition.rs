@@ -1,6 +1,7 @@
 #![cfg(all(feature = "std", feature = "validated-thing"))]
 use clinkz_wot_core::{
-    BindingGeneration, BindingId, Operation, ThingSlotId, producer::ProducerInstanceAuthority,
+    BindingGeneration, BindingId, CoreResult, Operation, ThingSlotId,
+    producer::ProducerInstanceAuthority,
 };
 use clinkz_wot_foundation::{
     GatewayDefaultV1, Generation, SlotIndex, StaticResourceProfile, WorkBudget, WorkClass,
@@ -37,6 +38,10 @@ fn td() -> String {
 }
 struct Provider(u32, &'static str);
 impl ProducerCapability for Provider {
+    fn observe_configuration(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        Ok(())
+    }
+
     fn identity(&self) -> (BindingId, BindingGeneration) {
         (BindingId::new(self.0), BindingGeneration::INITIAL)
     }
@@ -254,10 +259,14 @@ fn absent_ambiguous_and_unregistered_controls_refuse_purely() {
 }
 
 struct SwitchProvider {
-    enabled: Cell<bool>,
+    enabled: std::cell::RefCell<PublicationState<bool>>,
     preparations: Cell<usize>,
 }
 impl ProducerCapability for SwitchProvider {
+    fn observe_configuration(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.enabled.borrow().observe(facts)
+    }
+
     fn identity(&self) -> (BindingId, BindingGeneration) {
         (BindingId::new(5), BindingGeneration::INITIAL)
     }
@@ -270,7 +279,7 @@ impl ProducerCapability for SwitchProvider {
         budget: &mut WorkBudget,
     ) -> clinkz_wot_core::CoreResult<Option<Box<dyn Any>>> {
         self.preparations.set(self.preparations.get() + 1);
-        if self.enabled.get() {
+        if *self.enabled.borrow().get() {
             Provider(5, "property").prepare(input, budget)
         } else {
             Ok(None)
@@ -281,7 +290,7 @@ impl ProducerCapability for SwitchProvider {
         input: ProducerOperationInput<'_>,
         budget: &mut WorkBudget,
     ) -> clinkz_wot_core::CoreResult<bool> {
-        if self.enabled.get() {
+        if *self.enabled.borrow().get() {
             Provider(5, "property").supports(input, budget)
         } else {
             Ok(false)
@@ -304,7 +313,7 @@ fn final_check_detects_new_ambiguity_and_changed_meaning_without_preparing() {
     let e = Provider(3, "event");
     let c = Provider(4, "collection");
     let candidate = SwitchProvider {
-        enabled: Cell::new(false),
+        enabled: std::cell::RefCell::new(PublicationState::new(false)),
         preparations: Cell::new(0),
     };
     let providers: [&dyn ProducerCapability; 5] = [&p, &a, &e, &c, &candidate];
@@ -329,7 +338,7 @@ fn final_check_detects_new_ambiguity_and_changed_meaning_without_preparing() {
         covered,
     )
     .unwrap();
-    candidate.enabled.set(true);
+    candidate.enabled.borrow_mut().replace(true);
     assert!(
         check_final_thing(
             &text,
@@ -342,7 +351,7 @@ fn final_check_detects_new_ambiguity_and_changed_meaning_without_preparing() {
         )
         .is_err()
     );
-    candidate.enabled.set(false);
+    candidate.enabled.borrow_mut().replace(false);
     let changed = text.replace("127.0.0.1:1234/p", "127.0.0.1:4321/p");
     assert!(
         check_final_thing(
@@ -357,4 +366,52 @@ fn final_check_detects_new_ambiguity_and_changed_meaning_without_preparing() {
         .is_err()
     );
     assert_eq!(candidate.preparations.get(), preparations);
+}
+
+#[test]
+fn retained_affordance_requires_a_form_even_beside_a_supported_property() {
+    let text = td();
+    let p = Provider(1, "property");
+    let a = Provider(2, "action");
+    let e = Provider(3, "event");
+    let c = Provider(4, "collection");
+    let providers: [&dyn ProducerCapability; 4] = [&p, &a, &e, &c];
+    let prepared = prepare_thing(
+        &text,
+        key(),
+        GatewayDefaultV1::LIMITS,
+        &mut work(),
+        &providers,
+        covered,
+    )
+    .unwrap();
+    for family in ["properties", "actions", "events"] {
+        let mut changed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        changed[family]["empty"] = serde_json::json!({"forms":[]});
+        let changed = changed.to_string();
+        assert!(
+            check_final_thing(
+                &changed,
+                key(),
+                GatewayDefaultV1::LIMITS,
+                &mut work(),
+                &providers,
+                &prepared,
+                covered
+            )
+            .is_err(),
+            "published empty {family}"
+        );
+        assert!(
+            prepare_thing(
+                &changed,
+                key(),
+                GatewayDefaultV1::LIMITS,
+                &mut work(),
+                &providers,
+                covered
+            )
+            .is_err()
+        );
+    }
 }

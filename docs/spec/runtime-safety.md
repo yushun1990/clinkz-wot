@@ -497,10 +497,11 @@ before acquiring native resources. Owned closed native participation may determi
 endpoints. Finalize the effective TD and revalidate affected common/Binding
 support, collision and ownership facts for that exact revision. All retained
 Forms/effective operations require complete qualified support and required
-readiness under PREP-COVER-001. Final dependency/cancellation checks and publication
-of final TD, logical registry and current authority share one Servient-local
-linearization boundary with no new fallible native preparation, allocation or
-handler call. Cancellation winning prevents publication; failure retains partial
+readiness under PREP-COVER-001. Changes to membership, provider configuration
+or required installation facts MUST be ordered with the decision. After the
+last linked callback, Servient holds those facts current while installing the
+exact TD and behavior, granting current authority and opening every original
+gate. The local commit performs only bounded, infallible operations. Cancellation winning prevents publication; failure retains partial
 setup and rollback owners. No prepublication input dispatches behavior. A complete
 reduced TD can be deliberately requalified, never silently substituted. No global
 network/remote cached-TD atomicity is claimed.
@@ -1151,11 +1152,12 @@ selected-entry equality alone cannot fund an additional retained schema.
 ## Reusable Producer definition ownership
 
 Complete Producer publication remains per instance. `ComposedProducerExposure`
-owns that instance's complete selected mappings, actual providers, native member
-identities, final-check scratch and publication/retirement guard. It may retain
-references to shared immutable Binding instructions; it does not become a shared
-Thing or acquire another instance's authority, native participant or shutdown
-right. A failed publication retires only its original membership. A sibling
+stages that instance's selected mappings, eligible registrations, whole-TD
+coverage and qualification allowance. Installation checks the actual native
+mapping/service identities and holds all observed configuration versions
+through commit. Completing or cancelling staging drops its preparation
+references. Independent native resources, logical authority and accepted work
+retain their own publication and retirement owners. A failed publication retires only its original membership. A sibling
 keeps its own current permission, behavior, native progress and settlement.
 
 Explicitly funded HTTP instructions retain their original physical definition
@@ -1254,8 +1256,11 @@ facts are reconciled at Servient. A failed participant may fence its own ingress
 and close its native resources; it cannot revoke logical currentness or dispose
 application continuations. Servient validates the original issuer/instance
 association and exact membership in that incarnation's committed native set
-before propagating native failure to logical revocation. A stale, foreign or
-uncommitted participant cannot revoke a publication or cancel its accepted work.
+before propagating native failure or withdrawal to logical revocation. A
+managed turn also checks the original members and gates before progressing
+siblings, including an original native owner moved out through a typed loan.
+A stale, foreign or uncommitted participant cannot revoke a publication or
+cancel its accepted work.
 Uncommitted failure cleanup remains local and may precede publication. Native
 and application progress, acknowledgement and final result disposal remain
 independent and caller-driven.

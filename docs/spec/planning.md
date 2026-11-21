@@ -104,15 +104,18 @@ actual Binding representation; incompatible environments need not use identical
 native artifacts. The [runtime profile contract](runtime-safety.md) distinguishes
 these claims from independent logical authority and their executable evidence.
 
-`PREP-COVER-001`: Before Producer Serving, every retained final Thing-root and
-affordance Form and each effective operation MUST have complete support under
-the actual Binding/services/configuration and registered behavior or an explicitly
-supported aggregation path. Check native addressing/matching, subprotocol,
+`PREP-COVER-001`: Require at least one Form on every retained Property, Action
+and Event. Before Producer Serving, every final root or affordance Form, each
+effective operation and every advertised alternative MUST have complete support
+under one configuration effective through the local publication decision. This
+covers the eligible registration set, selected Binding and services, every
+competitor whose refusal establishes uniqueness, and the registered behavior
+or an explicitly supported aggregation path. Check native addressing/matching, subprotocol,
 formats/response branches, required schema rules, security, and promised Action,
 subscription/cancel/Event-response behavior. One preferred Form/default operation/
 security alternative or a draft Covered marker cannot certify others. There is
 no live late-handler exception and no advertise-now/Unsupported-later policy.
-A deliberately reduced TD must pass the complete final process itself.
+A deliberately reduced TD must pass the complete final process itself. [TD 1.1 InteractionAffordance](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#interactionaffordance)
 
 Support may be established by constructing the mappings, or by the actual
 Binding's equivalent complete support check followed by deferred pure
@@ -128,9 +131,12 @@ It completes before dependent native effects, dispatch or validated delivery.
 An execution-only Producer materializes required data before installation.
 
 Closed native setup can determine actual endpoints before final qualification.
-Final TD revision, bound endpoints, provider dependencies, native collisions and
-readiness MUST be rechecked before the local publication commit. Supplied Form
-meaning cannot silently change. This supersedes freeze-before-all-effects,
+Qualification MUST apply to the exact published TD, actual bound endpoints,
+native collisions and ready members. An immutable staged TD can carry complete
+coverage through closed installation if all changes affecting that coverage
+are ordered against commit. A change to the final TD requires qualification
+of the new meaning. A change affecting a provider answer invalidates coverage
+even if it restores an earlier value. This supersedes freeze-before-all-effects,
 always-eager Producer lowering and equality-only endpoint ownership as general
 contracts. Native collision/multiplicity checks belong to the Binding; Engine
 selection still requires an unambiguous actual owner of each selected mapping.
@@ -154,8 +160,8 @@ own resolved vocabulary, captures common prepared data meaning and the exact sta
 registration, and rejects unsupported control data, dataResponse, response
 branches, security or other effective operations. It creates no native subscriber
 or socket during preparation. Composed publication binds the original native
-mapping and actual validation/security services and rechecks complete final
-meaning after closed installation. The concrete supported subset is owned by
+mapping and actual validation/security services to the qualified final TD.
+Closed installation verifies that exact pairing. The concrete supported subset is owned by
 [the MQTT README](../../protocol-bindings/protocols/mqtt/README.md).
 
 The previous 2,180-line plan-set/API projection is superseded; its exact revision
@@ -169,9 +175,9 @@ coordinator. The open finite Consumer path now uses the portable
 carrier and sealed aggregate are explicitly named `InlineConsumer*`. The Host
 Producer now also has a whole-Thing selector: each advertised Form/effective
 operation asks the actual linked capability registrations for independently
-owned concrete definitions; missing, ambiguous or behavior-less operations
-refuse before native setup. Final support is checked again against those
-registrations/definitions before publication. Opaque owned definitions are not
+owned concrete definitions. Missing Forms, ambiguous support and missing
+behaviors refuse before native setup. Final qualification checks the complete
+retained TD against those definitions and all eligible registrations. Opaque owned definitions are not
 a universal program/session ABI; native readiness and collisions remain separate
 Binding obligations. Consumer first-use coordination and broader service,
 schema and security implementations remain outstanding.
@@ -180,7 +186,9 @@ Final whole-Thing checking walks the complete common meaning and compares each
 original definition at its exact scope/Form/operation and actual registration.
 The selected provider checks its existing definition and current dependencies;
 other registrations perform complete support probes to detect new ambiguity.
-This check does not construct a second retained definition set. Support probes
+Planning observes the actual set and all mutable inputs before the first probe.
+Servient carries their validity through the commit with the closed native
+owners. Repeating independent Form probes cannot establish this invariant. Support probes
 and final comparisons use the same matching/refusal semantics as preparation,
 not operation/type/identity tags. Their sequential callback temporaries require
 an actual declared peak bound before managed Host invocation; callbacks retain
@@ -323,8 +331,9 @@ whole-Thing cloning or the Consumer definition/association representation.
 
 Every new instance still runs the complete TD admission/semantic walk, actual
 behavior coverage, deterministic provider selection and native operand checks.
-After closed installation, `check_final_thing` rechecks the entire final TD,
-the exact selected mappings, actual dependencies and every competing candidate.
+Managed admission qualifies the entire immutable final TD, exact mappings and
+all eligible providers. Closed installation verifies actual native operands
+and consumes that qualification under the current configuration.
 A shared subdefinition grants neither final-TD qualification nor permission.
 Changed dependencies refuse a supplied definition; there is no implicit fallback
 compilation in the explicit bind path.
@@ -735,7 +744,8 @@ provisional owners conservatively. Producer paths that construct additional
 owners still fund each actual construction. A short payment reports capacity
 refusal rather than an unsupported alternative.
 Final Producer qualification compares the original complete member meaning,
-root coordinate and selected actual registration after closed native setup.
+root coordinate and selected registration. Closed installation binds those facts
+to the actual native mappings.
 Changing an included schema, role eligibility or member set invalidates prior support.
 
 `prepare_writable_property_schema` independently derives every non-readOnly
@@ -794,8 +804,9 @@ unrelated leaf mappings.
 Complete Producer qualification additionally requires the actual root policy,
 all described Action operations, their original validation/control services, a
 captured root route and the concrete Binding's complete native inventory. The
-same immutable member meanings and services are checked against the final retained
-TD at managed admission and again after closed native setup before publication.
+immutable member meanings and services are checked against the final retained TD
+at managed admission. Closed native installation confirms the same routes and
+service owners through the publication decision.
 A prepared root definition or installed listener alone supplies none of the
 missing obligations. No dependency, gate or milestone changes follow from this
 bounded increment.

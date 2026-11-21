@@ -4,6 +4,7 @@ use crate::{
     HttpFiniteListener, HttpProducerConfig, HttpProducerProgram,
     producer_transport::NativeConnection,
 };
+use clinkz_wot_core::publication::PublicationObserver;
 use clinkz_wot_core::{finite::*, producer::*, *};
 use clinkz_wot_foundation::MonotonicInstant;
 use std::{
@@ -271,14 +272,27 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                 },
         )
     }
+    fn qualified_operation_count(&self) -> Option<usize> {
+        Some(self.configuration.mappings.len())
+    }
+    fn observe_installation(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        if let Some(listener) = &self.configuration.listener {
+            listener.observe_installation(facts)?;
+        }
+        if self.bound_address() != Some(self.configuration.listen_address()) {
+            return Err(crate::producer::producer_unsupported());
+        }
+        if let Some(security) = &self.configuration.security {
+            security.observe_configuration(facts)?;
+            if !security.is_ready() {
+                return Err(crate::producer::producer_unsupported());
+            }
+        }
+        Ok(())
+    }
     fn prepared_for_instance(&self, key: ProducerInstanceKey) -> bool {
         self.configuration.instance == key
             && self.configuration.listen.secure == self.configuration.security.is_some()
-            && self
-                .configuration
-                .security
-                .as_ref()
-                .is_none_or(|s| s.is_ready())
     }
     fn covers_definition(
         &self,

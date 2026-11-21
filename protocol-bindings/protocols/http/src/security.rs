@@ -2,7 +2,11 @@
 //! These services are live instance/native owners, never prepared definitions.
 use crate::*;
 use base64::{Engine, engine::general_purpose::STANDARD};
-use clinkz_wot_core::{consumer::*, security::*};
+use clinkz_wot_core::{
+    consumer::*,
+    publication::{PublicationObserver, PublicationState},
+    security::*,
+};
 use rustls::{
     ClientConfig, RootCertStore, ServerConfig,
     pki_types::{CertificateDer, PrivateKeyDer},
@@ -484,6 +488,21 @@ impl HttpGrant {
     }
 }
 
+/// The actual verifier work declaration captured by the HTTP registration.
+/// Changing it invalidates staged publications and is checked at use.
+#[derive(Clone)]
+pub struct HttpVerifierWork(Arc<Mutex<PublicationState<u64>>>);
+impl HttpVerifierWork {
+    pub fn new(work: u64) -> Self {
+        Self(Arc::new(Mutex::new(PublicationState::new(work))))
+    }
+    pub fn set(&self, work: u64) {
+        self.0.lock().unwrap().replace(work);
+    }
+    fn get(&self) -> u64 {
+        *self.0.lock().unwrap().get()
+    }
+}
 /// Actual bounded synchronous verifier. Credential evidence is borrowed only
 /// during this callback. Success MUST establish identity/claims from a trusted
 /// verifier; accepting a username or transport evidence alone is not verification.
@@ -497,7 +516,7 @@ pub trait HttpBasicVerifier: Send + Sync {
         0
     }
     fn verify(&self, username: &[u8], password: &[u8]) -> CoreResult<Principal>;
-    fn work(&self) -> u64;
+    fn work(&self) -> &HttpVerifierWork;
 }
 
 #[derive(Clone)]
@@ -544,12 +563,12 @@ pub trait HttpApiKeyVerifier: Send + Sync {
         0
     }
     fn verify(&self, key: &[u8]) -> CoreResult<Principal>;
-    fn work(&self) -> u64;
+    fn work(&self) -> &HttpVerifierWork;
 }
 struct VerifierRevisions {
     observed: (u64, u64),
     revision: u64,
-    exhausted: bool,
+    exhausted: PublicationState<bool>,
 }
 /// Live TLS key and independently qualified verification services. Programs
 /// retain only immutable native requirements and the original pairing identity.
@@ -558,6 +577,7 @@ pub struct HttpServerSecurity {
     pub(crate) tls: Arc<ServerConfig>,
     basic: Option<Arc<dyn HttpBasicVerifier>>,
     api_key: Option<Arc<dyn HttpApiKeyVerifier>>,
+    declarations: [Option<HttpVerifierWork>; 2],
     work: (u64, u64),
     revisions: Arc<Mutex<VerifierRevisions>>,
     pub(crate) registration: SecurityRegistration,
@@ -577,9 +597,13 @@ impl HttpServerSecurity {
         basic: Option<Arc<dyn HttpBasicVerifier>>,
         api_key: Option<Arc<dyn HttpApiKeyVerifier>>,
     ) -> CoreResult<Self> {
+        let declarations = [
+            basic.as_ref().map(|v| v.work().clone()),
+            api_key.as_ref().map(|v| v.work().clone()),
+        ];
         let work = (
-            basic.as_ref().map_or(0, |v| v.work()),
-            api_key.as_ref().map_or(0, |v| v.work()),
+            declarations[0].as_ref().map_or(0, HttpVerifierWork::get),
+            declarations[1].as_ref().map_or(0, HttpVerifierWork::get),
         );
         if (basic.is_some() && work.0 == 0)
             || (api_key.is_some() && work.1 == 0)
@@ -609,11 +633,12 @@ impl HttpServerSecurity {
             tls: Arc::new(tls),
             basic,
             api_key,
+            declarations,
             work,
             revisions: Arc::new(Mutex::new(VerifierRevisions {
                 observed,
                 revision: 0,
-                exhausted: false,
+                exhausted: PublicationState::new(false),
             })),
             registration: SecurityRegistration(Arc::new(())),
         })
@@ -623,10 +648,25 @@ impl HttpServerSecurity {
             && (!requirement.uses_basic() || self.basic.is_some())
             && (!requirement.uses_api_key() || self.api_key.is_some())
     }
+    pub(crate) fn observe_configuration(
+        &self,
+        facts: &mut PublicationObserver<'_>,
+    ) -> CoreResult<()> {
+        for declaration in self.declarations.iter().flatten() {
+            declaration.0.lock().unwrap().observe(facts)?;
+        }
+        self.revisions.lock().unwrap().exhausted.observe(facts)
+    }
     pub(crate) fn is_ready(&self) -> bool {
-        self.basic.as_ref().map_or(0, |v| v.work()) == self.work.0
-            && self.api_key.as_ref().map_or(0, |v| v.work()) == self.work.1
-            && !self.revisions.lock().unwrap().exhausted
+        self.declarations[0]
+            .as_ref()
+            .map_or(0, HttpVerifierWork::get)
+            == self.work.0
+            && self.declarations[1]
+                .as_ref()
+                .map_or(0, HttpVerifierWork::get)
+                == self.work.1
+            && !*self.revisions.lock().unwrap().exhausted.get()
     }
     pub(crate) fn work(&self) -> u64 {
         self.work.0 + self.work.1 + 4096
@@ -639,10 +679,14 @@ impl HttpServerSecurity {
         let mut state = self.revisions.lock().unwrap();
         if observed != state.observed {
             state.observed = observed;
-            if let Some(next) = state.revision.checked_add(1).filter(|_| !state.exhausted) {
+            if let Some(next) = state
+                .revision
+                .checked_add(1)
+                .filter(|_| !*state.exhausted.get())
+            {
                 state.revision = next;
             } else {
-                state.exhausted = true;
+                state.exhausted.replace(true);
             }
         }
         state.revision

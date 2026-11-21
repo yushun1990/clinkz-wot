@@ -2,6 +2,7 @@
 //! Public joined v6 path with independent real TCP/HTTP peers. Controlled
 //! wrappers retain the real native owner; they do not replace socket execution.
 use clinkz_wot_binding_http::*;
+use clinkz_wot_core::publication::{PublicationObserver, PublicationState};
 use clinkz_wot_core::{finite::*, producer::*, *};
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::{ResolvedProducerInput, finite_producer::FiniteProducerCompiler};
@@ -9,7 +10,7 @@ use clinkz_wot_servient::{host_accounts::HostResourceAccounts, producer::*};
 use clinkz_wot_servient_finite::RawFiniteState;
 use serde_json::{Value, json};
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     rc::Rc,
@@ -622,8 +623,8 @@ fn loss_of_exposure_or_root_closes_authority_and_native_owners_without_waiting()
 
 #[derive(Default)]
 struct Controls {
-    lose_service: Cell<bool>,
-    refuse_final: Cell<bool>,
+    lose_service: RefCell<PublicationState<bool>>,
+    refuse_final: RefCell<PublicationState<bool>>,
     fail_send: Cell<bool>,
     final_calls: Cell<usize>,
     close_polls: Cell<usize>,
@@ -647,11 +648,18 @@ impl FiniteIngressBinding for ControlledBinding {
     fn configuration(&self) -> &Self::Configuration {
         self.actual.configuration()
     }
+    fn qualified_operation_count(&self) -> Option<usize> {
+        self.actual.qualified_operation_count()
+    }
+    fn observe_installation(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.controls.lose_service.borrow().observe(facts)?;
+        self.actual.observe_installation(facts)
+    }
     fn prepared_for_instance(&self, key: ProducerInstanceKey) -> bool {
         self.actual.prepared_for_instance(key)
     }
     fn validator(&self) -> Option<&dyn FiniteValidator> {
-        if self.controls.lose_service.get() {
+        if *self.controls.lose_service.borrow().get() {
             None
         } else {
             self.actual.validator()
@@ -722,6 +730,11 @@ impl FiniteIngressBinding for ControlledBinding {
     }
 }
 impl FiniteProducerCompiler for ControlledCompiler {
+    fn observe_configuration(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.controls.refuse_final.borrow().observe(facts)?;
+        self.actual.observe_configuration(facts)
+    }
+
     type Binding = ControlledBinding;
     fn prepare(
         &self,
@@ -753,7 +766,7 @@ impl FiniteProducerCompiler for ControlledCompiler {
         self.controls
             .final_calls
             .set(self.controls.final_calls.get() + 1);
-        if self.controls.refuse_final.get() {
+        if *self.controls.refuse_final.borrow().get() {
             return Err(CoreError::UnsupportedOperation(ErrorContext::new(
                 ErrorPhase::Admission,
                 RetryClass::Never,
@@ -783,7 +796,7 @@ fn final_actual_service_loss_and_failed_pending_cleanup_retain_full_native_owner
     let mut e = prepare(&s, document(addr), authority(), application.clone(), None).unwrap();
     until(&mut s, &mut e, RawFiniteState::InstalledClosed);
     let _peer = request(addr);
-    controls.lose_service.set(true);
+    controls.lose_service.borrow_mut().replace(true);
     step(&mut s, &mut e);
     assert_eq!(e.state(), RawFiniteState::Closing);
     assert!(s.description(e.key()).is_none());
@@ -892,7 +905,7 @@ fn final_support_refusal_retains_closed_setup_and_never_publishes() {
     let mut e = prepare(&s, document(addr), authority(), application.clone(), None).unwrap();
     until(&mut s, &mut e, RawFiniteState::InstalledClosed);
     let _peer = request(addr);
-    controls.refuse_final.set(true);
+    controls.refuse_final.borrow_mut().replace(true);
     step(&mut s, &mut e);
     assert_eq!(controls.final_calls.get(), 1);
     assert_eq!(e.state(), RawFiniteState::Closing);
@@ -1145,11 +1158,11 @@ fn terminal_setup_releases_scratch_but_failed_cleanup_keeps_lifetime_leases() {
             }
             3 => step(&mut s, &mut e), // Real native bind failure.
             4 => {
-                controls.refuse_final.set(true);
+                controls.refuse_final.borrow_mut().replace(true);
                 step(&mut s, &mut e);
             }
             _ => {
-                controls.lose_service.set(true);
+                controls.lose_service.borrow_mut().replace(true);
                 step(&mut s, &mut e);
             }
         }

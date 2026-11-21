@@ -131,7 +131,7 @@ pub fn input_with_instance(
     ComposedProducerInput {
         instance,
         prepared,
-        providers: vec![Rc::new(provider.clone())],
+        providers: ProducerRegistrations::new(vec![Rc::new(provider.clone())]),
         participants: vec![OwnedProducerParticipation::notifications(runtime)],
         expected,
         handler_backing_bytes: 0,

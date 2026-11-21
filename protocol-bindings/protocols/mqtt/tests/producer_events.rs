@@ -439,7 +439,7 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
             ComposedProducerInput {
                 instance,
                 prepared,
-                providers: vec![Rc::new(provider.clone())],
+                providers: ProducerRegistrations::new(vec![Rc::new(provider.clone())]),
                 participants: vec![OwnedProducerParticipation::notifications(participant)],
                 expected: None,
                 handler_backing_bytes: 0,
