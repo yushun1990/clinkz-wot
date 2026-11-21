@@ -239,6 +239,7 @@ impl<D: 'static, P, V: Fn() -> Option<u64>> ConsumerNotificationRegistry<D, P, V
                         && pass.visits(form.index) =>
                 {
                     if !form.effective_operations.contains(&kind.start_operation())
+                        || form.href_is_template
                         || form.resolved_href.len() > 256
                     {
                         if selector.form.is_some() {

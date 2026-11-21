@@ -580,6 +580,8 @@ resolved Form on the actual source-free Binding. A provider accepting
 `contentCoding` must implement that coding for the selected data roles.
 The notification execution profile currently qualifies fixed endpoints, the
 simple endpoint NoSec requirement and Forms without explicit response branches.
+An unexpanded Form href is ineligible before destination authorization or native
+compilation, including when the TD omits URI variable declarations.
 Planning checks the actual data service's availability, media and schema
 support, and the access service's security support and destination permission.
 Present scalar roles use `supports_media` for the Form representation. Collection

@@ -144,6 +144,8 @@ pub struct ValidatedProducerForm<'a> {
     pub effective_operations: &'a [Operation],
     pub effective_security: &'a [String],
     pub resolved_href: &'a str,
+    /// Resolution preserves a Form template until a Binding expands it.
+    pub href_is_template: bool,
 }
 impl<'td> ValidatedThing<'td> {
     pub fn into_producer(mut self) -> ValidatedProducerCursor<'td> {
@@ -256,6 +258,7 @@ impl<'td> ValidatedProducerCursor<'td> {
                         form,
                     ),
                     resolved_href: self.alias.unwrap_or_else(|| self.scratch.text()),
+                    href_is_template: form.href.is_template(),
                 }))
             }
             _ => ValidatedProducerStep::Pending,

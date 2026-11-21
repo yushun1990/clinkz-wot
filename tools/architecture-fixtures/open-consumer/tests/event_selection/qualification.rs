@@ -150,6 +150,49 @@ fn control_only_events_require_scalar_media_and_collections_keep_their_exact_rep
 }
 
 #[test]
+fn an_unexpanded_href_leaves_the_only_native_probe_for_the_concrete_datagram_form() {
+    let peers = Peers::new();
+    let d = Deployment::new(peers.addr);
+    d.stream_access.missing.store(true, SeqCst);
+    let registry = d.registry(false);
+    let plans = bank();
+    let mut source = td(peers.addr, &[(Some("datagram"), None); 2]);
+    let alarm = source.events.as_mut().unwrap().get_mut("alarm").unwrap();
+    alarm._interaction.forms[0].href =
+        clinkz_wot_td::data_type::FormHref::parse("testevent://source/{channel}").unwrap();
+
+    let mut no_native_work = work().with_remaining(WorkClass::BindingPolls, 0);
+    assert!(matches!(
+        select(
+            &registry,
+            &source,
+            pin(Some(0), None),
+            &plans,
+            &mut no_native_work
+        ),
+        Err(CoreError::UnsupportedOperation(_))
+    ));
+    assert_eq!(d.datagram.compilations.get(), 0);
+    clean(&plans);
+
+    for form in [None, Some(1)] {
+        let mut budget = work().with_remaining(
+            WorkClass::BindingPolls,
+            d.datagram.preparation_bounds().work,
+        );
+        let SelectedEvent::Datagram(selected) =
+            select(&registry, &source, pin(form, None), &plans, &mut budget).unwrap()
+        else {
+            panic!("the concrete datagram Form must win")
+        };
+        assert_eq!(selected.input().form, 1);
+        runtime().block_on(exchange_digit(selected, &peers));
+        clean(&plans);
+    }
+    assert_eq!(d.datagram.compilations.get(), 2);
+}
+
+#[test]
 fn a_denial_only_describes_an_otherwise_executable_candidate() {
     let peers = Peers::new();
     let deployment = Deployment::new(peers.addr);

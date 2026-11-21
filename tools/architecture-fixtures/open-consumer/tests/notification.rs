@@ -928,13 +928,20 @@ impl ConsumerNotificationPreparation for CollectionBinding {
         Ok(Some(self.0.0.clone()))
     }
 }
+const COLLECTION_ENDPOINT: &str = "testevent://source/%7Bchannel%7D";
 struct CollectionAccess;
 impl ConsumerAccessService for CollectionAccess {
     fn qualification_revision(&self) -> u64 {
         0
     }
 
-    fn authorize(&self, _: BindingRegistrationIdentity, _: &str, op: Operation) -> CoreResult<()> {
+    fn authorize(
+        &self,
+        _: BindingRegistrationIdentity,
+        endpoint: &str,
+        op: Operation,
+    ) -> CoreResult<()> {
+        assert_eq!(endpoint, COLLECTION_ENDPOINT);
         assert_eq!(op, Operation::SubscribeAllEvents);
         Ok(())
     }
@@ -974,12 +981,14 @@ fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_
     .unwrap();
     let definition = {
         let source=serde_json::from_value(serde_json::json!({
-            "@context":"https://www.w3.org/2022/wot/td/v1.1","title":"Collection responses",
+            "@context":"https://www.w3.org/2022/wot/td/v1.1","title":"Collection responses","base":"testevent://source/",
             "security":"n","securityDefinitions":{"n":{"scheme":"nosec"}},
             "events":{
                 "alarm":{"data":{"type":"object","required":["reading"],"properties":{"reading":{"type":"object","required":["level"],"properties":{"level":{"type":"integer","minimum":1,"maximum":2}}}}},"dataResponse":{"type":"string","minLength":3,"maxLength":3},"forms":[{"href":ENDPOINT}]},
                 "ready":{"data":{"type":"boolean"},"dataResponse":{"type":"integer","minimum":7,"maximum":7},"forms":[{"href":ENDPOINT}]}},
-            "forms":[{"href":ENDPOINT,"op":["subscribeallevents","unsubscribeallevents"]}]
+            "forms":[
+                {"href":"testevent://source/{channel}","op":["subscribeallevents","unsubscribeallevents"]},
+                {"href":"%7Bchannel%7D","op":["subscribeallevents","unsubscribeallevents"]}]
         })).unwrap();
         registry
             .prepare_notification(
@@ -993,6 +1002,8 @@ fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_
             )
             .unwrap()
     };
+    assert_eq!(definition.input().form, 1);
+    assert_eq!(&*definition.input().endpoint, COLLECTION_ENDPOINT);
     drop(registry);
     let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
     let mut root = NotificationFixture::try_new(
