@@ -1263,7 +1263,10 @@ withdrawal of a native owner moved out through a typed loan. Servient checks
 this permission after linked callbacks and before granting behavior entry.
 A stale, foreign or uncommitted participant cannot revoke a publication or
 cancel its accepted work.
-Uncommitted failure cleanup remains local and may precede publication. Native
+At a staged publication decision, a recorded native failure rolls back the
+candidate, releases qualification scratch and starts retirement of its original
+members. This also applies when the terminal cause is backpressure. A healthy
+candidate can retry a short work allowance or pending native setup. Native
 and application progress, acknowledgement and final result disposal remain
 independent and caller-driven.
 An encoded reply may finish after ingress closes; completed native delivery never

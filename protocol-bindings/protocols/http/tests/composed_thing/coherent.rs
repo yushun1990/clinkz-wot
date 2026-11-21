@@ -736,3 +736,57 @@ fn managed_dispatch_refuses_withdrawal_in_the_credit_callback() {
 fn dispatch_refuses_sibling_withdrawal_inside_authorization() {
     check_sibling_withdrawal(Withdrawal::DuringAuthorization);
 }
+
+#[test]
+fn terminal_native_backpressure_rolls_back_funded_stage() {
+    let mut owner = owner();
+    let accounts = bank();
+    let addresses = [tcp_addr(), tcp_addr()];
+    let input = http_input(
+        &owner,
+        key(1, Generation::INITIAL),
+        addresses,
+        Rc::new(Counts::default()),
+    );
+    let mut exposure =
+        ComposedProducerExposure::try_new(&owner, input, limits(), accounts.clone(), &mut budget())
+            .ok()
+            .unwrap();
+    start_http(&mut exposure);
+    assert!(matches!(
+        exposure.publish(&mut owner, &mut WorkBudget::new()),
+        Err(CoreError::Backpressure(_))
+    ));
+    assert!(scratch(&accounts) > 0);
+    assert!(exposure.publication_failure().is_none());
+    let cause = CoreError::Backpressure(
+        ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
+            .with_redacted_cause(77, "native participation fenced"),
+    );
+    exposure
+        .participant_mut::<HttpRuntime>(0)
+        .unwrap()
+        .fence(cause.clone());
+    assert_eq!(
+        exposure.publish(&mut owner, &mut budget()),
+        Err(cause.clone())
+    );
+    assert_eq!(exposure.publication_failure(), Some(&cause));
+    assert_eq!(scratch(&accounts), 0);
+    assert_eq!(
+        exposure.participant_mut::<HttpRuntime>(1).unwrap().state(),
+        RawFiniteState::Closing
+    );
+    assert!(owner.description(exposure.key()).is_none());
+    for _ in 0..8 {
+        exposure
+            .step(&mut owner, &mut cx(), now(), |_, _| budget())
+            .unwrap();
+    }
+    exposure.retire(&mut owner, &mut budget()).unwrap();
+    drop(exposure);
+    for address in addresses {
+        TcpListener::bind(address).unwrap();
+    }
+    assert_empty(&accounts);
+}

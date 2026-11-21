@@ -726,18 +726,30 @@ impl ComposedProducerExposure {
                 |key, members| capture_mappings(key, &stage.prepared, members).map(Some),
             )
         })();
-        match &result {
+        match result {
             Ok(()) => {
                 self.stage = None;
                 self.publication.release_retired();
+                Ok(())
             }
-            Err(CoreError::Backpressure(_)) => {}
             Err(error) => {
-                self.publication_failure = Some(error.clone());
+                // A terminal native cause can itself be Backpressure, including
+                // when a member failed during the last installation callback.
+                let recorded = self
+                    .participants
+                    .iter()
+                    .filter(|p| p.has_original_native())
+                    .find_map(|p| p.native_failure());
+                let cause = match recorded {
+                    Some(native) => native.clone(),
+                    None if matches!(error, CoreError::Backpressure(_)) => return Err(error),
+                    None => error,
+                };
+                self.publication_failure = Some(cause.clone());
                 self.begin_close();
+                Err(cause)
             }
         }
-        result
     }
 
     pub fn begin_close(&mut self) {
