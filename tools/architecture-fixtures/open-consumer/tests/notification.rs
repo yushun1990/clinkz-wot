@@ -1033,19 +1033,45 @@ fn collection_runtime(
 
 #[test]
 fn collection_responses_validate_the_original_occurrence_schema_and_retain_each_native_owner() {
+    let source = collection_source(serde_json::json!([
+        {"href":"testevent://source/{channel}","op":["subscribeallevents","unsubscribeallevents"]},
+        {"href":"%7Bchannel%7D","op":["subscribeallevents","unsubscribeallevents"]}
+    ]));
+    exercise_collection_responses(source, 1);
+}
+
+#[test]
+fn a_collection_without_a_td_base_authorizes_only_the_absolute_fallback() {
+    let hrefs = [
+        "%7Bchannel%7D",
+        "/alarm",
+        "//source/alarm",
+        "?q=a:b",
+        "#alarm",
+        "",
+        COLLECTION_ENDPOINT,
+    ];
+    let forms = hrefs.map(|href| {
+        serde_json::json!({
+            "href": href,
+            "op": ["subscribeallevents", "unsubscribeallevents"]
+        })
+    });
+    let mut source = collection_source(forms.into());
+    source.as_object_mut().unwrap().remove("base");
+    exercise_collection_responses(source, (hrefs.len() - 1) as u32);
+}
+
+fn exercise_collection_responses(source: serde_json::Value, expected_form: u32) {
     let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let responses = Rc::new(Responses {
         collection_structured: true,
         ..Responses::default()
     });
     let access = Arc::new(CollectionAccess::default());
-    let source = collection_source(serde_json::json!([
-        {"href":"testevent://source/{channel}","op":["subscribeallevents","unsubscribeallevents"]},
-        {"href":"%7Bchannel%7D","op":["subscribeallevents","unsubscribeallevents"]}
-    ]));
     let definition =
         prepare_collection(source, &responses, access.clone(), &bank, &mut work()).unwrap();
-    assert_eq!(definition.input().form, 1);
+    assert_eq!(definition.input().form, expected_form);
     assert_eq!(&*definition.input().endpoint, COLLECTION_ENDPOINT);
     let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
     let mut root = collection_runtime(&owner, definition, access);

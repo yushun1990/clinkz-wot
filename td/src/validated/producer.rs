@@ -144,8 +144,8 @@ pub struct ValidatedProducerForm<'a> {
     pub effective_operations: &'a [Operation],
     pub effective_security: &'a [String],
     pub resolved_href: &'a str,
-    /// Resolution preserves a Form template until a Binding expands it.
-    pub href_is_template: bool,
+    /// True when the resolved href is a non-template URI with a scheme.
+    pub resolved_href_is_absolute: bool,
 }
 impl<'td> ValidatedThing<'td> {
     pub fn into_producer(mut self) -> ValidatedProducerCursor<'td> {
@@ -258,7 +258,8 @@ impl<'td> ValidatedProducerCursor<'td> {
                         form,
                     ),
                     resolved_href: self.alias.unwrap_or_else(|| self.scratch.text()),
-                    href_is_template: form.href.is_template(),
+                    // The resolver writes to scratch only when it applies an absolute base.
+                    resolved_href_is_absolute: self.alias.is_none() || form.href.is_absolute_uri(),
                 }))
             }
             _ => ValidatedProducerStep::Pending,
@@ -718,7 +719,8 @@ mod tests {
             "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"revisit",
             "base":"http://example.org/base/", "security":"n",
             "securityDefinitions":{"n":{"scheme":"nosec"}},
-            "events":{"alarm":{"forms":[{"href":"one"},{"href":"two"}]}}
+            "events":{"alarm":{"forms":[{"href":"one"},{"href":"urn:example:alarm"},
+                {"href":"http://example.org/{channel}"},{"href":"two"}]}}
         }))
         .unwrap();
         let mut cursor = producer(&thing, 1 << 20);
@@ -733,7 +735,12 @@ mod tests {
             ValidatedProducerStep::Pending
         ));
         assert_eq!(cursor.owner.remaining, remaining);
-        let endpoints = ["http://example.org/base/one", "http://example.org/base/two"];
+        let endpoints = [
+            ("http://example.org/base/one", true),
+            ("urn:example:alarm", true),
+            ("http://example.org/{channel}", false),
+            ("http://example.org/base/two", true),
+        ];
         let mut seen = 0;
         loop {
             match cursor.step(&mut work(), false).unwrap() {
@@ -741,7 +748,10 @@ mod tests {
                 ValidatedProducerStep::Ready(ValidatedProducerEvent::Form(form)) => {
                     assert_eq!(form.scope, ValidatedProducerScope::Event("alarm"));
                     assert_eq!(form.index as usize, seen);
-                    assert_eq!(form.resolved_href, endpoints[seen]);
+                    assert_eq!(
+                        (form.resolved_href, form.resolved_href_is_absolute),
+                        endpoints[seen]
+                    );
                     seen += 1;
                 }
                 _ => {}
