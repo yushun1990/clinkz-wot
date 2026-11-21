@@ -125,6 +125,28 @@ fn control_only_events_require_scalar_media_and_collections_keep_their_exact_rep
     ));
     assert!(collection.supports_data(&service, "application/cbor"));
     assert!(!collection.supports_data(&service, "application/json"));
+
+    let integer = data_schema::PreparedSchema::Type(data_schema::ValueType::Integer);
+    for (data, data_response) in [(Some(integer.clone()), None), (None, Some(integer))] {
+        let member = collection::EventMemberSchema {
+            name: "alarm".into(),
+            subscription: None,
+            data,
+            data_response,
+            cancellation: None,
+        };
+        let collection = NotificationSchemas::SubscribeAllEvents(Arc::new(
+            collection::EventCollectionSchema::try_new(vec![member]).unwrap(),
+        ));
+        assert!(
+            !collection.supports_data(&service, "application/cbor"),
+            "member needs a scalar codec"
+        );
+        assert!(
+            !collection.supports_data(&service, "application/json"),
+            "collection needs exact primary media"
+        );
+    }
 }
 
 #[test]

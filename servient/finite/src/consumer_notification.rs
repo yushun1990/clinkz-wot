@@ -101,9 +101,8 @@ impl<B: ConsumerNotificationBinding> CapturedServices<B> {
         self.check_dependencies().map_err(Dependency)?;
         match (schema, payload) {
             (None, None) => Ok(()),
-            (Some(schema), Some(payload))
-                if payload.body.len() as u64 <= self.policy().body_bytes =>
-            {
+            (Some(schema), Some(payload)) => {
+                self.check_payload(payload)?;
                 let result = self.definition.input().data.validate(schema, payload);
                 // This check also runs when the codec refuses the caller's
                 // payload. Observed dependency loss cannot become input error.
@@ -112,6 +111,15 @@ impl<B: ConsumerNotificationBinding> CapturedServices<B> {
             }
             _ => Err(Rejected(invalid())),
         }
+    }
+    fn check_payload(&self, payload: &Payload) -> Result<(), NotificationValidationError> {
+        let input = self.definition.input();
+        if payload.body.len() as u64 > input.data_policy.body_bytes
+            || payload.content_type != input.content_type.as_ref()
+        {
+            return Err(NotificationValidationError::Rejected(invalid()));
+        }
+        Ok(())
     }
     fn prepay(&self, budget: &mut WorkBudget) -> Result<(), NotificationValidationError> {
         self.check_dependencies()
@@ -213,9 +221,7 @@ impl<B: ConsumerNotificationBinding> NotificationValidation for CapturedServices
         if let NotificationSchemas::ObserveAllProperties(schema) = self.schemas() {
             self.check_dependencies().map_err(Dependency)?;
             let payload = data.ok_or_else(|| Rejected(invalid()))?;
-            if payload.body.len() as u64 > self.policy().body_bytes {
-                return Err(Rejected(invalid()));
-            }
+            self.check_payload(payload)?;
             let result = self
                 .definition
                 .input()

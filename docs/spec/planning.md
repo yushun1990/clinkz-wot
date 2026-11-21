@@ -670,7 +670,8 @@ contains Event declarations and local contexts, without their individual Forms.
 An unrelated root operation acquires no Event schema closure. Construction and
 disposal walks and variable name/table backing are funded before construction;
 selected definitions and captured validation share the original backing. Scalar
-schema support qualifies each Event role; no full Property-map decoder is used.
+schema support qualifies each Event role. A member with data or a dataResponse
+also requires executable scalar media support for the selected representation.
 The actual Binding must prove native attribution and supported control/response
 roles. The current joined control subset refuses member subscription/cancellation
 data; no common aggregate wire encoding is inferred. MQTT additionally refuses

@@ -216,8 +216,13 @@ impl NotificationSchemas {
     /// Named collection facets use the service's exact collection media.
     pub fn supports_data(&self, data: &dyn ConsumerDataService, media: &str) -> bool {
         let media_supported = match self {
-            Self::ObserveAllProperties(_) | Self::SubscribeAllEvents(_) => {
-                data.content_type() == media
+            Self::ObserveAllProperties(_) => data.content_type() == media,
+            Self::SubscribeAllEvents(collection) => {
+                let has_scalar_payload = collection
+                    .members()
+                    .iter()
+                    .any(|m| m.data.is_some() || m.data_response.is_some());
+                data.content_type() == media && (!has_scalar_payload || data.supports_media(media))
             }
             Self::Event {
                 subscription: None,

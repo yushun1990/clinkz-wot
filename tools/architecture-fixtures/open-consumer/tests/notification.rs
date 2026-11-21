@@ -23,6 +23,7 @@ struct Responses {
     compiled_data: Arc<std::sync::atomic::AtomicUsize>,
     last_body: RefCell<Option<std::sync::Weak<[u8]>>>,
     sends: Cell<usize>,
+    response_wire: Option<std::net::UdpSocket>,
     retire_polls: Cell<usize>,
     releases: Cell<usize>,
     pending_retirement: Cell<bool>,
@@ -53,6 +54,9 @@ impl NotificationResponse for Response {
             );
         }
         assert!(!self.sent);
+        if let Some(wire) = &self.responses.response_wire {
+            wire.send(&data.0.as_ref().unwrap().body).unwrap();
+        }
         self.sent = true;
         self.responses.sends.set(self.responses.sends.get() + 1);
         Poll::Ready(Ok(()))
@@ -279,6 +283,17 @@ fn runtime(
     responses: &Rc<Responses>,
     bank: &Arc<HostResourceAccounts>,
 ) -> (ConsumerInstance, Runtime) {
+    runtime_with_data(
+        responses,
+        bank,
+        independent_open_consumer::services(Arc::default()).data,
+    )
+}
+fn runtime_with_data(
+    responses: &Rc<Responses>,
+    bank: &Arc<HostResourceAccounts>,
+    data: Arc<dyn ConsumerDataService>,
+) -> (ConsumerInstance, Runtime) {
     let definition = {
         let source = serde_json::from_value(serde_json::json!({
             "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"Optional response",
@@ -291,10 +306,7 @@ fn runtime(
             vec![ConsumerNotificationRegistration {
                 binding: EventBinding(responses.clone()),
                 services: ConsumerServices {
-                    data: independent_open_consumer::services(Arc::new(
-                        independent_open_consumer::Probe::default(),
-                    ))
-                    .data,
+                    data,
                     access: Arc::new(EventAccess),
                 },
             }],
@@ -368,6 +380,10 @@ impl ConsumerDataService for StructuredData {
         true
     }
     fn validate(&self, schema: &data_schema::PreparedSchema, payload: &Payload) -> CoreResult<()> {
+        assert_eq!(
+            payload.content_type, "application/json",
+            "only selected media reaches the codec"
+        );
         if let data_schema::PreparedSchema::Object(o) = schema {
             if o.properties()
                 .first()
@@ -502,6 +518,19 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
     assert_eq!(responses.starts.get(), 0);
     drop(refused);
     assert!(weak.upgrade().is_none());
+    let wrong_media = Payload::new(br#"{"filter":1}"#.as_slice(), "application/octet-stream");
+    let refused = root
+        .subscribe(
+            SubscriptionInput(Some(wrong_media.clone())),
+            ResponseRequirement::Required,
+            NotificationOverflow::Terminate,
+            &mut work(),
+        )
+        .err()
+        .unwrap()
+        .into_input();
+    assert_eq!(refused.0, Some(wrong_media));
+    assert_eq!(responses.starts.get(), 0);
     let mut cursor = root
         .subscribe(
             SubscriptionInput(payload(br#"{"filter":1}"#)),
@@ -573,6 +602,20 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
         )
         .is_err()
     );
+    let wrong_media = Payload::new(
+        br#"{"reason":"done"}"#.as_slice(),
+        "application/octet-stream",
+    );
+    let refused = root
+        .stop(
+            &cursor,
+            Some(CancellationInput(Some(wrong_media.clone()))),
+            &mut work(),
+        )
+        .err()
+        .unwrap()
+        .into_input();
+    assert_eq!(refused.unwrap().0, Some(wrong_media));
     root.stop(
         &cursor,
         Some(CancellationInput(payload(br#"{"reason":"done"}"#))),
@@ -585,6 +628,119 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
     assert_eq!(responses.closes.get(), 1);
     drop(root);
     drop(settlement);
+    clean(&bank);
+}
+
+#[test]
+fn a_dual_format_codec_cannot_send_a_binary_response_on_the_selected_json_form() {
+    use std::{
+        net::UdpSocket,
+        sync::atomic::{AtomicUsize, Ordering::Relaxed},
+    };
+    const BINARY: &str = "application/octet-stream";
+    #[derive(Default)]
+    struct IntegerCodec(AtomicUsize);
+    impl ConsumerDataService for IntegerCodec {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+        fn content_type(&self) -> &str {
+            "application/json"
+        }
+        fn supports_media(&self, media: &str) -> bool {
+            matches!(media, "application/json" | BINARY)
+        }
+        fn supports_schema(&self, s: &data_schema::PreparedSchema) -> bool {
+            *s == data_schema::PreparedSchema::Type(data_schema::ValueType::Integer)
+        }
+        fn policy(&self) -> ConsumerDataPolicy {
+            ConsumerDataPolicy {
+                retained_bytes: std::mem::size_of::<Self>() as u64,
+                ..CollectionData.policy()
+            }
+        }
+        fn validate(&self, s: &data_schema::PreparedSchema, p: &Payload) -> CoreResult<()> {
+            if p.content_type == BINARY {
+                self.0.fetch_add(1, Relaxed);
+                if self.supports_schema(s) && p.body.len() == 8 && p.content_coding.is_none() {
+                    return Ok(());
+                }
+                return Err(invalid());
+            }
+            clinkz_wot_codec_json::validate_payload(s, p)
+        }
+    }
+    let peer = UdpSocket::bind("127.0.0.1:0").unwrap();
+    peer.set_nonblocking(true).unwrap();
+    let wire = UdpSocket::bind("127.0.0.1:0").unwrap();
+    wire.connect(peer.local_addr().unwrap()).unwrap();
+    let responses = Rc::new(Responses {
+        response_wire: Some(wire),
+        ..Default::default()
+    });
+    let codec = Arc::new(IntegerCodec::default());
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let (_owner, mut root) = runtime_with_data(&responses, &bank, codec.clone());
+    let mut cursor = root
+        .subscribe(
+            SubscriptionInput(None),
+            ResponseRequirement::Required,
+            NotificationOverflow::Terminate,
+            &mut work(),
+        )
+        .ok()
+        .unwrap();
+    step(&mut root, &cursor);
+    step(&mut root, &cursor);
+    assert_eq!(
+        root.front(&mut cursor, &mut work())
+            .unwrap()
+            .unwrap()
+            .response,
+        EventResponseState::Awaiting
+    );
+    let binary = Payload::new(7_i64.to_be_bytes().as_slice(), BINARY);
+    codec
+        .validate(
+            &data_schema::PreparedSchema::Type(data_schema::ValueType::Integer),
+            &binary,
+        )
+        .unwrap();
+    let original = Arc::downgrade(&binary.body);
+    let refused = root
+        .respond(&mut cursor, EventDataResponse(Some(binary)), &mut work())
+        .err()
+        .expect("the Form selects JSON");
+    assert!(matches!(refused.error().error(), CoreError::Validation(_)));
+    let returned = refused.into_input().0.unwrap();
+    assert!(Arc::ptr_eq(&returned.body, &original.upgrade().unwrap()));
+    assert_eq!(returned.content_type, BINARY);
+    assert_eq!(
+        codec.0.load(Relaxed),
+        1,
+        "only the direct codec control ran"
+    );
+    step(&mut root, &cursor);
+    let mut bytes = [0; 16];
+    assert_eq!(
+        peer.recv(&mut bytes).unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+    root.respond(
+        &mut cursor,
+        EventDataResponse(Some(Payload::new(b"7".as_slice(), "application/json"))),
+        &mut work(),
+    )
+    .ok()
+    .unwrap();
+    step(&mut root, &cursor);
+    peer.set_nonblocking(false).unwrap();
+    peer.set_read_timeout(Some(std::time::Duration::from_secs(1)))
+        .unwrap();
+    let n = peer.recv(&mut bytes).unwrap();
+    assert_eq!(&bytes[..n], b"7");
+    assert_eq!(finish(&mut root, &cursor).responses_delivered, 1);
+    drop(root);
     clean(&bank);
 }
 

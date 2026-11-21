@@ -42,6 +42,84 @@ impl ConsumerDataService for ObservedData {
 }
 
 #[test]
+fn root_subscription_qualifies_member_media_before_connecting_and_delivers_with_a_capable_codec() {
+    struct MemberCodec(AtomicBool);
+    impl ConsumerDataService for MemberCodec {
+        fn qualification_revision(&self) -> u64 {
+            u64::from(!self.0.load(Ordering::Relaxed))
+        }
+        fn content_type(&self) -> &str {
+            "application/json"
+        }
+        fn supports_media(&self, media: &str) -> bool {
+            self.0.load(Ordering::Relaxed) && media == self.content_type()
+        }
+        fn policy(&self) -> ConsumerDataPolicy {
+            let mut policy = MqttJsonData.policy();
+            policy.retained_bytes += std::mem::size_of::<Self>() as u64;
+            policy
+        }
+        fn validate(
+            &self,
+            schema: &data_schema::PreparedSchema,
+            payload: &Payload,
+        ) -> CoreResult<()> {
+            if !self.supports_media(&payload.content_type) {
+                return Err(invalid());
+            }
+            MqttJsonData.validate(schema, payload)
+        }
+    }
+    runtime().block_on(async {
+        let broker = Broker::start();
+        let service = service(&broker, 8192);
+        let bank = bank();
+        let access = Arc::new(Access::default());
+        let prepare = |codec: Arc<MemberCodec>| {
+            try_definition(
+                &service,
+                event_collection_td(broker.address, "media/events"),
+                &bank,
+                access.clone(),
+                codec,
+            )
+        };
+        assert!(matches!(
+            prepare(Arc::new(MemberCodec(false.into()))),
+            Err(CoreError::UnsupportedOperation(_))
+        ));
+        assert!(!service.connected());
+        assert_empty(&bank);
+        let codec = Arc::new(MemberCodec(true.into()));
+        let retained = prepare(codec.clone()).unwrap();
+        let owner = consumer_owner();
+        let mut events = from_definition(prepare(codec.clone()).unwrap(), &owner, 2, access);
+        let mut cursor = subscribe(&mut events, NotificationOverflow::Terminate);
+        active(&mut events, &cursor).await;
+        let mut peer = Peer::new(&broker);
+        peer.publish_raw("media/events/alarm", b"5", false);
+        accounted(&mut events, &cursor, 1).await;
+        let item = events.front(&mut cursor, &mut budget()).unwrap().unwrap();
+        assert_eq!(
+            item.target,
+            clinkz_wot_core::thing::AffordanceSite::Event("alarm")
+        );
+        assert_eq!(item.data.unwrap().body, b"5");
+        events.advance(&mut cursor, &mut budget()).unwrap();
+        events
+            .stop(&cursor, Some(CancellationInput(None)), &mut budget())
+            .ok()
+            .unwrap();
+        assert_eq!(settled(&mut events, &cursor).await.delivered_items, 1);
+        codec.0.store(false, Ordering::Relaxed);
+        assert!(retained.check_dependencies().is_err());
+        assert!(ConsumerNotificationDefinition::try_new(retained.into_input()).is_err());
+        drop(events);
+        assert_empty(&bank);
+    });
+}
+
+#[test]
 fn occurrence_views_cannot_retain_original_backing_across_repeated_advance_and_unsubscribe() {
     runtime().block_on(async {
         let broker = Broker::start();
