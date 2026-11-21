@@ -219,16 +219,24 @@ impl<D: 'static, P, V: Fn() -> Option<u64>> ConsumerNotificationRegistry<D, P, V
             }
             None => self.registrations.as_slice(),
         };
-        let mut denied = None;
+        let mut pass = SearchPass::Select { denied: None };
         loop {
             debit(budget, W::PlanningItems, 1)?;
             walk.resize(cursor.next_step_temporary_bytes().map_err(td_error)?)?;
             let before = credits(budget);
             match cursor.step(budget, false).map_err(td_error)? {
-                ValidatedProducerStep::Done => return Err(denied.unwrap_or_else(unsupported)),
+                ValidatedProducerStep::Done => {
+                    if pass.begin_diagnosis() {
+                        cursor.rewind();
+                        continue;
+                    }
+                    return Err(unsupported());
+                }
                 ValidatedProducerStep::Pending if before == credits(budget) => return Err(busy()),
                 ValidatedProducerStep::Ready(ValidatedProducerEvent::Form(form))
-                    if form.scope == scope && selector.form.is_none_or(|f| f == form.index) =>
+                    if form.scope == scope
+                        && selector.form.is_none_or(|f| f == form.index)
+                        && pass.visits(form.index) =>
                 {
                     if !form.effective_operations.contains(&kind.start_operation())
                         || form.resolved_href.len() > 256
@@ -249,10 +257,11 @@ impl<D: 'static, P, V: Fn() -> Option<u64>> ConsumerNotificationRegistry<D, P, V
                         |doc, endpoint, budget| -> CoreResult<()> {
                             selected = Form::from_loan(doc, target, index, endpoint)?.select(
                                 candidates.iter().map(self.candidate),
+                                selector.form.is_some(),
                                 kind,
                                 admission,
                                 budget,
-                                &mut denied,
+                                &mut pass,
                             )?;
                             Ok(())
                         },
@@ -275,13 +284,40 @@ impl<D: 'static, P, V: Fn() -> Option<u64>> ConsumerNotificationRegistry<D, P, V
                             | SemanticError::UnsupportedDependency,
                         )) => {}
                     }
-                    if selector.form.is_some() {
-                        return Err(denied.unwrap_or_else(unsupported));
+                    if selector.form.is_some()
+                        || matches!(pass, SearchPass::Diagnose { last, .. } if index == last)
+                    {
+                        return Err(unsupported());
                     }
                 }
                 _ => {}
             }
             cursor.acknowledge();
+        }
+    }
+}
+
+// Remember only the span containing denials. Diagnostic native work can affect
+// the answer only after authorized selection has exhausted its alternatives.
+enum SearchPass {
+    Select { denied: Option<(u32, u32)> },
+    Diagnose { first: u32, last: u32 },
+}
+impl SearchPass {
+    fn begin_diagnosis(&mut self) -> bool {
+        let Self::Select {
+            denied: Some((first, last)),
+        } = *self
+        else {
+            return false;
+        };
+        *self = Self::Diagnose { first, last };
+        true
+    }
+    fn visits(&self, form: u32) -> bool {
+        match *self {
+            Self::Select { .. } => true,
+            Self::Diagnose { first, last } => (first..=last).contains(&form),
         }
     }
 }
@@ -334,21 +370,27 @@ impl<'a> Form<'a> {
 
     fn select<'bank, 'r, D: 'r>(
         &self,
-        candidates: impl Iterator<Item = &'r dyn Candidate<D>>,
+        candidates: impl Iterator<Item = &'r dyn Candidate<D>> + Clone,
+        pinned_form: bool,
         kind: NotificationKind,
         admission: &'bank ConsumerAdmission<'bank>,
         budget: &mut WorkBudget,
-        denied: &mut Option<CoreError>,
+        pass: &mut SearchPass,
     ) -> CoreResult<Option<Selected<'bank, D>>> {
         let mut choice = prepare_schemas(self.document, self.target, kind, admission, budget)?;
-        for r in candidates {
-            debit(budget, W::ProviderProbes, 1)?;
-            choice = r.probe(self, choice, admission, budget, denied)?;
+        loop {
+            for r in candidates.clone() {
+                debit(budget, W::ProviderProbes, 1)?;
+                choice = r.probe(self, choice, admission, budget, pass)?;
+            }
+            match choice {
+                FormChoice::Selected(winner) => return Ok(Some(winner)),
+                // A Form pin rules out every later alternative. Its original
+                // semantic loan and role schemas can serve the diagnostic too.
+                FormChoice::Open { .. } if pinned_form && pass.begin_diagnosis() => continue,
+                FormChoice::Open { .. } => return Ok(None),
+            }
         }
-        Ok(match choice {
-            FormChoice::Open { .. } => None,
-            FormChoice::Selected(winner) => Some(winner),
-        })
     }
 }
 

@@ -62,6 +62,8 @@ temporary byte requirement, including inline movement, overlapping frame blocks
 and URI buffer replacement. It can retain the coordinate and resolved href from the walk.
 After that walk completes, the cursor can lend a selected coordinate from the same
 immutable admitted Thing using the original ledger and semantic work allowance.
+Rewinding a completed walk releases its resolved href storage. Replaying Forms
+uses the remaining source work from that same admission.
 The cursor can partition its temporary allowance for caller-owned selection
 storage. Each split counts against every applicable temporary and live ceiling.
 An indexed loan reports the tightest resource kind and the bytes available

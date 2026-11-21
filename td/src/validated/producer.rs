@@ -192,6 +192,25 @@ impl<'td> ValidatedProducerCursor<'td> {
             _ => {}
         }
     }
+
+    /// Revisit a completed Form walk on the original admission. Re-resolving
+    /// hrefs and lending semantics spend the remaining source work and ledger.
+    pub fn rewind(&mut self) {
+        if self.stage == Stage::Done && self.cause.is_none() {
+            self.scratch.release(&mut self.owner.stack.ledger);
+            self.stage = Stage::Start;
+            self.category = 0;
+            self.entries = None;
+            self.scope = Owner::Thing;
+            self.ordinal = 0;
+            self.form = 0;
+            self.last = None;
+            self.alias = None;
+            self.resolver = None;
+            self.effective = self.owner.counts.content;
+        }
+    }
+
     pub fn step(
         &mut self,
         budget: &mut WorkBudget,
@@ -690,6 +709,47 @@ mod tests {
         }
         cursor
     }
+    #[test]
+    fn rewinding_a_completed_walk_releases_the_href_and_preserves_source_work() {
+        let thing = serde_json::from_value(serde_json::json!({
+            "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"revisit",
+            "base":"http://example.org/base/", "security":"n",
+            "securityDefinitions":{"n":{"scheme":"nosec"}},
+            "events":{"alarm":{"forms":[{"href":"one"},{"href":"two"}]}}
+        }))
+        .unwrap();
+        let mut cursor = producer(&thing, 1 << 20);
+        let remaining = cursor.owner.remaining;
+        let live = cursor.owner.stack.ledger.live_bytes();
+        let href_bytes = cursor.scratch.capacity as u64;
+        assert!(href_bytes > 0);
+        cursor.rewind();
+        assert_eq!(cursor.owner.stack.ledger.live_bytes(), live - href_bytes);
+        assert!(matches!(
+            cursor.step(&mut WorkBudget::new(), false).unwrap(),
+            ValidatedProducerStep::Pending
+        ));
+        assert_eq!(cursor.owner.remaining, remaining);
+        let endpoints = ["http://example.org/base/one", "http://example.org/base/two"];
+        let mut seen = 0;
+        loop {
+            match cursor.step(&mut work(), false).unwrap() {
+                ValidatedProducerStep::Done => break,
+                ValidatedProducerStep::Ready(ValidatedProducerEvent::Form(form)) => {
+                    assert_eq!(form.scope, ValidatedProducerScope::Event("alarm"));
+                    assert_eq!(form.index as usize, seen);
+                    assert_eq!(form.resolved_href, endpoints[seen]);
+                    seen += 1;
+                }
+                _ => {}
+            }
+            cursor.acknowledge();
+        }
+        assert_eq!(seen, endpoints.len());
+        assert!(cursor.owner.remaining < remaining);
+        assert_eq!(cursor.owner.stack.ledger.live_bytes(), live);
+    }
+
     #[test]
     fn parent_scratch_tracks_frame_growth_and_uri_replacement_step_by_step() {
         let thing = serde_json::from_value(serde_json::json!({

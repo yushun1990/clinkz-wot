@@ -584,8 +584,11 @@ Planning checks the actual data service's availability, media and schema
 support, and the access service's security support and destination permission.
 Present scalar roles use `supports_media` for the Form representation. Collection
 facets use the service's exact primary media. The source-free definition repeats
-the same data qualification. A denied destination determines the final error only
-if its native mapping qualifies and the search finds no authorized alternative.
+the same data qualification. Selection spends native compilation work and cleanup
+capacity on authorized candidates. If every alternative fails and a destination
+was denied, the search revisits the range of Forms containing denials on the same
+TD admission, work budget and configuration decision. A native mapping that
+qualifies with its destination denied establishes `AuthorizationDenied`.
 
 The TD walk, semantic arena and compiler scratch share one temporary allowance.
 The schema and both the selected and competing native mappings count toward the

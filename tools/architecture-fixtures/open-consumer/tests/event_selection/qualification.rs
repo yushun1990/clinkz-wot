@@ -167,6 +167,87 @@ fn a_denial_only_describes_an_otherwise_executable_candidate() {
 }
 
 #[test]
+fn denied_competitors_leave_the_only_cleanup_slot_and_compiler_credit_for_authorized_forms() {
+    let peers = Peers::new();
+    let mut limits = GatewayDefaultV1::LIMITS.clone();
+    assert!(limits.set(ResourceKind::CleanupItemsMax, Some(1)));
+    let plans = Arc::new(HostResourceAccounts::new(&limits));
+    for reverse in [true, false] {
+        let d = Deployment::new(peers.addr);
+        d.stream_access.denied.store(true, SeqCst);
+        let registry = d.registry(reverse);
+        let shared = [(None, None)];
+        let fallback = [(Some("stream"), None), (Some("datagram"), None)];
+        for forms in [shared.as_slice(), fallback.as_slice()] {
+            let thing = td(peers.addr, forms);
+            let units = d.datagram.preparation_bounds().work * forms.len() as u64;
+            for mut budget in [
+                work(),
+                work().with_remaining(WorkClass::BindingPolls, units),
+            ] {
+                let SelectedEvent::Datagram(selected) =
+                    select(&registry, &thing, pin(None, None), &plans, &mut budget).unwrap()
+                else {
+                    panic!("only UDP is authorized")
+                };
+                assert_eq!(selected.input().form as usize, forms.len() - 1);
+                assert_eq!(plans.account(ResourceKind::CleanupItemsMax).used(), 1);
+                runtime().block_on(exchange_digit(selected, &peers));
+                clean(&plans);
+            }
+        }
+        assert_eq!(d.stream.compilations.load(SeqCst), 0);
+        let both = td(peers.addr, &shared);
+        for form in [None, Some(0)] {
+            assert!(matches!(
+                select(&registry, &both, pin(form, Some(71)), &plans, &mut work()),
+                Err(CoreError::Security {
+                    reason: SecurityFailureReason::AuthorizationDenied,
+                    ..
+                })
+            ));
+        }
+        assert_eq!(d.stream.compilations.load(SeqCst), 2);
+        clean(&plans);
+    }
+}
+
+#[test]
+fn a_deferred_denial_spends_the_remaining_work_and_is_fenced_at_the_original_revision() {
+    let peers = Peers::new();
+    let d = Deployment::new(peers.addr);
+    d.stream_access.denied.store(true, SeqCst);
+    let thing = td(
+        peers.addr,
+        &[(Some("unknown"), None), (Some("stream"), None)],
+    );
+    let plans = bank();
+    let selector = pin(None, Some(71));
+    let mut short =
+        work().with_remaining(WorkClass::BindingPolls, d.stream.preparation_bounds().work);
+    assert!(matches!(
+        select(&d.registry(false), &thing, selector, &plans, &mut short),
+        Err(CoreError::Backpressure(_))
+    ));
+    assert_eq!(d.stream.compilations.load(SeqCst), 1);
+    clean(&plans);
+    // Inject a configuration change during each native diagnostic compilation.
+    let compilations = d.stream.compilations.clone();
+    let registry =
+        ConsumerNotificationRegistry::try_new_revisioned(d.providers(false), move || {
+            Some(compilations.load(SeqCst) as u64)
+        })
+        .unwrap();
+    assert!(matches!(
+        select(&registry, &thing, selector, &plans, &mut work()),
+        Err(CoreError::StaleHandle(_))
+    ));
+    assert_eq!(d.stream.compilations.load(SeqCst), 3);
+    peers.quiet();
+    clean(&plans);
+}
+
+#[test]
 fn coded_datagram_delivers_and_releases_its_ipv6_recipient() {
     let peers = Peers::on(std::net::Ipv6Addr::LOCALHOST.into());
     let deployment = Deployment::new(peers.addr);

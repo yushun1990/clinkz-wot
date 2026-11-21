@@ -53,7 +53,7 @@ pub(super) trait Candidate<D> {
         choice: FormChoice<'a, D>,
         admission: &'a ConsumerAdmission<'a>,
         budget: &mut WorkBudget,
-        denied: &mut Option<CoreError>,
+        pass: &mut SearchPass,
     ) -> CoreResult<FormChoice<'a, D>>;
 }
 
@@ -129,7 +129,7 @@ where
         choice: FormChoice<'a, D>,
         admission: &'a ConsumerAdmission<'a>,
         budget: &mut WorkBudget,
-        denied: &mut Option<CoreError>,
+        pass: &mut SearchPass,
     ) -> CoreResult<FormChoice<'a, D>> {
         self.check()?;
         let r = &self.registration;
@@ -174,13 +174,21 @@ where
         let authorized = access.authorize(id, form.endpoint, schemas.kind().start_operation());
         current()?;
         let denial = match authorized {
+            Ok(()) if matches!(pass, SearchPass::Diagnose { .. }) => return Ok(choice),
             Ok(()) => None,
             Err(
                 e @ CoreError::Security {
                     reason: SecurityFailureReason::AuthorizationDenied,
                     ..
                 },
-            ) => Some(e),
+            ) => match pass {
+                SearchPass::Select { denied } => {
+                    let (_, last) = denied.get_or_insert((form.index, form.index));
+                    *last = form.index;
+                    return Ok(choice);
+                }
+                SearchPass::Diagnose { .. } => Some(e),
+            },
             Err(
                 CoreError::UnsupportedOperation(_)
                 | CoreError::Validation(_)
@@ -272,8 +280,7 @@ where
             Err(e) => return Err(e),
         };
         if let Some(error) = denial {
-            denied.get_or_insert(error);
-            return Ok(choice);
+            return Err(error);
         }
         let FormChoice::Open {
             schemas,
