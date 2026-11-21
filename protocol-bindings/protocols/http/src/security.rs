@@ -488,26 +488,68 @@ impl HttpGrant {
     }
 }
 
-/// The actual verifier work declaration captured by the HTTP registration.
-/// Changing it invalidates staged publications and is checked at use.
-#[derive(Clone)]
-pub struct HttpVerifierWork(Arc<Mutex<PublicationState<u64>>>);
-impl HttpVerifierWork {
-    pub fn new(work: u64) -> Self {
-        Self(Arc::new(Mutex::new(PublicationState::new(work))))
+/// A replaceable verifier and its complete cooperative work bound. Each
+/// server registration captures one version for both budgeting and execution.
+pub struct HttpVerifierRegistration<V: ?Sized> {
+    current: Mutex<PublicationState<Arc<VerifierConfiguration<V>>>>,
+}
+
+struct VerifierConfiguration<V: ?Sized> {
+    verifier: Arc<V>,
+    work: u64,
+}
+
+impl<V: ?Sized> HttpVerifierRegistration<V> {
+    pub fn new(verifier: Arc<V>, work: u64) -> Arc<Self> {
+        Arc::new(Self {
+            current: Mutex::new(PublicationState::new(Arc::new(VerifierConfiguration {
+                verifier,
+                work,
+            }))),
+        })
     }
-    pub fn set(&self, work: u64) {
-        self.0.lock().unwrap().replace(work);
+
+    /// Replace the executable verifier and its work bound together. This
+    /// invalidates every earlier selection, even when restoring the same pair.
+    pub fn replace(&self, verifier: Arc<V>, work: u64) {
+        let next = Arc::new(VerifierConfiguration { verifier, work });
+        let previous = self.current.lock().unwrap().replace(next);
+        drop(previous); // dispose linked state outside the registration lock
     }
-    fn get(&self) -> u64 {
-        *self.0.lock().unwrap().get()
+
+    fn select(self: Arc<Self>) -> SelectedVerifier<V> {
+        let configuration = Arc::clone(self.current.lock().unwrap().get());
+        SelectedVerifier {
+            registration: self,
+            configuration,
+        }
     }
 }
+
+struct SelectedVerifier<V: ?Sized> {
+    registration: Arc<HttpVerifierRegistration<V>>,
+    configuration: Arc<VerifierConfiguration<V>>,
+}
+
+impl<V: ?Sized> SelectedVerifier<V> {
+    fn is_current(&self) -> bool {
+        Arc::ptr_eq(
+            self.registration.current.lock().unwrap().get(),
+            &self.configuration,
+        )
+    }
+
+    fn observe(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.registration.current.lock().unwrap().observe(facts)
+    }
+}
+
 /// Actual bounded synchronous verifier. Credential evidence is borrowed only
 /// during this callback. Success MUST establish identity/claims from a trusted
 /// verifier; accepting a username or transport evidence alone is not verification.
-/// work() includes its complete comparison, identity allocation and disposal;
-/// callbacks are cooperative, cannot acquire I/O or call application behavior.
+/// The registration's work bound covers comparison, identity allocation and
+/// disposal for every call. Install a new registration version before using
+/// a different bound. Callbacks cannot acquire I/O or call application behavior.
 pub trait HttpBasicVerifier: Send + Sync {
     /// Passive non-reused invalidation revision. Mutable verification policy
     /// must advance this on change, even during verify(). Immutable verifiers
@@ -516,7 +558,6 @@ pub trait HttpBasicVerifier: Send + Sync {
         0
     }
     fn verify(&self, username: &[u8], password: &[u8]) -> CoreResult<Principal>;
-    fn work(&self) -> &HttpVerifierWork;
 }
 
 #[derive(Clone)]
@@ -563,30 +604,32 @@ pub trait HttpApiKeyVerifier: Send + Sync {
         0
     }
     fn verify(&self, key: &[u8]) -> CoreResult<Principal>;
-    fn work(&self) -> &HttpVerifierWork;
 }
 struct VerifierRevisions {
     observed: (u64, u64),
     revision: u64,
     exhausted: PublicationState<bool>,
 }
+struct ServerVerifiers {
+    basic: Option<SelectedVerifier<dyn HttpBasicVerifier>>,
+    api_key: Option<SelectedVerifier<dyn HttpApiKeyVerifier>>,
+    work: u64,
+    revisions: Mutex<VerifierRevisions>,
+}
+
 /// Live TLS key and independently qualified verification services. Programs
 /// retain only immutable native requirements and the original pairing identity.
 #[derive(Clone)]
 pub struct HttpServerSecurity {
     pub(crate) tls: Arc<ServerConfig>,
-    basic: Option<Arc<dyn HttpBasicVerifier>>,
-    api_key: Option<Arc<dyn HttpApiKeyVerifier>>,
-    declarations: [Option<HttpVerifierWork>; 2],
-    work: (u64, u64),
-    revisions: Arc<Mutex<VerifierRevisions>>,
+    verifiers: Arc<ServerVerifiers>,
     pub(crate) registration: SecurityRegistration,
 }
 impl HttpServerSecurity {
     pub fn try_new(
         chain: Vec<CertificateDer<'static>>,
         key: PrivateKeyDer<'static>,
-        verifier: Arc<dyn HttpBasicVerifier>,
+        verifier: Arc<HttpVerifierRegistration<dyn HttpBasicVerifier>>,
     ) -> CoreResult<Self> {
         Self::try_composed(chain, key, Some(verifier), None)
     }
@@ -594,16 +637,14 @@ impl HttpServerSecurity {
     pub fn try_composed(
         chain: Vec<CertificateDer<'static>>,
         key: PrivateKeyDer<'static>,
-        basic: Option<Arc<dyn HttpBasicVerifier>>,
-        api_key: Option<Arc<dyn HttpApiKeyVerifier>>,
+        basic: Option<Arc<HttpVerifierRegistration<dyn HttpBasicVerifier>>>,
+        api_key: Option<Arc<HttpVerifierRegistration<dyn HttpApiKeyVerifier>>>,
     ) -> CoreResult<Self> {
-        let declarations = [
-            basic.as_ref().map(|v| v.work().clone()),
-            api_key.as_ref().map(|v| v.work().clone()),
-        ];
+        let basic = basic.map(HttpVerifierRegistration::select);
+        let api_key = api_key.map(HttpVerifierRegistration::select);
         let work = (
-            declarations[0].as_ref().map_or(0, HttpVerifierWork::get),
-            declarations[1].as_ref().map_or(0, HttpVerifierWork::get),
+            basic.as_ref().map_or(0, |v| v.configuration.work),
+            api_key.as_ref().map_or(0, |v| v.configuration.work),
         );
         if (basic.is_some() && work.0 == 0)
             || (api_key.is_some() && work.1 == 0)
@@ -626,57 +667,77 @@ impl HttpServerSecurity {
         tls.send_tls13_tickets = 0;
         tls.max_fragment_size = Some(4096);
         let observed = (
-            basic.as_ref().map_or(0, |v| v.revision()),
-            api_key.as_ref().map_or(0, |v| v.revision()),
+            basic
+                .as_ref()
+                .map_or(0, |v| v.configuration.verifier.revision()),
+            api_key
+                .as_ref()
+                .map_or(0, |v| v.configuration.verifier.revision()),
         );
         Ok(Self {
             tls: Arc::new(tls),
-            basic,
-            api_key,
-            declarations,
-            work,
-            revisions: Arc::new(Mutex::new(VerifierRevisions {
-                observed,
-                revision: 0,
-                exhausted: PublicationState::new(false),
-            })),
+            verifiers: Arc::new(ServerVerifiers {
+                basic,
+                api_key,
+                work: work.0 + work.1 + 4096,
+                revisions: Mutex::new(VerifierRevisions {
+                    observed,
+                    revision: 0,
+                    exhausted: PublicationState::new(false),
+                }),
+            }),
             registration: SecurityRegistration(Arc::new(())),
         })
     }
     pub(crate) fn supports(&self, requirement: HttpSecurity) -> bool {
         self.is_ready()
-            && (!requirement.uses_basic() || self.basic.is_some())
-            && (!requirement.uses_api_key() || self.api_key.is_some())
+            && (!requirement.uses_basic() || self.verifiers.basic.is_some())
+            && (!requirement.uses_api_key() || self.verifiers.api_key.is_some())
     }
     pub(crate) fn observe_configuration(
         &self,
         facts: &mut PublicationObserver<'_>,
     ) -> CoreResult<()> {
-        for declaration in self.declarations.iter().flatten() {
-            declaration.0.lock().unwrap().observe(facts)?;
+        if let Some(basic) = &self.verifiers.basic {
+            basic.observe(facts)?;
         }
-        self.revisions.lock().unwrap().exhausted.observe(facts)
+        if let Some(key) = &self.verifiers.api_key {
+            key.observe(facts)?;
+        }
+        self.verifiers
+            .revisions
+            .lock()
+            .unwrap()
+            .exhausted
+            .observe(facts)
     }
     pub(crate) fn is_ready(&self) -> bool {
-        self.declarations[0]
+        self.verifiers
+            .basic
             .as_ref()
-            .map_or(0, HttpVerifierWork::get)
-            == self.work.0
-            && self.declarations[1]
+            .is_none_or(SelectedVerifier::is_current)
+            && self
+                .verifiers
+                .api_key
                 .as_ref()
-                .map_or(0, HttpVerifierWork::get)
-                == self.work.1
-            && !*self.revisions.lock().unwrap().exhausted.get()
+                .is_none_or(SelectedVerifier::is_current)
+            && !*self.verifiers.revisions.lock().unwrap().exhausted.get()
     }
     pub(crate) fn work(&self) -> u64 {
-        self.work.0 + self.work.1 + 4096
+        self.verifiers.work
     }
     pub(crate) fn revision(&self) -> u64 {
         let observed = (
-            self.basic.as_ref().map_or(0, |v| v.revision()),
-            self.api_key.as_ref().map_or(0, |v| v.revision()),
+            self.verifiers
+                .basic
+                .as_ref()
+                .map_or(0, |v| v.configuration.verifier.revision()),
+            self.verifiers
+                .api_key
+                .as_ref()
+                .map_or(0, |v| v.configuration.verifier.revision()),
         );
-        let mut state = self.revisions.lock().unwrap();
+        let mut state = self.verifiers.revisions.lock().unwrap();
         if observed != state.observed {
             state.observed = observed;
             if let Some(next) = state
@@ -709,9 +770,12 @@ impl HttpServerSecurity {
         let mut principal = None;
         if let Some(credentials) = &evidence.basic {
             principal = Some(bounded_principal(
-                self.basic
+                self.verifiers
+                    .basic
                     .as_ref()
                     .ok_or_else(|| denied(SecurityFailureReason::UnsupportedScheme))?
+                    .configuration
+                    .verifier
                     .verify(&credentials.username, &credentials.password)
                     .map_err(redact_verification)?,
             )?);
@@ -724,9 +788,12 @@ impl HttpServerSecurity {
                 return Err(denied(SecurityFailureReason::ProviderFailure));
             }
             let verified = bounded_principal(
-                self.api_key
+                self.verifiers
+                    .api_key
                     .as_ref()
                     .ok_or_else(|| denied(SecurityFailureReason::UnsupportedScheme))?
+                    .configuration
+                    .verifier
                     .verify(&key.0)
                     .map_err(redact_verification)?,
             )?;
@@ -773,8 +840,7 @@ impl PartialEq for HttpServerSecurity {
     fn eq(&self, other: &Self) -> bool {
         self.registration == other.registration
             && Arc::ptr_eq(&self.tls, &other.tls)
-            && Arc::ptr_eq(&self.revisions, &other.revisions)
-            && self.work == other.work
+            && Arc::ptr_eq(&self.verifiers, &other.verifiers)
     }
 }
 impl Eq for HttpServerSecurity {}
@@ -782,6 +848,45 @@ impl Eq for HttpServerSecurity {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replacing_the_verifier_waits_for_its_publication_decision() {
+        use clinkz_wot_core::publication::PublicationFacts;
+        use std::{
+            thread,
+            time::{Duration, Instant},
+        };
+
+        let registration = HttpVerifierRegistration::new(Arc::new(1), 1024);
+        let selected = registration.clone().select();
+        let mut facts = PublicationFacts::default();
+        selected.observe(&mut facts.observer()).unwrap();
+        thread::scope(|scope| {
+            let commit = PublicationFacts::lock_current(&[&facts]).unwrap();
+            let writer = scope.spawn(|| registration.replace(Arc::new(2), 2048));
+            // Once replace holds the registration mutex it must wait for this
+            // decision before it can install the new executable configuration.
+            let end = Instant::now() + Duration::from_secs(5);
+            while registration.current.try_lock().is_ok() {
+                assert!(!writer.is_finished() && Instant::now() < end);
+                thread::yield_now();
+            }
+            assert!(!writer.is_finished());
+            drop(commit);
+            writer.join().unwrap();
+        });
+        assert!(!selected.is_current());
+        assert!(matches!(
+            PublicationFacts::lock_current(&[&facts]),
+            Err(CoreError::StaleHandle(_))
+        ));
+        let fresh = registration.select();
+        assert!(fresh.is_current());
+        assert_eq!(
+            (*fresh.configuration.verifier, fresh.configuration.work),
+            (2, 2048)
+        );
+    }
 
     struct Policy;
     impl ConsumerAccessService for Policy {

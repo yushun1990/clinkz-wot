@@ -45,7 +45,7 @@ pub use producer::{
 };
 pub use security::{
     HttpApiKey, HttpApiKeyVerifier, HttpBasicCredentials, HttpBasicVerifier, HttpClientAccess,
-    HttpClientTls, HttpServerSecurity, HttpVerifierWork,
+    HttpClientTls, HttpServerSecurity, HttpVerifierRegistration,
 };
 #[cfg(feature = "prepare")]
 mod producer_compiler;

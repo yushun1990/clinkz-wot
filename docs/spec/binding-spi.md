@@ -309,8 +309,10 @@ Each eligible Binding exposes all shared mutable inputs to its support answers
 and declared bounds. Each native member does the same for installed mappings,
 services and readiness. Fixed operands can establish stability by construction.
 Reloadable owners order changes against Servient's local decision. In Host
-HTTP, this includes the actual verifier work declarations and shared listener
-failure. Per-request credential verification and authorization stay live.
+HTTP, each version of a Basic or API-key registration pairs the executable
+verifier with its work bound. Replacing either pair or losing a shared listener
+invalidates staged coverage. Per-request credential verification and authorization
+stay live.
 Network availability and cached TD visibility remain independently ordered.
 
 Bounded authentication parsing/handshake may occur before final authorization;

@@ -532,7 +532,15 @@ fn changed_verifier_application_policy_and_instance_authority_fence_original_del
         for case in 0..9 {
             let keys = Keys::for_name("127.0.0.1");
             let verify = verifier();
-            let mut server = SecureFixture::new(&keys, verify.clone());
+            let basic =
+                HttpVerifierRegistration::<dyn HttpBasicVerifier>::new(verify.clone(), 1024);
+            let addr = address();
+            let mut server = SecureFixture::from_security(
+                keys.registered_server(basic.clone()),
+                addr,
+                secure_description(addr),
+                &[Operation::ReadProperty],
+            );
             let owner = consumer_instance();
             let accounts = bank();
             let access = access(
@@ -579,7 +587,7 @@ fn changed_verifier_application_policy_and_instance_authority_fence_original_del
                 }
                 5 => server.exposure.begin_close(),
                 6 => verify.replacement_identity.store(true, Ordering::Release),
-                7 => verify.work.set(2048),
+                7 => basic.replace(verify.clone(), 2048),
                 8 => *server.app.revoke_in_permission.borrow_mut() = Some(verify.clone()),
                 _ => unreachable!(),
             }
@@ -1275,7 +1283,14 @@ fn verify_dispatch_refuses_callback_invalidation(edge: DispatchInvalidation) {
     io().block_on(async {
         let keys = Keys::for_name("127.0.0.1");
         let verify = verifier();
-        let mut server = SecureFixture::new(&keys, verify.clone());
+        let basic = HttpVerifierRegistration::<dyn HttpBasicVerifier>::new(verify.clone(), 1024);
+        let addr = address();
+        let mut server = SecureFixture::from_security(
+            keys.registered_server(basic.clone()),
+            addr,
+            secure_description(addr),
+            &[Operation::ReadProperty],
+        );
         let instance = consumer_instance();
         let accounts = bank();
         let access = access(
@@ -1298,7 +1313,7 @@ fn verify_dispatch_refuses_callback_invalidation(edge: DispatchInvalidation) {
         let verify_in_hook = verify.clone();
         let invalidate = move || {
             if matches!(edge, DispatchInvalidation::FinalVerificationWork) {
-                verify_in_hook.work.set(2048);
+                basic.replace(verify_in_hook, 2048);
             } else {
                 gate.set(false);
             }
@@ -1412,15 +1427,16 @@ fn dispatch_refuses_service_work_changed_during_final_verification() {
 fn restoring_verifier_work_after_closed_install_does_not_restore_staged_coverage() {
     let keys = Keys::for_name("127.0.0.1");
     let verify = verifier();
+    let basic = HttpVerifierRegistration::<dyn HttpBasicVerifier>::new(verify.clone(), 1024);
     let addr = address();
     let mut fixture = SecureFixture::install_closed(
-        keys.server(verify.clone()),
+        keys.registered_server(basic.clone()),
         addr,
         secure_description(addr),
         &[Operation::ReadProperty],
     );
-    verify.work.set(2048);
-    verify.work.set(1024);
+    basic.replace(verifier(), 2048);
+    basic.replace(verify.clone(), 1024);
     assert!(matches!(
         fixture.exposure.publish(&mut fixture.owner, &mut work()),
         Err(CoreError::StaleHandle(_))

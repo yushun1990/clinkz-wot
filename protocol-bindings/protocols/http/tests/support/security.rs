@@ -22,7 +22,6 @@ struct Verifier {
     revision: std::sync::atomic::AtomicU64,
     expected_password: &'static [u8],
     replacement_identity: AtomicBool,
-    work: HttpVerifierWork,
     revoked: AtomicBool,
     calls: std::sync::atomic::AtomicUsize,
 }
@@ -52,9 +51,6 @@ impl HttpBasicVerifier for Verifier {
             scopes: vec!["property-access".into()],
         })
     }
-    fn work(&self) -> &HttpVerifierWork {
-        &self.work
-    }
 }
 struct Keys {
     cert: CertificateDer<'static>,
@@ -73,8 +69,13 @@ impl Keys {
         HttpClientTls::from_roots(vec![self.cert.clone()]).unwrap()
     }
     fn server(&self, verifier: Arc<Verifier>) -> HttpServerSecurity {
-        HttpServerSecurity::try_new(vec![self.cert.clone()], self.key.clone_key(), verifier)
-            .unwrap()
+        self.registered_server(HttpVerifierRegistration::new(verifier, 1024))
+    }
+    fn registered_server(
+        &self,
+        basic: Arc<HttpVerifierRegistration<dyn HttpBasicVerifier>>,
+    ) -> HttpServerSecurity {
+        HttpServerSecurity::try_new(vec![self.cert.clone()], self.key.clone_key(), basic).unwrap()
     }
     fn independent_client(&self) -> Arc<rustls::ClientConfig> {
         let mut roots = rustls::RootCertStore::empty();
@@ -388,7 +389,6 @@ fn verifier_password(expected_password: &'static [u8]) -> Arc<Verifier> {
         revision: std::sync::atomic::AtomicU64::new(0),
         expected_password,
         replacement_identity: AtomicBool::new(false),
-        work: HttpVerifierWork::new(1024),
         revoked: AtomicBool::new(false),
         calls: std::sync::atomic::AtomicUsize::new(0),
     })

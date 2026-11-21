@@ -12,7 +12,11 @@ Use `try_https_consumer_registration`, `HttpConsumerConfig::for_https_ip`,
 `HttpClientTls` and instance-bound `HttpClientAccess`. `try_composed` configures
 independent Basic/API-key slots; `try_new` is the Basic-only convenience, including
 an initially missing/revoked credential. Producer `HttpFiniteProducer::try_https`
-pairs `HttpServerSecurity::try_composed` with independent optional verifiers.
+pairs `HttpServerSecurity::try_composed` with an optional `HttpVerifierRegistration`
+for each scheme. Construct each registration with the verifier and its complete
+work bound. Its `replace` method sets both together and invalidates prior
+selections. Construct a fresh server security configuration to select the new
+version and qualify it for publication.
 API-key-only and HTTPS NoSec require no dummy Basic service. Attach the same
 server registration to `HttpFiniteConfig::with_security` before installation.
 TLS 1.3 chain/expiry/IP-SAN verification precedes credential projection; TLS trust
