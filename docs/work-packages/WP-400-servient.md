@@ -655,10 +655,14 @@ negative match. Closed setup then checks the actual endpoint, mapping/service
 identity, native readiness and expected incumbent. Source-free installation
 pins the observed registration, provider and native facts through the local
 decision. A stale candidate retires its original members and leaves the
-incumbent current. Each effective operation has exactly one native owner. The source-free publication stages two bounded original identity
-vectors before setup, moves one into the registry at commit, and rejects changed,
-duplicate, omitted or foreign retirement sets. No allocation, native progress or
-fallible preparation is added inside the local publication commit.
+incumbent current. Each effective operation has exactly one native owner.
+Before setup, `PublicationPermission` reserves one vector of weak member
+identities and one of weak ingress gates. Admission records the original
+identities. Commit records the gates in their reserved storage and shares the
+permission with the registry. The publication guard and accepted work retain
+that same permission. Retirement checks the complete original set and rejects
+changed, duplicate, omitted or foreign members. The local commit opens all
+prechecked gates without allocation, native progress or fallible preparation.
 
 The existing shared `HostResourceAccounts` bank reserves Engine retained bytes,
 cleanup byte/item allowances and a Thing slot before ownership handoff. Costs
