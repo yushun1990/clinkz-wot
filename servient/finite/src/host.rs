@@ -469,29 +469,31 @@ impl RawProducerServient {
         expected: ProducerInstanceKey,
         replacement: RawProducerInstance,
     ) -> Result<(), BindingInputRejection<RawProducerInstance>> {
-        let index = self
+        let Some(index) = self
             .instances
             .iter()
-            .position(|entry| entry.instance.key() == expected);
-        if index.is_none()
-            || replacement.key() == expected
+            .position(|entry| entry.instance.key() == expected)
+        else {
+            return Err(rejection(replacement));
+        };
+        if replacement.key() == expected
             || replacement.key().slot().slot() != expected.slot().slot()
             || !Self::valid_instance(&replacement, self.limits)
         {
             return Err(rejection(replacement));
         }
-        self.instances[index.expect("checked entry")]
-            .permission
-            .revoke();
-        self.instances[index.expect("checked entry")] = InstanceEntry {
+        let entry = InstanceEntry {
             instance: Rc::new(replacement),
             permission: Rc::new(PublicationPermission::raw()),
             action_routes: None,
             notification_routes: None,
         };
+        self.instances[index].permission.close_ingress();
+        let displaced = core::mem::replace(&mut self.instances[index], entry);
         if let Some(actions) = &mut self.actions {
             actions.revoke(expected);
         }
+        drop(displaced);
         Ok(())
     }
 
@@ -595,6 +597,10 @@ impl RawProducerServient {
             runtime.fail(CoreError::Validation(context()));
             return Ok(Poll::Ready(runtime.state));
         }
+        if let Err(error) = runtime.binding.check_ingress() {
+            runtime.fail(error);
+            return Ok(Poll::Ready(runtime.state));
+        }
         let mut ingress = runtime.ingress.take().expect("received exchange retained");
         let single = ingress
             .candidates
@@ -669,6 +675,8 @@ impl RawProducerServient {
                     reason: clinkz_wot_core::SecurityFailureReason::AuthorizationDenied,
                     context: context(),
                 })
+            } else if let Err(error) = runtime.binding.check_ingress() {
+                Err(error)
             } else if !runtime.ingress_gate.is_open() || !self.instances[i].permission.is_current()
             {
                 Err(CoreError::StaleHandle(context()))
@@ -1188,8 +1196,19 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             self.fail(CoreError::Validation(context()));
             return Poll::Ready(self.state);
         }
-        // An unread result occupies the next receive opportunity. The installed
-        // service must still pass the funded maintenance check above.
+        if matches!(self.state, Serving | Delivering)
+            && let Err(error) = self.binding.check_ingress()
+        {
+            if self.state == Serving {
+                self.fail(error);
+                return Poll::Ready(self.state);
+            }
+            // An independently failed listener can still own a usable reply
+            // socket. Fence fresh ingress while the original delivery runs.
+            self.ingress_gate.withdraw();
+            self.first_cause.get_or_insert(error);
+        }
+        // An unread result occupies the next receive opportunity.
         if unread {
             return Poll::Ready(Serving);
         }
@@ -1343,7 +1362,11 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                             .expect("prechecked terminal handoff");
                         self.settle_reply(FiniteDelivery::Delivered);
                         self.io_deadline = Deadline::NONE;
-                        self.state = Serving;
+                        self.state = if self.first_cause.is_some() {
+                            Closing
+                        } else {
+                            Serving
+                        };
                         Poll::Ready(self.state)
                     }
                 }

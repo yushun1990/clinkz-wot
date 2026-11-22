@@ -212,15 +212,7 @@ fn failed_uncommitted_participant_preserves_publication_and_original_action() {
     }
 }
 
-fn send_report(
-    owner: &mut RawProducerServient,
-    exposure: &mut ComposedProducerExposure,
-    address: SocketAddr,
-    method: &str,
-    path: &str,
-    body: &str,
-    credits: &mut WorkBudget,
-) -> (String, HttpActionDelivery) {
+fn action_request(address: SocketAddr, method: &str, path: &str, body: &str) -> TcpStream {
     let mut peer = TcpStream::connect(address).unwrap();
     peer.set_nonblocking(true).unwrap();
     let head = format!(
@@ -233,6 +225,19 @@ fn send_report(
         body.len()
     );
     peer.write_all(head.as_bytes()).unwrap();
+    peer
+}
+
+fn send_report(
+    owner: &mut RawProducerServient,
+    exposure: &mut ComposedProducerExposure,
+    address: SocketAddr,
+    method: &str,
+    path: &str,
+    body: &str,
+    credits: &mut WorkBudget,
+) -> (String, HttpActionDelivery) {
+    let mut peer = action_request(address, method, path, body);
     let end = Instant::now() + Duration::from_secs(5);
     let mut bytes = Vec::new();
     loop {
@@ -1455,22 +1460,22 @@ fn late_invalid_result_and_replacement_never_retarget_old_http_correlation() {
         .unwrap();
     second.publish(&mut owner, &mut budget()).unwrap();
     assert_eq!(owner.description(old_key), None);
-    // Replacement displaces the old logical authority; its still-live native
-    // lease cannot turn a stale request into an authorized Action.
-    let (stale, report) = send_report(
-        &mut owner,
-        &mut first,
-        old_addr,
-        "POST",
-        "/run",
-        "12",
-        &mut budget(),
+    // The post-commit POST reaches the old listen backlog. The native owner
+    // can retire its listener while the original invocation is still pending.
+    let _stale = action_request(old_addr, "POST", "/run", "12");
+    let native = first.participant_mut::<HttpActionRuntime>(0).unwrap();
+    assert!(native.ingress_gate().is_withdrawn());
+    let mut credit = budget();
+    let polls = credit.remaining(WorkClass::BindingPolls);
+    assert_eq!(
+        owner.step_actions(native, &mut credit).unwrap(),
+        Poll::Pending
     );
-    assert!(stale.starts_with("HTTP/1.1 410 Gone"), "{stale}");
-    assert!(matches!(
-        report.request_error,
-        Some(CoreError::StaleHandle(_))
-    ));
+    assert_eq!(credit.remaining(WorkClass::BindingPolls), polls);
+    owner.reconcile_participation(old_key, native).unwrap();
+    assert!(native.take_delivery().is_none());
+    assert_eq!(native.action_ids().collect::<Vec<_>>(), [id]);
+    TcpListener::bind(old_addr).unwrap();
     assert_eq!(old.invoked.get(), 1);
     assert_eq!(newer.invoked.get(), 0);
     let new_accepted = send(&mut owner, &mut second, new_addr, "POST", "/run", "12");

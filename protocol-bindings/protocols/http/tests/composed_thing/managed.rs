@@ -234,6 +234,15 @@ fn action_without_prepared_control_route_refuses_managed_handoff_before_native_s
     UdpSocket::bind(address).unwrap();
 }
 
+fn admit(
+    owner: &RawProducerServient,
+    input: ComposedProducerInput,
+    accounts: &Arc<HostResourceAccounts>,
+) -> ComposedProducerExposure {
+    ComposedProducerExposure::try_new(owner, input, limits(), accounts.clone(), &mut budget())
+        .ok()
+        .unwrap()
+}
 fn start_http(exposure: &mut ComposedProducerExposure) {
     for i in 0..2 {
         assert_eq!(
@@ -571,6 +580,9 @@ impl FiniteIngressBinding for ControlledClose {
     }
     fn configuration(&self) -> &Self::Configuration {
         self.inner.configuration()
+    }
+    fn check_ingress(&self) -> CoreResult<()> {
+        self.inner.check_ingress()
     }
     fn engine_backing_bytes(&self) -> Option<usize> {
         self.inner.engine_backing_bytes()

@@ -102,6 +102,15 @@ fn http_read(
         100,
     )
     .unwrap();
+    http_runtime(owner, config, id, validation)
+}
+
+fn http_runtime(
+    owner: &RawProducerServient,
+    config: HttpFiniteConfig,
+    id: BindingId,
+    validation: FiniteValidation,
+) -> RawFiniteRuntime<HttpFiniteBinding> {
     RawFiniteRuntime::try_new(
         HttpFiniteBinding::new(config.clone(), id, BindingGeneration::INITIAL),
         config,
@@ -841,17 +850,21 @@ fn udp_call(
     let (n, _) = peer.recv_from(&mut buf).unwrap();
     std::str::from_utf8(&buf[..n]).unwrap().into()
 }
+fn connect(addr: SocketAddr, path: &str) -> TcpStream {
+    let mut peer = TcpStream::connect(addr).unwrap();
+    peer.write_all(
+        format!("GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n").as_bytes(),
+    )
+    .unwrap();
+    peer.set_nonblocking(true).unwrap();
+    peer
+}
 fn read_peer(
     addr: SocketAddr,
     owner: &mut RawProducerServient,
     read: &mut RawFiniteRuntime<HttpFiniteBinding>,
 ) -> Vec<u8> {
-    let mut peer = TcpStream::connect(addr).unwrap();
-    peer.set_nonblocking(true).unwrap();
-    peer.write_all(
-        format!("GET /value HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n").as_bytes(),
-    )
-    .unwrap();
+    let mut peer = connect(addr, "/value");
     let mut output = vec![];
     let end = Instant::now() + Duration::from_secs(5);
     loop {
@@ -1768,15 +1781,15 @@ fn shared_native_socket_serves_two_things_and_replacement_does_not_retarget_old_
     assert_eq!(s.description(k1), None);
     assert_eq!(s.description(k2), Some(text.as_ref()));
     assert_eq!(s.description(k3), Some(text.as_ref()));
-    // Old native correlation and late work keep their original key. Numeric
-    // slot reuse grants no fresh query/cancel or new invocation authority.
+    // The shared socket refuses fresh requests at the displaced native gate.
+    // The original handle below still progresses its accepted invocation.
     assert_eq!(
         udp_call(&peer, &native, &mut s, routes(&p1), k1, "query"),
-        "rejected"
+        "closed"
     );
     assert_eq!(
         udp_call(&peer, &native, &mut s, routes(&p1), k1, "invoke"),
-        "rejected"
+        "closed"
     );
     assert_eq!(
         udp_call(&peer, &native, &mut s, routes(&p3), k3, "invoke"),

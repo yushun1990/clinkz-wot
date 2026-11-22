@@ -104,15 +104,6 @@ fn compiler(address: SocketAddr, accounts: &Arc<HostResourceAccounts>) -> Rc<Htt
         .unwrap(),
     )
 }
-fn connect(address: SocketAddr, path: &str) -> TcpStream {
-    let mut peer = TcpStream::connect(address).unwrap();
-    peer.write_all(
-        format!("GET {path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n").as_bytes(),
-    )
-    .unwrap();
-    peer.set_nonblocking(true).unwrap();
-    peer
-}
 fn drive(owner: &mut RawProducerServient, exposures: &mut [&mut ComposedProducerExposure]) {
     drive_at(owner, exposures, now());
 }
@@ -851,4 +842,146 @@ fn incompatible_native_configuration_and_known_listener_failure_cannot_qualify_p
     drop(shared);
     assert_empty(&accounts);
     TcpListener::bind(address).unwrap();
+}
+
+fn check_shared_listener_loss(phase: RawFiniteState) {
+    let mut owner = owner();
+    let accounts = bank();
+    let addresses = [tcp_addr(), tcp_addr()];
+    let shared = listener(addresses[0]);
+    let counts = Rc::new(Counts::default());
+    let mut input = http_input(
+        &owner,
+        key(1, Generation::INITIAL),
+        addresses,
+        counts.clone(),
+    );
+    let left = &input.prepared.operations()[0];
+    let config = HttpFiniteConfig::try_new(
+        HttpProducerConfig::for_loopback(addresses[0]).unwrap(),
+        left.definition::<HttpProducerProgram>().unwrap().clone(),
+        input.instance.key(),
+        AffordanceTarget::Property(Arc::from("left")),
+        100,
+    )
+    .unwrap()
+    .with_listener(&shared)
+    .unwrap();
+    input.participants[0] = OwnedProducerParticipation::finite(http_runtime(
+        &owner,
+        config,
+        left.binding.0,
+        FiniteValidation::Required,
+    ));
+    let mut thing = admit(&owner, input, &accounts);
+    start_http(&mut thing);
+    thing.publish(&mut owner, &mut budget()).unwrap();
+    let mut first = connect(addresses[0], "/value");
+    let member = thing.participant_mut::<HttpRuntime>(0).unwrap();
+    let end = Instant::now() + Duration::from_secs(5);
+    while owner.step(member, &mut cx(), &mut budget(), now()).unwrap() != Poll::Ready(phase) {
+        assert!(
+            Instant::now() < end,
+            "first request stalled at {:?}",
+            member.state()
+        );
+    }
+    let assert_delivered = |peer: &mut TcpStream| {
+        let mut wire = Vec::new();
+        peer.read_to_end(&mut wire).unwrap();
+        assert!(wire.starts_with(b"HTTP/1.1 200") && wire.ends_with(b"42"));
+    };
+    if phase == RawFiniteState::Serving {
+        assert_delivered(&mut first);
+    }
+    let accepted = phase != RawFiniteState::Dispatching;
+
+    // A second route on the same physical listener brings an incompatible clock.
+    let other_input = input_with_listener(
+        &owner,
+        key(2, Generation::INITIAL),
+        &td(addresses[0], "other", &["/other"]),
+        compiler(addresses[0], &accounts),
+        "other",
+        7,
+        Rc::new(App::default()),
+        Some(&shared),
+    );
+    let mut other = admit(&owner, other_input, &accounts);
+    let other_clock = MonotonicInstant::new(ClockId::new(2), 0);
+    other
+        .step(&mut owner, &mut cx(), other_clock, |_, _| budget())
+        .unwrap();
+    other.publish(&mut owner, &mut budget()).unwrap();
+    other
+        .step(&mut owner, &mut cx(), other_clock, |_, _| budget())
+        .unwrap();
+    assert!(matches!(
+        other.progress_failure(0),
+        Some(CoreError::Binding(_))
+    ));
+
+    thing
+        .step(&mut owner, &mut cx(), now(), |_, _| WorkBudget::new())
+        .unwrap();
+    assert!(owner.description(thing.key()).is_some());
+    let mut sibling = connect(addresses[1], "/value");
+    for _ in 0..8 {
+        thing
+            .step(&mut owner, &mut cx(), now(), |_, _| budget())
+            .unwrap();
+    }
+    let mut wire = Vec::new();
+    if let Err(error) = sibling.read_to_end(&mut wire) {
+        assert_eq!(error.kind(), std::io::ErrorKind::ConnectionReset);
+    }
+    assert_eq!(
+        (
+            owner.description(thing.key()).is_some(),
+            counts.property.get(),
+            wire.starts_with(b"HTTP/1.1 200")
+        ),
+        (false, usize::from(accepted), false),
+    );
+    assert!(matches!(
+        thing.progress_failure(0),
+        Some(CoreError::Binding(_))
+    ));
+    assert!(thing.retire(&mut owner, &mut budget()).is_err());
+    let original = acknowledge(&mut thing);
+    if accepted {
+        if phase == RawFiniteState::Delivering {
+            assert_delivered(&mut first);
+        }
+        assert_eq!(original.delivery, FiniteDelivery::Delivered);
+        assert_eq!(
+            original.result.unwrap().data().unwrap().body.as_ref(),
+            b"42"
+        );
+    } else {
+        assert_eq!(original.effect, FiniteEffect::NotInvoked);
+        assert_eq!(original.delivery, FiniteDelivery::NotDelivered);
+        assert!(matches!(original.result, Err(CoreError::Binding(_))));
+    }
+    thing.retire(&mut owner, &mut budget()).unwrap();
+    other
+        .step(&mut owner, &mut cx(), other_clock, |_, _| budget())
+        .unwrap();
+    other.retire(&mut owner, &mut budget()).unwrap();
+    drop((thing, other));
+    for address in addresses {
+        TcpListener::bind(address).unwrap();
+    }
+    assert_empty(&accounts);
+}
+
+#[test]
+fn shared_listener_loss_fences_a_sibling_with_an_unacknowledged_result() {
+    check_shared_listener_loss(RawFiniteState::Serving);
+}
+
+#[test]
+fn shared_listener_loss_refuses_a_candidate_and_preserves_an_accepted_reply() {
+    check_shared_listener_loss(RawFiniteState::Dispatching);
+    check_shared_listener_loss(RawFiniteState::Delivering);
 }

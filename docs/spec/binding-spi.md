@@ -417,7 +417,8 @@ requires input/output validation to be enabled and verifies its captured service
 an explicitly raw runtime cannot qualify a published exposure. An unrelated
 closed runtime cannot be opened as an extra participant. The
 handoff installs a staged `ProducerIngressGate` for each participant and opens
-the complete set inside the Servient publication boundary. Withdrawal is terminal
+the complete set inside the Servient publication boundary. The same commit
+withdraws the original gates of any displaced incarnation. Withdrawal is terminal
 for that gate. Reconciliation retires its own native participant even after
 registry replacement. Third-party `open` callbacks
 after logical commit are not permitted: reentrancy or partial opening would
@@ -430,6 +431,11 @@ new semantic ingress, including after an earlier exchange. Owned replies and
 native cleanup can still finish after the gate closes. A lease is not a
 native connection or per-Thing Binding runtime: one Binding owner
 can retain many leases and Things, and closing one releases only that participation.
+Finite Bindings with independently fallible ingress implement
+`FiniteIngressBinding::check_ingress` as a bounded, passive read of their
+native owner. This lets a funded turn detect the loss of a shared listener
+while a delivered result occupies the receive slot. The check leaves the
+original exchange and its acknowledgement with their owner.
 The HTTP finite participant can share one listener across up to 32 independently
 prepared Property Read/Write and Thing-root finite collection mappings; native
 method/path collisions refuse before setup. `FiniteIngressBinding::validator` supplies one captured `FiniteValidator`

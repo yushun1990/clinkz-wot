@@ -908,3 +908,149 @@ fn replacement_drains_original_members_with_or_without_a_td_lookup() {
         assert_empty(&accounts);
     }
 }
+
+fn publish_http_pair(
+    owner: &mut RawProducerServient,
+    accounts: &Arc<HostResourceAccounts>,
+    addresses: [SocketAddr; 2],
+    counts: Rc<Counts>,
+    generation: Generation,
+    expected: Option<ProducerInstanceKey>,
+) -> ComposedProducerExposure {
+    let mut input = http_input(owner, key(1, generation), addresses, counts);
+    input.expected = expected;
+    let mut exposure = admit(owner, input, accounts);
+    start_http(&mut exposure);
+    exposure.publish(owner, &mut budget()).unwrap();
+    exposure
+}
+
+#[test]
+fn live_replacement_refuses_late_ingress_and_preserves_precommit_work() {
+    for accepted_before_commit in [false, true] {
+        let mut owner = owner();
+        let accounts = bank();
+        let addresses = [tcp_addr(), tcp_addr()];
+        let counts = Rc::new(Counts::default());
+        let mut old = publish_http_pair(
+            &mut owner,
+            &accounts,
+            addresses,
+            counts.clone(),
+            Generation::INITIAL,
+            None,
+        );
+        let mut accepted = accepted_before_commit.then(|| {
+            let peer = connect(addresses[0], "/value");
+            let member = old.participant_mut::<HttpRuntime>(0).unwrap();
+            for _ in 0..8 {
+                let _ = owner.step(member, &mut cx(), &mut budget(), now()).unwrap();
+                if member.state() == RawFiniteState::Delivering {
+                    return peer;
+                }
+            }
+            panic!("old handler did not reach delivery");
+        });
+        let next_addresses = [tcp_addr(), tcp_addr()];
+        let mut successor = publish_http_pair(
+            &mut owner,
+            &accounts,
+            next_addresses,
+            Rc::new(Counts::default()),
+            Generation::new(2).unwrap(),
+            Some(old.key()),
+        );
+        let gates_withdrawn = (0..2).all(|i| {
+            old.participant_mut::<HttpRuntime>(i)
+                .unwrap()
+                .ingress_gate()
+                .is_withdrawn()
+        });
+        // The old socket still belongs to its native owner. The peer reaches
+        // its listen backlog after commit and before that owner's first turn.
+        let _late = connect(addresses[1], "/value");
+        for _ in 0..8 {
+            old.step(&mut owner, &mut cx(), now(), |_, _| budget())
+                .unwrap();
+        }
+        assert_eq!(counts.property.get(), usize::from(accepted_before_commit));
+        if let Some(peer) = &mut accepted {
+            let mut bytes = Vec::new();
+            peer.read_to_end(&mut bytes).unwrap();
+            assert!(bytes.starts_with(b"HTTP/1.1 200") && bytes.ends_with(b"42"));
+            assert!(old.retire(&mut owner, &mut budget()).is_err());
+            let original = old
+                .participant_mut::<HttpRuntime>(0)
+                .unwrap()
+                .take_settlement()
+                .unwrap();
+            assert_eq!(original.recipient, Some(old.key()));
+            assert_eq!(original.delivery, FiniteDelivery::Delivered);
+            assert_eq!(
+                original.result.unwrap().data().unwrap().body.as_ref(),
+                b"42"
+            );
+        }
+        let retired = old.retire(&mut owner, &mut budget());
+        let late = old
+            .participant_mut::<HttpRuntime>(1)
+            .unwrap()
+            .take_settlement();
+        assert_eq!(
+            late.map(|s| (s.effect, s.delivery)),
+            None,
+            "post-commit GET acquired old work"
+        );
+        assert!(gates_withdrawn);
+        retired.unwrap();
+        for (i, address) in next_addresses.into_iter().enumerate() {
+            let member = successor.participant_mut::<HttpRuntime>(i).unwrap();
+            assert!(read_peer(address, &mut owner, member).starts_with(b"HTTP/1.1 200"));
+            assert_eq!(
+                member.take_settlement().unwrap().delivery,
+                FiniteDelivery::Delivered
+            );
+        }
+        close_http(&mut successor);
+        successor.retire(&mut owner, &mut budget()).unwrap();
+        drop((old, successor));
+        for address in addresses {
+            TcpListener::bind(address).unwrap();
+        }
+        assert_empty(&accounts);
+    }
+}
+
+#[test]
+fn raw_replacement_withdraws_published_gates_before_a_direct_receive() {
+    let mut owner = owner();
+    let accounts = bank();
+    let addresses = [tcp_addr(), tcp_addr()];
+    let mut old = publish_http_pair(
+        &mut owner,
+        &accounts,
+        addresses,
+        Rc::new(Counts::default()),
+        Generation::INITIAL,
+        None,
+    );
+    let replacement = action_instance(
+        key(1, Generation::new(2).unwrap()),
+        Rc::new(Counts::default()),
+    );
+    owner.replace(old.key(), replacement).ok().unwrap();
+    let _late = connect(addresses[0], "/value");
+    for i in 0..2 {
+        let member = old.participant_mut::<HttpRuntime>(i).unwrap();
+        let state = owner.step(member, &mut cx(), &mut budget(), now()).unwrap();
+        assert_ne!(state, Poll::Ready(RawFiniteState::Dispatching));
+        assert!(member.ingress_gate().is_withdrawn());
+    }
+    for _ in 0..8 {
+        old.step(&mut owner, &mut cx(), now(), |_, _| budget())
+            .unwrap();
+    }
+    old.retire(&mut owner, &mut budget()).unwrap();
+    drop(old);
+    assert_empty(&accounts);
+}

@@ -80,7 +80,7 @@ impl PublicationPermission {
         self.active.set(false);
     }
 
-    fn close_ingress(&self) {
+    pub(super) fn close_ingress(&self) {
         self.revoke();
         for gate in self.gates.iter().filter_map(Weak::upgrade) {
             gate.withdraw();
@@ -385,7 +385,8 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
         &self,
         facts: &mut PublicationObserver<'_>,
     ) -> clinkz_wot_core::CoreResult<()> {
-        self.binding.observe_installation(facts)
+        self.binding.observe_installation(facts)?;
+        self.binding.check_ingress()
     }
 
     fn associated_with(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
@@ -762,7 +763,7 @@ impl RawProducerServient {
         if index == self.instances.len() {
             self.instances.push(entry);
         } else {
-            self.instances[index].permission.revoke();
+            self.instances[index].permission.close_ingress();
             publication.retired = Some(core::mem::replace(&mut self.instances[index], entry));
             // Fixed-size bounded Action scan, no application callback. The
             // original invocation still owns its work and late settlement.

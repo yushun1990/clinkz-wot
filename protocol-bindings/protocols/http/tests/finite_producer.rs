@@ -347,6 +347,9 @@ impl FiniteIngressBinding for ControlledHttp {
     fn configuration(&self) -> &Self::Configuration {
         self.native.configuration()
     }
+    fn check_ingress(&self) -> CoreResult<()> {
+        self.native.check_ingress()
+    }
     fn validator(&self) -> Option<&dyn FiniteValidator> {
         self.live.get().then_some(self)
     }

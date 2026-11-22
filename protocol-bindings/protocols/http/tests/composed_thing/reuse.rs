@@ -197,15 +197,6 @@ fn input_with_capacity(
         handler_backing_bytes: std::mem::size_of::<App>(),
     }
 }
-fn admit(
-    owner: &RawProducerServient,
-    input: ComposedProducerInput,
-    accounts: &Arc<HostResourceAccounts>,
-) -> ComposedProducerExposure {
-    ComposedProducerExposure::try_new(owner, input, limits(), accounts.clone(), &mut budget())
-        .ok()
-        .unwrap()
-}
 fn start(exposure: &mut ComposedProducerExposure) {
     assert_eq!(
         exposure

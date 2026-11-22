@@ -1261,11 +1261,13 @@ registry and accepted work share the original member identities and ingress
 gates. TD lookup and fresh dispatch observe their availability, including
 withdrawal of a native owner moved out through a typed loan. Servient checks
 this permission after linked callbacks and before granting behavior entry.
-On a funded turn, a finite participant checks its installed services even while
-a delivered result awaits acknowledgement. Loss of a required service withdraws
-its gate and preserves the original settlement. A withdrawn gate continues to
-request local retirement after a successor takes the registry slot. A healthy
-staged gate still waits for its own publication decision.
+On a funded turn, a finite participant checks its installed services and the
+health of any shared native ingress, including while a delivered result awaits
+acknowledgement. Terminal loss withdraws its gate. The original reply and
+settlement stay with the accepting participant. At replacement commit, Servient
+withdraws every displaced gate before opening the successor's gates. Old
+participants can then drain their own work and retire even if nobody looks up
+the old TD. A healthy staged gate waits for its own publication decision.
 A stale, foreign or uncommitted participant cannot revoke a publication or
 cancel its accepted work.
 At a staged publication decision, a recorded native failure rolls back the

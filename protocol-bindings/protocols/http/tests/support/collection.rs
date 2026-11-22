@@ -256,6 +256,9 @@ impl FiniteIngressBinding for Native {
     fn configuration(&self) -> &HttpFiniteConfig {
         self.actual.configuration()
     }
+    fn check_ingress(&self) -> CoreResult<()> {
+        self.actual.check_ingress()
+    }
     fn engine_backing_bytes(&self) -> Option<usize> {
         self.actual
             .engine_backing_bytes()?
@@ -1367,6 +1370,9 @@ fn verify_collection_validator_bound(operation: Operation) {
         }
         fn configuration(&self) -> &HttpFiniteConfig {
             self.actual.configuration()
+        }
+        fn check_ingress(&self) -> CoreResult<()> {
+            self.actual.check_ingress()
         }
         fn validator(&self) -> Option<&dyn FiniteValidator> {
             Some(self)

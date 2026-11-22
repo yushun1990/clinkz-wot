@@ -648,6 +648,9 @@ impl FiniteIngressBinding for ControlledBinding {
     fn configuration(&self) -> &Self::Configuration {
         self.actual.configuration()
     }
+    fn check_ingress(&self) -> CoreResult<()> {
+        self.actual.check_ingress()
+    }
     fn qualified_operation_count(&self) -> Option<usize> {
         self.actual.qualified_operation_count()
     }

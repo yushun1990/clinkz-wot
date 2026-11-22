@@ -210,13 +210,17 @@ impl HttpFiniteBinding {
         }
     }
 
-    fn failure(&mut self, phase: ErrorPhase) -> CoreError {
-        let error = CoreError::Binding(
+    fn native_error(&self, phase: ErrorPhase) -> CoreError {
+        CoreError::Binding(
             ErrorContext::new(phase, RetryClass::Never)
                 .with_thing(self.configuration.instance.slot())
                 .with_binding(self.identity.0, self.identity.1)
                 .with_redacted_cause(627, "finite HTTP native operation failed"),
-        );
+        )
+    }
+
+    fn failure(&mut self, phase: ErrorPhase) -> CoreError {
+        let error = self.native_error(phase);
         if self.failed.is_none() {
             self.failed = Some(error.clone());
         }
@@ -294,6 +298,21 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         self.configuration.instance == key
             && self.configuration.listen.secure == self.configuration.security.is_some()
     }
+    fn check_ingress(&self) -> CoreResult<()> {
+        if let Some(error) = &self.failed {
+            return Err(error.clone());
+        }
+        if self.closed
+            || self
+                .configuration
+                .listener
+                .as_ref()
+                .is_some_and(|listener| !listener.available())
+        {
+            return Err(self.native_error(ErrorPhase::Binding));
+        }
+        Ok(())
+    }
     fn covers_definition(
         &self,
         key: ProducerInstanceKey,
@@ -303,11 +322,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         definition: &dyn Any,
     ) -> bool {
         self.prepared_for_instance(key)
-            && self
-                .configuration
-                .listener
-                .as_ref()
-                .is_none_or(|s| s.available())
+            && self.check_ingress().is_ok()
             && self.configuration.mappings.iter().any(|(target, program)| {
                 (match (target, site) {
                     (AffordanceTarget::Thing, clinkz_wot_core::thing::AffordanceSite::Thing) => {

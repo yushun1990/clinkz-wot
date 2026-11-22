@@ -187,6 +187,13 @@ pub trait FiniteIngressBinding {
             crate::ErrorContext::new(crate::ErrorPhase::Admission, crate::RetryClass::Never),
         ))
     }
+    /// Report a terminal loss of installed ingress without accepting a request
+    /// or touching an outstanding reply. A Binding whose native owner can
+    /// fail independently of its own polls must consult that owner's bounded,
+    /// passive health state here. Wrappers forward the check.
+    fn check_ingress(&self) -> CoreResult<()> {
+        Ok(())
+    }
     /// Passive closed-participation recipient check. This is a native mapping
     /// claim, not logical permission; a shared Binding may prepare several
     /// independent Things. Raw-only Bindings gain no publication readiness.
