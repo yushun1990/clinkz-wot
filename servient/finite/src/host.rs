@@ -1145,7 +1145,6 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         self.check_time(now);
         if self.state == Closed
             || self.state == InstalledClosed
-            || (self.state == Serving && self.settlement.is_some())
             || (self.state == Dispatching && self.issuer.strong_count() != 0)
         {
             return Poll::Ready(self.state);
@@ -1153,15 +1152,17 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         // Serving is only a native state, not a lasting grant of publication
         // authority. A revoked gate must fence every subsequent receive, while
         // Dispatching/Delivering/Closing still own their original work.
-        if self.state == Serving && !self.ingress_gate.get() {
-            return Poll::Pending;
-        }
+        let unread = self.state == Serving && self.settlement.is_some();
         let class = match self.state {
             Closing => WorkClass::CleanupItems,
             _ => WorkClass::BindingPolls,
         };
-        if budget.remaining(class) == 0 {
-            return Poll::Pending;
+        if budget.remaining(class) == 0 || (self.state == Serving && !self.ingress_gate.get()) {
+            return if unread {
+                Poll::Ready(Serving)
+            } else {
+                Poll::Pending
+            };
         }
         let queue_work = if self.capacity.is_some()
             && matches!(self.state, Delivering | Closing)
@@ -1185,6 +1186,11 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         if self.state != Closing && !self.pair_is_current() {
             self.fail(CoreError::Validation(context()));
             return Poll::Ready(self.state);
+        }
+        // An unread result occupies the next receive opportunity. The installed
+        // service must still pass the funded maintenance check above.
+        if unread {
+            return Poll::Ready(Serving);
         }
         match self.state {
             Starting => {

@@ -1445,3 +1445,106 @@ fn restoring_verifier_work_after_closed_install_does_not_restore_staged_coverage
     assert_eq!(verify.calls.load(Ordering::Relaxed), 0);
     fixture.close();
 }
+
+#[test]
+fn unread_settlement_does_not_mask_installed_verifier_withdrawal() {
+    io().block_on(async {
+        let keys = Keys::for_name("127.0.0.1");
+        let first = address();
+        let second = address();
+        let registration = HttpVerifierRegistration::<dyn HttpBasicVerifier>::new(verifier(), 1024);
+        let mut td = secure_description(first);
+        td["properties"]["on"]["forms"]
+            .as_array_mut()
+            .unwrap()
+            .push(secure_description(second)["properties"]["on"]["forms"][0].clone());
+        let mut server = SecureFixture::install_listeners(
+            vec![
+                (first, keys.registered_server(registration.clone())),
+                (second, keys.server(verifier())),
+            ],
+            td,
+            &[Operation::ReadProperty],
+        );
+        server
+            .exposure
+            .publish(&mut server.owner, &mut work())
+            .unwrap();
+
+        let accounts = bank();
+        let consumer = consumer_instance();
+        let client_for = |addr| {
+            let td = secure_description(addr);
+            let access = access(
+                &consumer,
+                td["properties"]["on"]["forms"][0]["href"].as_str().unwrap(),
+                true,
+                Arc::new(AtomicBool::new(false)),
+            );
+            secure_client(&td, &keys, &consumer, access, &accounts, None).0
+        };
+        let left = client_for(first);
+        assert!(
+            server
+                .exchange(&mut read_secure(&left))
+                .await
+                .result()
+                .is_ok()
+        );
+        let right = client_for(second);
+        assert!(
+            server
+                .exchange(&mut read_secure(&right))
+                .await
+                .result()
+                .is_ok()
+        );
+        assert_eq!(
+            server
+                .exposure
+                .participant_mut::<SecureServer>(1)
+                .unwrap()
+                .take_settlement()
+                .unwrap()
+                .delivery,
+            FiniteDelivery::Delivered
+        );
+
+        registration.replace(verifier(), 2048);
+        assert_eq!(
+            server
+                .server()
+                .step(&mut cx(), &mut WorkBudget::new(), now(0)),
+            Poll::Ready(RawFiniteState::Serving)
+        );
+        server
+            .exposure
+            .step(&mut server.owner, &mut cx(), now(0), |_, _| work())
+            .unwrap();
+        let result = server.exchange(&mut read_secure(&right)).await;
+        assert_eq!(
+            server.app.reads.get(),
+            2,
+            "a withdrawn publication dispatched a fresh sibling GET"
+        );
+        assert!(result.result().is_err());
+        assert!(server.owner.description(server.exposure.key()).is_none());
+        assert!(matches!(
+            server.server().first_cause(),
+            Some(CoreError::Validation(_))
+        ));
+        assert!(
+            server
+                .exposure
+                .retire(&mut server.owner, &mut work())
+                .is_err()
+        );
+        let original = server.server().take_settlement().unwrap();
+        assert_eq!(original.recipient, Some(server.exposure.key()));
+        assert_eq!(original.delivery, FiniteDelivery::Delivered);
+        assert!(original.result.is_ok());
+        drop((original, result, left, right, consumer));
+        clean(&accounts);
+        server.close();
+    });
+}

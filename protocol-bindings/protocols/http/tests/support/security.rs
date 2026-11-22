@@ -182,6 +182,7 @@ impl RawFiniteHandler for SecureBehavior {
 }
 type SecureServer = RawFiniteRuntime<HttpFiniteBinding>;
 struct SecureFixture {
+    members: usize,
     owner: RawProducerServient,
     exposure: ComposedProducerExposure,
     app: Rc<SecureApp>,
@@ -223,6 +224,16 @@ impl SecureFixture {
         td: Value,
         operations: &[Operation],
     ) -> Self {
+        Self::install_listeners(vec![(addr, security)], td, operations)
+    }
+
+    fn install_listeners(
+        listeners: Vec<(SocketAddr, HttpServerSecurity)>,
+        td: Value,
+        operations: &[Operation],
+    ) -> Self {
+        let members = listeners.len();
+        let addr = listeners[0].0;
         let accounts = bank();
         let owner = RawProducerServient::try_empty(RawProducerRegistryLimits {
             instances: 1,
@@ -247,69 +258,87 @@ impl SecureFixture {
                 .collect(),
         )
         .with_description(Arc::from(td.to_string()));
-        let listen = HttpProducerConfig::for_https_loopback(addr).unwrap();
-        let provider: Rc<dyn ProducerCapability> = Rc::new(
-            HttpFiniteProducer::try_https(
-                listen,
-                BindingId::new(197),
-                BindingGeneration::INITIAL,
-                1000,
-                security.clone(),
-            )
-            .unwrap(),
-        );
+        let listeners: Vec<_> = listeners
+            .into_iter()
+            .enumerate()
+            .map(|(i, (addr, security))| {
+                (
+                    BindingId::new(197 + i as u32),
+                    HttpProducerConfig::for_https_loopback(addr).unwrap(),
+                    security,
+                )
+            })
+            .collect();
+        let providers: Vec<Rc<dyn ProducerCapability>> = listeners
+            .iter()
+            .map(|(binding, listen, security)| {
+                Rc::new(
+                    HttpFiniteProducer::try_https(
+                        *listen,
+                        *binding,
+                        BindingGeneration::INITIAL,
+                        1000,
+                        security.clone(),
+                    )
+                    .unwrap(),
+                ) as Rc<dyn ProducerCapability>
+            })
+            .collect();
         let prepared = prepare_thing(
             instance.description().unwrap(),
             key,
             GatewayDefaultV1::LIMITS,
             &mut work(),
-            &[provider.as_ref()],
+            &providers.iter().map(Rc::as_ref).collect::<Vec<_>>(),
             |scope, op| match scope {
                 ValidatedProducerScope::Property(n) => instance.supports_property(n, op),
                 _ => false,
             },
         )
         .unwrap();
-        let mappings = prepared
-            .operations()
-            .iter()
-            .map(|op| {
-                (
-                    AffordanceTarget::Property(Arc::from("on")),
-                    op.definition::<HttpProducerProgram>().unwrap().clone(),
+        let participants = listeners
+            .into_iter()
+            .map(|(binding, listen, security)| {
+                let mappings = prepared
+                    .operations()
+                    .iter()
+                    .filter(|op| op.binding.0 == binding)
+                    .map(|op| {
+                        (
+                            AffordanceTarget::Property(Arc::from("on")),
+                            op.definition::<HttpProducerProgram>().unwrap().clone(),
+                        )
+                    })
+                    .collect();
+                let config = HttpFiniteConfig::try_from_mappings(listen, mappings, key, 1000)
+                    .unwrap_or_else(|e| panic!("{:?}", e.error()))
+                    .with_security(security)
+                    .unwrap();
+                let server = RawFiniteRuntime::try_new(
+                    HttpFiniteBinding::new(config.clone(), binding, BindingGeneration::INITIAL),
+                    config,
+                    &owner,
+                    RawFiniteLimits {
+                        candidates: 1,
+                        input_body_bytes: 4096,
+                        output_body_bytes: 4096,
+                        output_media_capacity: 64,
+                        output_retained_bytes: 8192,
+                    },
+                    FiniteValidation::Required,
+                    Deadline::NONE,
                 )
+                .unwrap_or_else(|e| panic!("{:?}", e.error()));
+                OwnedProducerParticipation::finite(server)
             })
             .collect();
-        let config = HttpFiniteConfig::try_from_mappings(listen, mappings, key, 1000)
-            .unwrap_or_else(|e| panic!("{:?}", e.error()))
-            .with_security(security)
-            .unwrap();
-        let server = RawFiniteRuntime::try_new(
-            HttpFiniteBinding::new(
-                config.clone(),
-                BindingId::new(197),
-                BindingGeneration::INITIAL,
-            ),
-            config,
-            &owner,
-            RawFiniteLimits {
-                candidates: 1,
-                input_body_bytes: 4096,
-                output_body_bytes: 4096,
-                output_media_capacity: 64,
-                output_retained_bytes: 8192,
-            },
-            FiniteValidation::Required,
-            Deadline::NONE,
-        )
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let mut exposure = ComposedProducerExposure::try_new(
             &owner,
             ComposedProducerInput {
                 instance,
                 prepared,
-                providers: ProducerRegistrations::new(vec![provider]),
-                participants: vec![OwnedProducerParticipation::finite(server)],
+                providers: ProducerRegistrations::new(providers),
+                participants,
                 expected: None,
                 handler_backing_bytes: 4096,
             },
@@ -318,15 +347,18 @@ impl SecureFixture {
             &mut work(),
         )
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
-        let server = exposure.participant_mut::<SecureServer>(0).unwrap();
-        let _ = server.step(&mut cx(), &mut work(), now(0));
-        assert_eq!(
-            server.state(),
-            RawFiniteState::InstalledClosed,
-            "{:?}",
-            server.first_cause()
-        );
+        for i in 0..members {
+            let server = exposure.participant_mut::<SecureServer>(i).unwrap();
+            let _ = server.step(&mut cx(), &mut work(), now(0));
+            assert_eq!(
+                server.state(),
+                RawFiniteState::InstalledClosed,
+                "{:?}",
+                server.first_cause()
+            );
+        }
         Self {
+            members,
             owner,
             exposure,
             app,
@@ -339,15 +371,13 @@ impl SecureFixture {
         self.exposure.participant_mut::<SecureServer>(0).unwrap()
     }
     fn step(&mut self) {
-        let _ = self
-            .owner
-            .step(
-                self.exposure.participant_mut::<SecureServer>(0).unwrap(),
-                &mut cx(),
-                &mut work(),
-                now(0),
-            )
-            .unwrap();
+        for i in 0..self.members {
+            let server = self.exposure.participant_mut::<SecureServer>(i).unwrap();
+            let _ = self
+                .owner
+                .step(server, &mut cx(), &mut work(), now(0))
+                .unwrap();
+        }
     }
     async fn exchange(&mut self, call: &mut ConsumerCall) -> ConsumerSettlement {
         let start = Instant::now();
@@ -367,14 +397,20 @@ impl SecureFixture {
     }
     fn close(mut self) {
         self.exposure.begin_close();
-        for _ in 0..100 {
-            self.step();
-            if self.server().state() == RawFiniteState::Closed {
-                break;
+        for i in 0..self.members {
+            let server = self.exposure.participant_mut::<SecureServer>(i).unwrap();
+            for _ in 0..100 {
+                if server.state() == RawFiniteState::Closed {
+                    break;
+                }
+                let _ = self
+                    .owner
+                    .step(server, &mut cx(), &mut work(), now(0))
+                    .unwrap();
             }
+            assert_eq!(server.state(), RawFiniteState::Closed);
+            drop(server.take_settlement());
         }
-        assert_eq!(self.server().state(), RawFiniteState::Closed);
-        drop(self.server().take_settlement());
         self.exposure.retire(&mut self.owner, &mut work()).unwrap();
         drop(self.exposure);
         drop(self.owner);
