@@ -41,8 +41,8 @@ impl ClosedProducerParticipation for ServicesParticipant {
             .admission_backing_bytes(owner, key)?
             .checked_add(4096)
     }
-    fn begin_retire(&mut self) {
-        self.native.begin_retire();
+    fn begin_retire(&mut self, intent: ProducerRetirement) {
+        self.native.begin_retire(intent);
     }
     fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         self.native.ready_for(owner, key)

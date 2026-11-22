@@ -445,7 +445,7 @@ impl MqttNotificationRuntime {
             if self.first_cause.is_none() {
                 self.first_cause = Some(cause);
             }
-            self.begin_retire();
+            self.begin_retire(ProducerRetirement::Close);
         }
         Ok(result)
     }
@@ -546,7 +546,7 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
         // Native reference fields are already included in the layouts above.
         Some(bytes)
     }
-    fn begin_retire(&mut self) {
+    fn begin_retire(&mut self, _: ProducerRetirement) {
         self.closed = true;
         self.gate.withdraw();
         if let Some(l) = &self.lease {
@@ -620,7 +620,7 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
 }
 impl Drop for MqttNotificationRuntime {
     fn drop(&mut self) {
-        self.begin_retire();
+        self.begin_retire(ProducerRetirement::Close);
     }
 }
 impl ProducerNotificationBinding for MqttNotificationRuntime {

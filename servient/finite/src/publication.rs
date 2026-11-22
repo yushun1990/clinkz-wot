@@ -4,6 +4,7 @@ use super::*;
 use clinkz_wot_core::action::{ActionRoute, ActionValidator};
 pub use clinkz_wot_core::publication::{
     ClosedProducerParticipation, ProducerIngressGate, ProducerOwnerToken, ProducerParticipationId,
+    ProducerRetirement,
 };
 use clinkz_wot_core::publication::{PublicationFacts, PublicationObserver};
 
@@ -71,17 +72,13 @@ impl PublicationPermission {
                     .iter()
                     .any(|gate| gate.upgrade().is_none_or(|g| !g.is_open())))
         {
-            self.close_ingress();
+            self.revoke();
         }
         self.active.get()
     }
 
     pub(super) fn revoke(&self) {
         self.active.set(false);
-    }
-
-    pub(super) fn close_ingress(&self) {
-        self.revoke();
         for gate in self.gates.iter().filter_map(Weak::upgrade) {
             gate.withdraw();
         }
@@ -327,7 +324,7 @@ impl ProducerPublication {
     /// application callback or native shutdown occurs here.
     pub fn revoke(&self) {
         self.cancelled.set(true);
-        self.permission.close_ingress();
+        self.permission.revoke();
     }
     pub fn staged_description(&self) -> Option<&str> {
         self.instance.as_ref()?.description.as_deref()
@@ -433,8 +430,12 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
             .checked_add(self.limits.input_body_bytes)?
             .checked_add(self.limits.output_retained_bytes)
     }
-    fn begin_retire(&mut self) {
-        self.begin_close();
+    fn begin_retire(&mut self, intent: ProducerRetirement) {
+        if intent == ProducerRetirement::Drain && self.state == RawFiniteState::Delivering {
+            self.ingress_gate.withdraw();
+        } else {
+            self.begin_close();
+        }
     }
     fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         // A captured service cannot qualify dispatch that skips validation.
@@ -498,9 +499,9 @@ impl RawProducerServient {
             }
             // The original gate carries withdrawal even after another
             // incarnation has taken this slot. Retirement is local to this member.
-            participant.begin_retire();
+            participant.begin_retire(ProducerRetirement::Drain);
         } else if gate.is_open() && self.description(key).is_none() {
-            participant.begin_retire();
+            participant.begin_retire(ProducerRetirement::Drain);
         }
         Ok(())
     }
@@ -763,7 +764,7 @@ impl RawProducerServient {
         if index == self.instances.len() {
             self.instances.push(entry);
         } else {
-            self.instances[index].permission.close_ingress();
+            self.instances[index].permission.revoke();
             publication.retired = Some(core::mem::replace(&mut self.instances[index], entry));
             // Fixed-size bounded Action scan, no application callback. The
             // original invocation still owns its work and late settlement.

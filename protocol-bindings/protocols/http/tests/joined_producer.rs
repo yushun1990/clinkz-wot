@@ -443,15 +443,49 @@ fn fresh_currentness_and_authorization_checked_between_ingress_and_dispatch() {
         } else {
             assert!(s.revoke(e.key()));
         }
-        assert!(response(&mut s, &mut e, &mut peer).starts_with(b"HTTP/1.1 500"));
+        let wire = response(&mut s, &mut e, &mut peer);
         let settlement = e.take_settlement().unwrap();
         assert_eq!(settlement.effect, FiniteEffect::NotInvoked);
         assert_eq!(application.calls.get(), 0);
-        if !denied {
+        if denied {
+            assert!(wire.starts_with(b"HTTP/1.1 500"));
+            assert_eq!(settlement.delivery, FiniteDelivery::Delivered);
+        } else {
+            assert!(wire.is_empty());
+            assert_eq!(settlement.delivery, FiniteDelivery::NotDelivered);
             assert!(matches!(settlement.result, Err(CoreError::StaleHandle(_))));
         }
         close(&mut s, &mut e);
     }
+}
+
+#[test]
+fn joined_revocation_after_commit_retires_an_idle_listener() {
+    let addr = address();
+    let bank = accounts();
+    let application = app();
+    let mut s = root(compiler(addr), bank.clone());
+    let registry_bytes = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
+    let mut e = prepare(&s, document(addr), authority(), application.clone(), None).unwrap();
+    publish(&mut s, &mut e);
+    assert!(s.revoke(e.key()));
+    let _late = request(addr);
+    until(&mut s, &mut e, RawFiniteState::Closed);
+    assert!(s.description(e.key()).is_none());
+    assert!(e.take_settlement().is_none());
+    assert_eq!(application.calls.get(), 0);
+    s.retire(&mut e, &mut work(1)).unwrap();
+    drop(e);
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        registry_bytes
+    );
+    drop(s);
+    assert_eq!(
+        bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
+        0
+    );
+    assert_released(addr);
 }
 
 #[test]

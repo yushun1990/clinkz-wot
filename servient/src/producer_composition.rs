@@ -22,7 +22,7 @@ use clinkz_wot_planning::producer_composition::{
 };
 use clinkz_wot_servient_finite::{
     CapturedActionRoute, CapturedNotificationRoute, CapturedProducerRoutes,
-    ClosedProducerParticipation, ProducerPublication, RawProducerServient,
+    ClosedProducerParticipation, ProducerPublication, ProducerRetirement, RawProducerServient,
 };
 use clinkz_wot_servient_finite::{MAX_PRODUCER_PARTICIPANTS, RawProducerInstance};
 use clinkz_wot_td::ValidatedProducerScope;
@@ -764,7 +764,7 @@ impl ComposedProducerExposure {
         self.stage = None;
         for participant in &mut self.participants {
             if participant.has_original_native() {
-                participant.begin_retire();
+                participant.begin_retire(ProducerRetirement::Close);
             }
         }
     }

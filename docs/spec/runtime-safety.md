@@ -246,12 +246,10 @@ Finite Producer dispatch borrows the logical owner shared and the selected
 runtime exclusively. A callback may progress a different runtime without a
 registry lock or exclusive owner loan; recursively borrowing the same native
 runtime remains unavailable. `ProducerRevocation` captures only one-way control
-of the original incarnation's permission cell and its original funding. It
-performs no lookup, native work, behavior callback or replacement, and cannot
-revoke a successor in a reused slot. Its weak cell cannot preserve liveness;
-the retained capacity lease lasts through the last control handle so late weak
-storage does not outlive its accounting. Passive instance/publication revocation
-inside callbacks is observed at the final acceptance/delivery boundary.
+of the original incarnation's permission and its funding. It withdraws that
+incarnation's recorded gates without a registry lookup or a linked callback.
+The capacity lease funds its weak reference through the last control handle.
+The final acceptance and delivery checks observe revocation inside callbacks.
 
 ### Finite Producer participation and work capacity
 
@@ -1261,13 +1259,16 @@ registry and accepted work share the original member identities and ingress
 gates. TD lookup and fresh dispatch observe their availability, including
 withdrawal of a native owner moved out through a typed loan. Servient checks
 this permission after linked callbacks and before granting behavior entry.
-On a funded turn, a finite participant checks its installed services and the
-health of any shared native ingress, including while a delivered result awaits
-acknowledgement. Terminal loss withdraws its gate. The original reply and
-settlement stay with the accepting participant. At replacement commit, Servient
-withdraws every displaced gate before opening the successor's gates. Old
-participants can then drain their own work and retire even if nobody looks up
-the old TD. A healthy staged gate waits for its own publication decision.
+Native poll credit funds a finite participant's check of its installed services
+and shared ingress independently of handler and result-queue credit. Terminal
+loss withdraws its gate. Registry revocation, a captured revocation handle and
+a terminal notification failure all withdraw the original publication's gates
+at the same permission owner. The accepting participant keeps its reply socket
+across funded delivery turns and retains its settlement for acknowledgement.
+At replacement commit, Servient withdraws every displaced gate before opening
+the successor's gates. Old participants can then drain their own work and
+retire even if nobody looks up the old TD. A healthy staged gate waits for
+its own publication decision.
 A stale, foreign or uncommitted participant cannot revoke a publication or
 cancel its accepted work.
 At a staged publication decision, a recorded native failure rolls back the

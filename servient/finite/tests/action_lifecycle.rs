@@ -1,6 +1,6 @@
 //! Deterministic source-free Engine semantics; no native transport or TD
 //! publication is inferred from these in-memory Binding observations.
-use clinkz_wot_core::publication::{ProducerIngressGate, PublicationObserver};
+use clinkz_wot_core::publication::{ProducerIngressGate, ProducerRetirement, PublicationObserver};
 use clinkz_wot_core::{
     AcceptHint, ActionInvocationRef, AffordanceTarget, BindingGeneration, BindingId, CoreError,
     CoreResult, ErrorContext, ErrorPhase, HandlerContext, InteractionInput, InteractionOutput,
@@ -1537,7 +1537,7 @@ impl clinkz_wot_core::publication::ClosedProducerParticipation for CandidateFace
     fn retain_owner(&mut self, _: Rc<dyn std::any::Any>) {
         unreachable!("raw test fixture")
     }
-    fn begin_retire(&mut self) {
+    fn begin_retire(&mut self, _: ProducerRetirement) {
         self.gate.withdraw();
     }
     fn ready_for(

@@ -70,14 +70,14 @@ fn description(tcp: SocketAddr, udp: SocketAddr) -> Arc<str> {
     }).to_string())
 }
 
-fn http_properties(first: SocketAddr, second: SocketAddr) -> Arc<str> {
+fn http_properties(first: SocketAddr, second: SocketAddr, value_type: &str) -> Arc<str> {
     Arc::from(
         serde_json::json!({"@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"two listeners",
             "security":["n"],"securityDefinitions":{"n":{"scheme":"nosec"}},
             "properties":{
-                "left":{"type":"integer","readOnly":true,
+                "left":{"type":value_type,"readOnly":true,
                     "forms":[{"href":format!("http://{first}/value")}]},
-                "right":{"type":"integer","readOnly":true,
+                "right":{"type":value_type,"readOnly":true,
                     "forms":[{"href":format!("http://{second}/value")}]}
             }
         })
@@ -145,7 +145,7 @@ impl ClosedProducerParticipation for UnselectedParticipant {
     fn retain_owner(&mut self, owner: Rc<dyn Any>) {
         self.2 = Some(owner);
     }
-    fn begin_retire(&mut self) {}
+    fn begin_retire(&mut self, _: ProducerRetirement) {}
     fn ready_for(&self, _: &ProducerOwnerToken, _: ProducerInstanceKey) -> bool {
         true
     }
@@ -392,12 +392,22 @@ fn http_action_registration_does_not_veto_a_different_bindings_action_forms() {
 
 #[derive(Default)]
 struct Counts {
+    long_string: bool,
     withdraw_on_authorize: RefCell<Option<Rc<ProducerIngressGate>>>,
     property: Cell<usize>,
     actions: Cell<usize>,
     cancels: Cell<usize>,
     work_drops: Cell<usize>,
     complete: Cell<bool>,
+}
+impl Counts {
+    fn property_body(&self) -> Vec<u8> {
+        if self.long_string {
+            serde_json::to_vec(&"x".repeat(4094)).unwrap()
+        } else {
+            b"42".to_vec()
+        }
+    }
 }
 struct Property(Rc<Counts>);
 impl RawFiniteHandler for Property {
@@ -415,7 +425,7 @@ impl RawFiniteHandler for Property {
         assert_eq!(ctx.operation(), Operation::ReadProperty);
         self.0.property.set(self.0.property.get() + 1);
         Ok(InteractionOutput::with_data(Payload::new(
-            b"42".to_vec(),
+            self.0.property_body(),
             "application/json",
         )))
     }
@@ -719,7 +729,7 @@ impl ClosedProducerParticipation for ActionLease {
                     + std::mem::size_of::<ProducerIngressGate>(),
             )
     }
-    fn begin_retire(&mut self) {
+    fn begin_retire(&mut self, _: ProducerRetirement) {
         self.close();
     }
     fn ready_for(&self, _: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
@@ -967,7 +977,7 @@ fn two_http_registrations_compose_without_opening_a_foreign_runtime() {
             })
             .collect(),
     );
-    let description = http_properties(left_addr, right_addr);
+    let description = http_properties(left_addr, right_addr, "integer");
     let left_id = BindingId::new(101);
     let right_id = BindingId::new(102);
     let left_provider = HttpFiniteProducer::try_new(
@@ -1058,7 +1068,7 @@ fn two_http_registrations_compose_without_opening_a_foreign_runtime() {
     // B has a live handler and a separate closed listener. It is not part of
     // A's qualified exposure, despite sharing the same Servient owner.
     let mut foreign_td: serde_json::Value =
-        serde_json::from_str(&http_properties(foreign_addr, right_addr)).unwrap();
+        serde_json::from_str(&http_properties(foreign_addr, right_addr, "integer")).unwrap();
     foreign_td["properties"]
         .as_object_mut()
         .unwrap()

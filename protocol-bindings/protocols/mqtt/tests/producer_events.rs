@@ -177,7 +177,7 @@ fn callback_revocation_and_cleanup_failure_retain_original_effect_and_owner() {
             peer.event("callback/alarm", b"12");
             assert!(owner.description(key).is_none());
             drop(binding);
-            native.begin_retire();
+            native.begin_retire(ProducerRetirement::Close);
             let _ = owner
                 .step_notifications(&mut native, &mut cx(), &mut budget())
                 .unwrap();

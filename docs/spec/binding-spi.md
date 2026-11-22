@@ -433,9 +433,13 @@ native connection or per-Thing Binding runtime: one Binding owner
 can retain many leases and Things, and closing one releases only that participation.
 Finite Bindings with independently fallible ingress implement
 `FiniteIngressBinding::check_ingress` as a bounded, passive read of their
-native owner. This lets a funded turn detect the loss of a shared listener
-while a delivered result occupies the receive slot. The check leaves the
-original exchange and its acknowledgement with their owner.
+native owner. Native poll credit funds this check while a candidate waits for
+handler credit or a delivered result occupies the receive slot.
+On withdrawal, Servient requests `ProducerRetirement::Drain`. A participant
+with an accepted reply continues its original funded writes until completion,
+delivery failure or deadline, subject to its delivery authorization. Explicit
+close or rollback requests `ProducerRetirement::Close` and preserves evidence
+of any partial write. Wrappers forward the retirement intent.
 The HTTP finite participant can share one listener across up to 32 independently
 prepared Property Read/Write and Thing-root finite collection mappings; native
 method/path collisions refuse before setup. `FiniteIngressBinding::validator` supplies one captured `FiniteValidator`

@@ -3,7 +3,7 @@
 use crate::{producer::producer_unsupported, producer_validation};
 use clinkz_wot_core::publication::{
     ClosedProducerParticipation, ProducerIngressGate, ProducerOwnerToken, ProducerParticipationId,
-    PublicationObserver,
+    ProducerRetirement, PublicationObserver,
 };
 use clinkz_wot_core::{
     ActionInvocationRef, AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult,
@@ -961,8 +961,16 @@ impl ClosedProducerParticipation for HttpActionRuntime {
             // overlap. Native OS/socket state is separately Binding-owned.
             .checked_add(128 * 1024)
     }
-    fn begin_retire(&mut self) {
-        self.begin_close();
+    fn begin_retire(&mut self, intent: ProducerRetirement) {
+        self.gate.withdraw();
+        if intent == ProducerRetirement::Close
+            || self
+                .exchange
+                .as_ref()
+                .is_none_or(|exchange| exchange.response.is_empty())
+        {
+            self.begin_close();
+        }
     }
     fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         self.key == key

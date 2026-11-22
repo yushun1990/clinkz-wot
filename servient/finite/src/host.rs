@@ -317,7 +317,8 @@ struct AcceptedBehavior {
 
 /// One-way revocation of an original Producer incarnation. This handle grants
 /// no dispatch, replacement or publication authority and cannot address a reused
-/// slot. Revocation performs only a passive flag update, including in callbacks.
+/// slot. Revocation clears permission and withdraws its bounded set of gates,
+/// including when called from an application callback.
 /// The weak cell and its original capacity owner are retained together; cloning
 /// a handle creates no allocation and dropping the last one releases its lease.
 #[derive(Clone)]
@@ -488,7 +489,7 @@ impl RawProducerServient {
             action_routes: None,
             notification_routes: None,
         };
-        self.instances[index].permission.close_ingress();
+        self.instances[index].permission.revoke();
         let displaced = core::mem::replace(&mut self.instances[index], entry);
         if let Some(actions) = &mut self.actions {
             actions.revoke(expected);
@@ -550,15 +551,13 @@ impl RawProducerServient {
         if runtime.issuer.as_ptr() != Rc::as_ptr(&self.issuer) {
             return Err(CoreError::StaleHandle(context()));
         }
-        runtime.check_time(now);
-        if runtime.state != RawFiniteState::Dispatching {
-            return Ok(runtime.step(cx, budget, now));
-        }
-        // Received input is still only a candidate. Publication may have
-        // closed since receive; fencing consumes no callback/native work.
-        if !runtime.ingress_gate.is_open() {
-            runtime.fail(CoreError::StaleHandle(context()));
-            return Ok(Poll::Ready(runtime.state));
+        // Native maintenance has its own allowance even while an offered
+        // request waits for handler credit. A newly received offer dispatches
+        // on a later turn.
+        let had_candidate = runtime.state == RawFiniteState::Dispatching;
+        let progress = runtime.step(cx, budget, now);
+        if !had_candidate || runtime.state != RawFiniteState::Dispatching {
+            return Ok(progress);
         }
         let mut units = (self.limits.instances
             + self.limits.behaviors_per_instance * (self.limits.target_name_bytes + 1)
@@ -1152,10 +1151,11 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         }
         // Local fencing requires no native work credit. Cleanup still does.
         self.check_time(now);
-        if self.state == Closed
-            || self.state == InstalledClosed
-            || (self.state == Dispatching && self.issuer.strong_count() != 0)
-        {
+        if self.state == Dispatching && !self.ingress_gate.is_open() {
+            self.fail(CoreError::StaleHandle(context()));
+            return Poll::Ready(self.state);
+        }
+        if matches!(self.state, Closed | InstalledClosed) {
             return Poll::Ready(self.state);
         }
         // Serving is only a native state, not a lasting grant of publication
@@ -1167,12 +1167,39 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             _ => WorkClass::BindingPolls,
         };
         if budget.remaining(class) == 0 || (self.state == Serving && !self.ingress_gate.is_open()) {
-            return if unread {
-                Poll::Ready(Serving)
+            return if unread || (self.state == Dispatching && self.issuer.strong_count() != 0) {
+                Poll::Ready(self.state)
             } else {
                 Poll::Pending
             };
         }
+        if matches!(self.state, Starting | Serving | Dispatching) && self.issuer.strong_count() == 0
+        {
+            self.fail(CoreError::StaleHandle(context()));
+            return Poll::Ready(self.state);
+        }
+        if self.state != Closing && !self.pair_is_current() {
+            self.fail(CoreError::Validation(context()));
+            return Poll::Ready(self.state);
+        }
+        if matches!(self.state, Serving | Dispatching | Delivering)
+            && self.ingress_gate.is_open()
+            && let Err(error) = self.binding.check_ingress()
+        {
+            if self.state != Delivering {
+                self.fail(error);
+                return Poll::Ready(self.state);
+            }
+            // An independently failed listener can still own a usable reply
+            // socket. Fence fresh ingress while the original delivery runs.
+            self.ingress_gate.withdraw();
+            self.first_cause.get_or_insert(error);
+        }
+        if unread || self.state == Dispatching {
+            return Poll::Ready(self.state);
+        }
+        // Reserve terminal handoff work before the native poll. Charge only
+        // on actual FIFO insertion. Queue pressure cannot hide ingress loss.
         let queue_work = if self.capacity.is_some()
             && matches!(self.state, Delivering | Closing)
             && (self.ingress.is_some() || self.reply.is_some())
@@ -1183,34 +1210,6 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         };
         if budget.remaining(WorkClass::QueueOperations) < queue_work {
             return Poll::Pending;
-        }
-        // The participant and budget remain exclusively borrowed throughout
-        // native callbacks. Check terminal handoff capacity now, then charge
-        // only before actual FIFO mutation; Pending/error inserts no record.
-        if matches!(self.state, Starting | Serving | Dispatching) && self.issuer.strong_count() == 0
-        {
-            self.fail(CoreError::StaleHandle(context()));
-            return Poll::Ready(self.state);
-        }
-        if self.state != Closing && !self.pair_is_current() {
-            self.fail(CoreError::Validation(context()));
-            return Poll::Ready(self.state);
-        }
-        if matches!(self.state, Serving | Delivering)
-            && let Err(error) = self.binding.check_ingress()
-        {
-            if self.state == Serving {
-                self.fail(error);
-                return Poll::Ready(self.state);
-            }
-            // An independently failed listener can still own a usable reply
-            // socket. Fence fresh ingress while the original delivery runs.
-            self.ingress_gate.withdraw();
-            self.first_cause.get_or_insert(error);
-        }
-        // An unread result occupies the next receive opportunity.
-        if unread {
-            return Poll::Ready(Serving);
         }
         match self.state {
             Starting => {
@@ -1277,6 +1276,10 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 // permission under a fresh complete allowance before each send.
                 if self.security_work != 0 && self.reply.as_ref().is_some_and(|r| r.result.is_ok())
                 {
+                    if !self.ingress_gate.is_open() {
+                        self.fail(CoreError::StaleHandle(context()));
+                        return Poll::Ready(self.state);
+                    }
                     let Some(work) = self
                         .security_work
                         .checked_mul(2)
@@ -1296,9 +1299,6 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                             .as_ref()
                             .ok_or_else(|| CoreError::StaleHandle(context()))?;
                         let handler = &accepted.instance.behaviors[accepted.behavior].handler;
-                        if !self.ingress_gate.is_open() {
-                            return Err(CoreError::StaleHandle(context()));
-                        }
                         if self.binding.verify_ingress(&reply.ingress)?
                             != reply.ingress.input.principal
                         {

@@ -40,6 +40,29 @@ fn assert_empty(bank: &HostResourceAccounts) {
     }
 }
 
+fn assert_http_body(wire: &[u8], expected: &[u8]) {
+    let end = wire
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .expect("HTTP response headers");
+    let headers = std::str::from_utf8(&wire[..end]).unwrap();
+    assert!(headers.starts_with("HTTP/1.1 200"), "{headers}");
+    let length = format!("content-length: {}", expected.len());
+    assert!(
+        headers
+            .lines()
+            .any(|line| line.eq_ignore_ascii_case(&length)),
+        "{headers}"
+    );
+    let body = &wire[end + 4..];
+    assert_eq!(
+        body.len(),
+        expected.len(),
+        "response body bytes on the wire"
+    );
+    assert_eq!(body, expected);
+}
+
 fn http_input(
     owner: &RawProducerServient,
     authority: ProducerInstanceAuthority,
@@ -47,7 +70,12 @@ fn http_input(
     counts: Rc<Counts>,
 ) -> ComposedProducerInput {
     let key = authority.key();
-    let text = http_properties(addresses[0], addresses[1]);
+    let value_type = if counts.long_string {
+        "string"
+    } else {
+        "integer"
+    };
+    let text = http_properties(addresses[0], addresses[1], value_type);
     let instance = RawProducerInstance::new(
         authority,
         ["left", "right"]
@@ -1176,8 +1204,8 @@ impl ClosedProducerParticipation for ReviewLargeParticipant {
     ) -> Option<usize> {
         self.0.admission_backing_bytes(owner, key)
     }
-    fn begin_retire(&mut self) {
-        self.0.begin_retire()
+    fn begin_retire(&mut self, intent: ProducerRetirement) {
+        self.0.begin_retire(intent)
     }
     fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         self.0.ready_for(owner, key)

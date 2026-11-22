@@ -324,7 +324,15 @@ impl<C: FiniteProducerCompiler> ProducerServient<C> {
             exposure.cancel();
         }
         let was_closed = exposure.state() == RawFiniteState::InstalledClosed;
-        let progress = self.logical.step(&mut exposure.runtime, cx, budget, now)?;
+        let mut progress = self.logical.step(&mut exposure.runtime, cx, budget, now)?;
+        if exposure.publication.is_committed() && exposure.runtime.ingress_gate().is_withdrawn() {
+            let state = exposure.state();
+            self.logical
+                .reconcile_participation(exposure.key(), &mut exposure.runtime)?;
+            if exposure.state() != state {
+                progress = Poll::Ready(exposure.state());
+            }
+        }
         if matches!(
             exposure.state(),
             RawFiniteState::Closing | RawFiniteState::Closed

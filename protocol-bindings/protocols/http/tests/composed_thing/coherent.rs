@@ -278,8 +278,8 @@ impl ClosedProducerParticipation for GateHook {
             .admission_backing_bytes(owner, key)?
             .checked_add(128)
     }
-    fn begin_retire(&mut self) {
-        self.native.begin_retire()
+    fn begin_retire(&mut self, intent: ProducerRetirement) {
+        self.native.begin_retire(intent)
     }
     fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         *self.available.borrow().get() && self.native.ready_for(owner, key)
@@ -931,7 +931,10 @@ fn live_replacement_refuses_late_ingress_and_preserves_precommit_work() {
         let mut owner = owner();
         let accounts = bank();
         let addresses = [tcp_addr(), tcp_addr()];
-        let counts = Rc::new(Counts::default());
+        let counts = Rc::new(Counts {
+            long_string: accepted_before_commit,
+            ..Counts::default()
+        });
         let mut old = publish_http_pair(
             &mut owner,
             &accounts,
@@ -977,7 +980,7 @@ fn live_replacement_refuses_late_ingress_and_preserves_precommit_work() {
         if let Some(peer) = &mut accepted {
             let mut bytes = Vec::new();
             peer.read_to_end(&mut bytes).unwrap();
-            assert!(bytes.starts_with(b"HTTP/1.1 200") && bytes.ends_with(b"42"));
+            assert_http_body(&bytes, &counts.property_body());
             assert!(old.retire(&mut owner, &mut budget()).is_err());
             let original = old
                 .participant_mut::<HttpRuntime>(0)
@@ -988,7 +991,7 @@ fn live_replacement_refuses_late_ingress_and_preserves_precommit_work() {
             assert_eq!(original.delivery, FiniteDelivery::Delivered);
             assert_eq!(
                 original.result.unwrap().data().unwrap().body.as_ref(),
-                b"42"
+                counts.property_body().as_slice()
             );
         }
         let retired = old.retire(&mut owner, &mut budget());
@@ -1053,4 +1056,129 @@ fn raw_replacement_withdraws_published_gates_before_a_direct_receive() {
     old.retire(&mut owner, &mut budget()).unwrap();
     drop(old);
     assert_empty(&accounts);
+}
+
+#[test]
+fn registry_and_captured_revocation_fence_idle_native_receivers() {
+    for captured in [false, true] {
+        let mut owner = owner();
+        let accounts = bank();
+        let addresses = [tcp_addr(), tcp_addr()];
+        let counts = Rc::new(Counts::default());
+        let mut thing = publish_http_pair(
+            &mut owner,
+            &accounts,
+            addresses,
+            counts.clone(),
+            Generation::INITIAL,
+            None,
+        );
+        if captured {
+            owner.revocation(thing.key()).unwrap().revoke();
+        } else {
+            assert!(owner.revoke(thing.key()));
+        }
+        assert!(owner.description(thing.key()).is_none());
+        let withdrawn = (0..2).all(|i| {
+            thing
+                .participant_mut::<HttpRuntime>(i)
+                .unwrap()
+                .ingress_gate()
+                .is_withdrawn()
+        });
+        let _peer = connect(addresses[0], "/value");
+        for _ in 0..4 {
+            thing
+                .step(&mut owner, &mut cx(), now(), |_, _| budget())
+                .unwrap();
+        }
+        let retired = thing.retire(&mut owner, &mut budget());
+        let late = thing
+            .participant_mut::<HttpRuntime>(0)
+            .unwrap()
+            .take_settlement();
+        assert_eq!(late.map(|s| (s.effect, s.delivery)), None);
+        assert!(withdrawn);
+        retired.unwrap();
+        assert_eq!(counts.property.get(), 0);
+        drop(thing);
+        assert_empty(&accounts);
+    }
+}
+
+#[test]
+fn explicit_close_and_deadline_interrupt_a_draining_reply_truthfully() {
+    for deadline in [false, true] {
+        let mut owner = owner();
+        let accounts = bank();
+        let addresses = [tcp_addr(), tcp_addr()];
+        let counts = Rc::new(Counts {
+            long_string: true,
+            ..Counts::default()
+        });
+        let mut thing = publish_http_pair(
+            &mut owner,
+            &accounts,
+            addresses,
+            counts.clone(),
+            Generation::INITIAL,
+            None,
+        );
+        let mut peer = connect(addresses[0], "/value");
+        let end = Instant::now() + Duration::from_secs(3);
+        while thing.participant_mut::<HttpRuntime>(0).unwrap().state() != RawFiniteState::Delivering
+        {
+            thing
+                .step(&mut owner, &mut cx(), now(), |_, _| budget())
+                .unwrap();
+            assert!(Instant::now() < end);
+        }
+        assert!(owner.revoke(thing.key()));
+        for credit in [WorkBudget::new, budget as fn() -> WorkBudget] {
+            thing
+                .step(&mut owner, &mut cx(), now(), |_, _| credit())
+                .unwrap();
+            assert_eq!(
+                thing.participant_mut::<HttpRuntime>(0).unwrap().state(),
+                RawFiniteState::Delivering
+            );
+        }
+        let instant = if deadline {
+            MonotonicInstant::new(ClockId::new(1), 101)
+        } else {
+            thing.begin_close();
+            now()
+        };
+        for _ in 0..4 {
+            thing
+                .step(&mut owner, &mut cx(), instant, |_, _| budget())
+                .unwrap();
+        }
+        let cause = thing.progress_failure(0).unwrap();
+        assert!(matches!(
+            (deadline, cause),
+            (true, CoreError::TimedOut(_)) | (false, CoreError::Cancelled(_))
+        ));
+        let original = thing
+            .participant_mut::<HttpRuntime>(0)
+            .unwrap()
+            .take_settlement()
+            .unwrap();
+        assert_eq!(original.recipient, Some(thing.key()));
+        assert_eq!(original.delivery, FiniteDelivery::Unknown);
+        let expected = counts.property_body();
+        assert_eq!(
+            original.result.unwrap().data().unwrap().body.as_ref(),
+            expected
+        );
+        let mut wire = Vec::new();
+        peer.read_to_end(&mut wire).unwrap();
+        let end = wire.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+        let partial = &wire[end..];
+        assert!(!partial.is_empty() && partial.len() < expected.len());
+        assert!(expected.starts_with(partial));
+        thing.retire(&mut owner, &mut budget()).unwrap();
+        drop(thing);
+        assert_empty(&accounts);
+    }
 }

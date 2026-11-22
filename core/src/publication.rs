@@ -232,6 +232,15 @@ impl ProducerIngressGate {
     }
 }
 
+/// The intent passed to the original native owner on retirement.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProducerRetirement {
+    /// Fence fresh ingress and finish previously accepted replies on funded turns.
+    Drain,
+    /// Explicit close or rollback. Retain the outcome of any interrupted work.
+    Close,
+}
+
 /// Closed native contribution to one logical publication. Readiness and
 /// membership are passive; the separate Servient commit opens its ingress gate.
 /// A lease may use shared physical infrastructure without sharing logical authority.
@@ -275,7 +284,7 @@ pub trait ClosedProducerParticipation {
     }
     /// Bounded local retirement intent, without polling I/O or calling an
     /// application. Progress remains specific to the native participant.
-    fn begin_retire(&mut self);
+    fn begin_retire(&mut self, intent: ProducerRetirement);
     /// Passive readiness for this exact logical instance and Servient owner.
     /// Readiness alone does not establish qualified Form/operation coverage.
     fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool;

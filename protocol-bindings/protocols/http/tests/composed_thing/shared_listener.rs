@@ -844,12 +844,16 @@ fn incompatible_native_configuration_and_known_listener_failure_cannot_qualify_p
     TcpListener::bind(address).unwrap();
 }
 
-fn check_shared_listener_loss(phase: RawFiniteState) {
+fn check_shared_listener_loss(phase: RawFiniteState, left_budget: fn() -> WorkBudget) {
     let mut owner = owner();
     let accounts = bank();
     let addresses = [tcp_addr(), tcp_addr()];
     let shared = listener(addresses[0]);
-    let counts = Rc::new(Counts::default());
+    let counts = Rc::new(Counts {
+        long_string: phase == RawFiniteState::Delivering,
+        ..Counts::default()
+    });
+    let expected = counts.property_body();
     let mut input = http_input(
         &owner,
         key(1, Generation::INITIAL),
@@ -889,7 +893,7 @@ fn check_shared_listener_loss(phase: RawFiniteState) {
     let assert_delivered = |peer: &mut TcpStream| {
         let mut wire = Vec::new();
         peer.read_to_end(&mut wire).unwrap();
-        assert!(wire.starts_with(b"HTTP/1.1 200") && wire.ends_with(b"42"));
+        assert_http_body(&wire, &expected);
     };
     if phase == RawFiniteState::Serving {
         assert_delivered(&mut first);
@@ -928,7 +932,9 @@ fn check_shared_listener_loss(phase: RawFiniteState) {
     let mut sibling = connect(addresses[1], "/value");
     for _ in 0..8 {
         thing
-            .step(&mut owner, &mut cx(), now(), |_, _| budget())
+            .step(&mut owner, &mut cx(), now(), |index, _| {
+                if index == 0 { left_budget() } else { budget() }
+            })
             .unwrap();
     }
     let mut wire = Vec::new();
@@ -956,7 +962,7 @@ fn check_shared_listener_loss(phase: RawFiniteState) {
         assert_eq!(original.delivery, FiniteDelivery::Delivered);
         assert_eq!(
             original.result.unwrap().data().unwrap().body.as_ref(),
-            b"42"
+            expected.as_slice()
         );
     } else {
         assert_eq!(original.effect, FiniteEffect::NotInvoked);
@@ -977,11 +983,18 @@ fn check_shared_listener_loss(phase: RawFiniteState) {
 
 #[test]
 fn shared_listener_loss_fences_a_sibling_with_an_unacknowledged_result() {
-    check_shared_listener_loss(RawFiniteState::Serving);
+    check_shared_listener_loss(RawFiniteState::Serving, budget);
 }
 
 #[test]
 fn shared_listener_loss_refuses_a_candidate_and_preserves_an_accepted_reply() {
-    check_shared_listener_loss(RawFiniteState::Dispatching);
-    check_shared_listener_loss(RawFiniteState::Delivering);
+    check_shared_listener_loss(RawFiniteState::Dispatching, budget);
+    check_shared_listener_loss(RawFiniteState::Delivering, budget);
+}
+
+#[test]
+fn shared_listener_loss_fences_dispatch_without_handler_credit() {
+    check_shared_listener_loss(RawFiniteState::Dispatching, || {
+        budget().with_remaining(WorkClass::HandlerSteps, 0)
+    });
 }
