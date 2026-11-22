@@ -554,7 +554,7 @@ impl RawProducerServient {
         }
         // Received input is still only a candidate. Publication may have
         // closed since receive; fencing consumes no callback/native work.
-        if !runtime.ingress_gate.get() {
+        if !runtime.ingress_gate.is_open() {
             runtime.fail(CoreError::StaleHandle(context()));
             return Ok(Poll::Ready(runtime.state));
         }
@@ -669,7 +669,8 @@ impl RawProducerServient {
                     reason: clinkz_wot_core::SecurityFailureReason::AuthorizationDenied,
                     context: context(),
                 })
-            } else if !runtime.ingress_gate.get() || !self.instances[i].permission.is_current() {
+            } else if !runtime.ingress_gate.is_open() || !self.instances[i].permission.is_current()
+            {
                 Err(CoreError::StaleHandle(context()))
             } else {
                 Ok(())
@@ -807,7 +808,7 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     configuration: B::Configuration,
     limits: RawFiniteLimits,
     state: RawFiniteState,
-    ingress_gate: Rc<Cell<bool>>,
+    ingress_gate: Rc<ProducerIngressGate>,
     first_cause: Option<CoreError>,
     validation: FiniteValidation,
     validation_work: u64,
@@ -862,7 +863,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             configuration,
             limits,
             state: RawFiniteState::Starting,
-            ingress_gate: Rc::new(Cell::new(false)),
+            ingress_gate: Rc::new(ProducerIngressGate::default()),
             first_cause: None,
             settlement: None,
             validation,
@@ -898,7 +899,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     }
 
     pub fn state(&self) -> RawFiniteState {
-        if self.state == RawFiniteState::InstalledClosed && self.ingress_gate.get() {
+        if self.state == RawFiniteState::InstalledClosed && self.ingress_gate.is_open() {
             RawFiniteState::Serving
         } else {
             self.state
@@ -952,18 +953,18 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             self.fail(error.clone());
             return Err(error);
         }
-        if !self.pair_is_current() {
+        if !self.pair_is_current() || !self.ingress_gate.is_staged() {
             let error = CoreError::Validation(context());
             self.fail(error.clone());
             return Err(error);
         }
         self.state = RawFiniteState::Serving;
-        self.ingress_gate.set(true);
+        self.ingress_gate.open();
         Ok(())
     }
 
     pub fn begin_close(&mut self) {
-        self.ingress_gate.set(false);
+        self.ingress_gate.withdraw();
         if self.state != RawFiniteState::Closed {
             if (self.ingress.is_some() || self.reply.is_some()) && self.first_cause.is_none() {
                 self.first_cause = Some(CoreError::Cancelled(ErrorContext::new(
@@ -978,7 +979,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     }
 
     fn fail(&mut self, error: CoreError) {
-        self.ingress_gate.set(false);
+        self.ingress_gate.withdraw();
         if self.first_cause.is_none() {
             self.first_cause = Some(error);
         }
@@ -1138,7 +1139,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         now: MonotonicInstant,
     ) -> Poll<RawFiniteState> {
         use RawFiniteState::*;
-        if self.state == InstalledClosed && self.ingress_gate.get() {
+        if self.state == InstalledClosed && self.ingress_gate.is_open() {
             self.state = Serving;
         }
         // Local fencing requires no native work credit. Cleanup still does.
@@ -1157,7 +1158,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             Closing => WorkClass::CleanupItems,
             _ => WorkClass::BindingPolls,
         };
-        if budget.remaining(class) == 0 || (self.state == Serving && !self.ingress_gate.get()) {
+        if budget.remaining(class) == 0 || (self.state == Serving && !self.ingress_gate.is_open()) {
             return if unread {
                 Poll::Ready(Serving)
             } else {
@@ -1240,7 +1241,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                         // A linked Binding can revoke publication while its
                         // receive callback runs. Retain its original ingress
                         // for native retirement, never offer it for dispatch.
-                        if self.ingress_gate.get() {
+                        if self.ingress_gate.is_open() {
                             self.state = Dispatching;
                         } else {
                             self.fail(CoreError::Cancelled(ErrorContext::new(
@@ -1276,7 +1277,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                             .as_ref()
                             .ok_or_else(|| CoreError::StaleHandle(context()))?;
                         let handler = &accepted.instance.behaviors[accepted.behavior].handler;
-                        if !self.ingress_gate.get() {
+                        if !self.ingress_gate.is_open() {
                             return Err(CoreError::StaleHandle(context()));
                         }
                         if self.binding.verify_ingress(&reply.ingress)?
@@ -1316,7 +1317,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                                 context: context(),
                             });
                         }
-                        if !self.ingress_gate.get() || !accepted.permission.is_current() {
+                        if !self.ingress_gate.is_open() || !accepted.permission.is_current() {
                             return Err(CoreError::StaleHandle(context()));
                         }
                         Ok(())

@@ -2,7 +2,8 @@
 //! possible native lease, not a logical Thing or a general Engine resource.
 use crate::{producer::producer_unsupported, producer_validation};
 use clinkz_wot_core::publication::{
-    ClosedProducerParticipation, ProducerOwnerToken, ProducerParticipationId, PublicationObserver,
+    ClosedProducerParticipation, ProducerIngressGate, ProducerOwnerToken, ProducerParticipationId,
+    PublicationObserver,
 };
 use clinkz_wot_core::{
     ActionInvocationRef, AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult,
@@ -18,7 +19,6 @@ use clinkz_wot_core::{
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
 use std::{
     any::Any,
-    cell::Cell,
     hash::{BuildHasher, Hasher},
     io::{Read, Write},
     mem::size_of,
@@ -177,7 +177,7 @@ pub struct HttpActionRuntime {
     first_cause: Option<CoreError>,
     closed: bool,
     participation: ProducerParticipationId,
-    gate: Rc<Cell<bool>>,
+    gate: Rc<ProducerIngressGate>,
     retained_owner: Option<Rc<dyn Any>>,
 }
 impl HttpActionRuntime {
@@ -297,7 +297,7 @@ impl HttpActionRuntime {
             first_cause: None,
             closed: false,
             participation: ProducerParticipationId::new(),
-            gate: Rc::new(Cell::new(false)),
+            gate: Rc::new(ProducerIngressGate::default()),
             retained_owner: None,
         })
     }
@@ -345,11 +345,11 @@ impl HttpActionRuntime {
     }
     fn fail(&mut self, error: CoreError) -> CoreError {
         self.first_cause.get_or_insert_with(|| error.clone());
-        self.gate.set(false);
+        self.gate.withdraw();
         error
     }
     pub fn begin_close(&mut self) {
-        self.gate.set(false);
+        self.gate.withdraw();
         self.closed = true;
         self.listener = None;
         // A possibly partially written reply retains its uncertainty in the
@@ -564,7 +564,7 @@ impl HttpActionRuntime {
         }
         // Revocation fences new connections and semantic ingress, not a socket
         // already accepted by this native owner or its pending response write.
-        if (!self.gate.get() || !self.token.is_alive()) && self.exchange.is_none() {
+        if (!self.gate.is_open() || !self.token.is_alive()) && self.exchange.is_none() {
             return Ok(Poll::Pending);
         }
         budget.consume(WorkClass::BindingPolls, 1).map_err(|_| {
@@ -732,7 +732,7 @@ impl HttpActionRuntime {
             let body = exchange.received[end..].to_vec();
             // A complete request arriving on a previously accepted connection
             // after revocation is not an accepted Action/control operation.
-            if !self.gate.get() || !self.token.is_alive() {
+            if !self.gate.is_open() || !self.token.is_alive() {
                 self.exchange = None;
                 return Ok(Poll::Ready(None));
             }
@@ -956,7 +956,7 @@ impl ClosedProducerParticipation for HttpActionRuntime {
                 self.validators.capacity() * size_of::<(Arc<str>, Rc<dyn ActionValidator>)>(),
             )?
             .checked_add(self.validators.len() * (size_of::<Schemas>() + 2 * size_of::<usize>()))?
-            .checked_add(size_of::<Cell<bool>>() + size_of::<[usize; 8]>())?
+            .checked_add(size_of::<ProducerIngressGate>() + size_of::<[usize; 8]>())?
             // Retained ingress, decoded payload, reply and bounded formatting
             // overlap. Native OS/socket state is separately Binding-owned.
             .checked_add(128 * 1024)
@@ -969,7 +969,7 @@ impl ClosedProducerParticipation for HttpActionRuntime {
             && self.token.same_owner(owner)
             && !self.closed
             && self.first_cause.is_none()
-            && !self.gate.get()
+            && self.gate.is_staged()
             && self.bound_address() == Some(self.definitions[0].address)
     }
     fn covers(
@@ -1043,7 +1043,7 @@ impl ClosedProducerParticipation for HttpActionRuntime {
                 .route()
         })
     }
-    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
         &self.gate
     }
     fn retired(&self) -> bool {

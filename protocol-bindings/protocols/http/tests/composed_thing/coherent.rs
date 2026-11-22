@@ -147,7 +147,7 @@ fn final_walk_refuses_both_fixed_overlaps_and_a_reload_between_forms() {
             assert!(matches!(result, Err(CoreError::UnsupportedOperation(_))));
         }
         assert_eq!(owner.description(publication.key()), None);
-        assert!(gates.iter().all(|gate| !gate.get()));
+        assert!(gates.iter().all(|gate| !gate.is_open()));
         assert_eq!(counts.property.get(), 0);
     }
     competitor.overlap.borrow_mut().replace(Overlap::Neither);
@@ -161,7 +161,7 @@ fn final_walk_refuses_both_fixed_overlaps_and_a_reload_between_forms() {
         &mut budget(),
     )
     .unwrap();
-    assert!(gates.iter().all(|gate| gate.get()));
+    assert!(gates.iter().all(|gate| gate.is_open()));
     for (p, address) in input.participants.iter_mut().zip(addresses) {
         let runtime = p.as_any_mut().downcast_mut::<HttpRuntime>().unwrap();
         assert!(read_peer(address, &mut owner, runtime).starts_with(b"HTTP/1.1 200"));
@@ -222,7 +222,7 @@ fn replacement_of_the_registration_set_refuses_source_free_install_and_preserves
         Err(CoreError::StaleHandle(_))
     ));
     assert_eq!(owner.description(candidate.key()), None);
-    assert!(gates.iter().all(|gate| !gate.get()));
+    assert!(gates.iter().all(|gate| !gate.is_open()));
     assert_eq!(counts.property.get(), 0);
     assert_eq!(owner.description(incumbent.key()), Some(old_td.as_str()));
     for (i, address) in incumbent_addresses.into_iter().enumerate() {
@@ -295,7 +295,7 @@ impl ClosedProducerParticipation for GateHook {
     ) -> bool {
         self.native.covers(key, binding, site, form, op, def)
     }
-    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
         if let Some(hook) = self.hook.borrow_mut().take() {
             hook();
         }
@@ -378,7 +378,7 @@ fn configuration_or_readiness_loss_in_the_last_gate_callback_prevents_commit() {
             Err(CoreError::StaleHandle(_))
         ));
         assert!(hook.borrow().is_none());
-        assert!(gates.iter().all(|gate| !gate.get()));
+        assert!(gates.iter().all(|gate| !gate.is_open()));
         assert_eq!(owner.description(exposure.key()), None);
         assert_eq!(counts.property.get(), 0);
         for _ in 0..4 {
@@ -430,7 +430,7 @@ fn an_empty_affordance_in_the_final_td_returns_the_staged_owners() {
         );
         assert_eq!(owner.description(key), None);
         for p in &refusal.input().participants {
-            assert!(!p.ingress_gate().get());
+            assert!(!p.ingress_gate().is_open());
         }
         for address in addresses {
             TcpListener::bind(address).unwrap();
@@ -737,8 +737,7 @@ fn dispatch_refuses_sibling_withdrawal_inside_authorization() {
     check_sibling_withdrawal(Withdrawal::DuringAuthorization);
 }
 
-#[test]
-fn terminal_native_backpressure_rolls_back_funded_stage() {
+fn check_staged_withdrawal(cause: Option<CoreError>) {
     let mut owner = owner();
     let accounts = bank();
     let addresses = [tcp_addr(), tcp_addr()];
@@ -759,19 +758,18 @@ fn terminal_native_backpressure_rolls_back_funded_stage() {
     ));
     assert!(scratch(&accounts) > 0);
     assert!(exposure.publication_failure().is_none());
-    let cause = CoreError::Backpressure(
-        ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
-            .with_redacted_cause(77, "native participation fenced"),
-    );
-    exposure
-        .participant_mut::<HttpRuntime>(0)
-        .unwrap()
-        .fence(cause.clone());
-    assert_eq!(
-        exposure.publish(&mut owner, &mut budget()),
-        Err(cause.clone())
-    );
-    assert_eq!(exposure.publication_failure(), Some(&cause));
+    let member = exposure.participant_mut::<HttpRuntime>(0).unwrap();
+    if let Some(error) = &cause {
+        member.fence(error.clone());
+    } else {
+        member.begin_close();
+    }
+    let failure = exposure.publish(&mut owner, &mut budget()).unwrap_err();
+    match cause {
+        Some(error) => assert_eq!(failure, error),
+        None => assert!(matches!(failure, CoreError::Cancelled(_)), "{failure:?}"),
+    }
+    assert_eq!(exposure.publication_failure(), Some(&failure));
     assert_eq!(scratch(&accounts), 0);
     assert_eq!(
         exposure.participant_mut::<HttpRuntime>(1).unwrap().state(),
@@ -789,4 +787,124 @@ fn terminal_native_backpressure_rolls_back_funded_stage() {
         TcpListener::bind(address).unwrap();
     }
     assert_empty(&accounts);
+}
+
+#[test]
+fn terminal_native_backpressure_rolls_back_funded_stage() {
+    check_staged_withdrawal(Some(CoreError::Backpressure(
+        ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
+            .with_redacted_cause(77, "native participation fenced"),
+    )));
+}
+
+#[test]
+fn a_withdrawn_staged_member_rolls_back_before_physical_retirement() {
+    check_staged_withdrawal(None);
+}
+
+#[test]
+fn replacement_drains_original_members_with_or_without_a_td_lookup() {
+    for (lookup, managed) in [(false, true), (true, true), (true, false)] {
+        let mut owner = owner();
+        let accounts = bank();
+        let old_addresses = [tcp_addr(), tcp_addr()];
+        let input = http_input(
+            &owner,
+            key(1, Generation::INITIAL),
+            old_addresses,
+            Rc::new(Counts::default()),
+        );
+        let mut old = ComposedProducerExposure::try_new(
+            &owner,
+            input,
+            limits(),
+            accounts.clone(),
+            &mut budget(),
+        )
+        .ok()
+        .unwrap();
+        start_http(&mut old);
+        old.publish(&mut owner, &mut budget()).unwrap();
+        assert!(
+            read_peer(
+                old_addresses[0],
+                &mut owner,
+                old.participant_mut::<HttpRuntime>(0).unwrap()
+            )
+            .starts_with(b"HTTP/1.1 200")
+        );
+
+        let new_addresses = [tcp_addr(), tcp_addr()];
+        let mut input = http_input(
+            &owner,
+            key(1, Generation::new(2).unwrap()),
+            new_addresses,
+            Rc::new(Counts::default()),
+        );
+        input.expected = Some(old.key());
+        let mut successor = ComposedProducerExposure::try_new(
+            &owner,
+            input,
+            limits(),
+            accounts.clone(),
+            &mut budget(),
+        )
+        .ok()
+        .unwrap();
+        start_http(&mut successor);
+        // A healthy staged successor still owns its closed listeners while the
+        // incumbent is serving in the same slot.
+        successor
+            .step(&mut owner, &mut cx(), now(), |_, _| budget())
+            .unwrap();
+        old.participant_mut::<HttpRuntime>(0).unwrap().begin_close();
+        if lookup {
+            assert!(owner.description(old.key()).is_none());
+        }
+        successor.publish(&mut owner, &mut budget()).unwrap();
+        for _ in 0..8 {
+            if managed {
+                old.step(&mut owner, &mut cx(), now(), |_, _| budget())
+                    .unwrap();
+            } else {
+                let key = old.key();
+                for i in 0..2 {
+                    let member = old.participant_mut::<HttpRuntime>(i).unwrap();
+                    let _ = owner.step(member, &mut cx(), &mut budget(), now()).unwrap();
+                    owner.reconcile_participation(key, member).unwrap();
+                }
+            }
+        }
+
+        for (i, addr) in new_addresses.into_iter().enumerate() {
+            let runtime = successor.participant_mut::<HttpRuntime>(i).unwrap();
+            assert!(read_peer(addr, &mut owner, runtime).starts_with(b"HTTP/1.1 200"));
+            assert_eq!(
+                runtime.take_settlement().unwrap().delivery,
+                FiniteDelivery::Delivered
+            );
+        }
+        for (i, addr) in old_addresses.into_iter().enumerate() {
+            assert_eq!(
+                old.participant_mut::<HttpRuntime>(i).unwrap().state(),
+                RawFiniteState::Closed,
+                "lookup={lookup}, member={i}"
+            );
+            TcpListener::bind(addr).unwrap();
+        }
+        assert!(old.retire(&mut owner, &mut budget()).is_err());
+        let original = old
+            .participant_mut::<HttpRuntime>(0)
+            .unwrap()
+            .take_settlement()
+            .unwrap();
+        assert_eq!(original.recipient, Some(old.key()));
+        assert_eq!(original.delivery, FiniteDelivery::Delivered);
+        old.retire(&mut owner, &mut budget()).unwrap();
+        assert!(owner.description(successor.key()).is_some());
+        close_http(&mut successor);
+        successor.retire(&mut owner, &mut budget()).unwrap();
+        drop((old, successor, original));
+        assert_empty(&accounts);
+    }
 }

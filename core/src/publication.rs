@@ -197,6 +197,41 @@ impl Default for ProducerParticipationId {
     }
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum IngressState {
+    #[default]
+    Staged,
+    Open,
+    Withdrawn,
+}
+
+/// One native participation's passive ingress and retirement signal. A fresh
+/// gate waits for local commit. Withdrawal survives registry replacement and
+/// is terminal for this native participation.
+#[derive(Default)]
+pub struct ProducerIngressGate(Cell<IngressState>);
+
+impl ProducerIngressGate {
+    pub fn is_staged(&self) -> bool {
+        self.0.get() == IngressState::Staged
+    }
+    pub fn is_open(&self) -> bool {
+        self.0.get() == IngressState::Open
+    }
+    pub fn is_withdrawn(&self) -> bool {
+        self.0.get() == IngressState::Withdrawn
+    }
+    /// Servient opens each prechecked staged gate at its callback-free commit.
+    pub fn open(&self) {
+        if self.is_staged() {
+            self.0.set(IngressState::Open);
+        }
+    }
+    pub fn withdraw(&self) {
+        self.0.set(IngressState::Withdrawn);
+    }
+}
+
 /// Closed native contribution to one logical publication. Readiness and
 /// membership are passive; the separate Servient commit opens its ingress gate.
 /// A lease may use shared physical infrastructure without sharing logical authority.
@@ -312,10 +347,10 @@ pub trait ClosedProducerParticipation {
         None
     }
     /// The native owner must consult this gate before offering semantic ingress.
-    /// It must be closed until publication and must not be shared between
-    /// independently published participations. Returning a gate is a passive
-    /// loan; all callbacks, including this one, run before the commit.
-    fn ingress_gate(&self) -> &Rc<Cell<bool>>;
+    /// Each independently published participation owns its own gate and keeps
+    /// it staged until commit. Withdrawal requests retirement of that original
+    /// participation. Gate access is passive and precedes the local commit.
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate>;
     /// True only after this participation's native obligations and unread
     /// settlements have retired. The physical infrastructure may remain shared.
     fn retired(&self) -> bool;

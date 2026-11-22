@@ -712,6 +712,13 @@ impl ComposedProducerExposure {
                 .iter()
                 .all(|p| p.ready_for(&owner.participation_token(), self.publication.key()))
             {
+                if self
+                    .participants
+                    .iter()
+                    .any(|p| p.ingress_gate().is_withdrawn())
+                {
+                    return Err(CoreError::Cancelled(context()));
+                }
                 return Err(busy());
             }
             let mut participants: Vec<_> = self

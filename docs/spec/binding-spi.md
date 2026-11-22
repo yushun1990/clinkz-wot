@@ -416,8 +416,10 @@ qualified exposure. Finite readiness also checks the exact logical instance,
 requires input/output validation to be enabled and verifies its captured service;
 an explicitly raw runtime cannot qualify a published exposure. An unrelated
 closed runtime cannot be opened as an extra participant. The
-handoff installs separately owned closed ingress gates before commit and flips
-them inside the Servient publication boundary. Third-party `open` callbacks
+handoff installs a staged `ProducerIngressGate` for each participant and opens
+the complete set inside the Servient publication boundary. Withdrawal is terminal
+for that gate. Reconciliation retires its own native participant even after
+registry replacement. Third-party `open` callbacks
 after logical commit are not permitted: reentrancy or partial opening would
 leave a multi-participant publication observably half-open despite a non-fallible
 contract. Gate loans and checks finish before commit; no linked callback,

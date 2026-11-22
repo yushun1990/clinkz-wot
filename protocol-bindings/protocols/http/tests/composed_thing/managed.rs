@@ -1186,7 +1186,7 @@ impl ClosedProducerParticipation for ReviewLargeParticipant {
                     .covers(key, binding, site, form, operation, &definition.program)
             })
     }
-    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
         self.0.ingress_gate()
     }
     fn retired(&self) -> bool {

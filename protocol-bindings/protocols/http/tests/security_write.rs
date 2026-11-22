@@ -414,7 +414,7 @@ fn callback_changes_before_dispatch_cannot_enter_write_behavior() {
                 }
                 1 => {
                     *server.app.authority_in_permission.borrow_mut() =
-                        Some(Box::new(move || gate.set(false)))
+                        Some(Box::new(move || gate.withdraw()))
                 }
                 2 | 3 | 4 => {
                     let verifier_hook = verifier.clone();
@@ -423,7 +423,7 @@ fn callback_changes_before_dispatch_cannot_enter_write_behavior() {
                             2,
                             Box::new(move || match case {
                                 2 => app.deny(),
-                                3 => gate.set(false),
+                                3 => gate.withdraw(),
                                 _ => {
                                     verifier_hook.revision.fetch_add(1, Ordering::AcqRel);
                                 }

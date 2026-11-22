@@ -971,7 +971,7 @@ fn switching_either_registered_verifier_after_install_requires_fresh_qualificati
                 Err(CoreError::StaleHandle(_))
             ));
             assert!(staged.owner.description(staged.exposure.key()).is_none());
-            assert!(!staged.server().ingress_gate().get());
+            assert!(!staged.server().ingress_gate().is_open());
             staged.close();
 
             let mut fresh =

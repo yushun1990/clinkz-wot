@@ -1,6 +1,6 @@
 //! Deterministic source-free Engine semantics; no native transport or TD
 //! publication is inferred from these in-memory Binding observations.
-use clinkz_wot_core::publication::PublicationObserver;
+use clinkz_wot_core::publication::{ProducerIngressGate, PublicationObserver};
 use clinkz_wot_core::{
     AcceptHint, ActionInvocationRef, AffordanceTarget, BindingGeneration, BindingId, CoreError,
     CoreResult, ErrorContext, ErrorPhase, HandlerContext, InteractionInput, InteractionOutput,
@@ -1474,7 +1474,7 @@ struct CandidateFacet {
     key: ProducerInstanceKey,
     token: clinkz_wot_core::publication::ProducerOwnerToken,
     id: clinkz_wot_core::publication::ProducerParticipationId,
-    gate: Rc<Cell<bool>>,
+    gate: Rc<ProducerIngressGate>,
     candidate: Option<clinkz_wot_core::action::ProducerActionCandidate>,
     inventory: Vec<ActionInvocationRef>,
     accepted: Option<ActionInvocationRef>,
@@ -1483,11 +1483,13 @@ struct CandidateFacet {
 }
 impl CandidateFacet {
     fn new(owner: &RawProducerServient, key: ProducerInstanceKey) -> Self {
+        let gate = Rc::new(ProducerIngressGate::default());
+        gate.open();
         Self {
             key,
             token: owner.participation_token(),
             id: Default::default(),
-            gate: Rc::new(Cell::new(true)),
+            gate,
             candidate: None,
             inventory: vec![],
             accepted: None,
@@ -1536,7 +1538,7 @@ impl clinkz_wot_core::publication::ClosedProducerParticipation for CandidateFace
         unreachable!("raw test fixture")
     }
     fn begin_retire(&mut self) {
-        self.gate.set(false);
+        self.gate.withdraw();
     }
     fn ready_for(
         &self,
@@ -1545,11 +1547,11 @@ impl clinkz_wot_core::publication::ClosedProducerParticipation for CandidateFace
     ) -> bool {
         self.associated_with(token, key)
     }
-    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
         &self.gate
     }
     fn retired(&self) -> bool {
-        !self.gate.get()
+        self.gate.is_withdrawn()
     }
 }
 impl clinkz_wot_core::action::ProducerActionBinding for CandidateFacet {

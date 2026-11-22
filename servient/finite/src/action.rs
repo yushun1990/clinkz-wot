@@ -507,7 +507,7 @@ impl RawProducerServient {
         candidate: &clinkz_wot_core::action::ProducerActionCandidate,
         budget: &mut WorkBudget,
     ) -> CoreResult<ProducerActionReply<'a>> {
-        if candidate.instance != binding.instance() || !binding.ingress_gate().get() {
+        if candidate.instance != binding.instance() || !binding.ingress_gate().is_open() {
             return Err(CoreError::StaleHandle(context()));
         }
         match candidate.operation {

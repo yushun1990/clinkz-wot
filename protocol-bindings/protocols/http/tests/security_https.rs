@@ -890,7 +890,7 @@ fn delivery_permission_callback_cannot_revoke_authority_or_publication_and_still
                 if revoke_instance {
                     assert!(callback_owner.borrow_mut().revoke(key));
                 } else {
-                    gate.set(false);
+                    gate.withdraw();
                 }
                 changed_in_hook.set(true);
             });
@@ -1315,7 +1315,7 @@ fn verify_dispatch_refuses_callback_invalidation(edge: DispatchInvalidation) {
             if matches!(edge, DispatchInvalidation::FinalVerificationWork) {
                 basic.replace(verify_in_hook, 2048);
             } else {
-                gate.set(false);
+                gate.withdraw();
             }
             changed_in_hook.set(true);
         };
@@ -1510,7 +1510,7 @@ fn unread_settlement_does_not_mask_installed_verifier_withdrawal() {
             FiniteDelivery::Delivered
         );
 
-        registration.replace(verifier(), 2048);
+        registration.replace(verifier(), 1024);
         assert_eq!(
             server
                 .server()
@@ -1521,6 +1521,10 @@ fn unread_settlement_does_not_mask_installed_verifier_withdrawal() {
             .exposure
             .step(&mut server.owner, &mut cx(), now(0), |_, _| work())
             .unwrap();
+        assert!(matches!(
+            server.server().first_cause(),
+            Some(CoreError::Validation(_))
+        ));
         let result = server.exchange(&mut read_secure(&right)).await;
         assert_eq!(
             server.app.reads.get(),
@@ -1529,10 +1533,6 @@ fn unread_settlement_does_not_mask_installed_verifier_withdrawal() {
         );
         assert!(result.result().is_err());
         assert!(server.owner.description(server.exposure.key()).is_none());
-        assert!(matches!(
-            server.server().first_cause(),
-            Some(CoreError::Validation(_))
-        ));
         assert!(
             server
                 .exposure
@@ -1542,7 +1542,17 @@ fn unread_settlement_does_not_mask_installed_verifier_withdrawal() {
         let original = server.server().take_settlement().unwrap();
         assert_eq!(original.recipient, Some(server.exposure.key()));
         assert_eq!(original.delivery, FiniteDelivery::Delivered);
-        assert!(original.result.is_ok());
+        assert_eq!(
+            original
+                .result
+                .as_ref()
+                .unwrap()
+                .data()
+                .unwrap()
+                .body
+                .as_ref(),
+            b"17"
+        );
         drop((original, result, left, right, consumer));
         clean(&accounts);
         server.close();

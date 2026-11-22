@@ -82,7 +82,7 @@ impl ClosedProducerParticipation for ServicesParticipant {
         };
         Some((route, services, bytes))
     }
-    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
         self.native.ingress_gate()
     }
     fn retired(&self) -> bool {

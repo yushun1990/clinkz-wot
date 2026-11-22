@@ -990,7 +990,7 @@ fn servient_observes_its_original_mqtt_member_withdrawal_on_lookup() {
             .step(&mut cx(), &mut budget())
             .unwrap();
         assert!(native(&mut exposure).first_failure().is_some());
-        assert!(!native(&mut exposure).ingress_gate().get());
+        assert!(!native(&mut exposure).ingress_gate().is_open());
         assert!(
             support::owner()
                 .reconcile_participation(key, native(&mut exposure))

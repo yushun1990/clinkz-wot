@@ -3,7 +3,7 @@
 use super::*;
 use clinkz_wot_core::action::{ActionRoute, ActionValidator};
 pub use clinkz_wot_core::publication::{
-    ClosedProducerParticipation, ProducerOwnerToken, ProducerParticipationId,
+    ClosedProducerParticipation, ProducerIngressGate, ProducerOwnerToken, ProducerParticipationId,
 };
 use clinkz_wot_core::publication::{PublicationFacts, PublicationObserver};
 
@@ -43,7 +43,7 @@ impl CapturedActionRoute {
 pub(super) struct PublicationPermission {
     active: Cell<bool>,
     members: Vec<Weak<()>>,
-    gates: Vec<Weak<Cell<bool>>>,
+    gates: Vec<Weak<ProducerIngressGate>>,
 }
 
 impl PublicationPermission {
@@ -69,7 +69,7 @@ impl PublicationPermission {
                 || self
                     .gates
                     .iter()
-                    .any(|gate| gate.upgrade().is_none_or(|g| !g.get())))
+                    .any(|gate| gate.upgrade().is_none_or(|g| !g.is_open())))
         {
             self.close_ingress();
         }
@@ -83,7 +83,7 @@ impl PublicationPermission {
     fn close_ingress(&self) {
         self.revoke();
         for gate in self.gates.iter().filter_map(Weak::upgrade) {
-            gate.set(false);
+            gate.withdraw();
         }
     }
 }
@@ -110,7 +110,7 @@ impl ProducerPublication {
     pub fn staging_backing_bytes() -> usize {
         size_of::<Self>()
             + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<()>>()
-            + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<Cell<bool>>>()
+            + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<ProducerIngressGate>>()
             + size_of::<PublicationPermission>()
             + 2 * size_of::<usize>()
     }
@@ -458,7 +458,7 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
                 .binding
                 .covers_definition(key, site, form, operation, definition)
     }
-    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
         &self.ingress_gate
     }
     fn retired(&self) -> bool {
@@ -481,8 +481,8 @@ impl RawProducerServient {
             return Err(CoreError::StaleHandle(context()));
         }
         let failed = participant.native_failure().is_some();
-        let open = participant.ingress_gate().get();
-        if failed || !open {
+        let gate = participant.ingress_gate();
+        if failed || gate.is_withdrawn() {
             let id = participant.participation_id();
             let committed_member = self.instances.iter().any(|entry| {
                 entry.instance.key() == key
@@ -495,10 +495,10 @@ impl RawProducerServient {
             if committed_member {
                 self.revoke(key);
             }
-            if failed || committed_member {
-                participant.begin_retire();
-            }
-        } else if self.description(key).is_none() {
+            // The original gate carries withdrawal even after another
+            // incarnation has taken this slot. Retirement is local to this member.
+            participant.begin_retire();
+        } else if gate.is_open() && self.description(key).is_none() {
             participant.begin_retire();
         }
         Ok(())
@@ -537,10 +537,10 @@ impl RawProducerServient {
                 + size_of::<RawFiniteBehavior>()
                 + size_of::<ProducerPublication>()
                 + size_of::<PublicationPermission>()
-                + size_of::<Cell<bool>>()
+                + size_of::<ProducerIngressGate>()
                 + size_of::<[usize; 8]>()
                 + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<()>>()
-                + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<Cell<bool>>>(),
+                + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<ProducerIngressGate>>(),
         )
     }
 
@@ -738,11 +738,9 @@ impl RawProducerServient {
             .try_reserve_exact(participants.len())
             .map_err(|_| CoreError::Backpressure(context()))?;
         gates.extend(participants.iter().map(|p| Rc::clone(p.ingress_gate())));
-        if gates
-            .iter()
-            .enumerate()
-            .any(|(i, gate)| gate.get() || gates[..i].iter().any(|prior| Rc::ptr_eq(prior, gate)))
-        {
+        if gates.iter().enumerate().any(|(i, gate)| {
+            !gate.is_staged() || gates[..i].iter().any(|prior| Rc::ptr_eq(prior, gate))
+        }) {
             return Err(CoreError::Validation(context()));
         }
         let _current = PublicationFacts::lock_current(&[coverage, &installation])?;
@@ -775,7 +773,7 @@ impl RawProducerServient {
         publication.permission.active.set(true);
         publication.committed = true;
         for gate in gates {
-            gate.set(true);
+            gate.open();
         }
         Ok(())
     }

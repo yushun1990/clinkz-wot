@@ -1064,7 +1064,7 @@ fn revoked_action_gate_drains_owned_partial_tcp_without_dispatch() {
         Poll::Pending
     );
     let gate = Rc::clone(native.ingress_gate());
-    gate.set(false);
+    gate.withdraw();
     peer.shutdown(std::net::Shutdown::Write).unwrap();
     let end = Instant::now() + Duration::from_secs(5);
     loop {
@@ -1150,7 +1150,7 @@ fn revoked_action_gate_finishes_owned_reply_and_action() {
     );
     assert_eq!(counts.invoked.get(), 1); // semantic admission, reply still owned
     let gate = Rc::clone(native.ingress_gate());
-    gate.set(false);
+    gate.withdraw();
     assert_eq!(
         owner.step_actions(native, &mut budget()).unwrap(),
         Poll::Ready(())
@@ -1205,7 +1205,7 @@ fn revoked_action_gate_refuses_completed_input_from_owned_connection() {
         owner.step_actions(native, &mut budget()).unwrap(),
         Poll::Pending
     );
-    Rc::clone(native.ingress_gate()).set(false);
+    Rc::clone(native.ingress_gate()).withdraw();
     peer.write_all(
         format!(" {address}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n12")
             .as_bytes(),

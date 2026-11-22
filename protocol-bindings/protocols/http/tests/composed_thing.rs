@@ -120,7 +120,11 @@ fn http_read(
     .unwrap()
 }
 
-struct UnselectedParticipant(Rc<Cell<bool>>, ProducerParticipationId, Option<Rc<dyn Any>>);
+struct UnselectedParticipant(
+    Rc<ProducerIngressGate>,
+    ProducerParticipationId,
+    Option<Rc<dyn Any>>,
+);
 impl ClosedProducerParticipation for UnselectedParticipant {
     fn observe_installation(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
         Ok(())
@@ -136,7 +140,7 @@ impl ClosedProducerParticipation for UnselectedParticipant {
     fn ready_for(&self, _: &ProducerOwnerToken, _: ProducerInstanceKey) -> bool {
         true
     }
-    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
         &self.0
     }
     fn retired(&self) -> bool {
@@ -163,7 +167,7 @@ fn publication_never_partially_opens_two_native_gates() {
     )
     .with_description(Arc::from("closed publication gate test"));
     let mut publication = owner.prepare_publication(instance, None).ok().unwrap();
-    let shared = Rc::new(Cell::new(false));
+    let shared = Rc::new(ProducerIngressGate::default());
     let mut first = UnselectedParticipant(Rc::clone(&shared), ProducerParticipationId::new(), None);
     let mut second =
         UnselectedParticipant(Rc::clone(&shared), ProducerParticipationId::new(), None);
@@ -173,15 +177,26 @@ fn publication_never_partially_opens_two_native_gates() {
             .is_err()
     );
     assert!(!publication.is_committed());
-    assert!(!shared.get());
+    assert!(!shared.is_open());
     assert_eq!(owner.description(publication.key()), None);
-    second.0 = Rc::new(Cell::new(false));
+    second.0 = Rc::new(ProducerIngressGate::default());
+    second.0.withdraw();
+    assert!(
+        owner
+            .publish_composed(&mut publication, &mut [&mut first, &mut second])
+            .is_err()
+    );
+    assert!(first.0.is_staged());
+    second.0.open();
+    assert!(second.0.is_withdrawn());
+    assert!(owner.description(publication.key()).is_none());
+    second.0 = Rc::new(ProducerIngressGate::default());
     owner
         .publish_composed(&mut publication, &mut [&mut first, &mut second])
         .unwrap();
-    assert!(first.0.get() && second.0.get());
+    assert!(first.0.is_open() && second.0.is_open());
     publication.revoke();
-    assert!(!first.0.get() && !second.0.get());
+    assert!(!first.0.is_open() && !second.0.is_open());
 }
 
 // Only this linked Binding interprets its UDP mapping. Each operation has an
@@ -368,7 +383,7 @@ fn http_action_registration_does_not_veto_a_different_bindings_action_forms() {
 
 #[derive(Default)]
 struct Counts {
-    withdraw_on_authorize: RefCell<Option<Rc<Cell<bool>>>>,
+    withdraw_on_authorize: RefCell<Option<Rc<ProducerIngressGate>>>,
     property: Cell<usize>,
     actions: Cell<usize>,
     cancels: Cell<usize>,
@@ -379,7 +394,7 @@ struct Property(Rc<Counts>);
 impl RawFiniteHandler for Property {
     fn authorize(&self, _: &InteractionInput) -> CoreResult<()> {
         if let Some(gate) = self.0.withdraw_on_authorize.borrow_mut().take() {
-            gate.set(false);
+            gate.withdraw();
         }
         Ok(())
     }
@@ -490,13 +505,13 @@ fn owner() -> RawProducerServient {
 struct ActionNative {
     socket: Option<UdpSocket>,
     address: SocketAddr,
-    leases: Vec<(ProducerInstanceKey, Rc<Cell<bool>>)>,
+    leases: Vec<(ProducerInstanceKey, Rc<ProducerIngressGate>)>,
     handles: Vec<(ProducerInstanceKey, RawActionHandle)>,
 }
 struct ActionLease {
     native: Rc<RefCell<ActionNative>>,
     key: ProducerInstanceKey,
-    open: Rc<Cell<bool>>,
+    open: Rc<ProducerIngressGate>,
     validator: Rc<dyn ActionValidator>,
     validator_enabled: bool,
     control_routes_enabled: bool,
@@ -552,7 +567,7 @@ impl ActionNative {
         Ok(())
     }
     fn lease(native: &Rc<RefCell<Self>>, key: ProducerInstanceKey) -> ActionLease {
-        let open = Rc::new(Cell::new(false));
+        let open = Rc::new(ProducerIngressGate::default());
         native.borrow_mut().leases.push((key, Rc::clone(&open)));
         ActionLease {
             native: Rc::clone(native),
@@ -601,7 +616,7 @@ impl ActionNative {
             n.socket.as_ref().unwrap().send_to(b"unknown", peer)?;
             return Ok(true);
         };
-        if !gate.get() {
+        if !gate.is_open() {
             n.socket.as_ref().unwrap().send_to(b"closed", peer)?;
             return Ok(true);
         }
@@ -688,11 +703,11 @@ impl ClosedProducerParticipation for ActionLease {
         _: &ProducerOwnerToken,
         key: ProducerInstanceKey,
     ) -> Option<usize> {
-        (!self.open.get() && !self.closed && self.retained_owner.is_none() && self.key == key)
+        (self.open.is_staged() && !self.closed && self.retained_owner.is_none() && self.key == key)
             .then_some(
                 std::mem::size_of::<Self>()
                     + 4 * std::mem::size_of::<usize>()
-                    + std::mem::size_of::<Cell<bool>>(),
+                    + std::mem::size_of::<ProducerIngressGate>(),
             )
     }
     fn begin_retire(&mut self) {
@@ -709,7 +724,7 @@ impl ClosedProducerParticipation for ActionLease {
                 .and_then(|s| s.local_addr().ok())
                 == Some(self.native.borrow().address)
     }
-    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
         &self.open
     }
     fn covers(
@@ -781,7 +796,7 @@ impl ClosedProducerParticipation for ActionLease {
 }
 impl ActionLease {
     fn close(&mut self) {
-        self.open.set(false);
+        self.open.withdraw();
         self.closed = true;
     }
 }
@@ -1405,7 +1420,7 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
     // A participant that claims readiness but covers no selected Form must
     // not be opened, even when every advertised operation has an owner.
     let mut extra = UnselectedParticipant(
-        Rc::new(Cell::new(false)),
+        Rc::new(ProducerIngressGate::default()),
         ProducerParticipationId::new(),
         None,
     );
@@ -1421,8 +1436,8 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
         )
         .is_err()
     );
-    assert!(!extra.0.get());
-    assert!(!lease.open.get());
+    assert!(!extra.0.is_open());
+    assert!(!lease.open.is_open());
     assert!(!publication.is_committed());
     assert_eq!(read.state(), RawFiniteState::InstalledClosed);
     assert_eq!(s.description(k), None);

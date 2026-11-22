@@ -1,7 +1,7 @@
 use super::*;
 use clinkz_wot_core::consumer::ConsumerDataService;
 use clinkz_wot_core::publication::{
-    ClosedProducerParticipation, ProducerOwnerToken, ProducerParticipationId,
+    ClosedProducerParticipation, ProducerIngressGate, ProducerOwnerToken, ProducerParticipationId,
 };
 use clinkz_wot_core::{
     BindingInputRejection, BindingOperationalError, CoreResult, producer::ProducerInstanceKey,
@@ -336,7 +336,7 @@ impl MqttNotificationService {
         }) {
             return Err(unsupported());
         }
-        let gate = Rc::new(Cell::new(false));
+        let gate = Rc::new(ProducerIngressGate::default());
         let lease = Rc::new(Lease {
             session: Rc::clone(&self.session),
             token: owner.clone(),
@@ -394,7 +394,7 @@ struct Lease {
     mappings: Vec<NotificationMapping>,
     definitions: Vec<MqttNotificationDefinition>,
     closing: Cell<bool>,
-    gate: Rc<Cell<bool>>,
+    gate: Rc<ProducerIngressGate>,
     // Last disposal includes native publications which outlive the exposure.
     funding: RefCell<Option<Rc<dyn Any>>>,
 }
@@ -415,7 +415,7 @@ pub struct MqttNotificationRuntime {
     lease: Option<Rc<Lease>>,
     token: ProducerOwnerToken,
     key: ProducerInstanceKey,
-    gate: Rc<Cell<bool>>,
+    gate: Rc<ProducerIngressGate>,
     id: ProducerParticipationId,
     started: bool,
     closed: bool,
@@ -548,7 +548,7 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
     }
     fn begin_retire(&mut self) {
         self.closed = true;
-        self.gate.set(false);
+        self.gate.withdraw();
         if let Some(l) = &self.lease {
             l.closing.set(true);
         }
@@ -611,7 +611,7 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
             .find(|e| e.target == target && e.kind == kind)?;
         Some((e.route.clone(), e.services.clone(), DATA_BACKING))
     }
-    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
         &self.gate
     }
     fn retired(&self) -> bool {
@@ -659,7 +659,7 @@ impl ProducerNotificationBinding for MqttNotificationRuntime {
         let Some(l) = self
             .lease
             .as_ref()
-            .filter(|l| !l.closing.get() && l.gate.get())
+            .filter(|l| !l.closing.get() && l.gate.is_open())
         else {
             return Err(reject(data, unsupported()));
         };
@@ -760,7 +760,7 @@ impl NativeNotificationPublication for MqttPublication {
             return Poll::Ready(outcome.clone());
         }
         let mut s = self.lease.session.borrow_mut();
-        if cancel || self.lease.closing.get() || !self.lease.gate.get() {
+        if cancel || self.lease.closing.get() || !self.lease.gate.is_open() {
             if self.written != 0 {
                 s.fail(io_error());
             }
