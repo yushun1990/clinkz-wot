@@ -84,10 +84,11 @@ root and startup registrations remain caller-provisioned, as in existing compose
 Producer paths. Services cannot be swapped at publication or per emission.
 
 The application-owned service has at most 32 participation leases and one
-shared publication slot. Each lease takes the caller's operation definitions
-and sizes its native mapping table from their start operations. The actual
-Producer registration checks topic attribution across its services before a
-member takes its definitions. A member with `n` starts funds
+shared TCP writer. Each lease has backing for one outstanding publication.
+It takes the caller's operation definitions and sizes its native mapping table
+from their start operations. The actual Producer registration checks topic
+attribution across its services before a member takes its definitions.
+A member with `n` starts funds
 `n × (n − 1) / 2` topic comparisons from `BindingPolls`. If this allowance or
 the lifetime cleanup allowance is short, the caller retains the definitions in
 their original order and both allowances remain available. Each live inventory
@@ -146,9 +147,13 @@ native failure evidence and decides logical revocation. Direct
 explicit `owner.reconcile_participation(key, native)` for that logical decision.
 Native code cannot dispatch or revoke application authority and has no normal
 Servient dependency.
-Unread settlements retain the slot and original funding. Closing one Thing
-preserves sibling leases; retained emissions prevent premature logical retirement
-and final physical release. Drop reports no successful drain.
+
+The final byte of a QoS 0 packet releases the writer for a sibling, including
+while the original emission awaits cleanup credit or acknowledgement. The
+unread settlement retains its participation's slot, data and original funding.
+Acknowledging or dropping it cannot release a sibling's active write. Closing
+one Thing preserves sibling leases. Retained emissions prevent premature
+logical retirement and final physical release. Drop reports no successful drain.
 
 Run the [qualified application example](examples/emit_event.rs) with a local
 anonymous broker and an independently subscribed MQTT peer:

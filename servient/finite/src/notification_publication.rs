@@ -219,7 +219,7 @@ impl<P: NativeNotificationPublication> ProducerNotificationPublication<P> {
     pub fn cleanup_error(&self) -> Option<&CoreError> {
         self.state.cleanup_error.as_ref()
     }
-    /// Terminal acknowledgement releases the original native slot and funding.
+    /// Terminal acknowledgement disposes the retained publication and its funding.
     pub fn acknowledge(mut self) -> Result<ProducerNotificationSettlement, Self> {
         match self.state.settlement.take() {
             Some(s) => Ok(s),

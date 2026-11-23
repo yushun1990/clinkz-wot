@@ -508,16 +508,21 @@ count. Its finite and Action handler lookup envelope remains 16. The
 [Host resource contract](foundation.md#host-producer-notification-mapping-capacity)
 defines how managed publication funds the captured table and native membership.
 
-The bounded MQTT Host participant uses one application-owned service across
-Thing participations, with one shared in-flight publication slot retained through
-unread settlement acknowledgement. Native resource policy permits no reconnect,
-replay or idle pooling. Dropping/retiring one participation preserves siblings;
-last actual participation/work disposal releases the connection. Partial TCP
-frame cancellation invalidates the shared native service, reports uncertainty
-and fences dependents rather than appending a sibling frame to truncated bytes.
-Only its unique service owner can explicitly shut down the whole infrastructure.
-QoS 0 local write completion carries no subscriber-delivery acknowledgement.
-This is a concrete mapping policy, not a requirement on all notification Bindings.
+The bounded MQTT Host service lends its single TCP writer to one admitted QoS 0
+packet at a time. Writing the final byte returns the writer immediately, even
+when publication retirement still awaits cleanup credit. Cancellation before
+the first byte also returns a healthy writer. Abandoning a partial frame or
+detecting an I/O failure fences that connection and its dependent participations.
+An interrupted prefix has uncertain effect. QoS 0 completion records only the
+local write.
+
+Each participation funds one publication through acknowledgement or drop.
+Its original data, outcome and lease can outlive the write and the Thing's
+replacement. A sibling with a free publication slot can use the healthy writer
+while that outcome is unread. Later retirement or disposal of the old outcome
+can release only its original resources. The service closes on last lease/work
+disposal and has no reconnect, replay or idle pool. Explicit whole-service
+shutdown belongs to its unique owner.
 
 The manual Host publication records bounded opaque identities of the original
 native participation owners. Publication and retirement reject duplicate,
