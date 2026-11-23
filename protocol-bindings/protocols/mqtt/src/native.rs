@@ -261,36 +261,50 @@ impl MqttNotificationService {
         self.session.borrow().first_cause.clone()
     }
 
+    /// Take the caller's definitions and allocate one native mapping per start.
+    /// Construction is caller-backed. Managed handoff declares both retained
+    /// capacities and the independent publication opportunity before native I/O.
     pub fn participation(
         &self,
         owner: &ProducerOwnerToken,
         key: ProducerInstanceKey,
-        definitions: Vec<MqttNotificationDefinition>,
+        mut definitions: Vec<MqttNotificationDefinition>,
     ) -> CoreResult<MqttNotificationRuntime> {
-        if definitions.is_empty() || definitions.len() > 32 {
-            return Err(unsupported());
-        }
         let mut session = self.session.borrow_mut();
         session.leases.retain(|w| w.strong_count() != 0);
-        if session.leases.len() == MAX_LEASES
-            || matches!(*session.phase.get(), Phase::Failed | Phase::Closed)
-            || definitions
-                .iter()
-                .any(|d| !Rc::ptr_eq(&d.registration, &session.registration))
+        if session.leases.len() == MAX_LEASES {
+            return Err(CoreError::Backpressure(
+                ErrorContext::new(ErrorPhase::Admission, RetryClass::Safe)
+                    .with_redacted_cause(652, "MQTT service participation leases occupied"),
+            ));
+        }
+        if matches!(*session.phase.get(), Phase::Failed | Phase::Closed)
+            || definitions.iter().any(|d| {
+                !Rc::ptr_eq(&d.registration, &session.registration)
+                    || NotificationKind::for_operation(d.operation) != Some(d.schemas.kind())
+            })
+        {
+            return Err(unsupported());
+        }
+        // This native subset has one start and at most one stop per source
+        // and family. Reuse the caller's vector as the coverage index.
+        definitions.sort_unstable_by(|a, b| a.coordinate().cmp(&b.coordinate()));
+        if definitions
+            .windows(2)
+            .any(|pair| pair[0].coordinate() == pair[1].coordinate())
         {
             return Err(unsupported());
         }
         let mut mappings: Vec<NotificationMapping> = Vec::new();
-        for d in &definitions {
-            let kind = NotificationKind::for_operation(d.operation).ok_or_else(unsupported)?;
-            if d.operation != kind.start_operation() {
-                continue;
-            }
-            if mappings.len() == 16
-                || mappings
-                    .iter()
-                    .any(|e| e.target == d.target && e.kind == kind || e.topic == d.topic)
-            {
+        let starts = definitions
+            .iter()
+            .filter(|d| d.operation == d.schemas.kind().start_operation());
+        mappings
+            .try_reserve_exact(starts.clone().count())
+            .map_err(|_| busy())?;
+        for d in starts {
+            let kind = d.schemas.kind();
+            if mappings.iter().any(|e| e.topic == d.topic) {
                 return Err(unsupported());
             }
             mappings.push(NotificationMapping {
@@ -305,17 +319,8 @@ impl MqttNotificationService {
         }
         if mappings.is_empty()
             || definitions.iter().any(|d| {
-                !mappings.iter().any(|e| {
-                    e.target == d.target
-                        && Some(e.kind) == NotificationKind::for_operation(d.operation)
-                        && e.topic == d.topic
-                        && e.services.schemas == d.schemas
-                })
-            })
-            || definitions.iter().enumerate().any(|(i, d)| {
-                definitions[..i]
-                    .iter()
-                    .any(|p| p.target == d.target && p.operation == d.operation)
+                NotificationMapping::find(&mappings, &d.target, d.schemas.kind())
+                    .is_none_or(|e| e.topic != d.topic || e.services.schemas != d.schemas)
             })
         {
             return Err(unsupported());
@@ -387,6 +392,25 @@ struct NotificationMapping {
     route: NotificationRoute,
     services: Rc<JsonNoSec>,
 }
+impl MqttNotificationDefinition {
+    fn coordinate(&self) -> (&AffordanceTarget, Operation) {
+        (&self.target, self.operation)
+    }
+}
+impl NotificationMapping {
+    fn find<'a>(
+        mappings: &'a [Self],
+        target: &AffordanceTarget,
+        kind: NotificationKind,
+    ) -> Option<&'a Self> {
+        // Starts were collected in definition order, including both root families.
+        let key = (target, kind.start_operation());
+        let index = mappings
+            .binary_search_by(|e| (&e.target, e.kind.start_operation()).cmp(&key))
+            .ok()?;
+        Some(&mappings[index])
+    }
+}
 struct Lease {
     session: Rc<RefCell<Session>>,
     token: ProducerOwnerToken,
@@ -430,7 +454,11 @@ impl MqttNotificationRuntime {
         };
         if self.closed {
             if Rc::strong_count(lease) == 1 {
-                if budget.consume(WorkClass::CleanupItems, 1).is_err() {
+                let items = 1 + lease.mappings.len() + lease.definitions.len();
+                if budget
+                    .consume(WorkClass::CleanupItems, items as u64)
+                    .is_err()
+                {
                     return Ok(Poll::Pending);
                 }
                 self.lease = None;
@@ -473,8 +501,12 @@ impl MqttNotificationRuntime {
             && form == d.form
             && operation == d.operation
             && l.definitions
-                .iter()
-                .any(|native| Arc::ptr_eq(&native.schemas, &d.schemas) && native == d)
+                .binary_search_by(|native| native.coordinate().cmp(&d.coordinate()))
+                .ok()
+                .is_some_and(|i| {
+                    let native = &l.definitions[i];
+                    Arc::ptr_eq(&native.schemas, &d.schemas) && native == d
+                })
     }
 }
 impl ClosedProducerParticipation for MqttNotificationRuntime {
@@ -517,16 +549,25 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
         {
             return None;
         }
-        let mut bytes = size_of::<Self>()
+        let fixed = size_of::<Self>()
             + size_of::<Lease>()
             + size_of::<Option<MqttPublication>>() + core::mem::align_of::<Option<MqttPublication>>()
             + DATA_BACKING
             // A provisioned callback envelope, including decoded JSON keys and
             // strings, retained with this original managed participation.
             + MqttJsonData.policy().temporary_bytes as usize
-            + 32 * size_of::<usize>()
-            + l.mappings.capacity() * size_of::<NotificationMapping>()
-            + l.definitions.capacity() * size_of::<MqttNotificationDefinition>();
+            + 32 * size_of::<usize>();
+        let mut bytes = fixed
+            .checked_add(
+                l.mappings
+                    .capacity()
+                    .checked_mul(size_of::<NotificationMapping>())?,
+            )?
+            .checked_add(
+                l.definitions
+                    .capacity()
+                    .checked_mul(size_of::<MqttNotificationDefinition>())?,
+            )?;
         for d in &l.definitions {
             bytes = bytes.checked_add(
                 target_name_bytes(&d.target) + d.topic.len() + 4 * size_of::<usize>(),
@@ -589,26 +630,12 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
         Rc<dyn ProducerNotificationServices>,
         usize,
     )> {
-        let target = match site {
-            AffordanceSite::Thing => AffordanceTarget::Thing,
-            AffordanceSite::Property(n) => AffordanceTarget::Property(Arc::from(n)),
-            AffordanceSite::Event(n) => AffordanceTarget::Event(Arc::from(n)),
-            _ => return None,
-        };
-        let kind = NotificationKind::for_operation(
-            definition
-                .downcast_ref::<MqttNotificationDefinition>()?
-                .operation,
-        )?;
+        let d = definition.downcast_ref::<MqttNotificationDefinition>()?;
+        let kind = d.schemas.kind();
         if !self.covers_definition(key, binding, site, form, kind.start_operation(), definition) {
             return None;
         }
-        let e = self
-            .lease
-            .as_ref()?
-            .mappings
-            .iter()
-            .find(|e| e.target == target && e.kind == kind)?;
+        let e = NotificationMapping::find(&self.lease.as_ref()?.mappings, &d.target, kind)?;
         Some((e.route.clone(), e.services.clone(), DATA_BACKING))
     }
     fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
@@ -644,12 +671,7 @@ impl ProducerNotificationBinding for MqttNotificationRuntime {
         target: &AffordanceTarget,
         kind: NotificationKind,
     ) -> Option<&NotificationRoute> {
-        self.lease
-            .as_ref()?
-            .mappings
-            .iter()
-            .find(|e| e.target == *target && e.kind == kind)
-            .map(|e| &e.route)
+        Some(&NotificationMapping::find(&self.lease.as_ref()?.mappings, target, kind)?.route)
     }
     fn start_publication(
         &mut self,

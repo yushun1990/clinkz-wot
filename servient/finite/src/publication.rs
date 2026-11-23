@@ -11,6 +11,22 @@ use clinkz_wot_core::publication::{PublicationFacts, PublicationObserver};
 /// Bounded original-membership storage for this manually driven Host slice.
 pub const MAX_PRODUCER_PARTICIPANTS: usize = 32;
 
+fn check_member_count(count: usize) -> CoreResult<()> {
+    if count == 0 {
+        return Err(CoreError::Validation(context()));
+    }
+    if count > MAX_PRODUCER_PARTICIPANTS {
+        return Err(CoreError::LimitExceeded {
+            resource: clinkz_wot_foundation::ResourceKind::RouteReadinessTokensPerThingMax,
+            limit: MAX_PRODUCER_PARTICIPANTS as u64,
+            requested: Some(count as u64),
+            observed: None,
+            context: context(),
+        });
+    }
+    Ok(())
+}
+
 /// Qualified, source-free Action mapping. Invoke routes carry their actual
 /// validation service; query/cancel routes establish the permitted controls.
 /// Native participants supply these during setup, not individual requests.
@@ -56,11 +72,11 @@ impl PublicationPermission {
         }
     }
 
-    fn staged() -> Self {
+    fn staged(members: usize) -> Self {
         Self {
             active: Cell::new(false),
-            members: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
-            gates: Vec::with_capacity(MAX_PRODUCER_PARTICIPANTS),
+            members: Vec::with_capacity(members),
+            gates: Vec::with_capacity(members),
         }
     }
 
@@ -75,6 +91,11 @@ impl PublicationPermission {
             self.revoke();
         }
         self.active.get()
+    }
+
+    pub(super) fn check_work(&self) -> usize {
+        // Validate the original identities/gates and allow for withdrawal.
+        1 + self.members.len() + 2 * self.gates.len()
     }
 
     pub(super) fn revoke(&self) {
@@ -105,9 +126,15 @@ pub struct ProducerPublication {
 
 impl ProducerPublication {
     pub fn staging_backing_bytes() -> usize {
+        Self::staging_backing_for(MAX_PRODUCER_PARTICIPANTS)
+    }
+
+    /// Controlled staging layout for a known membership. A raw publication
+    /// with deferred membership provisions the full manual Host envelope.
+    pub fn staging_backing_for(members: usize) -> usize {
+        let members = members.min(MAX_PRODUCER_PARTICIPANTS);
         size_of::<Self>()
-            + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<()>>()
-            + MAX_PRODUCER_PARTICIPANTS * size_of::<Weak<ProducerIngressGate>>()
+            + members * (size_of::<Weak<()>>() + size_of::<Weak<ProducerIngressGate>>())
             + size_of::<PublicationPermission>()
             + 2 * size_of::<usize>()
     }
@@ -157,12 +184,30 @@ impl ProducerPublication {
     }
     /// Capture the original notification publication mapping, validation and security
     /// services. Requalification cannot replace any one of these independently.
+    /// Raw callers transfer their provisioned vector. Managed admission reserves
+    /// its slots and backing before binding the complete set.
     pub fn bind_notification_routes(
         &mut self,
         routes: Vec<CapturedNotificationRoute>,
     ) -> CoreResult<()> {
-        if self.committed || self.cancelled.get() || routes.len() > MAX_PRODUCER_PARTICIPANTS {
+        if self.committed || self.cancelled.get() {
             return Err(CoreError::Validation(context()));
+        }
+        if let Some(old) = &self.notification_routes {
+            // The originally bound table already covers the immutable source
+            // set. A retry must reproduce every route and service in order.
+            if old.len() != routes.len()
+                || old.iter().zip(&routes).any(|(a, b)| {
+                    a.target != b.target
+                        || a.kind != b.kind
+                        || !a.route.same_mapping(&b.route)
+                        || !Rc::ptr_eq(&a.services, &b.services)
+                        || a.data_bytes != b.data_bytes
+                })
+            {
+                return Err(CoreError::Validation(context()));
+            }
+            return Ok(());
         }
         let instance = self
             .instance
@@ -182,21 +227,7 @@ impl ProducerPublication {
         }) {
             return Err(CoreError::Validation(context()));
         }
-        if let Some(old) = &self.notification_routes {
-            if old.len() != routes.len()
-                || old.iter().zip(&routes).any(|(a, b)| {
-                    a.target != b.target
-                        || a.kind != b.kind
-                        || !a.route.same_mapping(&b.route)
-                        || !Rc::ptr_eq(&a.services, &b.services)
-                        || a.data_bytes != b.data_bytes
-                })
-            {
-                return Err(CoreError::Validation(context()));
-            }
-        } else {
-            self.notification_routes = Some(routes);
-        }
+        self.notification_routes = Some(routes);
         Ok(())
     }
     pub fn is_committed(&self) -> bool {
@@ -295,9 +326,7 @@ impl ProducerPublication {
         &mut self,
         ids: impl ExactSizeIterator<Item = &'a ProducerParticipationId> + Clone,
     ) -> CoreResult<()> {
-        if ids.len() == 0 || ids.len() > MAX_PRODUCER_PARTICIPANTS {
-            return Err(CoreError::Validation(context()));
-        }
+        check_member_count(ids.len())?;
         if !self.permission.members.is_empty() {
             return if self.same_participants(ids) {
                 Ok(())
@@ -328,6 +357,9 @@ impl ProducerPublication {
     }
     pub fn staged_description(&self) -> Option<&str> {
         self.instance.as_ref()?.description.as_deref()
+    }
+    pub fn behavior_count(&self) -> usize {
+        self.instance.as_ref().map_or(0, |i| i.behavior_count())
     }
     pub fn supports(&self, target: &AffordanceTarget, operation: Operation) -> bool {
         self.instance
@@ -513,7 +545,7 @@ impl RawProducerServient {
     /// confer acceptance, unlike constructing an already active raw registry.
     pub fn try_empty(limits: RawProducerRegistryLimits) -> CoreResult<Self> {
         if !(1..=MAX_INSTANCES).contains(&limits.instances)
-            || !(1..=MAX_BEHAVIORS_PER_INSTANCE).contains(&limits.behaviors_per_instance)
+            || limits.behaviors_per_instance == 0
             || limits.target_name_bytes > MAX_TARGET_NAME_BYTES
         {
             return Err(CoreError::Validation(context()));
@@ -596,7 +628,18 @@ impl RawProducerServient {
         instance: RawProducerInstance,
         expected: Option<ProducerInstanceKey>,
     ) -> Result<ProducerPublication, BindingInputRejection<RawProducerInstance>> {
-        if let Err(error) = self.check_publication_input(&instance, expected) {
+        self.stage_publication(instance, expected, MAX_PRODUCER_PARTICIPANTS)
+    }
+
+    fn stage_publication(
+        &self,
+        instance: RawProducerInstance,
+        expected: Option<ProducerInstanceKey>,
+        members: usize,
+    ) -> Result<ProducerPublication, BindingInputRejection<RawProducerInstance>> {
+        if let Err(error) = check_member_count(members)
+            .and_then(|()| self.check_publication_input(&instance, expected))
+        {
             return Err(BindingInputRejection::new(
                 instance,
                 BindingOperationalError::new(error),
@@ -605,7 +648,7 @@ impl RawProducerServient {
         let key = instance.key();
         Ok(ProducerPublication {
             instance: Some(Rc::new(instance)),
-            permission: Rc::new(PublicationPermission::staged()),
+            permission: Rc::new(PublicationPermission::staged(members)),
             issuer: Rc::downgrade(&self.issuer),
             expected,
             retired: None,
@@ -627,7 +670,7 @@ impl RawProducerServient {
         participants: &[&dyn ClosedProducerParticipation],
         routes: CapturedProducerRoutes,
     ) -> Result<ProducerPublication, BindingInputRejection<RawProducerInstance>> {
-        let mut publication = self.prepare_publication(instance, expected)?;
+        let mut publication = self.stage_publication(instance, expected, participants.len())?;
         if let Err(error) = publication
             .bind_participants(participants)
             .and_then(|()| publication.bind_action_routes(routes.actions))
@@ -693,11 +736,10 @@ impl RawProducerServient {
             || publication.cancelled.get()
             || publication.instance.is_none()
             || publication.issuer.as_ptr() != Rc::as_ptr(&self.issuer)
-            || participants.is_empty()
-            || participants.len() > MAX_PRODUCER_PARTICIPANTS
         {
             return Err(CoreError::Validation(context()));
         }
+        check_member_count(participants.len())?;
         let mut installation = PublicationFacts::default();
         for participant in participants.iter() {
             participant.observe_installation(&mut installation.observer())?;
@@ -804,6 +846,30 @@ impl RawProducerServient {
         publication: &mut ProducerPublication,
         participants: &[&dyn ClosedProducerParticipation],
     ) -> CoreResult<()> {
+        self.retire_members(publication, participants, None)
+    }
+
+    /// Managed retirement pays for the actual registry, member, route and
+    /// invocation records it checks or disposes at this owner.
+    pub fn retire_composed_with_budget(
+        &mut self,
+        publication: &mut ProducerPublication,
+        participants: &[&dyn ClosedProducerParticipation],
+        budget: &mut WorkBudget,
+    ) -> CoreResult<()> {
+        self.retire_members(publication, participants, Some(budget))
+    }
+
+    fn retire_members(
+        &mut self,
+        publication: &mut ProducerPublication,
+        participants: &[&dyn ClosedProducerParticipation],
+        mut budget: Option<&mut WorkBudget>,
+    ) -> CoreResult<()> {
+        if let Some(budget) = budget.as_deref_mut() {
+            let members = publication.permission.members.len();
+            self.pay_retirement(budget, members * (2 * members + 3) + 1)?;
+        }
         if publication.issuer.as_ptr() != Rc::as_ptr(&self.issuer)
             || participants.is_empty()
             || !publication.same_participants(participants.iter().map(|p| p.participation_id()))
@@ -819,17 +885,40 @@ impl RawProducerServient {
         {
             return Err(CoreError::Validation(context()));
         }
-        publication.revoke();
-        if let Some(i) = self
+        let index = self
             .instances
             .iter()
-            .position(|e| e.instance.key() == publication.key)
-        {
+            .position(|e| e.instance.key() == publication.key);
+        if let Some(budget) = budget {
+            let staged = publication.notification_routes.as_ref().map_or(0, Vec::len);
+            let current = index.and_then(|i| self.instances[i].notification_routes.as_ref());
+            let displaced = publication
+                .retired
+                .as_ref()
+                .and_then(|e| e.notification_routes.as_ref());
+            budget
+                .consume(
+                    WorkClass::CleanupItems,
+                    (staged + current.map_or(0, Vec::len) + displaced.map_or(0, Vec::len)) as u64,
+                )
+                .map_err(|_| CoreError::Backpressure(context()))?;
+        }
+        publication.revoke();
+        if let Some(i) = index {
             self.instances.remove(i);
         }
+        publication.notification_routes = None;
         publication.instance = None;
         publication.release_retired();
         Ok(())
+    }
+
+    fn pay_retirement(&self, budget: &mut WorkBudget, member_work: usize) -> CoreResult<()> {
+        let actions = self.actions.as_ref().map_or(0, ActionStore::retained_count);
+        let items = 2 * self.instances.len() + actions + member_work;
+        budget
+            .consume(WorkClass::CleanupItems, items as u64)
+            .map_err(|_| CoreError::Backpressure(context()))
     }
 
     /// Reclaim a revoked composed record after its publication/exposure guard
@@ -841,18 +930,19 @@ impl RawProducerServient {
         key: ProducerInstanceKey,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
-        budget
-            .consume(
-                WorkClass::CleanupItems,
-                (MAX_INSTANCES + MAX_PRODUCER_PARTICIPANTS + 128) as u64,
-            )
-            .map_err(|_| CoreError::Backpressure(context()))?;
+        self.pay_retirement(budget, 1)?;
         let index = self
             .instances
             .iter()
             .position(|e| e.instance.key() == key)
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
         let entry = &self.instances[index];
+        budget
+            .consume(
+                WorkClass::CleanupItems,
+                (entry.permission.check_work() + entry.permission.members.len()) as u64,
+            )
+            .map_err(|_| CoreError::Backpressure(context()))?;
         if entry.permission.is_current()
             || entry.instance.notification_work.get() != 0
             || entry.permission.members.is_empty()
@@ -868,6 +958,12 @@ impl RawProducerServient {
         {
             return Err(CoreError::Backpressure(context()));
         }
+        budget
+            .consume(
+                WorkClass::CleanupItems,
+                entry.notification_routes.as_ref().map_or(0, Vec::len) as u64,
+            )
+            .map_err(|_| CoreError::Backpressure(context()))?;
         self.instances.remove(index);
         Ok(())
     }

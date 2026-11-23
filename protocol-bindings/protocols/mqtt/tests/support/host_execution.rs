@@ -157,6 +157,7 @@ impl Native {
         broker: SocketAddr,
         definition_bank: &Arc<HostResourceAccounts>,
         work_bank: &Arc<HostResourceAccounts>,
+        retained_calls: usize,
     ) -> Self {
         let compiler = Rc::new(
             HttpFiniteProducer::compiling(
@@ -187,7 +188,7 @@ impl Native {
                 owner,
                 finite_limits(),
                 1,
-                8,
+                retained_calls,
                 work_bank.clone(),
             )
             .unwrap(),
@@ -417,6 +418,7 @@ fn host_turns_join_independent_publications_all_families_replacement_and_complet
             broker.address,
             &definition_bank,
             &work_bank,
+            8,
         );
         let compiler = native.finite.clone();
         let td = description(http, action, broker.address, true, "alpha");
@@ -823,6 +825,7 @@ fn either_mqtt_failure_observer_withdraws_the_mixed_things_http_ingress() {
                 broker.address,
                 &accounts,
                 &accounts,
+                8,
             );
             let app = Rc::new(App::default());
             let (mut thing, definition) = native.stage(
@@ -948,3 +951,6 @@ fn either_mqtt_failure_observer_withdraws_the_mixed_things_http_ingress() {
         }
     });
 }
+
+#[path = "notification_capacity.rs"]
+mod notification_capacity;

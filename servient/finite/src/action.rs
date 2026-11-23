@@ -294,6 +294,9 @@ pub(super) struct ActionStore {
 }
 
 impl ActionStore {
+    pub(super) fn retained_count(&self) -> usize {
+        self.entries.len()
+    }
     pub(super) fn retains_instance(&self, key: ProducerInstanceKey) -> bool {
         self.entries.iter().any(|entry| entry.instance.key() == key)
     }
@@ -801,7 +804,7 @@ impl RawProducerServient {
             .instances
             .checked_add(
                 self.limits
-                    .behaviors_per_instance
+                    .handler_limit()
                     .saturating_mul(self.limits.target_name_bytes + 1),
             )
             .and_then(|n| n.checked_add(limits.input_bytes))
@@ -989,7 +992,7 @@ impl RawProducerServient {
             .instances
             .checked_add(
                 self.limits
-                    .behaviors_per_instance
+                    .handler_limit()
                     .saturating_mul(self.limits.target_name_bytes + 1),
             )
             .and_then(|n| n.checked_add(store.limits.invocations))
@@ -1104,7 +1107,7 @@ impl RawProducerServient {
         let units = self
             .limits
             .instances
-            .checked_add(self.limits.behaviors_per_instance)
+            .checked_add(self.limits.handler_limit())
             .and_then(|n| n.checked_add(store.limits.input_bytes))
             .and_then(|n| n.checked_add(store.limits.input_fields))
             .and_then(|n| n.checked_add(lookup))

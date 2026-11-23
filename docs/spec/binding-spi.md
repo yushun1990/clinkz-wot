@@ -500,9 +500,13 @@ reply opportunity. Native subscriber matching, subscribe/unsubscribe control and
 distribution stay at the Binding/broker; no physical subscription cardinality is
 inferred from logical source or recipient counts.
 
-The current manual Host publication bounds the captured notification mapping table at
-32 entries, independently of its 16-source per-instance registration envelope.
-Larger mappings require a separately bounded lookup/progress representation.
+Each selected notification start Form contributes one captured route. Its stop
+operation still needs complete qualification. A native participation can
+supply many routes and declares its concurrent publication slots separately.
+The Host registry bounds application sources through its configured behavior
+count. Its finite and Action handler lookup envelope remains 16. The
+[Host resource contract](foundation.md#host-producer-notification-mapping-capacity)
+defines how managed publication funds the captured table and native membership.
 
 The bounded MQTT Host participant uses one application-owned service across
 Thing participations, with one shared in-flight publication slot retained through

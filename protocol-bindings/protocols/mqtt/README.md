@@ -83,10 +83,15 @@ qualification scratch at the Host bank before any managed setup. The raw logical
 root and startup registrations remain caller-provisioned, as in existing composed
 Producer paths. Services cannot be swapped at publication or per emission.
 
-The native service is application-owned infrastructure with a fixed policy:
-at most 32 participation leases, each with at most 16 notification sources/32 operation
-definitions; one shared publication slot; 2-second setup timeout; clean session,
-keepalive disabled; no reconnect, retry, replay or idle retention. Native setup
+The application-owned service has at most 32 participation leases and one
+shared publication slot. Each lease takes the caller's operation definitions
+and sizes its native mapping table from their start operations. It checks
+source and topic uniqueness and pairs every control with its start. Managed
+handoff declares both vectors' actual capacities. Retirement with an exclusive
+lease pays cleanup work for its definitions and mappings.
+
+Setup has a 2-second timeout and uses a clean session with keepalive disabled.
+The service provides no reconnect, retry, replay or idle retention. Native setup
 and health, emission and retirement require explicit caller progress. Native
 socket/SDK state and this fixed service policy have their own Binding/deployment
 owner; Host bank charges are not total process RAM claims. One service can share

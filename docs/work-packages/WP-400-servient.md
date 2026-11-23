@@ -648,8 +648,8 @@ qualification, behavior/authority and instance accounts. A conflicting staged
 publication and one sibling's unread result/retirement cannot revoke another
 publication or refund its original shared definition.
 
-The fixed member vector admits 1..=32 participants and 1..=32 actual capability
-registrations in this manual Host slice. Managed admission checks the exact
+The manual Host supports 1..=32 native members and an independent eligible set
+of 1..=32 capability registrations. Managed admission checks the exact
 final TD and complete behavior set with the actual providers, including every
 negative match. Closed setup then checks the actual endpoint, mapping/service
 identity, native readiness and expected incumbent. Source-free installation
@@ -657,12 +657,20 @@ pins the observed registration, provider and native facts through the local
 decision. A stale candidate retires its original members and leaves the
 incumbent current. Each effective operation has exactly one native owner.
 Before setup, `PublicationPermission` reserves one vector of weak member
-identities and one of weak ingress gates. Admission records the original
+identities and one of weak ingress gates sized to the managed candidate's
+actual membership. Admission records the original
 identities. Commit records the gates in their reserved storage and shares the
 permission with the registry. The publication guard and accepted work retain
 that same permission. Retirement checks the complete original set and rejects
 changed, duplicate, omitted or foreign members. The local commit opens all
 prechecked gates without allocation, native progress or fallible preparation.
+
+The mapping-capacity fixture qualifies 33 Event Forms with 66 effective
+operations. One MQTT member delivers the final Event to its subscribed peer
+while a separate HTTP exchange occupies the finite pool. Reducing the route
+bank to 32 refuses the unchanged TD. Splitting the same Forms across two
+required members refuses at a one-member bank with all 33 mappings funded.
+Both refusals return the original closed owners. [Broker and HTTP fixture](../../protocol-bindings/protocols/mqtt/tests/support/notification_capacity.rs)
 
 The existing shared `HostResourceAccounts` bank reserves Engine retained bytes,
 cleanup byte/item allowances and a Thing slot before ownership handoff. Costs

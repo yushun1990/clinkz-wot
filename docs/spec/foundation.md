@@ -76,6 +76,21 @@ RAM bound or automatic aggregation across independent capacities is inferred.
 The [runtime contract](runtime-safety.md#finite-producer-participation-and-work-capacity)
 owns ordering and default dedicated-policy scope.
 
+### Host Producer notification mapping capacity
+
+Managed publication reserves one `BindingRoutesGlobalMax` item for each
+captured notification start mapping and one `RouteReadinessTokensGlobalMax`
+item for each required native member with its own ingress gate. Admission
+checks the corresponding per-Thing limits and acquires both global debits
+at the publication's original bank. A short reservation reports its resource,
+ceiling and requested count, and rolls back the candidate's acquisitions.
+
+These are logical allowances. The publication also funds the actual capacity
+of its route, member and gate vectors, the Binding's declared native backing,
+and metadata for the Binding's promised concurrent emissions. Its instance and
+native owners retain the original funding through outstanding work and unread
+results. Each finite receive uses its own work capacity.
+
 The Host notification representation imports the same original data/access
 service owners. A shared prepared mapping pays its actual program/schema/reference
 records, without charging service backing again. Independent associations fund
