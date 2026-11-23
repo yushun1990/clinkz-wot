@@ -47,10 +47,11 @@ impl MqttProducerConfig {
 struct Registration {
     config: MqttProducerConfig,
     binding: (BindingId, BindingGeneration),
+    topics: native::TopicOwners,
 }
 
-/// Actual immutable startup registration; shared native services retain this
-/// exact owner. Preparation and runtime cannot pair only by protocol/id tag.
+/// Startup registration with immutable configuration. Its native services
+/// share topic ownership and retain this exact registration through setup.
 #[derive(Clone)]
 pub struct MqttNotificationProducer {
     registration: Rc<Registration>,
@@ -61,6 +62,7 @@ impl MqttNotificationProducer {
             registration: Rc::new(Registration {
                 config,
                 binding: (id, generation),
+                topics: native::TopicOwners::default(),
             }),
         }
     }

@@ -50,7 +50,6 @@ struct Session {
     received: usize,
     started: Option<Instant>,
     first_cause: Option<CoreError>,
-    leases: Vec<Weak<Lease>>,
     live_leases: usize,
     busy: bool,
     locally_published: u64,
@@ -241,7 +240,6 @@ impl MqttNotificationService {
                 received: 0,
                 started: None,
                 first_cause: None,
-                leases: Vec::with_capacity(MAX_LEASES),
                 live_leases: 0,
                 busy: false,
                 locally_published: 0,
@@ -264,7 +262,8 @@ impl MqttNotificationService {
     }
 
     /// Adopt the caller's definitions and one mapping per start. The caller
-    /// prepays their lifetime disposal, including abandonment between cleanup
+    /// funds topic comparisons against the registration's live inventories and
+    /// prepays disposal of its records, including abandonment between cleanup
     /// turns. Refusal leaves all definitions with the caller.
     pub fn participation(
         &self,
@@ -274,8 +273,7 @@ impl MqttNotificationService {
         lifetime: &mut WorkBudget,
     ) -> CoreResult<MqttNotificationRuntime> {
         let mut session = self.session.borrow_mut();
-        session.leases.retain(|w| w.strong_count() != 0);
-        if session.leases.len() == MAX_LEASES {
+        if session.live_leases == MAX_LEASES {
             return Err(CoreError::Backpressure(
                 ErrorContext::new(ErrorPhase::Admission, RetryClass::Safe)
                     .with_redacted_cause(652, "MQTT service participation leases occupied"),
@@ -338,42 +336,25 @@ impl MqttNotificationService {
         {
             return Err(unsupported());
         }
-        // Refuse ambiguous attribution between independent logical sources.
-        // A staged successor may reuse its old numeric slot/topic, but cannot
-        // inherit its original mapping identity or pending publication.
-        if session.leases.iter().filter_map(Weak::upgrade).any(|l| {
-            if l.closing.get() {
-                return false;
-            }
-            let same_owner = l.token.same_owner(owner);
-            if same_owner && l.key != key && l.key.slot().slot() == key.slot().slot() {
-                return false;
-            }
-            let same_instance = same_owner && l.key == key;
-            l.inventory.borrow().upgrade().is_some_and(|inventory| {
-                inventory
-                    .mappings
-                    .iter()
-                    .any(|a| mappings.iter().any(|b| a.conflicts_with(b, same_instance)))
-            })
-        }) {
-            return Err(unsupported());
-        }
+        session
+            .registration
+            .topics
+            .check(owner, key, &mappings, lifetime)?;
         let gate = Rc::new(ProducerIngressGate::default());
         let inventory = Rc::new(Inventory {
+            owner: owner.clone(),
+            key,
+            neighbors: RefCell::default(),
             mappings,
             definitions: core::mem::take(definitions),
         });
         let lease = Rc::new(Lease {
             session: Rc::clone(&self.session),
-            token: owner.clone(),
-            key,
-            inventory: RefCell::new(Rc::downgrade(&inventory)),
             closing: Cell::new(false),
             gate: Rc::clone(&gate),
             funding: RefCell::new(None),
         });
-        session.leases.push(Rc::downgrade(&lease));
+        session.registration.topics.insert(&inventory);
         session.live_leases += 1;
         Ok(MqttNotificationRuntime {
             inventory: Some(inventory),
@@ -452,17 +433,92 @@ impl NotificationMapping {
         Some(&mappings[index])
     }
 }
+// One registration addresses one broker. Each live inventory supplies its own
+// links, so independent sessions share attribution without pooling their slots
+// or retaining storage for departed members. Both insertion and unlink are O(1).
+#[derive(Default)]
+pub(super) struct TopicOwners {
+    first: RefCell<Weak<Inventory>>,
+}
+#[derive(Default)]
+struct Neighbors {
+    previous: Weak<Inventory>,
+    next: Weak<Inventory>,
+}
+impl TopicOwners {
+    fn check(
+        &self,
+        owner: &ProducerOwnerToken,
+        key: ProducerInstanceKey,
+        mappings: &[NotificationMapping],
+        budget: &mut WorkBudget,
+    ) -> CoreResult<()> {
+        let mut next = self.first.borrow().upgrade();
+        while let Some(existing) = next {
+            budget
+                .consume(WorkClass::BindingPolls, 1)
+                .map_err(|_| busy())?;
+            next = existing.neighbors.borrow().next.upgrade();
+            let same_owner = existing.owner.same_owner(owner);
+            // A successor may stage in its predecessor's namespace. Their
+            // separate gates still order which incarnation can publish.
+            if same_owner && existing.key != key && existing.key.slot().slot() == key.slot().slot()
+            {
+                continue;
+            }
+            let comparisons = existing
+                .mappings
+                .len()
+                .checked_mul(mappings.len())
+                .ok_or_else(busy)?;
+            budget
+                .consume(WorkClass::BindingPolls, comparisons as u64)
+                .map_err(|_| busy())?;
+            let same_instance = same_owner && existing.key == key;
+            if existing
+                .mappings
+                .iter()
+                .any(|a| mappings.iter().any(|b| a.conflicts_with(b, same_instance)))
+            {
+                return Err(unsupported());
+            }
+        }
+        Ok(())
+    }
+
+    fn insert(&self, inventory: &Rc<Inventory>) {
+        let added = Rc::downgrade(inventory);
+        let next = self.first.replace(added.clone());
+        if let Some(next) = next.upgrade() {
+            next.neighbors.borrow_mut().previous = added;
+        }
+        inventory.neighbors.borrow_mut().next = next;
+    }
+
+    fn remove(&self, inventory: &Inventory) {
+        let Neighbors { previous, next } = inventory.neighbors.take();
+        if let Some(prior) = previous.upgrade() {
+            prior.neighbors.borrow_mut().next = next.clone();
+        } else {
+            self.first.replace(next.clone());
+        }
+        if let Some(next) = next.upgrade() {
+            next.neighbors.borrow_mut().previous = previous;
+        }
+    }
+}
+
 // The runtime alone owns the variable inventory and its prepaid destruction.
 // A publication pins only the fixed session lease, gate and original funding.
 struct Inventory {
+    owner: ProducerOwnerToken,
+    key: ProducerInstanceKey,
+    neighbors: RefCell<Neighbors>,
     mappings: Vec<NotificationMapping>,
     definitions: Vec<MqttNotificationDefinition>,
 }
 struct Lease {
     session: Rc<RefCell<Session>>,
-    token: ProducerOwnerToken,
-    key: ProducerInstanceKey,
-    inventory: RefCell<Weak<Inventory>>,
     closing: Cell<bool>,
     gate: Rc<ProducerIngressGate>,
     // Last disposal includes native publications which outlive the exposure.
@@ -503,7 +559,7 @@ impl MqttNotificationRuntime {
         if self.closed {
             if Rc::strong_count(lease) == 1 {
                 let inventory = Rc::get_mut(self.inventory.as_mut().expect("live inventory"))
-                    .expect("closing detached the service's weak inventory");
+                    .expect("closing unlinked the registration's weak inventory");
                 // Bound the actual work of this turn even when the inventory
                 // is larger than the profile's entire cleanup quantum.
                 let available = usize::try_from(budget.remaining(WorkClass::CleanupItems))
@@ -659,9 +715,14 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
     fn begin_retire(&mut self, _: ProducerRetirement) {
         self.closed = true;
         self.gate.withdraw();
-        if let Some(l) = &self.lease {
-            l.closing.set(true);
-            *l.inventory.borrow_mut() = Weak::new();
+        if let Some(l) = &self.lease
+            && !l.closing.replace(true)
+        {
+            l.session
+                .borrow()
+                .registration
+                .topics
+                .remove(self.inventory.as_ref().expect("live inventory"));
         }
     }
     fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {

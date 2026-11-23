@@ -85,13 +85,17 @@ Producer paths. Services cannot be swapped at publication or per emission.
 
 The application-owned service has at most 32 participation leases and one
 shared publication slot. Each lease takes the caller's operation definitions
-and sizes its native mapping table from their start operations. It checks
-topic uniqueness across every member of the same incarnation and pairs every
-control with its start. A distinct successor in the same logical slot may reuse
+and sizes its native mapping table from their start operations. The actual
+Producer registration checks topic attribution across its services before a
+member takes its definitions. Each live inventory supplies its own weak links.
+The caller funds one `BindingPolls` item per inventory visited and one per
+candidate/existing start pair subject to comparison. Closing a member unlinks
+its inventory in constant time. Each control must pair with its start.
+A distinct successor in the same logical slot may reuse
 its predecessor's topic. Within one Thing, a root Event wildcard may overlap
 the exact topic of the named Event that its final topic level identifies. A
 Property or differently named Event on that topic refuses before native setup,
-including when the root and leaf are installed on separate members.
+including when the root and leaf use separate broker connections.
 
 Native construction takes a caller-supplied lifetime work budget and prepays
 one cleanup item per definition and start mapping before adopting the vectors.
@@ -496,7 +500,8 @@ captured schemas. Every cursor keeps its own bounded queue, permission, loss,
 stop and settlement. Distinct overlapping filters in one Consumer service refuse
 before acceptance: MQTT can deliver extra copies for overlapping subscriptions,
 and this subset supplies no deduplication or exactly-once claim. Independent
-Producer slots likewise refuse overlapping namespaces. A staged successor may
+Producer slots using the same registration refuse overlapping namespaces even
+on separate connections. A staged successor may
 reuse its original slot's topics with fresh mapping identity and original-work
 fencing. One Thing's leaf/root mappings may coexist.
 

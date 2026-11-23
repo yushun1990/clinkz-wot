@@ -187,6 +187,26 @@ impl ProducerPublication {
         instance.action_result_accounts = Some(accounts);
         Ok(())
     }
+    /// Prepay destruction when the publication first takes each table. Commit
+    /// moves these same rows to the registry, which may drop before the facade.
+    /// Requalification compares against the originals without adopting again.
+    fn bind_routes(
+        &mut self,
+        routes: CapturedProducerRoutes,
+        mut lifetime: Option<&mut WorkBudget>,
+    ) -> CoreResult<()> {
+        let mut rows = 0;
+        if self.action_routes.is_none() {
+            rows += routes.actions.len();
+        }
+        if self.notification_routes.is_none() {
+            rows += routes.notifications.len();
+        }
+        pay_cleanup(&mut lifetime, rows)?;
+        self.bind_action_routes(routes.actions)?;
+        self.bind_notification_routes(routes.notifications)
+    }
+
     /// Capture the original notification publication mapping, validation and security
     /// services. Requalification cannot replace any one of these independently.
     /// Raw callers transfer their provisioned vector. Managed admission reserves
@@ -711,21 +731,22 @@ impl RawProducerServient {
         })
     }
 
-    /// Bind the caller's complete closed membership and staged routes before
-    /// ownership transfer. A linked validator may change its work declaration
-    /// during capture. Return the original instance on any such refusal.
+    /// Bind the caller's complete closed membership and prepay the staged
+    /// routes' lifetime disposal before ownership transfer. A linked validator
+    /// may change its work declaration during capture. Return the original
+    /// instance on refusal.
     pub fn prepare_composed_publication(
         &self,
         instance: RawProducerInstance,
         expected: Option<ProducerInstanceKey>,
         participants: &[&dyn ClosedProducerParticipation],
         routes: CapturedProducerRoutes,
+        lifetime: &mut WorkBudget,
     ) -> Result<ProducerPublication, BindingInputRejection<RawProducerInstance>> {
         let mut publication = self.stage_publication(instance, expected, participants.len())?;
         if let Err(error) = publication
             .bind_participants(participants)
-            .and_then(|()| publication.bind_action_routes(routes.actions))
-            .and_then(|()| publication.bind_notification_routes(routes.notifications))
+            .and_then(|()| publication.bind_routes(routes, Some(lifetime)))
         {
             let instance = publication
                 .instance
@@ -786,15 +807,15 @@ impl RawProducerServient {
         self.publish_if_current_with_cleanup(publication, participants, coverage, None, capture)
     }
 
-    /// With a work budget, fund disposal of the actual displaced records after
-    /// the final linked callback and before changing either incarnation's gates.
-    /// Raw callers that retain the displaced entry provide their own cleanup.
+    /// A budgeted caller funds newly adopted route rows and disposal of the
+    /// displaced records before changing either incarnation's gates. Unmetered
+    /// raw callers provide their own cleanup.
     pub fn publish_if_current_with_cleanup(
         &mut self,
         publication: &mut ProducerPublication,
         participants: &mut [&mut dyn ClosedProducerParticipation],
         coverage: &PublicationFacts,
-        cleanup: Option<&mut WorkBudget>,
+        mut cleanup: Option<&mut WorkBudget>,
         capture: impl FnOnce(
             ProducerInstanceKey,
             &[&mut dyn ClosedProducerParticipation],
@@ -813,8 +834,7 @@ impl RawProducerServient {
             participant.observe_installation(&mut installation.observer())?;
         }
         if let Some(routes) = capture(publication.key, participants)? {
-            publication.bind_action_routes(routes.actions)?;
-            publication.bind_notification_routes(routes.notifications)?;
+            publication.bind_routes(routes, cleanup.as_deref_mut())?;
         }
         if !participants
             .iter()

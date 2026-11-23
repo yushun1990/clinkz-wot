@@ -1684,6 +1684,15 @@ fn extra_expanded_event_data_refuses_before_native_start_and_supported_td_still_
 
 #[test]
 fn a_root_wildcard_shares_a_topic_only_with_the_event_it_decodes() {
+    check_wildcard_attribution(false);
+}
+
+#[test]
+fn wildcard_attribution_holds_across_two_independent_producer_connections() {
+    check_wildcard_attribution(true);
+}
+
+fn check_wildcard_attribution(separate_connections: bool) {
     runtime().block_on(async {
         let broker = Broker::start();
         let prefix = "attribution/events";
@@ -1694,6 +1703,9 @@ fn a_root_wildcard_shares_a_topic_only_with_the_event_it_decodes() {
             BindingGeneration::INITIAL,
         );
         let native_service = MqttNotificationService::new(&provider).unwrap();
+        let other =
+            separate_connections.then(|| MqttNotificationService::new(&provider.clone()).unwrap());
+        let leaf_service = other.as_ref().unwrap_or(&native_service);
         let accounts = bank();
         let candidate = |owner: &RawProducerServient,
                          property_topic: &str,
@@ -1729,9 +1741,12 @@ fn a_root_wildcard_shares_a_topic_only_with_the_event_it_decodes() {
                 );
             }
             let mut participants = Vec::new();
-            for mut defs in groups.into_iter().filter(|group| !group.is_empty()) {
+            for (mut defs, service) in groups.into_iter().zip([&native_service, leaf_service]) {
+                if defs.is_empty() {
+                    continue;
+                }
                 participants.push(OwnedProducerParticipation::notifications(
-                    native_service.participation(
+                    service.participation(
                         &owner.participation_token(),
                         instance.key(),
                         &mut defs,
@@ -1769,8 +1784,9 @@ fn a_root_wildcard_shares_a_topic_only_with_the_event_it_decodes() {
                     ),
                     Err(CoreError::UnsupportedOperation(_))
                 ));
-                assert!(!native_service.connected());
+                assert!(!native_service.connected() && !leaf_service.connected());
                 assert_eq!(native_service.locally_published(), 0);
+                assert_eq!(leaf_service.locally_published(), 0);
             }
         }
         let (td, input) =
@@ -1789,6 +1805,7 @@ fn a_root_wildcard_shares_a_topic_only_with_the_event_it_decodes() {
             assert!(Instant::now() < end);
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
+        assert!(native_service.connected() && leaf_service.connected());
         let cs = service(&broker, 8192);
         let access = Arc::new(Access::default());
         let consumer_owner = consumer_owner();
@@ -1833,7 +1850,12 @@ fn a_root_wildcard_shares_a_topic_only_with_the_event_it_decodes() {
             clinkz_wot_core::thing::AffordanceSite::Event("alarm")
         );
         assert_eq!(item.data.unwrap().body, b"7");
+        assert_eq!(leaf_service.locally_published(), 2);
+        if separate_connections {
+            assert_eq!(native_service.locally_published(), 0);
+        }
         drop((cursor, root, producer));
+        assert!(!native_service.connected() && !leaf_service.connected());
         owner
             .retire_revoked_publication(key, &mut budget())
             .unwrap();

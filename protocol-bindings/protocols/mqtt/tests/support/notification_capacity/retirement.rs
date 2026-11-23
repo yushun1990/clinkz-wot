@@ -8,6 +8,110 @@ fn policy(quantum: u64) -> Arc<ResourceLimits> {
 }
 
 #[test]
+fn captured_routes_prepay_disposal_when_the_servient_drops_before_the_exposure() {
+    runtime().block_on(async {
+        let mut single_route_frees = None;
+        for count in [1, 33, 86] {
+            let broker = Broker::start();
+            let (provider, service) = mqtt_service(&broker);
+            let mut owner = events_owner(count);
+            let accounts = publication_bank(count as u64, 1);
+            let input = event_input(
+                &owner,
+                event_instance(broker.address, count, false),
+                &provider,
+                &service,
+                count,
+                &mut budget(),
+            )
+            .unwrap();
+            let key = input.instance.key();
+            let gate = input.participants[0].ingress_gate().clone();
+            let limits = policy(4);
+            // Measure final TD qualification separately from the lifetime
+            // allowance for the rows that this one member actually supplies.
+            let mut qualification = budget();
+            let available = qualification.remaining(WorkClass::CleanupItems);
+            check_final_thing(
+                input.instance.description().unwrap(),
+                key,
+                &limits,
+                &mut qualification,
+                &[&provider],
+                &input.prepared,
+                |scope, op| match scope {
+                    ValidatedProducerScope::Event(name) => input.instance.supports_event(name, op),
+                    _ => false,
+                },
+            )
+            .unwrap();
+            let qualified = available - qualification.remaining(WorkClass::CleanupItems);
+            let rows = input.prepared.notification_mapping_count() as u64;
+            assert_eq!(rows, count as u64);
+            let mut short = budget().with_remaining(WorkClass::CleanupItems, qualified + rows - 1);
+            let refused = ComposedProducerExposure::try_new(
+                &owner,
+                input,
+                limits.clone(),
+                accounts.clone(),
+                &mut short,
+            )
+            .err()
+            .expect("one missing lifetime cleanup item");
+            assert!(matches!(
+                refused.error().error(),
+                CoreError::Backpressure(_)
+            ));
+            assert_eq!(short.remaining(WorkClass::CleanupItems), rows - 1);
+            let input = refused.into_input();
+            assert_eq!(input.instance.key(), key);
+            assert!(Rc::ptr_eq(input.participants[0].ingress_gate(), &gate));
+            assert!(gate.is_staged() && !service.connected() && owner.description(key).is_none());
+            clean(&accounts);
+
+            let mut exact = budget().with_remaining(WorkClass::CleanupItems, qualified + rows);
+            let mut exposure = ComposedProducerExposure::try_new(
+                &owner,
+                input,
+                limits,
+                accounts.clone(),
+                &mut exact,
+            )
+            .unwrap_or_else(|r| panic!("{:?}", r.error().error()));
+            assert_eq!(exact.remaining(WorkClass::CleanupItems), 0);
+            let end = Instant::now() + Duration::from_secs(5);
+            loop {
+                exposure
+                    .step(&mut owner, &mut cx(), now(), |_, _| budget())
+                    .unwrap();
+                // Commit transfers the already funded rows to the registry.
+                let mut commit = budget().with_remaining(WorkClass::CleanupItems, 0);
+                match exposure.publish(&mut owner, &mut commit) {
+                    Ok(()) => break,
+                    Err(CoreError::Backpressure(_)) => (),
+                    Err(error) => panic!("{error:?}"),
+                }
+                assert!(Instant::now() < end);
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            assert!(owner.description(key).is_some() && service.connected());
+            let ((), (allocated, freed)) = allocations(|| drop(owner));
+            assert_eq!(allocated, 0);
+            let baseline = *single_route_frees.get_or_insert(freed);
+            assert!(
+                freed <= baseline + count - 1,
+                "{freed} frees with {count} rows"
+            );
+            assert!(service.connected());
+            assert_eq!(accounts.account(K::BindingRoutesGlobalMax).used(), rows);
+            drop(exposure);
+            assert!(!service.connected());
+            clean(&accounts);
+        }
+    });
+}
+
+#[test]
 fn four_credit_turns_retire_an_event_even_when_the_registry_is_full() {
     runtime().block_on(async {
         let broker = Broker::start();

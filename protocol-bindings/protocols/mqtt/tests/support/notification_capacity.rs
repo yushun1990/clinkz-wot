@@ -454,6 +454,76 @@ fn same_incarnation_topic_collision_refuses_for_one_or_two_members() {
     });
 }
 
+#[test]
+fn registration_checks_live_topics_across_services_with_independent_lease_capacity() {
+    let broker = Broker::start();
+    let (provider, first) = mqtt_service(&broker);
+    let second = MqttNotificationService::new(&provider).unwrap();
+    let owner = events_owner(32);
+    let mut original = event_input(
+        &owner,
+        event_instance(broker.address, 32, false),
+        &provider,
+        &first,
+        1,
+        &mut budget(),
+    )
+    .unwrap();
+    let token = owner.participation_token();
+    let candidate = |topic: &str| {
+        let text = support::td(broker.address, topic).to_string();
+        let instance = support::instance(authority(1), &text);
+        let definitions = support::prepare(&instance, &[&provider])
+            .unwrap()
+            .operations()
+            .iter()
+            .map(|op| {
+                op.definition::<MqttNotificationDefinition>()
+                    .unwrap()
+                    .clone()
+            })
+            .collect::<Vec<_>>();
+        (instance.key(), definitions)
+    };
+
+    let (key, mut fresh) = candidate("other/alarm");
+    assert!(matches!(
+        first.participation(&token, key, &mut fresh, &mut budget()),
+        Err(CoreError::Backpressure(_))
+    ));
+    // Each existing member contributes one visit and one start comparison.
+    let mut short = budget().with_remaining(WorkClass::BindingPolls, 63);
+    assert!(matches!(
+        second.participation(&token, key, &mut fresh, &mut short),
+        Err(CoreError::Backpressure(_))
+    ));
+    assert_eq!(fresh.len(), 2);
+    let mut exact = budget().with_remaining(WorkClass::BindingPolls, 64);
+    let independent = second
+        .participation(&token, key, &mut fresh, &mut exact)
+        .unwrap();
+    assert_eq!(exact.remaining(WorkClass::BindingPolls), 0);
+
+    let (middle_key, mut middle) = candidate("capacity/event16");
+    assert!(matches!(
+        second.participation(&token, middle_key, &mut middle, &mut budget()),
+        Err(CoreError::UnsupportedOperation(_))
+    ));
+    drop(original.participants.remove(15));
+    let reclaimed = second
+        .participation(&token, middle_key, &mut middle, &mut budget())
+        .unwrap();
+    for neighbor in ["capacity/event15", "capacity/event17"] {
+        let (neighbor_key, mut defs) = candidate(neighbor);
+        assert!(matches!(
+            second.participation(&token, neighbor_key, &mut defs, &mut budget()),
+            Err(CoreError::UnsupportedOperation(_))
+        ));
+    }
+    drop((independent, original, reclaimed));
+    assert!(!first.connected() && !second.connected());
+}
+
 // Measure only the calling thread and only the synchronous operation under test.
 struct CountingAllocator;
 #[global_allocator]

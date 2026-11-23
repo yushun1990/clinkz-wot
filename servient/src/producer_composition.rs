@@ -668,7 +668,7 @@ impl ComposedProducerExposure {
         } = input;
         let refs: Vec<_> = participants.iter().map(|p| p.as_participation()).collect();
         let mut publication =
-            match owner.prepare_composed_publication(instance, expected, &refs, routes) {
+            match owner.prepare_composed_publication(instance, expected, &refs, routes, budget) {
                 Ok(publication) => publication,
                 Err(rejection) => {
                     let (instance, error) = rejection.into_parts();

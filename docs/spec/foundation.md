@@ -96,6 +96,13 @@ notification source it adopts. This allowance follows the instance through
 retirement, replacement and the last unread settlement. Each instance tracks
 its own retained Action entries and notification work through acknowledgement.
 
+The publication also takes one lifetime cleanup work item per captured Action
+or notification route when it first adopts the table. Commit transfers the
+funded rows to the registry. They can be disposed if the Servient drops while
+the exposure or native work is still live. Rechecking the same captured routes
+uses their existing lifetime allowance. Explicit retirement and atomic cutover
+still fund the work performed in their own turns.
+
 Managed admission checks the configured cleanup quantum before native setup.
 Lost-owner reclamation must be able to search the bounded registry, inspect the
 original members and withdraw their gates. A serving replacement must also be
