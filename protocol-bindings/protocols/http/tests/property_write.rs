@@ -147,6 +147,7 @@ fn denied() -> CoreError {
 #[derive(Default)]
 struct Controls {
     hold_send: Cell<bool>,
+    hold_reply_retirement: Cell<bool>,
     hold_close: Cell<bool>,
     lose_service: RefCell<PublicationState<bool>>,
 }
@@ -228,7 +229,7 @@ impl FiniteIngressBinding for Native {
         reply: &RawFiniteReply<Self::Reply>,
         cause: &CoreError,
     ) -> Poll<CoreResult<FiniteDelivery>> {
-        if self.controls.hold_close.get() {
+        if self.controls.hold_reply_retirement.get() {
             Poll::Pending
         } else {
             self.actual.poll_retire_reply(cx, reply, cause)

@@ -142,9 +142,15 @@ after logical retirement and socket release. [HTTP Write regression](../../proto
 A separate peer observes a partial HTTP response before expiry. Its settlement
 reports Unknown delivery and retains the complete output. A foreign or stale
 reply cannot abort a live connection. When an independently polled shared
-listener fails during reply retirement, the publication withdraws, reports
-the Binding failure and retains the earlier timeout on the original exchange.
-[Native reply tests](../../protocol-bindings/protocols/http/tests/finite_producer.rs) · [Listener failure test](../../protocol-bindings/protocols/http/tests/composed_thing/shared_listener.rs)
+listener fails during reply retirement, a turn with only native poll credit
+withdraws the Thing before its other required route can run another handler.
+The original settlement waits for cleanup credit. [Native reply tests](../../protocol-bindings/protocols/http/tests/finite_producer.rs) · [Listener failure test](../../protocol-bindings/protocols/http/tests/composed_thing/shared_listener.rs)
+
+If the publication was already revoked and reply retirement is still Pending,
+listener loss moves the original PUT to whole-participation close. The
+participation reports the Binding failure. Close releases the active slot and
+the peer sees EOF. The retained settlement carries the earlier Binding-phase
+timeout, completed write and original result until disposal. [Revoked PUT test](../../protocol-bindings/protocols/http/tests/support/accepted_timeout.rs)
 
 Focused commands:
 
@@ -152,6 +158,7 @@ Focused commands:
 cargo test --locked -p clinkz-wot-binding-http --test composed_thing shared_work -- --nocapture
 cargo test --locked -p clinkz-wot-binding-http --test property_write shared_producer_capacity -- --nocapture
 cargo test --locked -p clinkz-wot-binding-http --test property_write accepted_write_timeout
+cargo test --locked -p clinkz-wot-binding-http --test composed_thing --test property_write listener_loss_
 cargo test --locked -p clinkz-wot-servient-finite --test native_ingress shared_capacity -- --nocapture
 ```
 

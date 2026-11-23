@@ -46,6 +46,51 @@ fn take(exposure: &mut ComposedProducerExposure) -> Box<ProducerFiniteSettlement
         .unwrap()
 }
 
+fn write_owner() -> RawProducerServient {
+    RawProducerServient::try_empty(RawProducerRegistryLimits {
+        instances: 2,
+        behaviors_per_instance: 2,
+        target_name_bytes: 256,
+    })
+    .unwrap()
+}
+
+fn publish_writes(
+    owner: &mut RawProducerServient,
+    addr: SocketAddr,
+    accounts: &[Arc<HostResourceAccounts>; 2],
+    apps: &[Rc<Application>; 2],
+    controls: &[Rc<Controls>; 2],
+    capacities: [Option<&ProducerFiniteCapacity>; 2],
+) -> [ComposedProducerExposure; 2] {
+    let listener =
+        HttpFiniteListener::new(HttpProducerConfig::for_loopback(addr).unwrap(), 1000).unwrap();
+    [0, 1].map(|i| {
+        let mut td = description(addr);
+        let path = ["/level", "/sibling"][i];
+        td["properties"]["level"]["forms"][0]["href"] = json!(format!("http://{addr}{path}"));
+        let key = ProducerInstanceAuthority::try_new(ThingSlotId::new(
+            SlotIndex::new(i as u32),
+            Generation::INITIAL,
+        ))
+        .unwrap();
+        let mut exposure = exposure_with_capacity(
+            owner,
+            accounts[i].clone(),
+            td,
+            apps[i].clone(),
+            controls[i].clone(),
+            key,
+            None,
+            capacities[i],
+            Some(&listener),
+        );
+        drive_to(&mut exposure, owner, 0, RawFiniteState::InstalledClosed);
+        exposure.publish(owner, &mut work()).unwrap();
+        exposure
+    })
+}
+
 #[test]
 fn withdrawal_during_pending_reply_retirement_preserves_the_timeout() {
     for explicit_close in [false, true] {
@@ -59,7 +104,7 @@ fn withdrawal_during_pending_reply_retirement_preserves_the_timeout() {
             0,
             RawFiniteState::Delivering,
         );
-        server.controls.hold_close.set(true);
+        server.controls.hold_reply_retirement.set(true);
         drive_to(
             &mut server.exposure,
             &mut server.owner,
@@ -67,6 +112,7 @@ fn withdrawal_during_pending_reply_retirement_preserves_the_timeout() {
             RawFiniteState::RetiringReply,
         );
         if explicit_close {
+            server.controls.hold_close.set(true);
             server.exposure.begin_close();
         } else {
             assert!(server.owner.revoke(key));
@@ -85,6 +131,7 @@ fn withdrawal_during_pending_reply_retirement_preserves_the_timeout() {
                 RawFiniteState::RetiringReply
             }
         );
+        server.controls.hold_reply_retirement.set(false);
         server.controls.hold_close.set(false);
         for _ in 0..2 {
             server
@@ -112,56 +159,121 @@ fn withdrawal_during_pending_reply_retirement_preserves_the_timeout() {
 }
 
 #[test]
+fn listener_loss_after_revocation_closes_a_pending_reply_and_releases_its_slot() {
+    let addr = address();
+    let mut owner = write_owner();
+    let work_bank = bank();
+    let capacity =
+        ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 1, 1, work_bank.clone())
+            .unwrap();
+    let accounts = [bank(), bank()];
+    let apps = Default::default();
+    let controls = Default::default();
+    let [mut first, mut sibling] = publish_writes(
+        &mut owner,
+        addr,
+        &accounts,
+        &apps,
+        &controls,
+        [Some(&capacity), None],
+    );
+    let key = first.key();
+    let peer = put(addr, "/level", 41);
+    drive_to(&mut first, &mut owner, 10, RawFiniteState::Delivering);
+    controls[0].hold_reply_retirement.set(true);
+    drive_to(&mut first, &mut owner, 1010, RawFiniteState::RetiringReply);
+    assert!(owner.revoke(key));
+    drive_to(&mut first, &mut owner, 1010, RawFiniteState::RetiringReply);
+    assert!(owner.description(key).is_none());
+    assert_eq!((capacity.active_work(), capacity.retained_work()), (1, 1));
+
+    // This route's first receive is valid on its own clock, but precedes
+    // the tick 10 receive already observed by the shared listener.
+    sibling
+        .step(&mut owner, &mut cx(), now(0), |_, _| work())
+        .unwrap();
+    assert!(matches!(
+        sibling.progress_failure(0),
+        Some(CoreError::Binding(_))
+    ));
+    // The cleanup turn can observe loss even before the result queue is funded.
+    first
+        .step(&mut owner, &mut cx(), now(1010), |_, _| {
+            WorkBudget::new().with_remaining(WorkClass::CleanupItems, 1)
+        })
+        .unwrap();
+    let member = first.participant_mut::<Server>(0).unwrap();
+    assert_eq!(member.state(), RawFiniteState::Closing);
+    assert!(matches!(member.first_cause(), Some(CoreError::Binding(_))));
+    assert!(member.take_retained_settlement().is_none());
+    assert_eq!((capacity.active_work(), capacity.retained_work()), (1, 1));
+
+    // Only whole-participation close is available. It still owns the original PUT.
+    first
+        .step(&mut owner, &mut cx(), now(1010), |_, _| {
+            WorkBudget::new()
+                .with_remaining(WorkClass::CleanupItems, 1)
+                .with_remaining(WorkClass::QueueOperations, 1)
+        })
+        .unwrap();
+    assert_eq!(
+        first.participant_mut::<Server>(0).unwrap().state(),
+        RawFiniteState::Closed
+    );
+    assert!(matches!(
+        first.progress_failure(0),
+        Some(CoreError::Binding(_))
+    ));
+    assert!(wire(peer).is_empty());
+    assert_eq!((apps[0].writes.get(), apps[1].writes.get()), (1, 0));
+    assert_eq!(*apps[0].value.borrow(), b"41");
+    assert_eq!((capacity.active_work(), capacity.retained_work()), (0, 1));
+    let original = take(&mut first);
+    assert_eq!(original.recipient(), Some(key));
+    assert_eq!(original.operation(), Some(Operation::WriteProperty));
+    assert!(
+        matches!(original.first_cause(), Some(CoreError::TimedOut(c)) if c.phase() == ErrorPhase::Binding)
+    );
+    assert_eq!(original.effect(), FiniteEffect::Completed);
+    assert_eq!(original.delivery(), FiniteDelivery::NotDelivered);
+    assert_eq!(original.result().unwrap().status(), InteractionStatus::Ok);
+    first.retire(&mut owner, &mut work()).unwrap();
+    sibling
+        .step(&mut owner, &mut cx(), now(0), |_, _| work())
+        .unwrap();
+    sibling.retire(&mut owner, &mut work()).unwrap();
+    drop((first, sibling, owner));
+    TcpListener::bind(addr).unwrap();
+    assert_eq!(capacity.retained_work(), 1);
+    drop(original);
+    assert_eq!(capacity.retained_work(), 0);
+    drop(capacity);
+    clean(&work_bank);
+    for account in accounts {
+        clean(&account);
+    }
+}
+
+#[test]
 fn accepted_write_timeout_preserves_both_publications_and_the_funded_original() {
     for handler_error in [false, true] {
         let addr = address();
-        let listener =
-            HttpFiniteListener::new(HttpProducerConfig::for_loopback(addr).unwrap(), 1000).unwrap();
-        let mut owner = RawProducerServient::try_empty(RawProducerRegistryLimits {
-            instances: 2,
-            behaviors_per_instance: 2,
-            target_name_bytes: 256,
-        })
-        .unwrap();
+        let mut owner = write_owner();
         let work_bank = bank();
         let capacity =
             ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 1, 3, work_bank.clone())
                 .unwrap();
         let accounts = [bank(), bank()];
-        let apps = [
-            Rc::new(Application::default()),
-            Rc::new(Application::default()),
-        ];
-        let controls = [Rc::new(Controls::default()), Rc::new(Controls::default())];
-        let [mut first, mut sibling] = [0, 1].map(|i| {
-            let mut td = description(addr);
-            let path = ["/level", "/sibling"][i];
-            td["properties"]["level"]["forms"][0]["href"] = json!(format!("http://{addr}{path}"));
-            let key = ProducerInstanceAuthority::try_new(ThingSlotId::new(
-                SlotIndex::new(i as u32),
-                Generation::INITIAL,
-            ))
-            .unwrap();
-            let mut exposure = exposure_with_capacity(
-                &owner,
-                accounts[i].clone(),
-                td,
-                apps[i].clone(),
-                controls[i].clone(),
-                key,
-                None,
-                Some(&capacity),
-                Some(&listener),
-            );
-            drive_to(
-                &mut exposure,
-                &mut owner,
-                0,
-                RawFiniteState::InstalledClosed,
-            );
-            exposure.publish(&mut owner, &mut work()).unwrap();
-            exposure
-        });
+        let apps = Default::default();
+        let controls = Default::default();
+        let [mut first, mut sibling] = publish_writes(
+            &mut owner,
+            addr,
+            &accounts,
+            &apps,
+            &controls,
+            [Some(&capacity); 2],
+        );
         let original_key = first.key();
         apps[0].output.set(u8::from(handler_error));
         let peer = put(addr, "/level", 41);
@@ -172,7 +284,7 @@ fn accepted_write_timeout_preserves_both_publications_and_the_funded_original() 
 
         // The request deadline falls between behavior entry and the first native send.
         if handler_error {
-            controls[0].hold_close.set(true);
+            controls[0].hold_reply_retirement.set(true);
             drive_to(&mut first, &mut owner, 1000, RawFiniteState::RetiringReply);
             assert!(
                 first
@@ -182,7 +294,7 @@ fn accepted_write_timeout_preserves_both_publications_and_the_funded_original() 
                     .is_none()
             );
             assert_eq!((capacity.active_work(), capacity.retained_work()), (1, 1));
-            controls[0].hold_close.set(false);
+            controls[0].hold_reply_retirement.set(false);
         }
         drive_to(&mut first, &mut owner, 1000, RawFiniteState::Serving);
         assert!(wire(peer).is_empty());

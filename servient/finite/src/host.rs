@@ -1247,7 +1247,14 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             RetiringReply | Closing => WorkClass::CleanupItems,
             _ => WorkClass::BindingPolls,
         };
-        if budget.remaining(class) == 0 || (self.state == Serving && !self.ingress_gate.is_open()) {
+        let poll_funded = budget.remaining(class) != 0;
+        // A pending reply still depends on its installed service after logical
+        // withdrawal. Either a native turn or a cleanup turn can observe loss.
+        let check_retiring = self.state == RetiringReply
+            && (poll_funded || budget.remaining(WorkClass::BindingPolls) != 0);
+        if (!poll_funded && !check_retiring)
+            || (self.state == Serving && !self.ingress_gate.is_open())
+        {
             return if unread || (self.state == Dispatching && self.issuer.strong_count() != 0) {
                 Poll::Ready(self.state)
             } else {
@@ -1264,10 +1271,9 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             self.fail(CoreError::Validation(context()));
             return Poll::Ready(self.state);
         }
-        if matches!(
-            self.state,
-            Serving | Dispatching | Delivering | RetiringReply
-        ) && self.ingress_gate.is_open()
+        let check_published =
+            matches!(self.state, Serving | Dispatching | Delivering) && self.ingress_gate.is_open();
+        if (check_retiring || check_published)
             && let Err(error) = self.binding.check_ingress()
         {
             if self.state != Delivering {
@@ -1281,6 +1287,9 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         }
         if unread || self.state == Dispatching {
             return Poll::Ready(self.state);
+        }
+        if !poll_funded {
+            return Poll::Pending;
         }
         // Reserve terminal handoff work before the native poll. Charge only
         // on actual FIFO insertion. Queue pressure cannot hide ingress loss.

@@ -905,6 +905,13 @@ fn check_shared_listener_loss(phase: RawFiniteState, left_budget: fn() -> WorkBu
                 .is_pending()
         );
         assert_eq!(member.state(), RawFiniteState::RetiringReply);
+        let mut native_only = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1);
+        assert!(
+            member
+                .step(&mut cx(), &mut native_only, deadline)
+                .is_pending()
+        );
+        assert_eq!(member.state(), RawFiniteState::RetiringReply);
         deadline
     } else {
         now()
@@ -973,6 +980,16 @@ fn check_shared_listener_loss(phase: RawFiniteState, left_budget: fn() -> WorkBu
         Some(CoreError::Binding(_))
     ));
     assert!(thing.retire(&mut owner, &mut budget()).is_err());
+    if expiring && left_budget().remaining(WorkClass::CleanupItems) == 0 {
+        let member = thing.participant_mut::<HttpRuntime>(0).unwrap();
+        assert_eq!(member.state(), RawFiniteState::Closing);
+        assert!(member.take_settlement().is_none());
+        let mut cleanup = WorkBudget::new().with_remaining(WorkClass::CleanupItems, 1);
+        assert_eq!(
+            member.step(&mut cx(), &mut cleanup, instant),
+            Poll::Ready(RawFiniteState::Closed)
+        );
+    }
     let original = acknowledge(&mut thing);
     if accepted {
         if phase == RawFiniteState::Delivering {
@@ -1020,6 +1037,13 @@ fn shared_listener_loss_refuses_a_candidate_and_preserves_an_accepted_reply() {
 #[test]
 fn shared_listener_loss_during_reply_retirement_fences_the_publication() {
     check_shared_listener_loss(RawFiniteState::RetiringReply, budget);
+}
+
+#[test]
+fn shared_listener_loss_during_reply_retirement_fences_with_only_native_credit() {
+    check_shared_listener_loss(RawFiniteState::RetiringReply, || {
+        WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1)
+    });
 }
 
 #[test]

@@ -266,10 +266,14 @@ Publication/readiness MUST NOT require a vacant shared work opportunity.
 If the native request deadline expires while a participant holds a
 prepared reply, the runtime stops sending and enters `RetiringReply`. Servient
 retains the original reply and accepted behavior through the Binding's funded
-retirement poll. On success the settlement records the exchange's first local
-cause alongside the handler result, effect and delivery. A request timeout
-alone supplies no reason to withdraw the published Thing. Before returning to
-Serving, check the captured pair, ingress health, original owner and gate again.
+retirement poll. While retirement is pending, a turn with `BindingPolls` or
+`CleanupItems` checks the installed pair and ingress even after logical
+withdrawal. A failed check starts whole-participation close with the same reply.
+Both retirement polls require `CleanupItems`. On success the settlement records
+the exchange's first local cause alongside the handler result, effect and delivery.
+A request timeout alone supplies no reason to withdraw the published Thing.
+Before returning to Serving, check the captured pair, ingress health, original
+owner and gate again.
 Every later request goes through ordinary admission and current authorization.
 
 When the Binding requires whole-participation close or the installation fails,
