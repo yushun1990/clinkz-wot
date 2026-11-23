@@ -10,19 +10,11 @@ struct KeyVerifier {
     revision: AtomicU64,
     revoked: AtomicBool,
     different_identity: AtomicBool,
-    changed_work: AtomicBool,
     calls: AtomicUsize,
 }
 impl HttpApiKeyVerifier for KeyVerifier {
     fn revision(&self) -> u64 {
         self.revision.load(Ordering::Acquire)
-    }
-    fn work(&self) -> u64 {
-        if self.changed_work.load(Ordering::Acquire) {
-            2048
-        } else {
-            1024
-        }
     }
     fn verify(&self, key: &[u8]) -> CoreResult<Principal> {
         self.calls.fetch_add(1, Ordering::Relaxed);
@@ -51,7 +43,6 @@ fn key_verifier() -> Arc<KeyVerifier> {
         revision: AtomicU64::new(0),
         revoked: AtomicBool::new(false),
         different_identity: AtomicBool::new(false),
-        changed_work: AtomicBool::new(false),
         calls: AtomicUsize::new(0),
     })
 }
@@ -63,8 +54,8 @@ fn server_security(
     HttpServerSecurity::try_composed(
         vec![keys.cert.clone()],
         keys.key.clone_key(),
-        basic.map(|v| v as Arc<dyn HttpBasicVerifier>),
-        key.map(|v| v as Arc<dyn HttpApiKeyVerifier>),
+        basic.map(|v| HttpVerifierRegistration::<dyn HttpBasicVerifier>::new(v, 1024)),
+        key.map(|v| HttpVerifierRegistration::<dyn HttpApiKeyVerifier>::new(v, 1024)),
     )
     .unwrap()
 }
@@ -684,9 +675,18 @@ fn a_verifier_cannot_increase_the_next_verifiers_work_and_enter_its_callback() {
         let addr = address();
         let basic = verifier();
         let key = key_verifier();
+        let registered_key =
+            HttpVerifierRegistration::<dyn HttpApiKeyVerifier>::new(key.clone(), 1024);
+        let replacement = key_verifier();
         let td = description_for(addr, json!(["both"]));
         let mut server = SecureFixture::from_security(
-            server_security(&keys, Some(basic.clone()), Some(key.clone())),
+            HttpServerSecurity::try_composed(
+                vec![keys.cert.clone()],
+                keys.key.clone_key(),
+                Some(HttpVerifierRegistration::new(basic.clone(), 1024)),
+                Some(registered_key.clone()),
+            )
+            .unwrap(),
             addr,
             td,
             &[Operation::ReadProperty],
@@ -703,12 +703,12 @@ fn a_verifier_cannot_increase_the_next_verifiers_work_and_enter_its_callback() {
         );
         let mut call = read_secure(&client);
         until(&mut server, &mut call, RawFiniteState::Dispatching).await;
-        let changed = key.clone();
+        let changed = replacement.clone();
         VERIFICATION_HOOK.with(|h| {
             *h.borrow_mut() = Some((
                 1,
                 Box::new(move || {
-                    changed.changed_work.store(true, Ordering::Release);
+                    registered_key.replace(changed, 2048);
                 }),
             ))
         });
@@ -721,6 +721,7 @@ fn a_verifier_cannot_increase_the_next_verifiers_work_and_enter_its_callback() {
             0,
             "changed verifier has no original work credit"
         );
+        assert_eq!(replacement.calls.load(Ordering::Relaxed), 0);
         drop((result, call, client, content, owner));
         clean(&accounts);
         server.close();
@@ -924,4 +925,81 @@ fn extension_variants_reserve_built_in_discriminators() {
         drop(registry);
         clean(&accounts);
     }
+}
+
+#[test]
+fn switching_either_registered_verifier_after_install_requires_fresh_qualification() {
+    io().block_on(async {
+        let keys = Keys::for_name("127.0.0.1");
+        for switch_basic in [true, false] {
+            let original_basic = verifier();
+            let original_key = key_verifier();
+            let next_basic = verifier();
+            let next_key = key_verifier();
+            let basic = HttpVerifierRegistration::<dyn HttpBasicVerifier>::new(
+                original_basic.clone(),
+                1024,
+            );
+            let key =
+                HttpVerifierRegistration::<dyn HttpApiKeyVerifier>::new(original_key.clone(), 1024);
+            let select = || {
+                HttpServerSecurity::try_composed(
+                    vec![keys.cert.clone()],
+                    keys.key.clone_key(),
+                    Some(basic.clone()),
+                    Some(key.clone()),
+                )
+                .unwrap()
+            };
+            let addr = address();
+            let td = description_for(addr, json!(["both"]));
+            let mut staged = SecureFixture::install_closed(
+                select(),
+                addr,
+                td.clone(),
+                &[Operation::ReadProperty],
+            );
+            // Both implementations have the same policy revision. The registration
+            // owns the change of executable service and the larger bound together.
+            if switch_basic {
+                basic.replace(next_basic.clone(), 2048);
+            } else {
+                key.replace(next_key.clone(), 2048);
+            }
+            assert!(matches!(
+                staged.exposure.publish(&mut staged.owner, &mut work()),
+                Err(CoreError::StaleHandle(_))
+            ));
+            assert!(staged.owner.description(staged.exposure.key()).is_none());
+            assert!(!staged.server().ingress_gate().is_open());
+            staged.close();
+
+            let mut fresh =
+                SecureFixture::from_security(select(), addr, td, &[Operation::ReadProperty]);
+            let owner = consumer_instance();
+            let accounts = bank();
+            let (client, content) = secure_client(
+                &fresh.td,
+                &keys,
+                &owner,
+                client_access(&owner, &fresh.td, true, true),
+                &accounts,
+                None,
+            );
+            let mut call = read_secure(&client);
+            let result = fresh.exchange(&mut call).await;
+            assert!(result.result().is_ok());
+            assert_eq!(fresh.app.reads.get(), 1);
+            assert_eq!(next_basic.calls.load(Ordering::Relaxed) > 0, switch_basic);
+            assert_eq!(
+                original_basic.calls.load(Ordering::Relaxed) > 0,
+                !switch_basic
+            );
+            assert_eq!(next_key.calls.load(Ordering::Relaxed) > 0, !switch_basic);
+            assert_eq!(original_key.calls.load(Ordering::Relaxed) > 0, switch_basic);
+            drop((result, call, client, content, owner));
+            clean(&accounts);
+            fresh.close();
+        }
+    });
 }

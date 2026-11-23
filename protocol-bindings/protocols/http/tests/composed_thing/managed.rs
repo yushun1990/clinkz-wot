@@ -8,6 +8,8 @@ use clinkz_wot_servient::{
 
 type HttpRuntime = RawFiniteRuntime<HttpFiniteBinding>;
 
+#[path = "coherent.rs"]
+mod coherent;
 #[path = "execution.rs"]
 mod execution;
 #[path = "reuse.rs"]
@@ -38,6 +40,29 @@ fn assert_empty(bank: &HostResourceAccounts) {
     }
 }
 
+fn assert_http_body(wire: &[u8], expected: &[u8]) {
+    let end = wire
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .expect("HTTP response headers");
+    let headers = std::str::from_utf8(&wire[..end]).unwrap();
+    assert!(headers.starts_with("HTTP/1.1 200"), "{headers}");
+    let length = format!("content-length: {}", expected.len());
+    assert!(
+        headers
+            .lines()
+            .any(|line| line.eq_ignore_ascii_case(&length)),
+        "{headers}"
+    );
+    let body = &wire[end + 4..];
+    assert_eq!(
+        body.len(),
+        expected.len(),
+        "response body bytes on the wire"
+    );
+    assert_eq!(body, expected);
+}
+
 fn http_input(
     owner: &RawProducerServient,
     authority: ProducerInstanceAuthority,
@@ -45,7 +70,12 @@ fn http_input(
     counts: Rc<Counts>,
 ) -> ComposedProducerInput {
     let key = authority.key();
-    let text = http_properties(addresses[0], addresses[1]);
+    let value_type = if counts.long_string {
+        "string"
+    } else {
+        "integer"
+    };
+    let text = http_properties(addresses[0], addresses[1], value_type);
     let instance = RawProducerInstance::new(
         authority,
         ["left", "right"]
@@ -113,7 +143,7 @@ fn http_input(
     ComposedProducerInput {
         instance,
         prepared,
-        providers,
+        providers: ProducerRegistrations::new(providers),
         participants,
         expected: None,
         handler_backing_bytes: std::mem::size_of::<Counts>(),
@@ -150,7 +180,7 @@ fn action_input(
         ComposedProducerInput {
             instance,
             prepared,
-            providers: vec![provider],
+            providers: ProducerRegistrations::new(vec![provider]),
             participants: vec![OwnedProducerParticipation::new(
                 ActionNative::lease(native, key),
                 |_, _, _, _, _| Ok(()),
@@ -232,6 +262,15 @@ fn action_without_prepared_control_route_refuses_managed_handoff_before_native_s
     UdpSocket::bind(address).unwrap();
 }
 
+fn admit(
+    owner: &RawProducerServient,
+    input: ComposedProducerInput,
+    accounts: &Arc<HostResourceAccounts>,
+) -> ComposedProducerExposure {
+    ComposedProducerExposure::try_new(owner, input, limits(), accounts.clone(), &mut budget())
+        .ok()
+        .unwrap()
+}
 fn start_http(exposure: &mut ComposedProducerExposure) {
     for i in 0..2 {
         assert_eq!(
@@ -570,8 +609,17 @@ impl FiniteIngressBinding for ControlledClose {
     fn configuration(&self) -> &Self::Configuration {
         self.inner.configuration()
     }
+    fn check_ingress(&self) -> CoreResult<()> {
+        self.inner.check_ingress()
+    }
     fn engine_backing_bytes(&self) -> Option<usize> {
         self.inner.engine_backing_bytes()
+    }
+    fn qualified_operation_count(&self) -> Option<usize> {
+        self.inner.qualified_operation_count()
+    }
+    fn observe_installation(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.inner.observe_installation(facts)
     }
     fn prepared_for_instance(&self, key: ProducerInstanceKey) -> bool {
         self.inner.prepared_for_instance(key)
@@ -800,6 +848,11 @@ fn moved_native_owner_keeps_funding_and_a_substitute_cannot_publish_or_retire() 
     assert!(exposure.publish(&mut owner, &mut budget()).is_err());
     assert!(exposure.publication_failure().is_some());
     assert!(!exposure.is_committed());
+    // The substitute belongs to its caller. Rollback fenced the original
+    // publication but had no authority to close this separate native owner.
+    let substitute = exposure.participant_mut::<HttpRuntime>(0).unwrap();
+    assert_eq!(substitute.state(), RawFiniteState::InstalledClosed);
+    substitute.begin_close();
     close_http(&mut exposure);
     assert!(exposure.retire(&mut owner, &mut budget()).is_err());
     drop(exposure);
@@ -1000,7 +1053,7 @@ struct ReviewDefinitionMemory {
     charge_at_peak: Cell<u64>,
     definition_allocations: Cell<usize>,
     checks: Cell<usize>,
-    check_temporary: Cell<usize>,
+    check_temporary: RefCell<PublicationState<usize>>,
 }
 impl ReviewDefinitionMemory {
     fn observe(&self) {
@@ -1048,6 +1101,11 @@ impl Drop for ReviewCheckTemporary {
     }
 }
 impl ProducerCapability for ReviewLargeProvider {
+    fn observe_configuration(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.memory.check_temporary.borrow().observe(facts)?;
+        self.inner.observe_configuration(facts)
+    }
+
     fn supports(
         &self,
         input: ProducerOperationInput<'_>,
@@ -1058,7 +1116,7 @@ impl ProducerCapability for ReviewLargeProvider {
     fn final_check_temporary_bytes(&self) -> Option<usize> {
         self.inner
             .final_check_temporary_bytes()?
-            .checked_add(self.memory.check_temporary.get())
+            .checked_add(*self.memory.check_temporary.borrow().get())
     }
     fn identity(&self) -> (BindingId, BindingGeneration) {
         self.inner.identity()
@@ -1104,12 +1162,12 @@ impl ProducerCapability for ReviewLargeProvider {
         budget
             .consume(
                 WorkClass::HandlerSteps,
-                self.memory.check_temporary.get() as u64,
+                *self.memory.check_temporary.borrow().get() as u64,
             )
             .map_err(|_| {
                 CoreError::Backpressure(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
             })?;
-        let bytes = vec![0u8; self.memory.check_temporary.get()];
+        let bytes = vec![0u8; *self.memory.check_temporary.borrow().get()];
         self.memory
             .retained
             .set(self.memory.retained.get() + bytes.capacity());
@@ -1126,6 +1184,13 @@ impl ProducerCapability for ReviewLargeProvider {
 }
 struct ReviewLargeParticipant(HttpRuntime);
 impl ClosedProducerParticipation for ReviewLargeParticipant {
+    fn qualified_operation_count(&self) -> Option<usize> {
+        self.0.qualified_operation_count()
+    }
+    fn observe_installation(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.0.observe_installation(facts)
+    }
+
     fn participation_id(&self) -> &ProducerParticipationId {
         self.0.participation_id()
     }
@@ -1139,8 +1204,8 @@ impl ClosedProducerParticipation for ReviewLargeParticipant {
     ) -> Option<usize> {
         self.0.admission_backing_bytes(owner, key)
     }
-    fn begin_retire(&mut self) {
-        self.0.begin_retire()
+    fn begin_retire(&mut self, intent: ProducerRetirement) {
+        self.0.begin_retire(intent)
     }
     fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         self.0.ready_for(owner, key)
@@ -1161,7 +1226,7 @@ impl ClosedProducerParticipation for ReviewLargeParticipant {
                     .covers(key, binding, site, form, operation, &definition.program)
             })
     }
-    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
         self.0.ingress_gate()
     }
     fn retired(&self) -> bool {
@@ -1187,7 +1252,7 @@ fn review_large_input(
         charge_at_peak: Cell::new(0),
         definition_allocations: Cell::new(0),
         checks: Cell::new(0),
-        check_temporary: Cell::new(0),
+        check_temporary: RefCell::new(PublicationState::new(0)),
     });
     let addresses = [tcp_addr(), tcp_addr()];
     let mut input = http_input(
@@ -1196,20 +1261,21 @@ fn review_large_input(
         addresses,
         Rc::new(Counts::default()),
     );
-    input.providers = std::mem::take(&mut input.providers)
-        .into_iter()
+    let registrations: Vec<_> = input
+        .providers
+        .snapshot(&mut PublicationFacts::default())
+        .unwrap()
+        .iter()
+        .cloned()
         .map(|inner| {
             Rc::new(ReviewLargeProvider {
                 inner,
-                memory: Rc::clone(&memory),
+                memory: memory.clone(),
             }) as Rc<dyn ProducerCapability>
         })
         .collect();
-    let providers: Vec<_> = input
-        .providers
-        .iter()
-        .map(|provider| provider.as_ref())
-        .collect();
+    input.providers.replace(registrations.clone());
+    let providers: Vec<_> = registrations.iter().map(|p| p.as_ref()).collect();
     input.prepared = prepare_thing(
         input.instance.description().unwrap(),
         input.instance.key(),
@@ -1318,14 +1384,21 @@ fn review_requalification_cannot_regenerate_unreserved_definition_backing() {
     assert!(matches!(
         exposure.publish(
             &mut owner,
-            &mut budget().with_remaining(WorkClass::BindingPolls, 0)
+            &mut budget().with_remaining(WorkClass::HandlerSteps, 0)
         ),
         Err(CoreError::Backpressure(_))
     ));
     assert_eq!(scratch(&accounts), phase_bytes);
     let before_publish_checks = memory.checks.get();
-    exposure.publish(&mut owner, &mut budget()).unwrap();
-    assert_eq!(memory.checks.get(), before_publish_checks + 2);
+    exposure
+        .publish(
+            &mut owner,
+            &mut budget()
+                .with_remaining(WorkClass::CodecInputBytes, 0)
+                .with_remaining(WorkClass::BindingPolls, 0),
+        )
+        .unwrap();
+    assert_eq!(memory.checks.get(), before_publish_checks);
     assert_eq!(memory.definition_allocations.get(), 2);
     assert_eq!(scratch(&accounts), 0);
     for (i, address) in addresses.into_iter().enumerate() {
@@ -1373,7 +1446,7 @@ fn review_callback_temporaries_are_reserved_before_any_check_or_native_setup() {
         let original = input.prepared.operations()[0]
             .definition::<ReviewLargeDefinition>()
             .unwrap() as *const _;
-        memory.check_temporary.set(temporary);
+        memory.check_temporary.borrow_mut().replace(temporary);
         let result = ComposedProducerExposure::try_new(
             &owner,
             input,
@@ -1412,7 +1485,7 @@ fn review_callback_temporaries_are_reserved_before_any_check_or_native_setup() {
                     &mut budget().with_remaining(WorkClass::HandlerSteps, 100_000_000),
                 )
                 .unwrap();
-            assert_eq!(memory.checks.get(), checks + 2);
+            assert_eq!(memory.checks.get(), checks);
             assert_eq!(memory.definition_allocations.get(), 2);
             assert_eq!(memory.unfunded_peak.get(), 0);
             assert_eq!(scratch(&accounts), 0);
@@ -1441,7 +1514,7 @@ fn review_changed_callback_allowance_fences_before_requalification() {
     .unwrap();
     review_start_large(&mut exposure);
     let checks = memory.checks.get();
-    memory.check_temporary.set(8 * 1024 * 1024);
+    memory.check_temporary.borrow_mut().replace(8 * 1024 * 1024);
     assert!(exposure.publish(&mut owner, &mut budget()).is_err());
     assert!(!exposure.is_committed());
     assert!(exposure.publication_failure().is_some());

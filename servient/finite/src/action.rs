@@ -1,7 +1,7 @@
 //! Producer-side raw Action invocation kernel. There is deliberately no
 //! FiniteIngressBinding here: an initiating reply, subsequent control messages,
 //! correlation and native resources remain with their actual Binding owner.
-use super::{RawProducerServient, context};
+use super::{PublicationPermission, RawProducerServient, context};
 use alloc::{
     boxed::Box,
     rc::{Rc, Weak},
@@ -260,7 +260,7 @@ struct Invocation {
     // The original logical permission cell survives replacement and guard
     // Drop. A later funded step can request cancellation even when no mutable
     // Servient was available to the guard at revocation time.
-    current: Rc<Cell<bool>>,
+    permission: Rc<PublicationPermission>,
     behavior: usize,
     binding: (BindingId, BindingGeneration),
     mapping: ActionMappingKey,
@@ -507,7 +507,7 @@ impl RawProducerServient {
         candidate: &clinkz_wot_core::action::ProducerActionCandidate,
         budget: &mut WorkBudget,
     ) -> CoreResult<ProducerActionReply<'a>> {
-        if candidate.instance != binding.instance() || !binding.ingress_gate().get() {
+        if candidate.instance != binding.instance() || !binding.ingress_gate().is_open() {
             return Err(CoreError::StaleHandle(context()));
         }
         match candidate.operation {
@@ -670,7 +670,7 @@ impl RawProducerServient {
             {
                 continue;
             }
-            if close_revoked && !entry.current.get() {
+            if close_revoked && !entry.permission.is_current() {
                 entry.token.set(true);
                 if entry.work.is_some() {
                     entry.cancel_requested = true;
@@ -819,7 +819,7 @@ impl RawProducerServient {
         let instance = self
             .instances
             .iter()
-            .find(|e| e.current.get() && e.instance.key() == request.instance)
+            .find(|e| e.instance.key() == request.instance && e.permission.is_current())
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
         let index = instance
             .instance
@@ -897,10 +897,10 @@ impl RawProducerServient {
             .authorize(Operation::InvokeAction, request.input)?;
         // A callback can revoke this incarnation without borrowing the
         // registry. Fence acceptance before reserving work or invoking it.
-        if !instance.current.get() {
+        check_validation_work(validator.as_deref(), validation_work)?;
+        if !instance.permission.is_current() {
             return Err(CoreError::StaleHandle(context()));
         }
-        check_validation_work(validator.as_deref(), validation_work)?;
         let target = AffordanceTarget::Action(Arc::clone(&behavior.name));
         let ctx = clinkz_wot_core::HandlerContext::for_producer(
             instance.instance.key(),
@@ -928,7 +928,7 @@ impl RawProducerServient {
             native_progress: 0,
             id,
             token,
-            current: Rc::clone(&instance.current),
+            permission: Rc::clone(&instance.permission),
             instance: Rc::clone(&instance.instance),
             behavior: index,
             binding: request.invoke.binding,
@@ -1023,11 +1023,11 @@ impl RawProducerServient {
         {
             return Err(denied());
         }
-        if !entry.current.get()
+        if !entry.permission.is_current()
             || !self
                 .instances
                 .iter()
-                .any(|e| e.current.get() && e.instance.key() == entry.instance.key())
+                .any(|e| e.instance.key() == entry.instance.key() && e.permission.is_current())
         {
             return Err(CoreError::StaleHandle(context()));
         }
@@ -1042,7 +1042,7 @@ impl RawProducerServient {
         behavior.handler.authorize(operation, input)?;
         // Keep the accepted invocation's original authority through the last
         // callback; an earlier registry lookup cannot authorize this handoff.
-        if !entry.current.get() {
+        if !entry.permission.is_current() {
             return Err(CoreError::StaleHandle(context()));
         }
         Ok(i)
@@ -1119,7 +1119,7 @@ impl RawProducerServient {
         let current = self
             .instances
             .iter()
-            .find(|e| e.current.get() && e.instance.key() == instance)
+            .find(|e| e.instance.key() == instance && e.permission.is_current())
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
         if current.action_routes.as_ref().is_some_and(|routes| {
             !routes.iter().any(|r| {
@@ -1136,7 +1136,7 @@ impl RawProducerServient {
             .as_ref()
             .ok_or_else(|| CoreError::UnsupportedOperation(context()))?
             .authorize(input)?;
-        if !current.current.get() {
+        if !current.permission.is_current() {
             return Err(CoreError::StaleHandle(context()));
         }
         for handle in handles {
@@ -1161,12 +1161,12 @@ impl RawProducerServient {
                 Err(CoreError::Security { .. }) => continue,
                 Err(error) => return Err(error),
             }
-            if !current.current.get() || !entry.current.get() {
+            if !current.permission.is_current() || !entry.permission.is_current() {
                 return Err(CoreError::StaleHandle(context()));
             }
             observe(behavior.name(), handle, ActionStore::view(entry))?;
         }
-        if !current.current.get() {
+        if !current.permission.is_current() {
             return Err(CoreError::StaleHandle(context()));
         }
         Ok(())
@@ -1357,7 +1357,7 @@ impl ActionStore {
         if entry.work.is_none() {
             return Ok(Poll::Ready(()));
         }
-        if !entry.current.get() {
+        if !entry.permission.is_current() {
             entry.cancel_requested = true;
         }
         let closing = entry.token.get();

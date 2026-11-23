@@ -3,7 +3,9 @@ use super::*;
 use clinkz_wot_core::{CoreResult, notification::NotificationSchemas};
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
 use clinkz_wot_planning::{
-    producer_composition::{FormSite, ProducerCapability, ProducerOperationInput},
+    producer_composition::{
+        FormSite, ProducerCapability, ProducerOperationInput, PublicationObserver,
+    },
     type_schema::{
         matches_notification_schemas, notification_preparation_work, prepare_notification_schemas,
     },
@@ -307,6 +309,10 @@ fn annotation(node: SemanticNode<'_>) -> bool {
                     .all(|n| matches!(n.value(), SemanticValue::Iri(_))))
 }
 impl ProducerCapability for MqttNotificationProducer {
+    fn observe_configuration(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        Ok(())
+    }
+
     fn identity(&self) -> (BindingId, BindingGeneration) {
         self.registration.binding
     }

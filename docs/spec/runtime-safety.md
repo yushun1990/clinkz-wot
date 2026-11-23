@@ -246,12 +246,10 @@ Finite Producer dispatch borrows the logical owner shared and the selected
 runtime exclusively. A callback may progress a different runtime without a
 registry lock or exclusive owner loan; recursively borrowing the same native
 runtime remains unavailable. `ProducerRevocation` captures only one-way control
-of the original incarnation's permission cell and its original funding. It
-performs no lookup, native work, behavior callback or replacement, and cannot
-revoke a successor in a reused slot. Its weak cell cannot preserve liveness;
-the retained capacity lease lasts through the last control handle so late weak
-storage does not outlive its accounting. Passive instance/publication revocation
-inside callbacks is observed at the final acceptance/delivery boundary.
+of the original incarnation's permission and its funding. It withdraws that
+incarnation's recorded gates without a registry lookup or a linked callback.
+The capacity lease funds its weak reference through the last control handle.
+The final acceptance and delivery checks observe revocation inside callbacks.
 
 ### Finite Producer participation and work capacity
 
@@ -497,10 +495,11 @@ before acquiring native resources. Owned closed native participation may determi
 endpoints. Finalize the effective TD and revalidate affected common/Binding
 support, collision and ownership facts for that exact revision. All retained
 Forms/effective operations require complete qualified support and required
-readiness under PREP-COVER-001. Final dependency/cancellation checks and publication
-of final TD, logical registry and current authority share one Servient-local
-linearization boundary with no new fallible native preparation, allocation or
-handler call. Cancellation winning prevents publication; failure retains partial
+readiness under PREP-COVER-001. Changes to membership, provider configuration
+or required installation facts MUST be ordered with the decision. After the
+last linked callback, Servient holds those facts current while installing the
+exact TD and behavior, granting current authority and opening every original
+gate. The local commit performs only bounded, infallible operations. Cancellation winning prevents publication; failure retains partial
 setup and rollback owners. No prepublication input dispatches behavior. A complete
 reduced TD can be deliberately requalified, never silently substituted. No global
 network/remote cached-TD atomicity is claimed.
@@ -1151,11 +1150,12 @@ selected-entry equality alone cannot fund an additional retained schema.
 ## Reusable Producer definition ownership
 
 Complete Producer publication remains per instance. `ComposedProducerExposure`
-owns that instance's complete selected mappings, actual providers, native member
-identities, final-check scratch and publication/retirement guard. It may retain
-references to shared immutable Binding instructions; it does not become a shared
-Thing or acquire another instance's authority, native participant or shutdown
-right. A failed publication retires only its original membership. A sibling
+stages that instance's selected mappings, eligible registrations, whole-TD
+coverage and qualification allowance. Installation checks the actual native
+mapping/service identities and holds all observed configuration versions
+through commit. Completing or cancelling staging drops its preparation
+references. Independent native resources, logical authority and accepted work
+retain their own publication and retirement owners. A failed publication retires only its original membership. A sibling
 keeps its own current permission, behavior, native progress and settlement.
 
 Explicitly funded HTTP instructions retain their original physical definition
@@ -1254,9 +1254,27 @@ facts are reconciled at Servient. A failed participant may fence its own ingress
 and close its native resources; it cannot revoke logical currentness or dispose
 application continuations. Servient validates the original issuer/instance
 association and exact membership in that incarnation's committed native set
-before propagating native failure to logical revocation. A stale, foreign or
-uncommitted participant cannot revoke a publication or cancel its accepted work.
-Uncommitted failure cleanup remains local and may precede publication. Native
+before propagating native failure or withdrawal to logical revocation. The
+registry and accepted work share the original member identities and ingress
+gates. TD lookup and fresh dispatch observe their availability, including
+withdrawal of a native owner moved out through a typed loan. Servient checks
+this permission after linked callbacks and before granting behavior entry.
+Native poll credit funds a finite participant's check of its installed services
+and shared ingress independently of handler and result-queue credit. Terminal
+loss withdraws its gate. Registry revocation, a captured revocation handle and
+a terminal notification failure all withdraw the original publication's gates
+at the same permission owner. The accepting participant keeps its reply socket
+across funded delivery turns and retains its settlement for acknowledgement.
+At replacement commit, Servient withdraws every displaced gate before opening
+the successor's gates. Old participants can then drain their own work and
+retire even if nobody looks up the old TD. A healthy staged gate waits for
+its own publication decision.
+A stale, foreign or uncommitted participant cannot revoke a publication or
+cancel its accepted work.
+At a staged publication decision, a recorded native failure rolls back the
+candidate, releases qualification scratch and starts retirement of its original
+members. This also applies when the terminal cause is backpressure. A healthy
+candidate can retry a short work allowance or pending native setup. Native
 and application progress, acknowledgement and final result disposal remain
 independent and caller-driven.
 An encoded reply may finish after ingress closes; completed native delivery never

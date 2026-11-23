@@ -301,10 +301,7 @@ pub struct RawProducerRegistryLimits {
 }
 
 struct InstanceEntry {
-    // This is the one logical permission cell, shared with its publication
-    // guard so lost roots can revoke without a lock or native callback.
-    current: Rc<Cell<bool>>,
-    participations: Vec<Weak<()>>,
+    permission: Rc<PublicationPermission>,
     // None is explicitly raw; published Actions have captured routes/services.
     action_routes: Option<Vec<CapturedActionRoute>>,
     notification_routes: Option<Vec<CapturedNotificationRoute>>,
@@ -313,20 +310,21 @@ struct InstanceEntry {
 }
 
 struct AcceptedBehavior {
-    current: Rc<Cell<bool>>,
+    permission: Rc<PublicationPermission>,
     instance: Rc<RawProducerInstance>,
     behavior: usize,
 }
 
 /// One-way revocation of an original Producer incarnation. This handle grants
 /// no dispatch, replacement or publication authority and cannot address a reused
-/// slot. Revocation performs only a passive flag update, including in callbacks.
+/// slot. Revocation clears permission and withdraws its bounded set of gates,
+/// including when called from an application callback.
 /// The weak cell and its original capacity owner are retained together; cloning
 /// a handle creates no allocation and dropping the last one releases its lease.
 #[derive(Clone)]
 pub struct ProducerRevocation {
     key: ProducerInstanceKey,
-    current: Weak<Cell<bool>>,
+    permission: Weak<PublicationPermission>,
     _retained_owner: Option<Rc<dyn core::any::Any>>,
 }
 impl ProducerRevocation {
@@ -336,8 +334,8 @@ impl ProducerRevocation {
     /// Does not invoke a handler, native callback, waker or registry mutation.
     /// Original pending work observes revocation on its next funded step.
     pub fn revoke(&self) {
-        if let Some(current) = self.current.upgrade() {
-            current.set(false);
+        if let Some(permission) = self.permission.upgrade() {
+            permission.revoke();
         }
     }
 }
@@ -375,8 +373,7 @@ impl RawProducerServient {
         let mut entries = Vec::with_capacity(limits.instances);
         entries.extend(instances.into_iter().map(|instance| InstanceEntry {
             instance: Rc::new(instance),
-            current: Rc::new(Cell::new(true)),
-            participations: Vec::new(),
+            permission: Rc::new(PublicationPermission::raw()),
             action_routes: None,
             notification_routes: None,
         }));
@@ -433,16 +430,15 @@ impl RawProducerServient {
             })
     }
 
-    /// Stop new acceptance everywhere. At most 32 key probes and 128 Action
-    /// flags; no native callback, handler destruction or synchronous application
-    /// cancellation occurs here. Funded steps request cancellation afterwards.
+    /// Stop new acceptance after a bounded key lookup and original-member check.
+    /// Mark at most 128 Action flags. Funded steps request cancellation afterwards.
     pub fn revoke(&mut self, key: ProducerInstanceKey) -> bool {
         if let Some(entry) = self
             .instances
             .iter_mut()
-            .find(|entry| entry.instance.key() == key && entry.current.get())
+            .find(|entry| entry.instance.key() == key && entry.permission.is_current())
         {
-            entry.current.set(false);
+            entry.permission.revoke();
             if let Some(actions) = &mut self.actions {
                 actions.revoke(key);
             }
@@ -458,10 +454,10 @@ impl RawProducerServient {
     pub fn revocation(&self, key: ProducerInstanceKey) -> Option<ProducerRevocation> {
         self.instances
             .iter()
-            .find(|entry| entry.instance.key() == key && entry.current.get())
+            .find(|entry| entry.instance.key() == key && entry.permission.is_current())
             .map(|entry| ProducerRevocation {
                 key,
-                current: Rc::downgrade(&entry.current),
+                permission: Rc::downgrade(&entry.permission),
                 _retained_owner: entry.instance.retained_owner.clone(),
             })
     }
@@ -474,30 +470,31 @@ impl RawProducerServient {
         expected: ProducerInstanceKey,
         replacement: RawProducerInstance,
     ) -> Result<(), BindingInputRejection<RawProducerInstance>> {
-        let index = self
+        let Some(index) = self
             .instances
             .iter()
-            .position(|entry| entry.instance.key() == expected);
-        if index.is_none()
-            || replacement.key() == expected
+            .position(|entry| entry.instance.key() == expected)
+        else {
+            return Err(rejection(replacement));
+        };
+        if replacement.key() == expected
             || replacement.key().slot().slot() != expected.slot().slot()
             || !Self::valid_instance(&replacement, self.limits)
         {
             return Err(rejection(replacement));
         }
-        self.instances[index.expect("checked entry")]
-            .current
-            .set(false);
-        self.instances[index.expect("checked entry")] = InstanceEntry {
+        let entry = InstanceEntry {
             instance: Rc::new(replacement),
-            current: Rc::new(Cell::new(true)),
-            participations: Vec::new(),
+            permission: Rc::new(PublicationPermission::raw()),
             action_routes: None,
             notification_routes: None,
         };
+        self.instances[index].permission.revoke();
+        let displaced = core::mem::replace(&mut self.instances[index], entry);
         if let Some(actions) = &mut self.actions {
             actions.revoke(expected);
         }
+        drop(displaced);
         Ok(())
     }
 
@@ -528,7 +525,9 @@ impl RawProducerServient {
         let instance_index = self
             .instances
             .iter()
-            .position(|entry| entry.instance.key() == candidate.instance && entry.current.get())
+            .position(|entry| {
+                entry.instance.key() == candidate.instance && entry.permission.is_current()
+            })
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
         let behavior_index = self.instances[instance_index]
             .instance
@@ -552,15 +551,13 @@ impl RawProducerServient {
         if runtime.issuer.as_ptr() != Rc::as_ptr(&self.issuer) {
             return Err(CoreError::StaleHandle(context()));
         }
-        runtime.check_time(now);
-        if runtime.state != RawFiniteState::Dispatching {
-            return Ok(runtime.step(cx, budget, now));
-        }
-        // Received input is still only a candidate. Publication may have
-        // closed since receive; fencing consumes no callback/native work.
-        if !runtime.ingress_gate.get() {
-            runtime.fail(CoreError::StaleHandle(context()));
-            return Ok(Poll::Ready(runtime.state));
+        // Native maintenance has its own allowance even while an offered
+        // request waits for handler credit. A newly received offer dispatches
+        // on a later turn.
+        let had_candidate = runtime.state == RawFiniteState::Dispatching;
+        let progress = runtime.step(cx, budget, now);
+        if !had_candidate || runtime.state != RawFiniteState::Dispatching {
+            return Ok(progress);
         }
         let mut units = (self.limits.instances
             + self.limits.behaviors_per_instance * (self.limits.target_name_bytes + 1)
@@ -597,6 +594,10 @@ impl RawProducerServient {
         }
         if !runtime.pair_is_current() {
             runtime.fail(CoreError::Validation(context()));
+            return Ok(Poll::Ready(runtime.state));
+        }
+        if let Err(error) = runtime.binding.check_ingress() {
+            runtime.fail(error);
             return Ok(Poll::Ready(runtime.state));
         }
         let mut ingress = runtime.ingress.take().expect("received exchange retained");
@@ -666,8 +667,6 @@ impl RawProducerServient {
             // ingress stays owned through refusal and native retirement.
             let current = if !runtime.pair_is_current() {
                 Err(CoreError::Validation(context()))
-            } else if !runtime.ingress_gate.get() || !self.instances[i].current.get() {
-                Err(CoreError::StaleHandle(context()))
             } else if runtime.binding.security_revision() != security_revision
                 || behavior.handler.authorization_revision() != policy_revision
             {
@@ -675,6 +674,11 @@ impl RawProducerServient {
                     reason: clinkz_wot_core::SecurityFailureReason::AuthorizationDenied,
                     context: context(),
                 })
+            } else if let Err(error) = runtime.binding.check_ingress() {
+                Err(error)
+            } else if !runtime.ingress_gate.is_open() || !self.instances[i].permission.is_current()
+            {
+                Err(CoreError::StaleHandle(context()))
             } else {
                 Ok(())
             };
@@ -685,7 +689,7 @@ impl RawProducerServient {
             // Acceptance is ordered by exclusive access to this runtime. No lock,
             // native callback, allocation or re-lookup surrounds application code.
             runtime.accepted_instance = Some(AcceptedBehavior {
-                current: self.instances[i].current.clone(),
+                permission: Rc::clone(&self.instances[i].permission),
                 instance: Rc::clone(instance),
                 behavior: b,
             });
@@ -811,7 +815,7 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     configuration: B::Configuration,
     limits: RawFiniteLimits,
     state: RawFiniteState,
-    ingress_gate: Rc<Cell<bool>>,
+    ingress_gate: Rc<ProducerIngressGate>,
     first_cause: Option<CoreError>,
     validation: FiniteValidation,
     validation_work: u64,
@@ -866,7 +870,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             configuration,
             limits,
             state: RawFiniteState::Starting,
-            ingress_gate: Rc::new(Cell::new(false)),
+            ingress_gate: Rc::new(ProducerIngressGate::default()),
             first_cause: None,
             settlement: None,
             validation,
@@ -902,7 +906,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     }
 
     pub fn state(&self) -> RawFiniteState {
-        if self.state == RawFiniteState::InstalledClosed && self.ingress_gate.get() {
+        if self.state == RawFiniteState::InstalledClosed && self.ingress_gate.is_open() {
             RawFiniteState::Serving
         } else {
             self.state
@@ -956,18 +960,18 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             self.fail(error.clone());
             return Err(error);
         }
-        if !self.pair_is_current() {
+        if !self.pair_is_current() || !self.ingress_gate.is_staged() {
             let error = CoreError::Validation(context());
             self.fail(error.clone());
             return Err(error);
         }
         self.state = RawFiniteState::Serving;
-        self.ingress_gate.set(true);
+        self.ingress_gate.open();
         Ok(())
     }
 
     pub fn begin_close(&mut self) {
-        self.ingress_gate.set(false);
+        self.ingress_gate.withdraw();
         if self.state != RawFiniteState::Closed {
             if (self.ingress.is_some() || self.reply.is_some()) && self.first_cause.is_none() {
                 self.first_cause = Some(CoreError::Cancelled(ErrorContext::new(
@@ -982,7 +986,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     }
 
     fn fail(&mut self, error: CoreError) {
-        self.ingress_gate.set(false);
+        self.ingress_gate.withdraw();
         if self.first_cause.is_none() {
             self.first_cause = Some(error);
         }
@@ -1142,31 +1146,60 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         now: MonotonicInstant,
     ) -> Poll<RawFiniteState> {
         use RawFiniteState::*;
-        if self.state == InstalledClosed && self.ingress_gate.get() {
+        if self.state == InstalledClosed && self.ingress_gate.is_open() {
             self.state = Serving;
         }
         // Local fencing requires no native work credit. Cleanup still does.
         self.check_time(now);
-        if self.state == Closed
-            || self.state == InstalledClosed
-            || (self.state == Serving && self.settlement.is_some())
-            || (self.state == Dispatching && self.issuer.strong_count() != 0)
-        {
+        if self.state == Dispatching && !self.ingress_gate.is_open() {
+            self.fail(CoreError::StaleHandle(context()));
+            return Poll::Ready(self.state);
+        }
+        if matches!(self.state, Closed | InstalledClosed) {
             return Poll::Ready(self.state);
         }
         // Serving is only a native state, not a lasting grant of publication
         // authority. A revoked gate must fence every subsequent receive, while
         // Dispatching/Delivering/Closing still own their original work.
-        if self.state == Serving && !self.ingress_gate.get() {
-            return Poll::Pending;
-        }
+        let unread = self.state == Serving && self.settlement.is_some();
         let class = match self.state {
             Closing => WorkClass::CleanupItems,
             _ => WorkClass::BindingPolls,
         };
-        if budget.remaining(class) == 0 {
-            return Poll::Pending;
+        if budget.remaining(class) == 0 || (self.state == Serving && !self.ingress_gate.is_open()) {
+            return if unread || (self.state == Dispatching && self.issuer.strong_count() != 0) {
+                Poll::Ready(self.state)
+            } else {
+                Poll::Pending
+            };
         }
+        if matches!(self.state, Starting | Serving | Dispatching) && self.issuer.strong_count() == 0
+        {
+            self.fail(CoreError::StaleHandle(context()));
+            return Poll::Ready(self.state);
+        }
+        if self.state != Closing && !self.pair_is_current() {
+            self.fail(CoreError::Validation(context()));
+            return Poll::Ready(self.state);
+        }
+        if matches!(self.state, Serving | Dispatching | Delivering)
+            && self.ingress_gate.is_open()
+            && let Err(error) = self.binding.check_ingress()
+        {
+            if self.state != Delivering {
+                self.fail(error);
+                return Poll::Ready(self.state);
+            }
+            // An independently failed listener can still own a usable reply
+            // socket. Fence fresh ingress while the original delivery runs.
+            self.ingress_gate.withdraw();
+            self.first_cause.get_or_insert(error);
+        }
+        if unread || self.state == Dispatching {
+            return Poll::Ready(self.state);
+        }
+        // Reserve terminal handoff work before the native poll. Charge only
+        // on actual FIFO insertion. Queue pressure cannot hide ingress loss.
         let queue_work = if self.capacity.is_some()
             && matches!(self.state, Delivering | Closing)
             && (self.ingress.is_some() || self.reply.is_some())
@@ -1177,18 +1210,6 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         };
         if budget.remaining(WorkClass::QueueOperations) < queue_work {
             return Poll::Pending;
-        }
-        // The participant and budget remain exclusively borrowed throughout
-        // native callbacks. Check terminal handoff capacity now, then charge
-        // only before actual FIFO mutation; Pending/error inserts no record.
-        if matches!(self.state, Starting | Serving | Dispatching) && self.issuer.strong_count() == 0
-        {
-            self.fail(CoreError::StaleHandle(context()));
-            return Poll::Ready(self.state);
-        }
-        if self.state != Closing && !self.pair_is_current() {
-            self.fail(CoreError::Validation(context()));
-            return Poll::Ready(self.state);
         }
         match self.state {
             Starting => {
@@ -1238,7 +1259,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                         // A linked Binding can revoke publication while its
                         // receive callback runs. Retain its original ingress
                         // for native retirement, never offer it for dispatch.
-                        if self.ingress_gate.get() {
+                        if self.ingress_gate.is_open() {
                             self.state = Dispatching;
                         } else {
                             self.fail(CoreError::Cancelled(ErrorContext::new(
@@ -1255,6 +1276,10 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 // permission under a fresh complete allowance before each send.
                 if self.security_work != 0 && self.reply.as_ref().is_some_and(|r| r.result.is_ok())
                 {
+                    if !self.ingress_gate.is_open() {
+                        self.fail(CoreError::StaleHandle(context()));
+                        return Poll::Ready(self.state);
+                    }
                     let Some(work) = self
                         .security_work
                         .checked_mul(2)
@@ -1274,9 +1299,6 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                             .as_ref()
                             .ok_or_else(|| CoreError::StaleHandle(context()))?;
                         let handler = &accepted.instance.behaviors[accepted.behavior].handler;
-                        if !self.ingress_gate.get() {
-                            return Err(CoreError::StaleHandle(context()));
-                        }
                         if self.binding.verify_ingress(&reply.ingress)?
                             != reply.ingress.input.principal
                         {
@@ -1285,7 +1307,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                                 context: context(),
                             });
                         }
-                        if !accepted.current.get() {
+                        if !accepted.permission.is_current() {
                             return Err(CoreError::StaleHandle(context()));
                         }
                         let policy_revision = handler.authorization_revision();
@@ -1303,17 +1325,6 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                                 context: context(),
                             });
                         }
-                        // Verification and application policy are linked
-                        // callbacks: either can invalidate logical authority.
-                        // Only these final observations authorize native send.
-                        if !self.ingress_gate.get()
-                            || self
-                                .accepted_instance
-                                .as_ref()
-                                .is_none_or(|accepted| !accepted.current.get())
-                        {
-                            return Err(CoreError::StaleHandle(context()));
-                        }
                         if !self.pair_is_current() {
                             return Err(CoreError::Validation(context()));
                         }
@@ -1324,6 +1335,9 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                                 reason: clinkz_wot_core::SecurityFailureReason::AuthorizationDenied,
                                 context: context(),
                             });
+                        }
+                        if !self.ingress_gate.is_open() || !accepted.permission.is_current() {
+                            return Err(CoreError::StaleHandle(context()));
                         }
                         Ok(())
                     })();
@@ -1348,7 +1362,11 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                             .expect("prechecked terminal handoff");
                         self.settle_reply(FiniteDelivery::Delivered);
                         self.io_deadline = Deadline::NONE;
-                        self.state = Serving;
+                        self.state = if self.first_cause.is_some() {
+                            Closing
+                        } else {
+                            Serving
+                        };
                         Poll::Ready(self.state)
                     }
                 }

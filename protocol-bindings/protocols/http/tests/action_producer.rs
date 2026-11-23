@@ -76,14 +76,16 @@ fn native_http_candidate_has_no_application_dispatch_or_revocation_authority() {
     assert_eq!(counts.authorized.get(), 0);
     assert_eq!(counts.invoked.get(), 0);
     assert_eq!(native.records(), 0);
-    // Abandoning this candidate retires its original native opportunity. No
-    // application obligation exists, and physical close cannot revoke the Thing.
+    assert!(owner.description(key).is_some());
+    // Native close settles its own candidate. The registry observes that the
+    // published Thing has lost its required Action participant.
     native.begin_close();
     let delivery = native.take_delivery().unwrap();
     assert_eq!(delivery.exchange.unwrap().instance, key);
     assert!(!delivery.locally_written);
     assert_eq!(delivery.invocation, None);
-    assert!(owner.description(key).is_some());
+    assert!(owner.description(key).is_none());
+    assert_eq!(counts.invoked.get(), 0);
     exposure.retire(&mut owner, &mut budget()).unwrap();
     drop(candidate);
     drop(exposure);
@@ -210,15 +212,7 @@ fn failed_uncommitted_participant_preserves_publication_and_original_action() {
     }
 }
 
-fn send_report(
-    owner: &mut RawProducerServient,
-    exposure: &mut ComposedProducerExposure,
-    address: SocketAddr,
-    method: &str,
-    path: &str,
-    body: &str,
-    credits: &mut WorkBudget,
-) -> (String, HttpActionDelivery) {
+fn action_request(address: SocketAddr, method: &str, path: &str, body: &str) -> TcpStream {
     let mut peer = TcpStream::connect(address).unwrap();
     peer.set_nonblocking(true).unwrap();
     let head = format!(
@@ -231,6 +225,19 @@ fn send_report(
         body.len()
     );
     peer.write_all(head.as_bytes()).unwrap();
+    peer
+}
+
+fn send_report(
+    owner: &mut RawProducerServient,
+    exposure: &mut ComposedProducerExposure,
+    address: SocketAddr,
+    method: &str,
+    path: &str,
+    body: &str,
+    credits: &mut WorkBudget,
+) -> (String, HttpActionDelivery) {
+    let mut peer = action_request(address, method, path, body);
     let end = Instant::now() + Duration::from_secs(5);
     let mut bytes = Vec::new();
     loop {
@@ -730,26 +737,28 @@ fn action_wire_refusals_distinguish_policy_capacity_and_stale_authority() {
     ));
     assert_eq!(counts.invoked.get(), 4);
 
-    // Direct logical revocation leaves a native gate open until the exposure
-    // guard is retired; the Servient still refuses fresh access as stale.
+    // Revocation fences each fresh native request before it can create an
+    // exchange. Previously accepted invocations still have their original IDs.
     assert!(owner.revoke(key));
-    for (method, path, body) in [("GET", query.as_str(), ""), ("DELETE", cancel.as_str(), "")] {
-        let (response, report) = send_report(
-            &mut owner,
-            &mut exposure,
-            address,
-            method,
-            path,
-            body,
-            &mut budget(),
+    let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
+    assert!(native.ingress_gate().is_withdrawn());
+    for (method, path, body) in [
+        ("GET", query.as_str(), ""),
+        ("DELETE", cancel.as_str(), ""),
+        ("POST", "/run", "12"),
+    ] {
+        let _late = action_request(address, method, path, body);
+        let mut credit = budget();
+        let polls = credit.remaining(WorkClass::BindingPolls);
+        assert!(
+            owner
+                .step_actions(native, &mut credit)
+                .unwrap()
+                .is_pending()
         );
-        assert!(response.starts_with("HTTP/1.1 410 Gone"), "{response}");
-        assert!(matches!(
-            report.request_error,
-            Some(CoreError::StaleHandle(_))
-        ));
+        assert_eq!(credit.remaining(WorkClass::BindingPolls), polls);
+        assert!(native.take_delivery().is_none());
     }
-    // Free a native slot so the invoke reaches the same stale-authority check.
     let ids: Vec<_> = exposure
         .participant_mut::<HttpActionRuntime>(0)
         .unwrap()
@@ -765,20 +774,6 @@ fn action_wire_refusals_distinguish_policy_capacity_and_stale_authority() {
         );
         owner.acknowledge_action(native, id).unwrap().unwrap();
     }
-    let (response, report) = send_report(
-        &mut owner,
-        &mut exposure,
-        address,
-        "POST",
-        "/run",
-        "12",
-        &mut budget(),
-    );
-    assert!(response.starts_with("HTTP/1.1 410 Gone"), "{response}");
-    assert!(matches!(
-        report.request_error,
-        Some(CoreError::StaleHandle(_))
-    ));
     assert_eq!(counts.invoked.get(), 4);
 
     exposure.begin_close();
@@ -1062,7 +1057,7 @@ fn revoked_action_gate_drains_owned_partial_tcp_without_dispatch() {
         Poll::Pending
     );
     let gate = Rc::clone(native.ingress_gate());
-    gate.set(false);
+    gate.withdraw();
     peer.shutdown(std::net::Shutdown::Write).unwrap();
     let end = Instant::now() + Duration::from_secs(5);
     loop {
@@ -1141,6 +1136,7 @@ fn revoked_action_gate_finishes_owned_reply_and_action() {
     peer.write_all(
         format!("POST /run HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n12").as_bytes(),
     ).unwrap();
+    let key = exposure.key();
     let native = exposure.participant_mut::<HttpActionRuntime>(0).unwrap();
     assert_eq!(
         owner.step_actions(native, &mut budget()).unwrap(),
@@ -1148,7 +1144,8 @@ fn revoked_action_gate_finishes_owned_reply_and_action() {
     );
     assert_eq!(counts.invoked.get(), 1); // semantic admission, reply still owned
     let gate = Rc::clone(native.ingress_gate());
-    gate.set(false);
+    gate.withdraw();
+    owner.reconcile_participation(key, native).unwrap();
     assert_eq!(
         owner.step_actions(native, &mut budget()).unwrap(),
         Poll::Ready(())
@@ -1203,7 +1200,7 @@ fn revoked_action_gate_refuses_completed_input_from_owned_connection() {
         owner.step_actions(native, &mut budget()).unwrap(),
         Poll::Pending
     );
-    Rc::clone(native.ingress_gate()).set(false);
+    Rc::clone(native.ingress_gate()).withdraw();
     peer.write_all(
         format!(" {address}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n12")
             .as_bytes(),
@@ -1453,22 +1450,22 @@ fn late_invalid_result_and_replacement_never_retarget_old_http_correlation() {
         .unwrap();
     second.publish(&mut owner, &mut budget()).unwrap();
     assert_eq!(owner.description(old_key), None);
-    // Replacement displaces the old logical authority; its still-live native
-    // lease cannot turn a stale request into an authorized Action.
-    let (stale, report) = send_report(
-        &mut owner,
-        &mut first,
-        old_addr,
-        "POST",
-        "/run",
-        "12",
-        &mut budget(),
+    // The post-commit POST reaches the old listen backlog. The native owner
+    // can retire its listener while the original invocation is still pending.
+    let _stale = action_request(old_addr, "POST", "/run", "12");
+    let native = first.participant_mut::<HttpActionRuntime>(0).unwrap();
+    assert!(native.ingress_gate().is_withdrawn());
+    let mut credit = budget();
+    let polls = credit.remaining(WorkClass::BindingPolls);
+    assert_eq!(
+        owner.step_actions(native, &mut credit).unwrap(),
+        Poll::Pending
     );
-    assert!(stale.starts_with("HTTP/1.1 410 Gone"), "{stale}");
-    assert!(matches!(
-        report.request_error,
-        Some(CoreError::StaleHandle(_))
-    ));
+    assert_eq!(credit.remaining(WorkClass::BindingPolls), polls);
+    owner.reconcile_participation(old_key, native).unwrap();
+    assert!(native.take_delivery().is_none());
+    assert_eq!(native.action_ids().collect::<Vec<_>>(), [id]);
+    TcpListener::bind(old_addr).unwrap();
     assert_eq!(old.invoked.get(), 1);
     assert_eq!(newer.invoked.get(), 0);
     let new_accepted = send(&mut owner, &mut second, new_addr, "POST", "/run", "12");

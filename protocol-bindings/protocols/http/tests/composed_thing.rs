@@ -70,14 +70,14 @@ fn description(tcp: SocketAddr, udp: SocketAddr) -> Arc<str> {
     }).to_string())
 }
 
-fn http_properties(first: SocketAddr, second: SocketAddr) -> Arc<str> {
+fn http_properties(first: SocketAddr, second: SocketAddr, value_type: &str) -> Arc<str> {
     Arc::from(
         serde_json::json!({"@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"two listeners",
             "security":["n"],"securityDefinitions":{"n":{"scheme":"nosec"}},
             "properties":{
-                "left":{"type":"integer","readOnly":true,
+                "left":{"type":value_type,"readOnly":true,
                     "forms":[{"href":format!("http://{first}/value")}]},
-                "right":{"type":"integer","readOnly":true,
+                "right":{"type":value_type,"readOnly":true,
                     "forms":[{"href":format!("http://{second}/value")}]}
             }
         })
@@ -102,6 +102,15 @@ fn http_read(
         100,
     )
     .unwrap();
+    http_runtime(owner, config, id, validation)
+}
+
+fn http_runtime(
+    owner: &RawProducerServient,
+    config: HttpFiniteConfig,
+    id: BindingId,
+    validation: FiniteValidation,
+) -> RawFiniteRuntime<HttpFiniteBinding> {
     RawFiniteRuntime::try_new(
         HttpFiniteBinding::new(config.clone(), id, BindingGeneration::INITIAL),
         config,
@@ -120,19 +129,27 @@ fn http_read(
     .unwrap()
 }
 
-struct UnselectedParticipant(Rc<Cell<bool>>, ProducerParticipationId, Option<Rc<dyn Any>>);
+struct UnselectedParticipant(
+    Rc<ProducerIngressGate>,
+    ProducerParticipationId,
+    Option<Rc<dyn Any>>,
+);
 impl ClosedProducerParticipation for UnselectedParticipant {
+    fn observe_installation(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        Ok(())
+    }
+
     fn participation_id(&self) -> &ProducerParticipationId {
         &self.1
     }
     fn retain_owner(&mut self, owner: Rc<dyn Any>) {
         self.2 = Some(owner);
     }
-    fn begin_retire(&mut self) {}
+    fn begin_retire(&mut self, _: ProducerRetirement) {}
     fn ready_for(&self, _: &ProducerOwnerToken, _: ProducerInstanceKey) -> bool {
         true
     }
-    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
         &self.0
     }
     fn retired(&self) -> bool {
@@ -159,7 +176,7 @@ fn publication_never_partially_opens_two_native_gates() {
     )
     .with_description(Arc::from("closed publication gate test"));
     let mut publication = owner.prepare_publication(instance, None).ok().unwrap();
-    let shared = Rc::new(Cell::new(false));
+    let shared = Rc::new(ProducerIngressGate::default());
     let mut first = UnselectedParticipant(Rc::clone(&shared), ProducerParticipationId::new(), None);
     let mut second =
         UnselectedParticipant(Rc::clone(&shared), ProducerParticipationId::new(), None);
@@ -169,15 +186,26 @@ fn publication_never_partially_opens_two_native_gates() {
             .is_err()
     );
     assert!(!publication.is_committed());
-    assert!(!shared.get());
+    assert!(!shared.is_open());
     assert_eq!(owner.description(publication.key()), None);
-    second.0 = Rc::new(Cell::new(false));
+    second.0 = Rc::new(ProducerIngressGate::default());
+    second.0.withdraw();
+    assert!(
+        owner
+            .publish_composed(&mut publication, &mut [&mut first, &mut second])
+            .is_err()
+    );
+    assert!(first.0.is_staged());
+    second.0.open();
+    assert!(second.0.is_withdrawn());
+    assert!(owner.description(publication.key()).is_none());
+    second.0 = Rc::new(ProducerIngressGate::default());
     owner
         .publish_composed(&mut publication, &mut [&mut first, &mut second])
         .unwrap();
-    assert!(first.0.get() && second.0.get());
+    assert!(first.0.is_open() && second.0.is_open());
     publication.revoke();
-    assert!(!first.0.get() && !second.0.get());
+    assert!(!first.0.is_open() && !second.0.is_open());
 }
 
 // Only this linked Binding interprets its UDP mapping. Each operation has an
@@ -268,6 +296,10 @@ impl UdpActionProvider {
     }
 }
 impl ProducerCapability for UdpActionProvider {
+    fn observe_configuration(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        Ok(())
+    }
+
     fn identity(&self) -> (BindingId, BindingGeneration) {
         self.identity
     }
@@ -360,15 +392,29 @@ fn http_action_registration_does_not_veto_a_different_bindings_action_forms() {
 
 #[derive(Default)]
 struct Counts {
+    long_string: bool,
+    withdraw_on_authorize: RefCell<Option<Rc<ProducerIngressGate>>>,
     property: Cell<usize>,
     actions: Cell<usize>,
     cancels: Cell<usize>,
     work_drops: Cell<usize>,
     complete: Cell<bool>,
 }
+impl Counts {
+    fn property_body(&self) -> Vec<u8> {
+        if self.long_string {
+            serde_json::to_vec(&"x".repeat(4094)).unwrap()
+        } else {
+            b"42".to_vec()
+        }
+    }
+}
 struct Property(Rc<Counts>);
 impl RawFiniteHandler for Property {
     fn authorize(&self, _: &InteractionInput) -> CoreResult<()> {
+        if let Some(gate) = self.0.withdraw_on_authorize.borrow_mut().take() {
+            gate.withdraw();
+        }
         Ok(())
     }
     fn handle(
@@ -379,7 +425,7 @@ impl RawFiniteHandler for Property {
         assert_eq!(ctx.operation(), Operation::ReadProperty);
         self.0.property.set(self.0.property.get() + 1);
         Ok(InteractionOutput::with_data(Payload::new(
-            b"42".to_vec(),
+            self.0.property_body(),
             "application/json",
         )))
     }
@@ -478,13 +524,13 @@ fn owner() -> RawProducerServient {
 struct ActionNative {
     socket: Option<UdpSocket>,
     address: SocketAddr,
-    leases: Vec<(ProducerInstanceKey, Rc<Cell<bool>>)>,
+    leases: Vec<(ProducerInstanceKey, Rc<ProducerIngressGate>)>,
     handles: Vec<(ProducerInstanceKey, RawActionHandle)>,
 }
 struct ActionLease {
     native: Rc<RefCell<ActionNative>>,
     key: ProducerInstanceKey,
-    open: Rc<Cell<bool>>,
+    open: Rc<ProducerIngressGate>,
     validator: Rc<dyn ActionValidator>,
     validator_enabled: bool,
     control_routes_enabled: bool,
@@ -540,7 +586,7 @@ impl ActionNative {
         Ok(())
     }
     fn lease(native: &Rc<RefCell<Self>>, key: ProducerInstanceKey) -> ActionLease {
-        let open = Rc::new(Cell::new(false));
+        let open = Rc::new(ProducerIngressGate::default());
         native.borrow_mut().leases.push((key, Rc::clone(&open)));
         ActionLease {
             native: Rc::clone(native),
@@ -589,7 +635,7 @@ impl ActionNative {
             n.socket.as_ref().unwrap().send_to(b"unknown", peer)?;
             return Ok(true);
         };
-        if !gate.get() {
+        if !gate.is_open() {
             n.socket.as_ref().unwrap().send_to(b"closed", peer)?;
             return Ok(true);
         }
@@ -661,6 +707,10 @@ impl ActionNative {
     }
 }
 impl ClosedProducerParticipation for ActionLease {
+    fn observe_installation(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        Ok(())
+    }
+
     fn participation_id(&self) -> &ProducerParticipationId {
         &self.participation
     }
@@ -672,14 +722,14 @@ impl ClosedProducerParticipation for ActionLease {
         _: &ProducerOwnerToken,
         key: ProducerInstanceKey,
     ) -> Option<usize> {
-        (!self.open.get() && !self.closed && self.retained_owner.is_none() && self.key == key)
+        (self.open.is_staged() && !self.closed && self.retained_owner.is_none() && self.key == key)
             .then_some(
                 std::mem::size_of::<Self>()
                     + 4 * std::mem::size_of::<usize>()
-                    + std::mem::size_of::<Cell<bool>>(),
+                    + std::mem::size_of::<ProducerIngressGate>(),
             )
     }
-    fn begin_retire(&mut self) {
+    fn begin_retire(&mut self, _: ProducerRetirement) {
         self.close();
     }
     fn ready_for(&self, _: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
@@ -693,7 +743,7 @@ impl ClosedProducerParticipation for ActionLease {
                 .and_then(|s| s.local_addr().ok())
                 == Some(self.native.borrow().address)
     }
-    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
         &self.open
     }
     fn covers(
@@ -765,7 +815,7 @@ impl ClosedProducerParticipation for ActionLease {
 }
 impl ActionLease {
     fn close(&mut self) {
-        self.open.set(false);
+        self.open.withdraw();
         self.closed = true;
     }
 }
@@ -810,17 +860,21 @@ fn udp_call(
     let (n, _) = peer.recv_from(&mut buf).unwrap();
     std::str::from_utf8(&buf[..n]).unwrap().into()
 }
+fn connect(addr: SocketAddr, path: &str) -> TcpStream {
+    let mut peer = TcpStream::connect(addr).unwrap();
+    peer.write_all(
+        format!("GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n").as_bytes(),
+    )
+    .unwrap();
+    peer.set_nonblocking(true).unwrap();
+    peer
+}
 fn read_peer(
     addr: SocketAddr,
     owner: &mut RawProducerServient,
     read: &mut RawFiniteRuntime<HttpFiniteBinding>,
 ) -> Vec<u8> {
-    let mut peer = TcpStream::connect(addr).unwrap();
-    peer.set_nonblocking(true).unwrap();
-    peer.write_all(
-        format!("GET /value HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n").as_bytes(),
-    )
-    .unwrap();
+    let mut peer = connect(addr, "/value");
     let mut output = vec![];
     let end = Instant::now() + Duration::from_secs(5);
     loop {
@@ -923,7 +977,7 @@ fn two_http_registrations_compose_without_opening_a_foreign_runtime() {
             })
             .collect(),
     );
-    let description = http_properties(left_addr, right_addr);
+    let description = http_properties(left_addr, right_addr, "integer");
     let left_id = BindingId::new(101);
     let right_id = BindingId::new(102);
     let left_provider = HttpFiniteProducer::try_new(
@@ -1014,7 +1068,7 @@ fn two_http_registrations_compose_without_opening_a_foreign_runtime() {
     // B has a live handler and a separate closed listener. It is not part of
     // A's qualified exposure, despite sharing the same Servient owner.
     let mut foreign_td: serde_json::Value =
-        serde_json::from_str(&http_properties(foreign_addr, right_addr)).unwrap();
+        serde_json::from_str(&http_properties(foreign_addr, right_addr, "integer")).unwrap();
     foreign_td["properties"]
         .as_object_mut()
         .unwrap()
@@ -1389,7 +1443,7 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
     // A participant that claims readiness but covers no selected Form must
     // not be opened, even when every advertised operation has an owner.
     let mut extra = UnselectedParticipant(
-        Rc::new(Cell::new(false)),
+        Rc::new(ProducerIngressGate::default()),
         ProducerParticipationId::new(),
         None,
     );
@@ -1405,8 +1459,8 @@ fn complete_thing_ready_independently_publishes_once_and_retains_continuing_work
         )
         .is_err()
     );
-    assert!(!extra.0.get());
-    assert!(!lease.open.get());
+    assert!(!extra.0.is_open());
+    assert!(!lease.open.is_open());
     assert!(!publication.is_committed());
     assert_eq!(read.state(), RawFiniteState::InstalledClosed);
     assert_eq!(s.description(k), None);
@@ -1737,15 +1791,15 @@ fn shared_native_socket_serves_two_things_and_replacement_does_not_retarget_old_
     assert_eq!(s.description(k1), None);
     assert_eq!(s.description(k2), Some(text.as_ref()));
     assert_eq!(s.description(k3), Some(text.as_ref()));
-    // Old native correlation and late work keep their original key. Numeric
-    // slot reuse grants no fresh query/cancel or new invocation authority.
+    // The shared socket refuses fresh requests at the displaced native gate.
+    // The original handle below still progresses its accepted invocation.
     assert_eq!(
         udp_call(&peer, &native, &mut s, routes(&p1), k1, "query"),
-        "rejected"
+        "closed"
     );
     assert_eq!(
         udp_call(&peer, &native, &mut s, routes(&p1), k1, "invoke"),
-        "rejected"
+        "closed"
     );
     assert_eq!(
         udp_call(&peer, &native, &mut s, routes(&p3), k3, "invoke"),

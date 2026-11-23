@@ -135,7 +135,7 @@ fn main() {
         ComposedProducerInput {
             instance,
             prepared,
-            providers: vec![provider],
+            providers: ProducerRegistrations::new(vec![provider]),
             participants: vec![OwnedProducerParticipation::actions(native)],
             expected: None,
             handler_backing_bytes: 0,

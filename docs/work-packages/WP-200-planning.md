@@ -294,11 +294,10 @@ added. The Servient owner in WP-400 reserves finalization capacity before setup.
 The whole-Thing selector's owned definitions can also be handed to the managed
 composition owner in [WP-400](WP-400-servient.md#owned-composed-host-producer).
 Pure caller construction/compilation stays separate from funded runtime
-ownership handoff. That owner captures the actual registrations, validates the
-complete staged behavior/mapping set before native effects, reserves final
-qualification scratch and repeats complete qualification after closed setup.
-It neither changes immutable definition identity into live permission nor adds
-a general definition cache or native runtime ABI.
+ownership handoff. That owner reserves final qualification scratch and checks
+the exact staged TD, actual registration set and complete behavior/mapping set
+before native effects. Planning returns the observations establishing unique
+coverage. Closed installation uses them at the Servient publication decision.
 
 `check_final_thing` shares the bounded common TD walk with construction but
 compares the existing owned definitions in place. It never reconstructs a full
@@ -502,8 +501,8 @@ preference, configuration changes and independent retirement over two transports
 one description's `PreparedThing` selection from concrete reusable instruction
 subdefinitions. The actual capability can check and bind supplied immutable work
 through the existing `prepare` boundary. Every instance still runs complete
-common TD/behavior/provider qualification; final checking remains complete after
-closed native setup. No new common program, cache or Consumer-style association
+common TD/behavior/provider qualification and verifies the actual closed native
+installation while the coverage dependencies remain current. No new common program, cache or Consumer-style association
 layer is introduced. [HTTP evidence](../evidence/producer-preparation-reuse.md)
 proves actual avoided response/schema lowering, checked distinct names/routes,
 refusals and original ownership. This does not establish normalized whole-TD,

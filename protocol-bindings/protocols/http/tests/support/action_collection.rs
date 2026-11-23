@@ -109,7 +109,7 @@ fn exposure(owner:&RawProducerServient,auth:ProducerInstanceAuthority,td:&Value,
     let (prepared,providers)=prepare(td,&instance,addr).unwrap();
     let definitions=prepared.operations().iter().map(|o|o.definition::<HttpActionDefinition>().unwrap().clone()).collect();
     let participant=HttpActionRuntime::try_new(&owner.participation_token(), instance.key(), definitions, 8).unwrap();
-    ComposedProducerExposure::try_new(owner,ComposedProducerInput { instance,prepared,providers,
+    ComposedProducerExposure::try_new(owner,ComposedProducerInput { instance,prepared,providers: ProducerRegistrations::new(providers),
         participants:vec![OwnedProducerParticipation::actions(participant)],expected,handler_backing_bytes:256 },
         Arc::new(GatewayDefaultV1::LIMITS.clone()),bank,&mut work()).ok().unwrap()
 }

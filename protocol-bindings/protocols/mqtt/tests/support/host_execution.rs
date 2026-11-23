@@ -124,7 +124,76 @@ struct Native {
     service: MqttNotificationService,
     capacity: ProducerFiniteCapacity,
 }
+fn http_addresses() -> [SocketAddr; 2] {
+    let probes = [
+        TcpListener::bind("127.0.0.1:0").unwrap(),
+        TcpListener::bind("127.0.0.1:0").unwrap(),
+    ];
+    probes.each_ref().map(|p| p.local_addr().unwrap())
+}
+
+fn mixed_owner() -> RawProducerServient {
+    let mut owner = owner();
+    owner
+        .enable_raw_actions(RawActionLimits {
+            invocations: 8,
+            application_work_bytes: 1024,
+            input_fields: 8,
+            input_bytes: 4160,
+            principal_id_bytes: 32,
+            output_body_bytes: 4096,
+            output_media_capacity: 64,
+            output_retained_bytes: 8192,
+        })
+        .unwrap();
+    owner
+}
+
 impl Native {
+    fn new(
+        owner: &RawProducerServient,
+        listen: HttpProducerConfig,
+        action: SocketAddr,
+        broker: SocketAddr,
+        definition_bank: &Arc<HostResourceAccounts>,
+        work_bank: &Arc<HostResourceAccounts>,
+    ) -> Self {
+        let compiler = Rc::new(
+            HttpFiniteProducer::compiling(
+                listen,
+                BindingId::new(601),
+                BindingGeneration::INITIAL,
+                5_000,
+                definition_bank.clone(),
+            )
+            .unwrap(),
+        );
+        let mqtt = Rc::new(MqttNotificationProducer::new(
+            MqttProducerConfig::for_loopback(broker, 8192).unwrap(),
+            BindingId::new(602),
+            BindingGeneration::INITIAL,
+        ));
+        Self {
+            listener: HttpFiniteListener::new(listen, 5_000).unwrap(),
+            finite: compiler,
+            actions: Rc::new(HttpActionProducer::new(
+                HttpProducerConfig::for_loopback(action).unwrap(),
+                BindingId::new(603),
+                BindingGeneration::INITIAL,
+            )),
+            service: MqttNotificationService::new(&mqtt).unwrap(),
+            mqtt,
+            capacity: ProducerFiniteCapacity::try_new(
+                owner,
+                finite_limits(),
+                1,
+                8,
+                work_bank.clone(),
+            )
+            .unwrap(),
+        }
+    }
+
     fn stage(
         &self,
         owner: &RawProducerServient,
@@ -244,7 +313,7 @@ impl Native {
             ComposedProducerInput {
                 instance,
                 prepared,
-                providers,
+                providers: ProducerRegistrations::new(providers),
                 participants,
                 expected,
                 handler_backing_bytes: std::mem::size_of::<App>(),
@@ -334,65 +403,22 @@ fn acknowledge(
 fn host_turns_join_independent_publications_all_families_replacement_and_complete_disposal() {
     runtime().block_on(async {
         let broker = Broker::start();
-        // Hold both endpoint probes until distinct addresses have been chosen.
-        let probes = [
-            TcpListener::bind("127.0.0.1:0").unwrap(),
-            TcpListener::bind("127.0.0.1:0").unwrap(),
-        ];
-        let [http, action] = probes.each_ref().map(|p| p.local_addr().unwrap());
-        drop(probes);
+        let [http, action] = http_addresses();
         let definition_bank = bank();
         let work_bank = bank();
         let consumer_bank = bank();
         let publication_banks = [bank(), bank(), bank()];
-        let mut owner = owner();
-        owner
-            .enable_raw_actions(RawActionLimits {
-                invocations: 8,
-                application_work_bytes: 1024,
-                input_fields: 8,
-                input_bytes: 4160,
-                principal_id_bytes: 32,
-                output_body_bytes: 4096,
-                output_media_capacity: 64,
-                output_retained_bytes: 8192,
-            })
-            .unwrap();
+        let mut owner = mixed_owner();
         let listen = HttpProducerConfig::for_loopback(http).unwrap();
-        let compiler = Rc::new(
-            HttpFiniteProducer::compiling(
-                listen,
-                BindingId::new(601),
-                BindingGeneration::INITIAL,
-                5_000,
-                definition_bank.clone(),
-            )
-            .unwrap(),
+        let mut native = Native::new(
+            &owner,
+            listen,
+            action,
+            broker.address,
+            &definition_bank,
+            &work_bank,
         );
-        let mqtt = Rc::new(MqttNotificationProducer::new(
-            MqttProducerConfig::for_loopback(broker.address, 8192).unwrap(),
-            BindingId::new(602),
-            BindingGeneration::INITIAL,
-        ));
-        let mut native = Native {
-            listener: HttpFiniteListener::new(listen, 5_000).unwrap(),
-            finite: compiler.clone(),
-            actions: Rc::new(HttpActionProducer::new(
-                HttpProducerConfig::for_loopback(action).unwrap(),
-                BindingId::new(603),
-                BindingGeneration::INITIAL,
-            )),
-            service: MqttNotificationService::new(&mqtt).unwrap(),
-            mqtt,
-            capacity: ProducerFiniteCapacity::try_new(
-                &owner,
-                finite_limits(),
-                1,
-                8,
-                work_bank.clone(),
-            )
-            .unwrap(),
-        };
+        let compiler = native.finite.clone();
         let td = description(http, action, broker.address, true, "alpha");
         let apps = [
             Rc::new(App {
@@ -778,6 +804,147 @@ fn host_turns_join_independent_publications_all_families_replacement_and_complet
             .chain(publication_banks.iter())
         {
             clean(bank);
+        }
+    });
+}
+
+#[test]
+fn either_mqtt_failure_observer_withdraws_the_mixed_things_http_ingress() {
+    runtime().block_on(async {
+        let broker = Broker::start();
+        for emission_first in [true, false] {
+            let [http, action] = http_addresses();
+            let mut owner = mixed_owner();
+            let accounts = bank();
+            let mut native = Native::new(
+                &owner,
+                HttpProducerConfig::for_loopback(http).unwrap(),
+                action,
+                broker.address,
+                &accounts,
+                &accounts,
+            );
+            let app = Rc::new(App::default());
+            let (mut thing, definition) = native.stage(
+                &owner,
+                authority(1),
+                &description(http, action, broker.address, true, "alpha"),
+                app.clone(),
+                &accounts,
+                None,
+            );
+            thing
+                .participant_mut::<HttpActionRuntime>(1)
+                .unwrap()
+                .install_closed()
+                .unwrap();
+            let end = Instant::now() + Duration::from_secs(3);
+            loop {
+                thing
+                    .step(&mut owner, &mut cx(), now(), |_, _| budget())
+                    .unwrap();
+                match thing.publish(&mut owner, &mut budget()) {
+                    Ok(()) => break,
+                    Err(CoreError::Backpressure(_)) => (),
+                    Err(err) => panic!("{err:?}"),
+                }
+                assert!(Instant::now() < end);
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            assert!(native.service.connected());
+            let (mut independent, other_definition) = native.stage(
+                &owner,
+                authority(2),
+                &description(http, action, broker.address, false, "beta"),
+                Rc::new(App {
+                    value: 8,
+                    ..App::default()
+                }),
+                &accounts,
+                None,
+            );
+            independent
+                .step(&mut owner, &mut cx(), now(), |_, _| budget())
+                .unwrap();
+            independent.publish(&mut owner, &mut budget()).unwrap();
+            let key = thing.key();
+            let mqtt = thing.participant_mut::<MqttNotificationRuntime>(2).unwrap();
+            let mut emission = owner
+                .publish_notification(
+                    mqtt,
+                    key,
+                    AffordanceTarget::Event(Arc::from("alarm")),
+                    data(b"31"),
+                    Deadline::NONE,
+                    now(),
+                    &mut budget(),
+                )
+                .ok()
+                .unwrap();
+            native.service.shutdown();
+            if !emission_first {
+                let _ = owner
+                    .step_notifications(mqtt, &mut cx(), &mut budget())
+                    .unwrap();
+            }
+            finish(&mut emission).await;
+            let result = emission.acknowledge().ok().unwrap();
+            assert!(result.native.cause.is_some());
+            assert_eq!(result.instance, key);
+            assert!(owner.description(key).is_none());
+            let gate_withdrawn = thing
+                .participant_mut::<Finite>(0)
+                .unwrap()
+                .ingress_gate()
+                .is_withdrawn();
+            let _peer = connect(http, "alpha");
+            for _ in 0..8 {
+                thing
+                    .step(&mut owner, &mut cx(), now(), |_, _| budget())
+                    .unwrap();
+            }
+            let retired = thing.retire(&mut owner, &mut budget());
+            let late = thing
+                .participant_mut::<Finite>(0)
+                .unwrap()
+                .take_retained_settlement();
+            assert_eq!(
+                late.map(|s| (s.effect(), s.delivery())),
+                None,
+                "emission first = {emission_first}"
+            );
+            assert!(gate_withdrawn);
+            retired.unwrap();
+            assert_eq!(app.reads.get(), 0);
+            assert_eq!(native.capacity.retained_work(), 0);
+            assert!(owner.description(independent.key()).is_some());
+            let mut peer = connect(http, "beta");
+            let mut bytes = Vec::new();
+            let end = Instant::now() + Duration::from_secs(3);
+            while !read(&mut peer, &mut bytes) {
+                independent
+                    .step(&mut owner, &mut cx(), now(), |_, _| budget())
+                    .unwrap();
+                assert!(Instant::now() < end);
+            }
+            assert!(bytes.starts_with(b"HTTP/1.1 200") && bytes.ends_with(b"8"));
+            assert_eq!(take(&mut independent).delivery(), FiniteDelivery::Delivered);
+            independent.begin_close();
+            independent
+                .step(&mut owner, &mut cx(), now(), |_, _| budget())
+                .unwrap();
+            independent.retire(&mut owner, &mut budget()).unwrap();
+            drop((
+                thing,
+                independent,
+                native,
+                definition,
+                other_definition,
+                result,
+            ));
+            assert_empty(&accounts);
+            TcpListener::bind(http).unwrap();
+            TcpListener::bind(action).unwrap();
         }
     });
 }

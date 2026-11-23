@@ -715,7 +715,7 @@ fn final_retained_td_mismatch_refuses_before_managed_handoff_without_native_effe
         ComposedProducerInput {
             instance,
             prepared,
-            providers,
+            providers: ProducerRegistrations::new(providers),
             participants: vec![OwnedProducerParticipation::actions(participant)],
             expected: None,
             handler_backing_bytes: 256,
@@ -1103,10 +1103,14 @@ fn native_invocation_identity_cannot_cross_action_control_routes() {
 #[test]
 fn closed_native_setup_cannot_publish_after_actual_capability_disappears() {
     struct Toggle {
-        enabled: Rc<Cell<bool>>,
+        enabled: Rc<RefCell<PublicationState<bool>>>,
         inner: HttpActionProducer,
     }
     impl ProducerCapability for Toggle {
+        fn observe_configuration(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+            self.enabled.borrow().observe(facts)
+        }
+
         fn identity(&self) -> (BindingId, BindingGeneration) {
             self.inner.identity()
         }
@@ -1121,7 +1125,7 @@ fn closed_native_setup_cannot_publish_after_actual_capability_disappears() {
             self.inner.prepare(i, b)
         }
         fn supports(&self, i: ProducerOperationInput<'_>, b: &mut WorkBudget) -> CoreResult<bool> {
-            if self.enabled.get() {
+            if *self.enabled.borrow().get() {
                 self.inner.supports(i, b)
             } else {
                 Ok(false)
@@ -1136,7 +1140,7 @@ fn closed_native_setup_cannot_publish_after_actual_capability_disappears() {
             d: &dyn std::any::Any,
             b: &mut WorkBudget,
         ) -> CoreResult<bool> {
-            if self.enabled.get() {
+            if *self.enabled.borrow().get() {
                 self.inner.check_final(i, d, b)
             } else {
                 Ok(false)
@@ -1150,7 +1154,7 @@ fn closed_native_setup_cannot_publish_after_actual_capability_disappears() {
     let bank = accounts();
     let instance = logical(authority(Generation::INITIAL), &td, app.clone(), true);
     let (prepared, _) = prepare(&td, &instance, addr).unwrap();
-    let enabled = Rc::new(Cell::new(true));
+    let enabled = Rc::new(RefCell::new(PublicationState::new(true)));
     let providers: Vec<Rc<dyn ProducerCapability>> = vec![Rc::new(Toggle {
         enabled: enabled.clone(),
         inner: HttpActionProducer::new(
@@ -1172,7 +1176,7 @@ fn closed_native_setup_cannot_publish_after_actual_capability_disappears() {
         ComposedProducerInput {
             instance,
             prepared,
-            providers,
+            providers: ProducerRegistrations::new(providers),
             participants: vec![OwnedProducerParticipation::actions(participant)],
             expected: None,
             handler_backing_bytes: 256,
@@ -1201,7 +1205,7 @@ fn closed_native_setup_cannot_publish_after_actual_capability_disappears() {
             .is_pending()
     );
     assert_eq!(app.roots.get(), 0);
-    enabled.set(false);
+    enabled.borrow_mut().replace(false);
     assert!(exposure.publish(&mut owner, &mut work()).is_err());
     assert!(owner.description(exposure.key()).is_none());
     assert_eq!(app.roots.get(), 0);

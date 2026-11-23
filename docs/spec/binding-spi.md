@@ -303,10 +303,17 @@ mandatory per-Thing Runtime or compatibility facade is introduced.
 
 Producer publication follows [PREP-COVER-001](planning.md) and SAFE-PUBLISH-001.
 Native setup may be externally visible while semantic ingress remains closed.
-Readiness means required exposure participation is ready, not all future
-connections/subscriptions/results preallocated. The Binding supplies endpoint
-and collision facts; Engine publishes only final qualified meaning and actual
-behavior. Remote registration/cached TD visibility is not globally atomic.
+Before opening ingress, Servient checks the required installed members, their
+actual endpoints, native collision rules, mapping inventory and service owners.
+Each eligible Binding exposes all shared mutable inputs to its support answers
+and declared bounds. Each native member does the same for installed mappings,
+services and readiness. Fixed operands can establish stability by construction.
+Reloadable owners order changes against Servient's local decision. In Host
+HTTP, each version of a Basic or API-key registration pairs the executable
+verifier with its work bound. Replacing either pair or losing a shared listener
+invalidates staged coverage. Per-request credential verification and authorization
+stay live.
+Network availability and cached TD visibility remain independently ordered.
 
 Bounded authentication parsing/handshake may occur before final authorization;
 only configured verification establishes a principal. Native source evidence,
@@ -392,8 +399,9 @@ propagating failure to logical revocation. A failed uncommitted participant may
 retire its own native work before or after another participant publishes the same
 key; passive origin/key association cannot revoke that publication or its Actions.
 `step_actions` and `step_notifications` apply that boundary for their distinct
-facets. Direct native polling requires caller-driven
-reconciliation; there is no background failure propagation or automatic scheduler.
+facets. TD lookup and dispatch check the original ingress gates directly,
+including after a caller polls a native participant independently. Native cleanup
+still requires caller-driven progress.
 MQTT readiness/health/close therefore receives no logical owner. Logical
 notification publication metadata is funded by Servient; native participants
 declare native storage/alignment, data capacity and the number of publication
@@ -408,8 +416,11 @@ qualified exposure. Finite readiness also checks the exact logical instance,
 requires input/output validation to be enabled and verifies its captured service;
 an explicitly raw runtime cannot qualify a published exposure. An unrelated
 closed runtime cannot be opened as an extra participant. The
-handoff installs separately owned closed ingress gates before commit and flips
-them inside the Servient publication boundary. Third-party `open` callbacks
+handoff installs a staged `ProducerIngressGate` for each participant and opens
+the complete set inside the Servient publication boundary. The same commit
+withdraws the original gates of any displaced incarnation. Withdrawal is terminal
+for that gate. Reconciliation retires its own native participant even after
+registry replacement. Third-party `open` callbacks
 after logical commit are not permitted: reentrancy or partial opening would
 leave a multi-participant publication observably half-open despite a non-fallible
 contract. Gate loans and checks finish before commit; no linked callback,
@@ -420,6 +431,15 @@ new semantic ingress, including after an earlier exchange. Owned replies and
 native cleanup can still finish after the gate closes. A lease is not a
 native connection or per-Thing Binding runtime: one Binding owner
 can retain many leases and Things, and closing one releases only that participation.
+Finite Bindings with independently fallible ingress implement
+`FiniteIngressBinding::check_ingress` as a bounded, passive read of their
+native owner. Native poll credit funds this check while a candidate waits for
+handler credit or a delivered result occupies the receive slot.
+On withdrawal, Servient requests `ProducerRetirement::Drain`. A participant
+with an accepted reply continues its original funded writes until completion,
+delivery failure or deadline, subject to its delivery authorization. Explicit
+close or rollback requests `ProducerRetirement::Close` and preserves evidence
+of any partial write. Wrappers forward the retirement intent.
 The HTTP finite participant can share one listener across up to 32 independently
 prepared Property Read/Write and Thing-root finite collection mappings; native
 method/path collisions refuse before setup. `FiniteIngressBinding::validator` supplies one captured `FiniteValidator`

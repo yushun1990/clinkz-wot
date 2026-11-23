@@ -1,7 +1,7 @@
 use super::*;
 use clinkz_wot_core::consumer::ConsumerDataService;
 use clinkz_wot_core::publication::{
-    ClosedProducerParticipation, ProducerOwnerToken, ProducerParticipationId,
+    ClosedProducerParticipation, ProducerIngressGate, ProducerOwnerToken, ProducerParticipationId,
 };
 use clinkz_wot_core::{
     BindingInputRejection, BindingOperationalError, CoreResult, producer::ProducerInstanceKey,
@@ -40,7 +40,7 @@ enum Phase {
 type Connect = Pin<Box<dyn Future<Output = io::Result<TcpStream>>>>;
 struct Session {
     registration: Rc<Registration>,
-    phase: Phase,
+    phase: PublicationState<Phase>,
     connect: Option<Connect>,
     stream: Option<TcpStream>,
     handshake: [u8; 64],
@@ -61,13 +61,13 @@ impl Session {
         }
         self.connect = None;
         self.stream = None;
-        self.phase = Phase::Failed;
+        self.phase.replace(Phase::Failed);
     }
     fn step(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) -> Poll<()> {
-        if matches!(self.phase, Phase::Failed | Phase::Closed) {
+        if matches!(*self.phase.get(), Phase::Failed | Phase::Closed) {
             return Poll::Ready(());
         }
-        if self.phase != Phase::Ready
+        if *self.phase.get() != Phase::Ready
             && self
                 .started
                 .is_some_and(|t| t.elapsed() >= Duration::from_secs(2))
@@ -81,13 +81,13 @@ impl Session {
         if budget.consume(WorkClass::BindingPolls, 1).is_err() {
             return Poll::Pending;
         }
-        match self.phase {
+        match *self.phase.get() {
             Phase::New => {
                 self.started = Some(Instant::now());
                 self.connect = Some(Box::pin(TcpStream::connect(
                     self.registration.config.address,
                 )));
-                self.phase = Phase::Connecting;
+                self.phase.replace(Phase::Connecting);
             }
             Phase::Connecting => match self.connect.as_mut().expect("connecting").as_mut().poll(cx)
             {
@@ -98,7 +98,7 @@ impl Session {
                     }
                     self.stream = Some(stream);
                     self.connect = None;
-                    self.phase = Phase::SendingConnect;
+                    self.phase.replace(Phase::SendingConnect);
                 }
                 Poll::Ready(Err(_)) => self.fail(io_error()),
                 Poll::Pending => {}
@@ -114,7 +114,7 @@ impl Session {
                     Poll::Ready(Ok(n)) => {
                         self.written += n;
                         if self.written == self.handshake_len {
-                            self.phase = Phase::Connack;
+                            self.phase.replace(Phase::Connack);
                         }
                     }
                     Poll::Ready(Err(_)) => self.fail(io_error()),
@@ -132,7 +132,7 @@ impl Session {
                         // Clean session, protocol 3.1.1; no session-present or
                         // other server response can be silently accepted.
                         if self.connack == [0x20, 2, 0, 0] {
-                            self.phase = Phase::Ready;
+                            self.phase.replace(Phase::Ready);
                         } else {
                             self.fail(io_error());
                         }
@@ -157,7 +157,7 @@ impl Session {
             }
             Phase::Failed | Phase::Closed => unreachable!(),
         }
-        if matches!(self.phase, Phase::Ready | Phase::Failed) {
+        if matches!(*self.phase.get(), Phase::Ready | Phase::Failed) {
             Poll::Ready(())
         } else {
             Poll::Pending
@@ -230,7 +230,7 @@ impl MqttNotificationService {
         Ok(Self {
             session: Rc::new(RefCell::new(Session {
                 registration: Rc::clone(&producer.registration),
-                phase: Phase::New,
+                phase: PublicationState::new(Phase::New),
                 connect: None,
                 stream: None,
                 handshake,
@@ -273,7 +273,7 @@ impl MqttNotificationService {
         let mut session = self.session.borrow_mut();
         session.leases.retain(|w| w.strong_count() != 0);
         if session.leases.len() == MAX_LEASES
-            || matches!(session.phase, Phase::Failed | Phase::Closed)
+            || matches!(*session.phase.get(), Phase::Failed | Phase::Closed)
             || definitions
                 .iter()
                 .any(|d| !Rc::ptr_eq(&d.registration, &session.registration))
@@ -336,7 +336,7 @@ impl MqttNotificationService {
         }) {
             return Err(unsupported());
         }
-        let gate = Rc::new(Cell::new(false));
+        let gate = Rc::new(ProducerIngressGate::default());
         let lease = Rc::new(Lease {
             session: Rc::clone(&self.session),
             token: owner.clone(),
@@ -394,7 +394,7 @@ struct Lease {
     mappings: Vec<NotificationMapping>,
     definitions: Vec<MqttNotificationDefinition>,
     closing: Cell<bool>,
-    gate: Rc<Cell<bool>>,
+    gate: Rc<ProducerIngressGate>,
     // Last disposal includes native publications which outlive the exposure.
     funding: RefCell<Option<Rc<dyn Any>>>,
 }
@@ -404,8 +404,8 @@ impl Drop for Lease {
         if !s.leases.iter().any(|w| w.strong_count() != 0) {
             s.connect = None;
             s.stream = None;
-            if s.phase != Phase::New && s.phase != Phase::Failed {
-                s.phase = Phase::Closed;
+            if *s.phase.get() != Phase::New && *s.phase.get() != Phase::Failed {
+                s.phase.replace(Phase::Closed);
             }
         }
     }
@@ -415,7 +415,7 @@ pub struct MqttNotificationRuntime {
     lease: Option<Rc<Lease>>,
     token: ProducerOwnerToken,
     key: ProducerInstanceKey,
-    gate: Rc<Cell<bool>>,
+    gate: Rc<ProducerIngressGate>,
     id: ProducerParticipationId,
     started: bool,
     closed: bool,
@@ -445,7 +445,7 @@ impl MqttNotificationRuntime {
             if self.first_cause.is_none() {
                 self.first_cause = Some(cause);
             }
-            self.begin_retire();
+            self.begin_retire(ProducerRetirement::Close);
         }
         Ok(result)
     }
@@ -478,6 +478,13 @@ impl MqttNotificationRuntime {
     }
 }
 impl ClosedProducerParticipation for MqttNotificationRuntime {
+    fn observe_installation(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        if let Some(lease) = &self.lease {
+            lease.session.borrow().phase.observe(facts)?;
+        }
+        Ok(())
+    }
+
     fn notification_publication_slots(&self) -> usize {
         1
     }
@@ -539,9 +546,9 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
         // Native reference fields are already included in the layouts above.
         Some(bytes)
     }
-    fn begin_retire(&mut self) {
+    fn begin_retire(&mut self, _: ProducerRetirement) {
         self.closed = true;
-        self.gate.set(false);
+        self.gate.withdraw();
         if let Some(l) = &self.lease {
             l.closing.set(true);
         }
@@ -554,7 +561,7 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
             && self
                 .lease
                 .as_ref()
-                .is_some_and(|l| l.session.borrow().phase == Phase::Ready)
+                .is_some_and(|l| *l.session.borrow().phase.get() == Phase::Ready)
     }
     fn covers(
         &self,
@@ -604,7 +611,7 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
             .find(|e| e.target == target && e.kind == kind)?;
         Some((e.route.clone(), e.services.clone(), DATA_BACKING))
     }
-    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
         &self.gate
     }
     fn retired(&self) -> bool {
@@ -613,7 +620,7 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
 }
 impl Drop for MqttNotificationRuntime {
     fn drop(&mut self) {
-        self.begin_retire();
+        self.begin_retire(ProducerRetirement::Close);
     }
 }
 impl ProducerNotificationBinding for MqttNotificationRuntime {
@@ -652,7 +659,7 @@ impl ProducerNotificationBinding for MqttNotificationRuntime {
         let Some(l) = self
             .lease
             .as_ref()
-            .filter(|l| !l.closing.get() && l.gate.get())
+            .filter(|l| !l.closing.get() && l.gate.is_open())
         else {
             return Err(reject(data, unsupported()));
         };
@@ -663,7 +670,7 @@ impl ProducerNotificationBinding for MqttNotificationRuntime {
             return Err(reject(data, unsupported()));
         }
         let mut s = l.session.borrow_mut();
-        if s.phase != Phase::Ready {
+        if *s.phase.get() != Phase::Ready {
             return Err(reject(data, s.first_cause.clone().unwrap_or_else(io_error)));
         }
         if s.busy {
@@ -753,7 +760,7 @@ impl NativeNotificationPublication for MqttPublication {
             return Poll::Ready(outcome.clone());
         }
         let mut s = self.lease.session.borrow_mut();
-        if cancel || self.lease.closing.get() || !self.lease.gate.get() {
+        if cancel || self.lease.closing.get() || !self.lease.gate.is_open() {
             if self.written != 0 {
                 s.fail(io_error());
             }
@@ -767,7 +774,7 @@ impl NativeNotificationPublication for MqttPublication {
             });
         } else {
             let _ = s.step(cx, budget);
-            if s.phase == Phase::Failed || s.phase == Phase::Closed {
+            if *s.phase.get() == Phase::Failed || *s.phase.get() == Phase::Closed {
                 self.outcome = Some(NativePublicationOutcome {
                     effect: if self.written == 0 {
                         PublicationEffect::NotPublished

@@ -584,7 +584,7 @@ fn root_qualification_cannot_be_satisfied_by_only_individual_native_mappings() {
         ComposedProducerInput {
             instance,
             prepared,
-            providers: vec![provider],
+            providers: ProducerRegistrations::new(vec![provider]),
             participants: vec![OwnedProducerParticipation::finite(server)],
             expected: None,
             handler_backing_bytes: 8192,

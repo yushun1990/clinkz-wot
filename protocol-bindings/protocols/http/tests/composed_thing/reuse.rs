@@ -191,20 +191,11 @@ fn input_with_capacity(
     ComposedProducerInput {
         instance,
         prepared,
-        providers: vec![provider],
+        providers: ProducerRegistrations::new(vec![provider]),
         participants: vec![OwnedProducerParticipation::finite(runtime)],
         expected: None,
         handler_backing_bytes: std::mem::size_of::<App>(),
     }
-}
-fn admit(
-    owner: &RawProducerServient,
-    input: ComposedProducerInput,
-    accounts: &Arc<HostResourceAccounts>,
-) -> ComposedProducerExposure {
-    ComposedProducerExposure::try_new(owner, input, limits(), accounts.clone(), &mut budget())
-        .ok()
-        .unwrap()
 }
 fn start(exposure: &mut ComposedProducerExposure) {
     assert_eq!(

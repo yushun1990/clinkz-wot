@@ -177,7 +177,7 @@ fn callback_revocation_and_cleanup_failure_retain_original_effect_and_owner() {
             peer.event("callback/alarm", b"12");
             assert!(owner.description(key).is_none());
             drop(binding);
-            native.begin_retire();
+            native.begin_retire(ProducerRetirement::Close);
             let _ = owner
                 .step_notifications(&mut native, &mut cx(), &mut budget())
                 .unwrap();
@@ -439,7 +439,7 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
             ComposedProducerInput {
                 instance,
                 prepared,
-                providers: vec![Rc::new(provider.clone())],
+                providers: ProducerRegistrations::new(vec![Rc::new(provider.clone())]),
                 participants: vec![OwnedProducerParticipation::notifications(participant)],
                 expected: None,
                 handler_backing_bytes: 0,
@@ -961,7 +961,7 @@ fn real_broker_loss_reports_first_failure_and_retires_without_replay() {
 }
 
 #[test]
-fn native_failure_is_evidence_until_servient_reconciles_its_own_publication() {
+fn servient_observes_its_original_mqtt_member_withdrawal_on_lookup() {
     runtime().block_on(async {
         let broker = Broker::start();
         let provider = registration(broker.address, 8192);
@@ -982,20 +982,21 @@ fn native_failure_is_evidence_until_servient_reconciles_its_own_publication() {
         );
         publish(&mut owner, &mut exposure).await;
         let key = exposure.key();
+        assert!(owner.description(key).is_some());
         service.shutdown();
-        // Native progress closes its failed lease without receiving a logical
-        // owner. It has no capability to revoke the published Thing.
+        // Native progress closes only its own lease. The registry observes
+        // the original gate at lookup, before its next notification turn.
         let _ = native(&mut exposure)
             .step(&mut cx(), &mut budget())
             .unwrap();
         assert!(native(&mut exposure).first_failure().is_some());
-        assert!(owner.description(key).is_some());
+        assert!(!native(&mut exposure).ingress_gate().is_open());
         assert!(
             support::owner()
                 .reconcile_participation(key, native(&mut exposure))
                 .is_err()
         );
-        assert!(owner.description(key).is_some());
+        assert!(owner.description(key).is_none());
         owner
             .reconcile_participation(key, native(&mut exposure))
             .unwrap();

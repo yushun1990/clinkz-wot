@@ -558,7 +558,7 @@ fn shared_final_qualification_requires_original_writable_members_and_actual_root
         ComposedProducerInput {
             instance,
             prepared,
-            providers: vec![provider],
+            providers: ProducerRegistrations::new(vec![provider]),
             participants: vec![OwnedProducerParticipation::finite(native)],
             expected: None,
             handler_backing_bytes: 8192,

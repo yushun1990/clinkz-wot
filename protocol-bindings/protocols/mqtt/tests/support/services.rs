@@ -10,6 +10,10 @@ pub struct ServicesParticipant {
     route: NotificationRoute,
 }
 impl ClosedProducerParticipation for ServicesParticipant {
+    fn observe_installation(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.native.observe_installation(facts)
+    }
+
     fn associated_with(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         self.native.associated_with(owner, key)
     }
@@ -37,8 +41,8 @@ impl ClosedProducerParticipation for ServicesParticipant {
             .admission_backing_bytes(owner, key)?
             .checked_add(4096)
     }
-    fn begin_retire(&mut self) {
-        self.native.begin_retire();
+    fn begin_retire(&mut self, intent: ProducerRetirement) {
+        self.native.begin_retire(intent);
     }
     fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
         self.native.ready_for(owner, key)
@@ -78,7 +82,7 @@ impl ClosedProducerParticipation for ServicesParticipant {
         };
         Some((route, services, bytes))
     }
-    fn ingress_gate(&self) -> &Rc<Cell<bool>> {
+    fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
         self.native.ingress_gate()
     }
     fn retired(&self) -> bool {
@@ -177,7 +181,7 @@ pub fn intercept_with_instance(
         ComposedProducerInput {
             instance,
             prepared,
-            providers: vec![Rc::new(provider.clone())],
+            providers: ProducerRegistrations::new(vec![Rc::new(provider.clone())]),
             participants: vec![OwnedProducerParticipation::new(
                 ServicesParticipant {
                     native: runtime,

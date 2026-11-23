@@ -177,11 +177,33 @@ pub trait FiniteIngressBinding {
     fn engine_backing_bytes(&self) -> Option<usize> {
         None
     }
+    /// Record mutable shared dependencies before checking this installation.
+    /// Raw-only Bindings have no qualified installation by default.
+    fn observe_installation(
+        &self,
+        _facts: &mut crate::publication::PublicationObserver<'_>,
+    ) -> CoreResult<()> {
+        Err(crate::CoreError::UnsupportedOperation(
+            crate::ErrorContext::new(crate::ErrorPhase::Admission, crate::RetryClass::Never),
+        ))
+    }
+    /// Report a terminal loss of installed ingress without accepting a request
+    /// or touching an outstanding reply. A Binding whose native owner can
+    /// fail independently of its own polls must consult that owner's bounded,
+    /// passive health state here. Wrappers forward the check.
+    fn check_ingress(&self) -> CoreResult<()> {
+        Ok(())
+    }
     /// Passive closed-participation recipient check. This is a native mapping
     /// claim, not logical permission; a shared Binding may prepare several
     /// independent Things. Raw-only Bindings gain no publication readiness.
     fn prepared_for_instance(&self, _key: ProducerInstanceKey) -> bool {
         false
+    }
+    /// Number of logical Form/operation associations retained for this
+    /// publication. A Binding with an explicit installed inventory supplies it.
+    fn qualified_operation_count(&self) -> Option<usize> {
+        None
     }
     /// Passive exact mapping claim for a qualified Producer publication. The
     /// default is *no* coverage: existing raw-only finite Bindings do not gain

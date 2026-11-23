@@ -156,6 +156,15 @@ fn substituted_native_member_cannot_progress_but_its_original_sibling_completes(
         .unwrap();
     assert_eq!(settlement.recipient, Some(key));
     assert_eq!(settlement.delivery, FiniteDelivery::Delivered);
+    // Moving a live native owner preserved the sibling's request. Closing
+    // that same owner away from its facade withdraws the whole publication.
+    let mut original = original;
+    original.begin_close();
+    assert!(matches!(
+        exposure.step(&mut owner, &mut cx(), now(), |_, _| budget()),
+        Err(CoreError::StaleHandle(_))
+    ));
+    assert!(owner.description(key).is_none());
     let substitute = core::mem::replace(
         exposure.participant_mut::<HttpRuntime>(0).unwrap(),
         original,

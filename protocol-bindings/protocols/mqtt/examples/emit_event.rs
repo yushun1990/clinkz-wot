@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let native=service.participation(&owner.participation_token(), key, definitions)?;
         let accounts=Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
         let mut exposure=ComposedProducerExposure::try_new(&owner,ComposedProducerInput {instance,prepared,
-            providers:vec![provider],participants:vec![OwnedProducerParticipation::notifications(native)],expected:None,handler_backing_bytes:0},
+            providers:ProducerRegistrations::new(vec![provider]),participants:vec![OwnedProducerParticipation::notifications(native)],expected:None,handler_backing_bytes:0},
             Arc::new(GatewayDefaultV1::LIMITS.clone()),accounts,&mut budget()).map_err(|r| r.error().error().clone())?;
         let mut cx=Context::from_waker(Waker::noop());
         let end=Instant::now()+Duration::from_secs(3);

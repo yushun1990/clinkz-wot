@@ -111,7 +111,7 @@ pub struct ProducerNotificationPublication<P: NativeNotificationPublication> {
 // Concrete logical metadata has its own layout, so native crates never need to
 // name the generic Servient owner to declare their native publication backing.
 struct NotificationPublicationState {
-    current: Rc<Cell<bool>>,
+    permission: Rc<PublicationPermission>,
     issuer: Weak<()>,
     route: NotificationRoute,
     target: AffordanceTarget,
@@ -152,7 +152,7 @@ impl<P: NativeNotificationPublication> ProducerNotificationPublication<P> {
                 self.state.first_cause = outcome.cause.clone();
             }
             if outcome.cause.is_some() {
-                self.state.current.set(false);
+                self.state.permission.revoke();
             }
             self.state.native_outcome = Some(outcome);
         }
@@ -169,7 +169,7 @@ impl<P: NativeNotificationPublication> ProducerNotificationPublication<P> {
             if self.state.cleanup_error.is_none() {
                 self.state.cleanup_error = Some(error);
             }
-            self.state.current.set(false);
+            self.state.permission.revoke();
             return Poll::Pending;
         }
         self.observe_authority(now);
@@ -193,7 +193,7 @@ impl<P: NativeNotificationPublication> ProducerNotificationPublication<P> {
     fn observe_authority(&mut self, now: MonotonicInstant) {
         if self.state.first_cause.is_none() {
             self.state.first_cause =
-                if !self.state.current.get() || self.state.issuer.strong_count() == 0 {
+                if !self.state.permission.is_current() || self.state.issuer.strong_count() == 0 {
                     Some(CoreError::StaleHandle(self.progress_context()))
                 } else {
                     match self.state.deadline.checked_is_elapsed_at(now) {
@@ -279,7 +279,7 @@ impl RawProducerServient {
             let entry = self
                 .instances
                 .iter()
-                .find(|e| e.current.get() && e.instance.key() == key)
+                .find(|e| e.instance.key() == key && e.permission.is_current())
                 .ok_or_else(|| CoreError::StaleHandle(context()))?;
             if !data.kind().accepts_target(&target) {
                 return Err(CoreError::Validation(context()));
@@ -307,17 +307,17 @@ impl RawProducerServient {
             captured.services.authorize(&data, budget)?;
             captured.services.validate(&data, budget)?;
             // Trusted services may revoke a publication through its guard.
-            if !entry.current.get() {
+            if !entry.permission.is_current() {
                 return Err(CoreError::StaleHandle(context()));
             }
             Ok((
                 Rc::clone(&entry.instance),
-                Rc::clone(&entry.current),
+                Rc::clone(&entry.permission),
                 captured.route.clone(),
                 captured.target.clone(),
             ))
         })();
-        let (instance, current, route, target) = match admit {
+        let (instance, permission, route, target) = match admit {
             Ok(value) => value,
             Err(error) => {
                 return Err(BindingInputRejection::new(
@@ -333,7 +333,7 @@ impl RawProducerServient {
         Ok(ProducerNotificationPublication {
             native: Some(native),
             state: NotificationPublicationState {
-                current,
+                permission,
                 issuer: Rc::downgrade(&self.issuer),
                 route,
                 target,
