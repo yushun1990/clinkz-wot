@@ -34,10 +34,20 @@ fn cx() -> Context<'static> {
     Context::from_waker(Waker::noop())
 }
 fn address() -> SocketAddr {
-    TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
+    test_listener().local_addr().unwrap()
+}
+fn test_listener() -> TcpListener {
+    // A TD advertises its endpoint before native setup binds it. Keep both
+    // advertised endpoints and raw peers distinct across this binary's tests.
+    static SELECTED: std::sync::Mutex<std::collections::BTreeSet<SocketAddr>> =
+        std::sync::Mutex::new(std::collections::BTreeSet::new());
+    let mut selected = SELECTED.lock().unwrap();
+    loop {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        if selected.insert(listener.local_addr().unwrap()) {
+            return listener;
+        }
+    }
 }
 fn bank() -> Arc<HostResourceAccounts> {
     Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS))
@@ -403,7 +413,12 @@ impl Fixture {
             None,
         );
         let server = exposure.participant_mut::<Server>(0).unwrap();
-        let _ = server.step(&mut cx(), &mut work(), now(0));
+        assert_eq!(
+            server.step(&mut cx(), &mut work(), now(0)),
+            Poll::Ready(RawFiniteState::InstalledClosed),
+            "startup failed: {:?}",
+            server.first_cause()
+        );
         let addr = server
             .closed_binding()
             .unwrap()
@@ -923,7 +938,8 @@ fn consumer_requires_the_prepared_native_write_completion_and_never_replays_unce
         b"HTTP/1.1 204 No Content\r\n",
         b"", b"HTTP/1.1 204 No Content\r\n\r\n",
     ] {
-        let listener=TcpListener::bind("127.0.0.1:0").unwrap(); let addr=listener.local_addr().unwrap();
+        let listener = test_listener();
+        let addr = listener.local_addr().unwrap();
         let peer=std::thread::spawn(move || {
             let (mut stream,_)=listener.accept().unwrap(); stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
             let mut bytes=Vec::new();let mut buf=[0;4096];
@@ -955,7 +971,7 @@ fn empty_write_reply_is_checked_through_eof_across_native_read_boundaries() {
         for head_bytes in [4096, 8192, 1024, 4095, 4097, 8191] {
             for fragmented in [false, true] {
                 for extra_byte in [true, false] {
-                    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+                    let listener = test_listener();
                     let addr = listener.local_addr().unwrap();
                     let (head_sent, head_ready) = std::sync::mpsc::channel();
                     let (finish, finish_peer) = std::sync::mpsc::channel();
@@ -1036,7 +1052,7 @@ fn empty_write_reply_is_checked_through_eof_across_native_read_boundaries() {
 fn waiting_for_write_eof_keeps_original_funding_and_supports_cancellation_and_deadlines() {
     io().block_on(async {
         for fault in ["cancel", "timeout", "revoke", "root", "abandon"] {
-            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let listener = test_listener();
             let addr = listener.local_addr().unwrap();
             let (head_sent, head_ready) = std::sync::mpsc::channel();
             let (closed, peer_closed) = std::sync::mpsc::channel();

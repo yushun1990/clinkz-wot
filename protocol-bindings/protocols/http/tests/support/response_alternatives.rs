@@ -391,7 +391,7 @@ fn consumer_checks_wire_selected_response_schema_and_rejects_undeclared_native_o
             (422, br#"{"reason":1}"#.as_slice(), true),
             (503, b"7".as_slice(), false),
         ] {
-            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let listener = test_listener();
             let addr = listener.local_addr().unwrap();
             let peer = std::thread::spawn(move || {
                 let (mut stream, _) = listener.accept().unwrap();
