@@ -262,9 +262,10 @@ impl MqttNotificationService {
     }
 
     /// Adopt the caller's definitions and one mapping per start. The caller
-    /// funds topic comparisons against the registration's live inventories and
-    /// prepays disposal of its records, including abandonment between cleanup
-    /// turns. Refusal leaves all definitions with the caller.
+    /// funds topic comparisons within this member and against the registration's
+    /// live inventories. The cleanup allowance covers disposal of definitions
+    /// and mappings, including abandonment between turns. Refusal leaves all
+    /// definitions with the caller.
     pub fn participation(
         &self,
         owner: &ProducerOwnerToken,
@@ -292,6 +293,13 @@ impl MqttNotificationService {
             .filter(|d| d.operation == d.schemas.kind().start_operation())
             .count();
         let records = definitions.len().checked_add(starts).ok_or_else(busy)?;
+        // Each start will be compared with every preceding start in this member.
+        // Widen before multiplying so the pair count can be checked against the
+        // caller's credit before sorting or allocating any mapping.
+        let pairs = (starts as u128 * starts.saturating_sub(1) as u128) / 2;
+        if pairs > u128::from(lifetime.remaining(WorkClass::BindingPolls)) {
+            return Err(busy());
+        }
         lifetime
             .consume(WorkClass::CleanupItems, records as u64)
             .map_err(|_| busy())?;
@@ -306,6 +314,9 @@ impl MqttNotificationService {
         }
         let mut mappings: Vec<NotificationMapping> = Vec::new();
         mappings.try_reserve_exact(starts).map_err(|_| busy())?;
+        lifetime
+            .consume(WorkClass::BindingPolls, pairs as u64)
+            .expect("topic comparison credit checked");
         for d in definitions
             .iter()
             .filter(|d| d.operation == d.schemas.kind().start_operation())

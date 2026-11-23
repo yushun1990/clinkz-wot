@@ -87,10 +87,14 @@ The application-owned service has at most 32 participation leases and one
 shared publication slot. Each lease takes the caller's operation definitions
 and sizes its native mapping table from their start operations. The actual
 Producer registration checks topic attribution across its services before a
-member takes its definitions. Each live inventory supplies its own weak links.
-The caller funds one `BindingPolls` item per inventory visited and one per
-candidate/existing start pair subject to comparison. Closing a member unlinks
-its inventory in constant time. Each control must pair with its start.
+member takes its definitions. A member with `n` starts funds
+`n × (n − 1) / 2` topic comparisons from `BindingPolls`. If this allowance or
+the lifetime cleanup allowance is short, the caller retains the definitions in
+their original order and both allowances remain available. Each live inventory
+supplies its own weak links. The caller also funds one `BindingPolls` item per
+live inventory visited and one per candidate/existing start pair subject to
+comparison. Closing a member unlinks its inventory in constant time. Each
+control must pair with its start.
 A distinct successor in the same logical slot may reuse
 its predecessor's topic. Within one Thing, a root Event wildcard may overlap
 the exact topic of the named Event that its final topic level identifies. A

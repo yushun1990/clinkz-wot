@@ -559,6 +559,66 @@ fn allocations<T>(operation: impl FnOnce() -> T) -> (T, (usize, usize)) {
 }
 
 #[test]
+fn topic_comparison_work_covers_pairs_within_and_between_native_members() {
+    let broker = Broker::start();
+    let (provider, service) = mqtt_service(&broker);
+    let owner = events_owner(86);
+    let instance = event_instance(broker.address, 86, false);
+    let prepared = support::prepare(&instance, &[&provider]).unwrap();
+    let mut definitions: Vec<_> = prepared
+        .operations()
+        .iter()
+        .rev()
+        .map(|op| {
+            op.definition::<MqttNotificationDefinition>()
+                .unwrap()
+                .clone()
+        })
+        .collect();
+    let original = definitions.clone();
+    let token = owner.participation_token();
+    let key = instance.key();
+    assert_eq!(definitions.len(), 172);
+    assert_eq!(prepared.notification_mapping_count(), 86);
+
+    // 86 starts have 3,655 unordered pairs. The 86 stops add disposal work.
+    for (polls, cleanup_items) in [(0, 258), (3_654, 258), (3_655, 257)] {
+        let mut work = cleanup(cleanup_items).with_remaining(WorkClass::BindingPolls, polls);
+        let (result, counts) =
+            allocations(|| service.participation(&token, key, &mut definitions, &mut work));
+        assert!(matches!(result, Err(CoreError::Backpressure(_))));
+        assert_eq!(counts, (0, 0));
+        assert!(definitions == original);
+        assert_eq!(work.remaining(WorkClass::BindingPolls), polls);
+        assert_eq!(work.remaining(WorkClass::CleanupItems), cleanup_items);
+        assert!(!service.connected());
+    }
+    let mut exact = cleanup(258).with_remaining(WorkClass::BindingPolls, 3_655);
+    let member = service
+        .participation(&token, key, &mut definitions, &mut exact)
+        .unwrap();
+    assert!(definitions.is_empty() && member.ingress_gate().is_staged());
+    assert_eq!(member.qualified_operation_count(), Some(172));
+    assert!(exact.is_exhausted());
+    drop(member);
+
+    // Two groups of 43 have 903 internal pairs each and 1,849 across groups.
+    // The second member also visits the first member's inventory once.
+    let mut split = cleanup(258).with_remaining(WorkClass::BindingPolls, 3_656);
+    let input = event_input(&owner, instance, &provider, &service, 43, &mut split).unwrap();
+    assert_eq!(input.participants.len(), 2);
+    assert!(
+        input
+            .participants
+            .iter()
+            .all(|p| p.ingress_gate().is_staged())
+    );
+    assert!(split.is_exhausted());
+    assert!(owner.description(key).is_none() && !service.connected());
+    assert_eq!(service.locally_published(), 0);
+}
+
+#[test]
 fn large_native_inventory_drains_across_gateway_turns_and_orphaned_rows_stay_at_the_owner() {
     runtime().block_on(async {
         let broker = Broker::start();
@@ -576,7 +636,7 @@ fn large_native_inventory_drains_across_gateway_turns_and_orphaned_rows_stay_at_
                     .clone()
             })
             .collect();
-        let mut short = cleanup(257);
+        let mut short = budget().with_remaining(WorkClass::CleanupItems, 257);
         assert!(matches!(
             service.participation(
                 &owner.participation_token(),
@@ -590,7 +650,7 @@ fn large_native_inventory_drains_across_gateway_turns_and_orphaned_rows_stay_at_
         assert_eq!(short.remaining(WorkClass::CleanupItems), 257);
         assert!(!service.connected());
         drop((definitions, prepared));
-        let mut lifetime = cleanup(258);
+        let mut lifetime = budget().with_remaining(WorkClass::CleanupItems, 258);
         let input = event_input(&owner, instance, &provider, &service, 86, &mut lifetime).unwrap();
         assert_eq!(lifetime.remaining(WorkClass::CleanupItems), 0);
         let mut exposure = support::stage(&owner, input, &accounts);
@@ -772,12 +832,13 @@ fn cutover_charges_displaced_routes_and_allows_the_successor_to_reuse_its_topic(
 fn last_settlement_releases_only_its_fixed_lease_for_one_or_86_events() {
     runtime().block_on(async {
         let mut acknowledgements = Vec::new();
-        for count in [1, 86] {
+        for (count, pairs) in [(1, 0), (86, 3_655)] {
             let broker = Broker::start();
             let (provider, service) = mqtt_service(&broker);
             let mut owner = events_owner(count);
             let accounts = publication_bank(count as u64, 1);
-            let mut lifetime = cleanup(3 * count as u64);
+            let mut lifetime =
+                cleanup(3 * count as u64).with_remaining(WorkClass::BindingPolls, pairs);
             let input = event_input(
                 &owner,
                 event_instance(broker.address, count, false),
