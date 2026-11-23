@@ -1301,6 +1301,11 @@ fn partial_http_write(expire: bool) {
     // Header + 4096-byte body cannot fit the one-poll 4096-byte write allowance.
     assert_eq!(runtime.step(&mut cx(), &mut work(1), now(0)), Poll::Pending);
     assert_eq!(runtime.state(), RawFiniteState::Delivering);
+    peer.set_nonblocking(false).unwrap();
+    peer.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    let mut prefix = [0; 12];
+    peer.read_exact(&mut prefix).unwrap();
+    assert_eq!(&prefix, b"HTTP/1.1 200");
     if expire {
         assert_eq!(
             runtime.step(&mut cx(), &mut work(1), now(10)),
@@ -1326,12 +1331,12 @@ fn partial_http_write(expire: bool) {
         settlement.result.unwrap().data().unwrap().body.as_ref(),
         body.as_slice()
     );
-    peer.set_nonblocking(false).unwrap();
-    peer.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
-    let mut received = Vec::new();
+    let mut received = prefix.to_vec();
     peer.read_to_end(&mut received).unwrap();
-    assert!(!received.is_empty());
-    assert!(!received.ends_with(&body));
+    let headers = received.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+    let partial = &received[headers..];
+    assert!((1..body.len()).contains(&partial.len()));
+    assert!(body.starts_with(partial));
     assert_eq!(app.calls.get(), 1);
 }
 
