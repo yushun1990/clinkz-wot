@@ -52,6 +52,12 @@ pub fn publish_prepared_thing(
         participants.len(),
         publication.key(),
     )?;
+    owner.check_cleanup_quantum(
+        publication.key(),
+        publication.expected_incumbent(),
+        participants.len(),
+        limits.get(K::CleanupWorkItemsPerStepMax).unwrap_or(0),
+    )?;
     let qualification = ProducerQualification::begin(providers, PublicationFacts::default())?;
     pay_coverage(
         prepared,
@@ -493,6 +499,12 @@ impl ComposedProducerExposure {
             // Validate the raw owner's bounded registration envelope before
             // traversing or accounting caller-supplied handler collections.
             owner.check_publication_input(&input.instance, input.expected)?;
+            owner.check_cleanup_quantum(
+                key,
+                input.expected,
+                members,
+                limits.get(K::CleanupWorkItemsPerStepMax).unwrap_or(0),
+            )?;
             if input.participants.iter().enumerate().any(|(i, p)| {
                 !p.has_original_native()
                     || input.participants[..i]

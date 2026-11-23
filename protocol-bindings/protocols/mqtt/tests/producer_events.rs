@@ -419,10 +419,14 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
         json["events"]["notice"]["data"]["type"] = serde_json::json!("string");
         json["events"]["notice"]["forms"][0]["mqv:filter"] = serde_json::json!("multi/notice");
         let instance = RawProducerInstance::new(authority(1), vec![])
-            .with_notification_sources(vec![
-                ProducerNotificationSource::event("alarm"),
-                ProducerNotificationSource::event("notice"),
-            ])
+            .with_notification_sources(
+                vec![
+                    ProducerNotificationSource::event("alarm"),
+                    ProducerNotificationSource::event("notice"),
+                ],
+                &mut budget(),
+            )
+            .unwrap_or_else(|r| panic!("{:?}", r.error().error()))
             .with_description(Arc::from(json.to_string()));
         drop(json);
         let prepared = prepare(&instance, &[&provider]).unwrap();

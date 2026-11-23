@@ -51,7 +51,8 @@ fn logical(td: &Value, root_action: bool, root_events: bool) -> RawProducerInsta
     }
     let instance = RawProducerInstance::new(authority(1), vec![])
         .with_description(Arc::from(td.to_string()))
-        .with_notification_sources(sources)
+        .with_notification_sources(sources, &mut budget())
+        .unwrap_or_else(|r| panic!("{:?}", r.error().error()))
         .with_actions(vec![RawActionBehavior::new(
             Arc::from("alarm"),
             Behavior,

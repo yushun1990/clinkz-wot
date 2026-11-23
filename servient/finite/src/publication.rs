@@ -99,7 +99,9 @@ impl PublicationPermission {
     }
 
     pub(super) fn revoke(&self) {
-        self.active.set(false);
+        if !self.active.replace(false) {
+            return;
+        }
         for gate in self.gates.iter().filter_map(Weak::upgrade) {
             gate.withdraw();
         }
@@ -116,7 +118,6 @@ pub struct ProducerPublication {
     expected: Option<ProducerInstanceKey>,
     key: ProducerInstanceKey,
     committed: bool,
-    retirement_started: bool,
     cancelled: Cell<bool>,
     action_routes: Option<Vec<CapturedActionRoute>>,
     notification_routes: Option<Vec<CapturedNotificationRoute>>,
@@ -157,6 +158,9 @@ impl ProducerPublication {
     }
     pub fn key(&self) -> ProducerInstanceKey {
         self.key
+    }
+    pub fn expected_incumbent(&self) -> Option<ProducerInstanceKey> {
+        self.expected
     }
     /// Bind the actual managed result bank before publication. Every admitted
     /// Action must acquire its own result/cleanup lease before behavior entry.
@@ -406,6 +410,20 @@ impl Drop for ProducerPublication {
     }
 }
 
+impl InstanceEntry {
+    fn displacement_items(&self, last_instance_owner: bool) -> usize {
+        let routes = self.notification_routes.as_ref().map_or(0, Vec::len)
+            + self.action_routes.as_ref().map_or(0, Vec::len);
+        // The instance already owns lifetime disposal of its notification sources.
+        let handlers = if last_instance_owner {
+            self.instance.behavior_count() - self.instance.notification_sources.len()
+        } else {
+            0
+        };
+        routes + handlers
+    }
+}
+
 // A finite runtime contributes the passive Core publication facet.
 impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B> {
     fn qualified_operation_count(&self) -> Option<usize> {
@@ -622,6 +640,38 @@ impl RawProducerServient {
         Ok(())
     }
 
+    /// Check the largest indivisible cleanup pass before closed native setup.
+    /// The registry can fill or an incumbent can lose its last external owner
+    /// between staging and cutover. The incumbent's route table can only shrink.
+    pub fn check_cleanup_quantum(
+        &self,
+        key: ProducerInstanceKey,
+        expected: Option<ProducerInstanceKey>,
+        members: usize,
+        quantum: u64,
+    ) -> CoreResult<()> {
+        check_member_count(members)?;
+        let index = self.publication_index(key, expected)?;
+        let displaced = self
+            .instances
+            .get(index)
+            .map_or(0, |e| e.displacement_items(true));
+        // Find the entry, inspect its original members and, once, withdraw
+        // their gates. Later turns can always drain a row or remove the entry.
+        let retirement = self.limits.instances + 2 * members;
+        let required = retirement.max(displaced) as u64;
+        if required > quantum {
+            return Err(CoreError::LimitExceeded {
+                resource: clinkz_wot_foundation::ResourceKind::CleanupWorkItemsPerStepMax,
+                limit: quantum,
+                requested: Some(required),
+                observed: None,
+                context: context().with_thing(key.slot()),
+            });
+        }
+        Ok(())
+    }
+
     /// Pure staging, with all allocations and behavior validation before native
     /// setup. Refusal returns the original authority/behavior/description owner.
     pub fn prepare_publication(
@@ -655,7 +705,6 @@ impl RawProducerServient {
             retired: None,
             key,
             committed: false,
-            retirement_started: false,
             cancelled: Cell::new(false),
             action_routes: None,
             notification_routes: None,
@@ -810,14 +859,17 @@ impl RawProducerServient {
         if publication.cancelled.get() {
             return Err(CoreError::Cancelled(context()));
         }
-        if let (Some(entry), Some(budget)) = (self.instances.get(index), cleanup) {
-            let mut records = entry.notification_routes.as_ref().map_or(0, Vec::len)
-                + entry.action_routes.as_ref().map_or(0, Vec::len);
-            if Rc::strong_count(&entry.instance) == 1 {
-                records += entry.instance.behavior_count();
-            }
+        let incumbent = self.instances.get(index);
+        let action_store = self
+            .actions
+            .as_mut()
+            .filter(|_| incumbent.is_some_and(|e| e.instance.action_entries.get() != 0));
+        if let (Some(entry), Some(budget)) = (incumbent, cleanup) {
+            let records = entry.displacement_items(Rc::strong_count(&entry.instance) == 1);
             let cutover = entry.permission.gates.len()
-                + self.actions.as_ref().map_or(0, ActionStore::retained_count);
+                + action_store
+                    .as_deref()
+                    .map_or(0, ActionStore::retained_count);
             budget
                 .consume(WorkClass::HandlerSteps, cutover as u64)
                 .map_err(|_| CoreError::Backpressure(context()))?;
@@ -844,7 +896,7 @@ impl RawProducerServient {
             publication.retired = Some(core::mem::replace(&mut self.instances[index], entry));
             // Fixed-size bounded Action scan, no application callback. The
             // original invocation still owns its work and late settlement.
-            if let Some(actions) = &mut self.actions {
+            if let Some(actions) = action_store {
                 actions.revoke(publication.expected.expect("replacement checked"));
             }
         }
@@ -883,8 +935,8 @@ impl RawProducerServient {
         self.retire_members(publication, participants.iter().copied(), None)
     }
 
-    /// Managed retirement pays for the actual registry, member, route and
-    /// invocation records it checks or disposes at this owner.
+    /// Managed retirement checks each member in binding order. A manual caller
+    /// supplying another order also funds verification of the complete set.
     pub fn retire_composed_with_budget<'a>(
         &mut self,
         publication: &mut ProducerPublication,
@@ -907,56 +959,34 @@ impl RawProducerServient {
         {
             return Err(CoreError::Validation(context()));
         }
-        if let Some(budget) = budget.as_deref_mut() {
-            budget
-                .consume(WorkClass::CleanupItems, (2 * members.len()) as u64)
-                .map_err(|_| CoreError::Backpressure(context()))?;
-        }
-        // Managed publication keeps the original order. Match each distinct
-        // original directly. Raw callers may supply the same set in any order.
-        let ids = participants.clone().map(|p| p.participation_id());
-        if !ids
-            .clone()
-            .zip(members)
-            .all(|(id, original)| id.matches(original))
-        {
-            if let Some(budget) = budget.as_deref_mut() {
-                budget
-                    .consume(
-                        WorkClass::CleanupItems,
-                        (2 * members.len() * members.len()) as u64,
-                    )
-                    .map_err(|_| CoreError::Backpressure(context()))?;
+        // One visit per bound member in the managed order. A manual caller
+        // supplying the same set in another order also pays for that set check.
+        pay_cleanup(&mut budget, members.len())?;
+        let mut ordered = true;
+        for (participant, id) in participants.clone().zip(members) {
+            if !participant.retired() {
+                return Err(CoreError::Validation(context()));
             }
-            if !publication.same_participants(ids) {
+            ordered &= participant.participation_id().matches(id);
+        }
+        if !ordered {
+            pay_cleanup(&mut budget, 2 * members.len() * members.len())?;
+            if !publication.same_participants(participants.map(|p| p.participation_id())) {
                 return Err(CoreError::Validation(context()));
             }
         }
-        if !participants.into_iter().all(|p| p.retired()) {
+        if publication
+            .instance
+            .as_ref()
+            .is_some_and(|i| i.retains_publication_work())
+        {
             return Err(CoreError::Validation(context()));
         }
-        if !publication.retirement_started {
-            if let Some(budget) = budget.as_deref_mut() {
-                self.pay_retirement(budget, 0)?;
-            }
-            if publication
-                .instance
-                .as_ref()
-                .is_some_and(|i| i.notification_work.get() != 0)
-                || self
-                    .actions
-                    .as_ref()
-                    .is_some_and(|a| a.retains_instance(publication.key))
-            {
-                return Err(CoreError::Validation(context()));
-            }
-            publication.revoke();
-            publication.retirement_started = true;
-        } else if let Some(budget) = budget.as_deref_mut() {
-            budget
-                .consume(WorkClass::CleanupItems, (2 * self.instances.len()) as u64)
-                .map_err(|_| CoreError::Backpressure(context()))?;
+        if publication.permission.active.get() {
+            pay_cleanup(&mut budget, publication.permission.gates.len())?;
         }
+        publication.revoke();
+        pay_cleanup(&mut budget, self.instances.len())?;
         if let Some(i) = self
             .instances
             .iter()
@@ -967,7 +997,8 @@ impl RawProducerServient {
             let entry = &mut self.instances[i];
             drain_routes(&mut entry.notification_routes, &mut budget)?;
             drain_routes(&mut entry.action_routes, &mut budget)?;
-            self.instances.remove(i);
+            pay_cleanup(&mut budget, 1)?;
+            self.instances.swap_remove(i);
         }
         drain_routes(&mut publication.notification_routes, &mut budget)?;
         drain_routes(&mut publication.action_routes, &mut budget)?;
@@ -980,14 +1011,6 @@ impl RawProducerServient {
         Ok(())
     }
 
-    fn pay_retirement(&self, budget: &mut WorkBudget, member_work: usize) -> CoreResult<()> {
-        let actions = self.actions.as_ref().map_or(0, ActionStore::retained_count);
-        let items = 2 * self.instances.len() + actions + member_work;
-        budget
-            .consume(WorkClass::CleanupItems, items as u64)
-            .map_err(|_| CoreError::Backpressure(context()))
-    }
-
     /// Reclaim a revoked composed record after its publication/exposure guard
     /// was lost. Every original native owner must have actually disappeared,
     /// and continuing Actions/results must have been explicitly acknowledged.
@@ -997,41 +1020,49 @@ impl RawProducerServient {
         key: ProducerInstanceKey,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
-        self.pay_retirement(budget, 1)?;
+        let mut budget = Some(budget);
+        pay_cleanup(&mut budget, self.instances.len())?;
         let index = self
             .instances
             .iter()
             .position(|e| e.instance.key() == key)
             .ok_or_else(|| CoreError::StaleHandle(context()))?;
-        let entry = &self.instances[index];
-        budget
-            .consume(
-                WorkClass::CleanupItems,
-                (entry.permission.check_work() + entry.permission.members.len()) as u64,
-            )
-            .map_err(|_| CoreError::Backpressure(context()))?;
-        if entry.permission.is_current()
-            || entry.instance.notification_work.get() != 0
-            || entry.permission.members.is_empty()
-            || entry
-                .permission
-                .members
-                .iter()
-                .any(|p| p.strong_count() != 0)
-            || self
-                .actions
-                .as_ref()
-                .is_some_and(|a| a.retains_instance(key))
-        {
+        let entry = &mut self.instances[index];
+        let permission = &entry.permission;
+        if permission.members.is_empty() {
             return Err(CoreError::Backpressure(context()));
         }
-        let entry = &mut self.instances[index];
-        let mut budget = Some(budget);
+        pay_cleanup(&mut budget, permission.members.len())?;
+        let active = permission.active.get();
+        let mut gone = 0;
+        let mut lost = false;
+        for (id, gate) in permission.members.iter().zip(&permission.gates) {
+            let vanished = id.strong_count() == 0;
+            gone += usize::from(vanished);
+            lost = lost || vanished || (active && gate.upgrade().is_none_or(|g| !g.is_open()));
+        }
+        if lost && active {
+            pay_cleanup(&mut budget, permission.gates.len())?;
+            permission.revoke();
+        }
+        if gone != permission.members.len() || entry.instance.retains_publication_work() {
+            return Err(CoreError::Backpressure(context()));
+        }
         drain_routes(&mut entry.notification_routes, &mut budget)?;
         drain_routes(&mut entry.action_routes, &mut budget)?;
-        self.instances.remove(index);
+        pay_cleanup(&mut budget, 1)?;
+        self.instances.swap_remove(index);
         Ok(())
     }
+}
+
+fn pay_cleanup(budget: &mut Option<&mut WorkBudget>, items: usize) -> CoreResult<()> {
+    if let Some(budget) = budget.as_deref_mut() {
+        budget
+            .consume(WorkClass::CleanupItems, items as u64)
+            .map_err(|_| CoreError::Backpressure(context()))?;
+    }
+    Ok(())
 }
 
 /// Remove only records covered by this turn. The vector itself is the cursor.

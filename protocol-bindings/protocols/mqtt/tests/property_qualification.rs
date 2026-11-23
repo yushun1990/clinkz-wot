@@ -174,7 +174,11 @@ fn complete_producer_description_requires_real_property_source_and_all_advertise
     let p = producer(addr);
     let base = property_td(addr, "source/temperature");
     let event_source = RawProducerInstance::new(authority(1), vec![])
-        .with_notification_sources(vec![ProducerNotificationSource::event("temperature")])
+        .with_notification_sources(
+            vec![ProducerNotificationSource::event("temperature")],
+            &mut budget(),
+        )
+        .unwrap_or_else(|r| panic!("{:?}", r.error().error()))
         .with_description(Arc::from(base.to_string()));
     assert!(prepare(&event_source, &[&p]).is_err());
     for operations in [

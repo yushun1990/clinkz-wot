@@ -313,10 +313,7 @@ impl MqttNotificationService {
             .filter(|d| d.operation == d.schemas.kind().start_operation())
         {
             let kind = d.schemas.kind();
-            if mappings.iter().any(|e| e.topic == d.topic) {
-                return Err(unsupported());
-            }
-            mappings.push(NotificationMapping {
+            let mapping = NotificationMapping {
                 target: d.target.clone(),
                 kind,
                 topic: Arc::clone(&d.topic),
@@ -324,7 +321,14 @@ impl MqttNotificationService {
                 services: Rc::new(JsonNoSec {
                     schemas: d.schemas.clone(),
                 }),
-            });
+            };
+            if mappings
+                .iter()
+                .any(|prior| prior.conflicts_with(&mapping, true))
+            {
+                return Err(unsupported());
+            }
+            mappings.push(mapping);
         }
         if mappings.is_empty()
             || definitions.iter().any(|d| {
@@ -341,21 +345,16 @@ impl MqttNotificationService {
             if l.closing.get() {
                 return false;
             }
-            let same_slot = l.token.same_owner(owner) && l.key.slot().slot() == key.slot().slot();
-            if same_slot && l.key != key {
+            let same_owner = l.token.same_owner(owner);
+            if same_owner && l.key != key && l.key.slot().slot() == key.slot().slot() {
                 return false;
             }
+            let same_instance = same_owner && l.key == key;
             l.inventory.borrow().upgrade().is_some_and(|inventory| {
-                inventory.mappings.iter().any(|a| {
-                    mappings.iter().any(|b| {
-                        if same_slot {
-                            // This Thing may advertise a named Event and a root wildcard.
-                            a.topic == b.topic
-                        } else {
-                            filters_overlap(&a.topic, &b.topic)
-                        }
-                    })
-                })
+                inventory
+                    .mappings
+                    .iter()
+                    .any(|a| mappings.iter().any(|b| a.conflicts_with(b, same_instance)))
             })
         }) {
             return Err(unsupported());
@@ -422,6 +421,24 @@ impl MqttNotificationDefinition {
     }
 }
 impl NotificationMapping {
+    fn conflicts_with(&self, other: &Self, same_instance: bool) -> bool {
+        if !filters_overlap(&self.topic, &other.topic) {
+            return false;
+        }
+        // A collection and its own named Event may share exactly the topic
+        // that the Consumer decodes into that Event. Every other overlap
+        // would attribute a publication to another source.
+        let (root, leaf) = if self.kind == NotificationKind::SubscribeAllEvents {
+            (self, other)
+        } else {
+            (other, self)
+        };
+        !(same_instance
+            && root.kind == NotificationKind::SubscribeAllEvents
+            && leaf.kind == NotificationKind::Event
+            && matches!(&leaf.target, AffordanceTarget::Event(name)
+                if wildcard_member(&root.topic, &leaf.topic) == Some(name.as_ref())))
+    }
     fn find<'a>(
         mappings: &'a [Self],
         target: &AffordanceTarget,

@@ -74,7 +74,11 @@ pub fn td(address: SocketAddr, topic: &str) -> serde_json::Value {
 }
 pub fn instance(authority: ProducerInstanceAuthority, text: &str) -> RawProducerInstance {
     RawProducerInstance::new(authority, vec![])
-        .with_notification_sources(vec![ProducerNotificationSource::event("alarm")])
+        .with_notification_sources(
+            vec![ProducerNotificationSource::event("alarm")],
+            &mut budget(),
+        )
+        .unwrap_or_else(|r| panic!("{:?}", r.error().error()))
         .with_description(Arc::from(text))
 }
 pub fn prepare(
@@ -189,7 +193,11 @@ pub fn property_td(address: SocketAddr, topic: &str) -> serde_json::Value {
 pub fn property_instance(authority: ProducerInstanceAuthority, text: &str) -> RawProducerInstance {
     RawProducerInstance::new(authority, vec![])
         .with_description(Arc::from(text))
-        .with_notification_sources(vec![ProducerNotificationSource::property("temperature")])
+        .with_notification_sources(
+            vec![ProducerNotificationSource::property("temperature")],
+            &mut budget(),
+        )
+        .unwrap_or_else(|r| panic!("{:?}", r.error().error()))
 }
 
 pub fn collection_td(address: SocketAddr, topic: &str) -> serde_json::Value {
@@ -226,11 +234,15 @@ pub fn event_collection_instance(
 ) -> RawProducerInstance {
     RawProducerInstance::new(authority, vec![])
         .with_description(Arc::from(text))
-        .with_notification_sources(vec![
-            ProducerNotificationSource::AllEvents,
-            ProducerNotificationSource::event("alarm"),
-            ProducerNotificationSource::event("ready"),
-        ])
+        .with_notification_sources(
+            vec![
+                ProducerNotificationSource::AllEvents,
+                ProducerNotificationSource::event("alarm"),
+                ProducerNotificationSource::event("ready"),
+            ],
+            &mut budget(),
+        )
+        .unwrap_or_else(|r| panic!("{:?}", r.error().error()))
 }
 pub fn collection_instance(
     authority: ProducerInstanceAuthority,
@@ -238,11 +250,15 @@ pub fn collection_instance(
 ) -> RawProducerInstance {
     RawProducerInstance::new(authority, vec![])
         .with_description(Arc::from(text))
-        .with_notification_sources(vec![
-            ProducerNotificationSource::AllProperties,
-            ProducerNotificationSource::property("temperature"),
-            ProducerNotificationSource::property("enabled"),
-        ])
+        .with_notification_sources(
+            vec![
+                ProducerNotificationSource::AllProperties,
+                ProducerNotificationSource::property("temperature"),
+                ProducerNotificationSource::property("enabled"),
+            ],
+            &mut budget(),
+        )
+        .unwrap_or_else(|r| panic!("{:?}", r.error().error()))
 }
 
 #[path = "../../../../../servient/finite/tests/support/composed_notification.rs"]

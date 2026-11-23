@@ -318,10 +318,14 @@ fn producer_requires_a_distinct_root_source_and_requalifies_all_final_meaning() 
     let td = collection_td(addr, "final/all");
     let leaves = RawProducerInstance::new(authority(1), vec![])
         .with_description(Arc::from(td.to_string()))
-        .with_notification_sources(vec![
-            ProducerNotificationSource::property("temperature"),
-            ProducerNotificationSource::property("enabled"),
-        ]);
+        .with_notification_sources(
+            vec![
+                ProducerNotificationSource::property("temperature"),
+                ProducerNotificationSource::property("enabled"),
+            ],
+            &mut budget(),
+        )
+        .unwrap_or_else(|r| panic!("{:?}", r.error().error()));
     assert!(
         prepare(&leaves, &[&p]).is_err(),
         "leaf observation is not root support"

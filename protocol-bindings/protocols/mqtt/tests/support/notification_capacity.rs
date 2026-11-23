@@ -13,14 +13,9 @@ fn events_owner(count: usize) -> RawProducerServient {
     .unwrap()
 }
 
-fn event_instance(
-    broker: SocketAddr,
-    count: usize,
-    duplicate_last_topic: bool,
-) -> RawProducerInstance {
+fn event_td(broker: SocketAddr, count: usize, duplicate_last_topic: bool) -> String {
     let mut td = support::td(broker, "unused");
     let mut events = serde_json::Map::new();
-    let mut sources = Vec::new();
     for i in 1..=count {
         let name = format!("event{i:02}");
         let topic = if duplicate_last_topic && i == count {
@@ -33,12 +28,23 @@ fn event_instance(
             "data": {"type": schema},
             "forms": [{"href": format!("mqtt://{broker}"), "mqv:filter": format!("capacity/event{topic:02}")}]
         }));
-        sources.push(ProducerNotificationSource::event(name));
     }
     td["events"] = events.into();
+    td.to_string()
+}
+
+fn event_instance(
+    broker: SocketAddr,
+    count: usize,
+    duplicate_last_topic: bool,
+) -> RawProducerInstance {
+    let sources = (1..=count)
+        .map(|i| ProducerNotificationSource::event(format!("event{i:02}")))
+        .collect();
     RawProducerInstance::new(authority(2), vec![])
-        .with_notification_sources(sources)
-        .with_description(Arc::from(td.to_string()))
+        .with_notification_sources(sources, &mut budget())
+        .unwrap_or_else(|r| panic!("{:?}", r.error().error()))
+        .with_description(Arc::from(event_td(broker, count, duplicate_last_topic)))
 }
 
 fn event_input(
@@ -746,3 +752,6 @@ fn last_settlement_releases_only_its_fixed_lease_for_one_or_86_events() {
         assert_eq!(acknowledgements[0], acknowledgements[1]);
     });
 }
+
+#[path = "notification_capacity/retirement.rs"]
+mod retirement;

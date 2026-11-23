@@ -91,11 +91,24 @@ and metadata for the Binding's promised concurrent emissions. Its instance and
 native owners retain the original funding through outstanding work and unread
 results. Each finite receive uses its own work capacity.
 
-Managed replacement funds disposal of the incumbent's captured routes before
-cutover. A short turn keeps the incumbent serving and the candidate closed.
-Managed retirement verifies the borrowed original membership and drains captured
-rows against the remaining cleanup credit. A partially drained registry entry
-stays fenced at its original Servient, including if the publication guard drops.
+The logical instance takes a caller-funded lifetime cleanup item for each
+notification source it adopts. This allowance follows the instance through
+retirement, replacement and the last unread settlement. Each instance tracks
+its own retained Action entries and notification work through acknowledgement.
+
+Managed admission checks the configured cleanup quantum before native setup.
+Lost-owner reclamation must be able to search the bounded registry, inspect the
+original members and withdraw their gates. A serving replacement must also be
+able to dispose of the displaced route rows and any handlers for which the
+registry could become the last owner in one cutover turn. An insufficient
+quantum returns `CleanupWorkItemsPerStepMax` with the required work and the
+original closed candidate. A short individual turn on an admitted replacement
+keeps the incumbent serving. An incumbent may also close and drain rows at its
+original owner before a smaller-quantum replacement retries.
+
+Explicit retirement verifies the original members, spends remaining credit on
+captured rows, and pays one item to remove the fenced registry entry. A partially
+drained entry stays at its original Servient if the publication guard drops.
 
 The Host notification representation imports the same original data/access
 service owners. A shared prepared mapping pays its actual program/schema/reference

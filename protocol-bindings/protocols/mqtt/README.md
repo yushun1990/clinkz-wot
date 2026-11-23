@@ -88,7 +88,10 @@ shared publication slot. Each lease takes the caller's operation definitions
 and sizes its native mapping table from their start operations. It checks
 topic uniqueness across every member of the same incarnation and pairs every
 control with its start. A distinct successor in the same logical slot may reuse
-its predecessor's topic. The existing named Event and root wildcard can coexist.
+its predecessor's topic. Within one Thing, a root Event wildcard may overlap
+the exact topic of the named Event that its final topic level identifies. A
+Property or differently named Event on that topic refuses before native setup,
+including when the root and leaf are installed on separate members.
 
 Native construction takes a caller-supplied lifetime work budget and prepays
 one cleanup item per definition and start mapping before adopting the vectors.

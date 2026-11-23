@@ -676,6 +676,13 @@ an 86-Event native close over two Gateway cleanup turns, retirement of an
 11-member publication, and last-settlement disposal after loss of the facade.
 [Broker and HTTP fixture](../../protocol-bindings/protocols/mqtt/tests/support/notification_capacity.rs)
 
+Cleanup evidence includes a full two-entry registry with four-item turns, 32
+orphaned members beside 128 unrelated Actions, and the original source table
+held by a displaced unread Event. A serving incumbent with 257 mappings
+refuses a 256-item successor before setup. Its returned successor can retry
+with a 257-item policy or after the incumbent closes and drains one row.
+[Retirement fixtures](../../protocol-bindings/protocols/mqtt/tests/support/notification_capacity/retirement.rs)
+
 The existing shared `HostResourceAccounts` bank reserves Engine retained bytes,
 cleanup byte/item allowances and a Thing slot before ownership handoff. Costs
 include controlled layouts, definition storage, captured reference vectors,

@@ -224,7 +224,11 @@ impl Native {
                     true,
                     true,
                 )])
-                .with_notification_sources(vec![ProducerNotificationSource::event("alarm")]);
+                .with_notification_sources(
+                    vec![ProducerNotificationSource::event("alarm")],
+                    &mut budget(),
+                )
+                .unwrap_or_else(|r| panic!("{:?}", r.error().error()));
             providers.extend([
                 self.actions.clone() as Rc<dyn ProducerCapability>,
                 self.mqtt.clone(),

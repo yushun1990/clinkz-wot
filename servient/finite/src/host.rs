@@ -90,6 +90,9 @@ pub struct RawProducerInstance {
     action_query: Option<Box<dyn clinkz_wot_core::action::ActionQueryPolicy>>,
     notification_sources: Vec<ProducerNotificationSource>,
     notification_work: Cell<usize>,
+    // Includes unread terminal Action entries. Taking a settlement removes
+    // its entry; the returned settlement still pins this instance's backing.
+    action_entries: Cell<usize>,
     action_result_accounts: Option<Arc<clinkz_wot_core::host_accounts::HostResourceAccounts>>,
     // Last to drop: original accepted work retains the actual shared capacity
     // owner through behavior/native/result disposal and acknowledgement.
@@ -106,6 +109,7 @@ impl RawProducerInstance {
             action_query: None,
             notification_sources: Vec::new(),
             notification_work: Cell::new(0),
+            action_entries: Cell::new(0),
             action_result_accounts: None,
             retained_owner: None,
         }
@@ -127,9 +131,28 @@ impl RawProducerInstance {
         self
     }
 
-    pub fn with_notification_sources(mut self, sources: Vec<ProducerNotificationSource>) -> Self {
+    /// Prepay one lifetime cleanup item per original source before taking its
+    /// table. The last instance owner can be an unread result after replacement.
+    pub fn with_notification_sources(
+        mut self,
+        sources: Vec<ProducerNotificationSource>,
+        lifetime: &mut WorkBudget,
+    ) -> Result<Self, BindingInputRejection<(Self, Vec<ProducerNotificationSource>)>> {
+        if lifetime
+            .consume(WorkClass::CleanupItems, sources.len() as u64)
+            .is_err()
+        {
+            let error = CoreError::Backpressure(context().with_thing(self.key().slot()));
+            return Err(BindingInputRejection::new(
+                (self, sources),
+                BindingOperationalError::new(error),
+            ));
+        }
         self.notification_sources = sources;
-        self
+        Ok(self)
+    }
+    fn retains_publication_work(&self) -> bool {
+        self.notification_work.get() != 0 || self.action_entries.get() != 0
     }
     pub fn behavior_count(&self) -> usize {
         self.behaviors.len()
@@ -448,7 +471,9 @@ impl RawProducerServient {
             .find(|entry| entry.instance.key() == key && entry.permission.is_current())
         {
             entry.permission.revoke();
-            if let Some(actions) = &mut self.actions {
+            if entry.instance.action_entries.get() != 0
+                && let Some(actions) = &mut self.actions
+            {
                 actions.revoke(key);
             }
             true
@@ -500,7 +525,9 @@ impl RawProducerServient {
         };
         self.instances[index].permission.revoke();
         let displaced = core::mem::replace(&mut self.instances[index], entry);
-        if let Some(actions) = &mut self.actions {
+        if displaced.instance.action_entries.get() != 0
+            && let Some(actions) = &mut self.actions
+        {
             actions.revoke(expected);
         }
         drop(displaced);
