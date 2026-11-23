@@ -1127,10 +1127,12 @@ policy/validator and checks the complete retained carrier backing. The native
 participant's declared bounded slot covers emission, frame, data, result and
 cleanup backing; refusal returns the original data. Cancellation records first
 local cause without work credit; funded progress retains any late native effect
-and completes retirement. Unread terminal settlement still holds its native slot
-and funding. Logical retirement additionally checks outstanding notification work, even
-if a participant incorrectly reports itself retired. Native publication errors
-fence affected logical currentness, and actual native service failure fences its
+and completes retirement. An unread settlement occupies its original funded
+publication slot through disposal. The Binding controls the lifetime of each
+physical resource used to produce that outcome. Logical retirement additionally
+checks outstanding notification work, even if a participant incorrectly reports
+itself retired. Native publication errors fence affected logical currentness,
+and actual native service failure fences its
 dependent participations on progress. Drop performs bounded local disposal and
 never claims delivered Property values/Event data or completed remote cancellation.
 

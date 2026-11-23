@@ -164,18 +164,25 @@ pub fn emit(
     exposure: &mut ComposedProducerExposure,
     bytes: &[u8],
 ) -> ProducerNotificationPublication<MqttPublication> {
-    let key = exposure.key();
-    owner
-        .publish_notification(
-            native(exposure),
-            key,
-            AffordanceTarget::Event(Arc::from("alarm")),
-            data(bytes),
-            Deadline::NONE,
-            now(),
-            &mut budget(),
-        )
+    try_emit(owner, exposure, data(bytes))
         .unwrap_or_else(|r| panic!("emission: {:?}", r.error().error()))
+}
+pub fn try_emit(
+    owner: &mut RawProducerServient,
+    exposure: &mut ComposedProducerExposure,
+    data: PublicationData,
+) -> Result<ProducerNotificationPublication<MqttPublication>, BindingInputRejection<PublicationData>>
+{
+    let key = exposure.key();
+    owner.publish_notification(
+        native(exposure),
+        key,
+        AffordanceTarget::Event(Arc::from("alarm")),
+        data,
+        Deadline::NONE,
+        now(),
+        &mut budget(),
+    )
 }
 
 pub fn property_td(address: SocketAddr, topic: &str) -> serde_json::Value {

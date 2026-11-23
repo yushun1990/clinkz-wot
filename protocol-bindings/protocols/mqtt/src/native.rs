@@ -51,7 +51,7 @@ struct Session {
     started: Option<Instant>,
     first_cause: Option<CoreError>,
     live_leases: usize,
-    busy: bool,
+    writer_busy: bool,
     locally_published: u64,
 }
 impl Session {
@@ -241,7 +241,7 @@ impl MqttNotificationService {
                 started: None,
                 first_cause: None,
                 live_leases: 0,
-                busy: false,
+                writer_busy: false,
                 locally_published: 0,
             })),
         })
@@ -841,7 +841,9 @@ impl ProducerNotificationBinding for MqttNotificationRuntime {
         if *s.phase.get() != Phase::Ready {
             return Err(reject(data, s.first_cause.clone().unwrap_or_else(io_error)));
         }
-        if s.busy {
+        // Only the runtime and its admitted publication own this lease. The
+        // publication keeps the participation's funded slot through disposal.
+        if Rc::strong_count(l) != 1 || s.writer_busy {
             return Err(reject(data, busy()));
         }
         if data.payload().body.len() > MAX_NOTIFICATION_BYTES {
@@ -895,26 +897,26 @@ impl ProducerNotificationBinding for MqttNotificationRuntime {
         at += topic.len();
         frame[at..at + data.payload().body.len()].copy_from_slice(&data.payload().body);
         at += data.payload().body.len();
-        s.busy = true;
+        s.writer_busy = true;
         Ok(MqttPublication {
             lease: Rc::clone(l),
             frame,
             len: at,
             written: 0,
             outcome: None,
-            data,
+            _data: data,
         })
     }
 }
 
-/// Original native slot, frame and data remain owned through Engine settlement
-/// acknowledgement. There is no per-subscriber replication or queued replay.
+/// The original participation, frame and data stay funded through disposal.
+/// Only a publication still awaiting its native outcome owns the session writer.
 pub struct MqttPublication {
     frame: [u8; MAX_PACKET],
     len: usize,
     written: usize,
     outcome: Option<NativePublicationOutcome>,
-    data: PublicationData,
+    _data: PublicationData,
     lease: Rc<Lease>,
 }
 impl NativeNotificationPublication for MqttPublication {
@@ -986,7 +988,13 @@ impl NativeNotificationPublication for MqttPublication {
                 }
             }
         }
-        self.outcome.clone().map_or(Poll::Pending, Poll::Ready)
+        match &self.outcome {
+            Some(outcome) => {
+                s.writer_busy = false;
+                Poll::Ready(outcome.clone())
+            }
+            None => Poll::Pending,
+        }
     }
     fn poll_retire(
         &mut self,
@@ -1002,15 +1010,15 @@ impl NativeNotificationPublication for MqttPublication {
 }
 impl Drop for MqttPublication {
     fn drop(&mut self) {
-        let mut s = self.lease.session.borrow_mut();
-        // A partially written TCP packet cannot be followed by another frame.
-        // Closing this shared service is a native framing failure, reported to
-        // all dependents, rather than silently corrupting a sibling publication.
-        if self.written > 0 && self.written < self.len {
-            s.fail(io_error());
+        if self.outcome.is_none() {
+            let mut s = self.lease.session.borrow_mut();
+            // Abandoning an unfinished packet after its first byte fences this
+            // connection before any sibling can acquire the writer.
+            if self.written != 0 {
+                s.fail(io_error());
+            }
+            s.writer_busy = false;
         }
-        s.busy = false;
-        let _ = &self.data; // actual input backing stays retained until this Drop
     }
 }
 fn busy() -> CoreError {

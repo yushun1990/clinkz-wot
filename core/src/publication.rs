@@ -147,7 +147,8 @@ pub trait ProducerNotificationBinding {
         kind: crate::notification::NotificationKind,
     ) -> Option<&NotificationRoute>;
     /// Before acceptance, refusal returns the original complete data carrier.
-    /// After acceptance the publication owns the native slot through disposal.
+    /// After acceptance the publication owns its funded slot through disposal.
+    /// The Binding may release an exclusive I/O resource at its last use.
     fn start_publication(
         &mut self,
         route: &NotificationRoute,

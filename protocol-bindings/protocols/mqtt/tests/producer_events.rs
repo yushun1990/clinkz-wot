@@ -667,6 +667,7 @@ fn cancel_deadline_and_replacement_do_not_publish_or_retarget_pending_data() {
         publish(&mut owner, &mut old).await;
         let mut peer = Peer::new(&broker);
         peer.subscribe("current/alarm");
+        drop(emit(&mut owner, &mut old, b"0"));
         let mut e = emit(&mut owner, &mut old, b"1");
         e.cancel();
         assert!(
@@ -712,10 +713,6 @@ fn cancel_deadline_and_replacement_do_not_publish_or_retarget_pending_data() {
         );
         publish(&mut owner, &mut successor).await;
         finish(&mut pending).await;
-        let s = pending.acknowledge().ok().unwrap();
-        assert_eq!(s.instance, key);
-        assert!(matches!(s.cause, Some(CoreError::StaleHandle(_))));
-        assert_eq!(s.native.effect, PublicationEffect::NotPublished);
         assert!(
             owner
                 .publish_notification(
@@ -731,10 +728,14 @@ fn cancel_deadline_and_replacement_do_not_publish_or_retarget_pending_data() {
         );
         peer.absent();
         assert_eq!(service.locally_published(), 0);
+        let mut e = emit(&mut owner, &mut successor, b"5");
+        let s = pending.acknowledge().ok().unwrap();
+        assert_eq!(s.instance, key);
+        assert!(matches!(s.cause, Some(CoreError::StaleHandle(_))));
+        assert_eq!(s.native.effect, PublicationEffect::NotPublished);
         close(&mut owner, &mut old);
         drop(old);
         assert!(service.connected());
-        let mut e = emit(&mut owner, &mut successor, b"5");
         finish(&mut e).await;
         peer.event("current/alarm", b"5");
         drop(e);
@@ -822,11 +823,125 @@ fn shared_connection_outlives_one_thing_and_releases_after_final_use() {
 }
 
 #[test]
+fn unread_outcome_survives_replacement_while_a_sibling_uses_the_writer() {
+    runtime().block_on(async {
+        let broker = Broker::start();
+        let provider = registration(broker.address, 16);
+        let service = MqttNotificationService::new(&provider).unwrap();
+        let original_bank = bank();
+        let serving_bank = bank();
+        let mut owner = owner();
+        let a_td = td(broker.address, "a/alarm").to_string();
+        let b_td = td(broker.address, "b/alarm").to_string();
+        let mut a = stage(
+            &owner,
+            input(&owner, authority(1), &provider, &service, &a_td, None),
+            &original_bank,
+        );
+        let mut b = stage(
+            &owner,
+            input(&owner, authority(2), &provider, &service, &b_td, None),
+            &serving_bank,
+        );
+        publish(&mut owner, &mut a).await;
+        publish(&mut owner, &mut b).await;
+        let mut peer = Peer::new(&broker);
+        peer.subscribe("+/alarm");
+        let live_bytes = ResourceKind::EngineLiveBytesGlobalMax;
+        let original_bytes = original_bank.account(live_bytes).used();
+
+        // A's whole packet fits in one write. Hold back retirement credit.
+        let input_a = data(b"1");
+        let body_a = Arc::downgrade(&input_a.payload().body);
+        let mut first = try_emit(&mut owner, &mut a, input_a).ok().unwrap();
+        let mut no_cleanup = budget().with_remaining(WorkClass::CleanupItems, 0);
+        assert!(first.step(&mut cx(), &mut no_cleanup, now()).is_pending());
+        peer.event("a/alarm", b"1");
+        let mut sibling = emit(&mut owner, &mut b, b"2");
+        finish(&mut first).await;
+        assert!(sibling.step(&mut cx(), &mut no_cleanup, now()).is_pending());
+        peer.event("b/alarm", b"2");
+
+        let old_key = a.key();
+        let mut successor = stage(
+            &owner,
+            input(
+                &owner,
+                authority(1),
+                &provider,
+                &service,
+                &a_td,
+                Some(old_key),
+            ),
+            &serving_bank,
+        );
+        publish(&mut owner, &mut successor).await;
+        drop(a);
+        assert!(owner.description(old_key).is_none());
+        assert!(body_a.upgrade().is_some());
+        assert!(original_bytes > 0);
+        assert_eq!(original_bank.account(live_bytes).used(), original_bytes);
+        let serving_bytes = serving_bank.account(live_bytes).used();
+
+        // The replacement's packet spans two writes. Between them, retire B's
+        // native work and acknowledge the old result from the same logical slot.
+        let mut writing = emit(&mut owner, &mut successor, b"123456789");
+        assert!(writing.step(&mut cx(), &mut budget(), now()).is_pending());
+        finish(&mut sibling).await;
+        sibling.acknowledge().ok().unwrap();
+        let settled = first.acknowledge().ok().unwrap();
+        assert_eq!(settled.instance, old_key);
+        assert!(settled.cause.is_none());
+        assert_eq!(settled.native.effect, PublicationEffect::LocallyPublished);
+        assert!(body_a.upgrade().is_none());
+        assert_empty(&original_bank);
+        assert_eq!(serving_bank.account(live_bytes).used(), serving_bytes);
+
+        let input_next = data(b"4");
+        let body_next = Arc::clone(&input_next.payload().body);
+        let refused = try_emit(&mut owner, &mut b, input_next)
+            .err()
+            .expect("the replacement still owns the shared writer");
+        assert!(matches!(
+            refused.error().error(),
+            CoreError::Backpressure(_)
+        ));
+        let returned = refused.into_input();
+        assert!(Arc::ptr_eq(&body_next, &returned.payload().body));
+        assert!(writing.step(&mut cx(), &mut budget(), now()).is_ready());
+        peer.event("a/alarm", b"123456789");
+        let mut next = try_emit(&mut owner, &mut b, returned).ok().unwrap();
+        finish(&mut next).await;
+        peer.event("b/alarm", b"4");
+        assert_eq!(service.locally_published(), 4);
+        assert_eq!(broker.logs().matches("as cz").count(), 1);
+
+        drop(writing);
+        drop(next);
+        close(&mut owner, &mut b);
+        close(&mut owner, &mut successor);
+        drop((b, successor));
+        assert!(!service.connected());
+        assert_empty(&serving_bank);
+    });
+}
+
+#[test]
 fn partial_write_cancellation_is_uncertain_and_fences_shared_native_service() {
+    check_partial_write_failure(false);
+}
+
+#[test]
+fn dropping_a_partial_write_fences_only_the_damaged_connection() {
+    check_partial_write_failure(true);
+}
+
+fn check_partial_write_failure(drop_partial: bool) {
     runtime().block_on(async {
         let broker = Broker::start();
         let provider = registration(broker.address, 1);
         let service = MqttNotificationService::new(&provider).unwrap();
+        let independent = MqttNotificationService::new(&provider).unwrap();
         let accounts = bank();
         let mut owner = owner();
         let mut a = stage(
@@ -855,15 +970,36 @@ fn partial_write_cancellation_is_uncertain_and_fences_shared_native_service() {
         );
         publish(&mut owner, &mut a).await;
         publish(&mut owner, &mut b).await;
+        let mut c = stage(
+            &owner,
+            input(
+                &owner,
+                authority(3),
+                &provider,
+                &independent,
+                &td(broker.address, "c/alarm").to_string(),
+                None,
+            ),
+            &accounts,
+        );
+        publish(&mut owner, &mut c).await;
+        let mut peer = Peer::new(&broker);
+        peer.subscribe("+/alarm");
+        let mut independent_write = emit(&mut owner, &mut c, b"3");
         let mut e = emit(&mut owner, &mut a, b"1");
         assert!(e.step(&mut cx(), &mut budget(), now()).is_pending());
-        e.cancel();
-        finish(&mut e).await;
-        let s = e.acknowledge().ok().unwrap();
-        assert!(matches!(s.cause, Some(CoreError::Cancelled(_))));
-        assert_eq!(s.native.effect, PublicationEffect::Uncertain);
+        if drop_partial {
+            drop(e);
+        } else {
+            e.cancel();
+            finish(&mut e).await;
+            let s = e.acknowledge().ok().unwrap();
+            assert!(matches!(s.cause, Some(CoreError::Cancelled(_))));
+            assert_eq!(s.native.effect, PublicationEffect::Uncertain);
+            assert_eq!(s.native.cause, service.first_failure());
+        }
         assert!(!service.connected());
-        assert!(service.first_failure().is_some());
+        let failure = service.first_failure().unwrap();
         assert_eq!(service.locally_published(), 0);
         let _ = owner
             .step_notifications(native(&mut a), &mut cx(), &mut budget())
@@ -873,12 +1009,19 @@ fn partial_write_cancellation_is_uncertain_and_fences_shared_native_service() {
             .unwrap();
         assert!(owner.description(a.key()).is_none());
         assert!(owner.description(b.key()).is_none());
-        assert!(native(&mut a).first_failure().is_some());
-        assert!(native(&mut b).first_failure().is_some());
+        assert_eq!(native(&mut a).first_failure(), Some(&failure));
+        assert_eq!(native(&mut b).first_failure(), Some(&failure));
+        assert!(owner.description(c.key()).is_some());
+        finish(&mut independent_write).await;
+        peer.event("c/alarm", b"3");
+        assert_eq!(independent.locally_published(), 1);
+        assert!(independent.first_failure().is_none());
+        drop(independent_write);
         close(&mut owner, &mut a);
         close(&mut owner, &mut b);
-        drop(a);
-        drop(b);
+        close(&mut owner, &mut c);
+        drop((a, b, c));
+        assert!(!independent.connected());
         assert_empty(&accounts);
     });
 }
@@ -931,9 +1074,18 @@ fn late_native_success_retains_original_effect_and_funding_after_root_loss() {
 
 #[test]
 fn real_broker_loss_reports_first_failure_and_retires_without_replay() {
+    check_broker_loss(false);
+}
+
+#[test]
+fn broker_loss_after_a_partial_write_preserves_the_uncertain_effect() {
+    check_broker_loss(true);
+}
+
+fn check_broker_loss(write_prefix: bool) {
     runtime().block_on(async {
         let mut broker = Broker::start();
-        let provider = registration(broker.address, 8192);
+        let provider = registration(broker.address, 1);
         let service = MqttNotificationService::new(&provider).unwrap();
         let accounts = bank();
         let mut owner = owner();
@@ -951,6 +1103,12 @@ fn real_broker_loss_reports_first_failure_and_retires_without_replay() {
         );
         publish(&mut owner, &mut exposure).await;
         let mut pending = emit(&mut owner, &mut exposure, b"1");
+        let expected_effect = if write_prefix {
+            assert!(pending.step(&mut cx(), &mut budget(), now()).is_pending());
+            PublicationEffect::Uncertain
+        } else {
+            PublicationEffect::NotPublished
+        };
         broker.stop();
         let end = Instant::now() + Duration::from_secs(2);
         while native(&mut exposure).first_failure().is_none() {
@@ -964,7 +1122,8 @@ fn real_broker_loss_reports_first_failure_and_retires_without_replay() {
         finish(&mut pending).await;
         let s = pending.acknowledge().ok().unwrap();
         assert!(matches!(s.cause, Some(CoreError::StaleHandle(_))));
-        assert_eq!(s.native.effect, PublicationEffect::NotPublished);
+        assert_eq!(s.native.effect, expected_effect);
+        assert_eq!(s.native.cause.as_ref(), Some(&first));
         assert_eq!(service.locally_published(), 0);
         assert!(!service.connected());
         close(&mut owner, &mut exposure);

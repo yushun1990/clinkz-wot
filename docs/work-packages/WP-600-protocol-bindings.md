@@ -238,6 +238,12 @@ Default qualification tests need no broker; execution-only compilation retains
 no Planning/TD dependency. The runnable `emit_event` example uses the same
 qualified public composition.
 
+The broker receives a sibling's packet while the first Thing retains its
+result. During a replacement's partial write, both original emissions can be
+disposed while the replacement keeps the writer. An independent connection
+also completes a packet after interruption fences the shared connection.
+[Producer Event broker tests](../../protocol-bindings/protocols/mqtt/tests/producer_events.rs)
+
 The [Consumer MQTT integration](../../protocol-bindings/protocols/mqtt/tests/consumer_events.rs)
 now joins this Producer through TD-selected subscription establishment, actual
 captured validation/access services, per-item validation, independent logical
