@@ -883,13 +883,32 @@ fn check_shared_listener_loss(phase: RawFiniteState, left_budget: fn() -> WorkBu
     let mut first = connect(addresses[0], "/value");
     let member = thing.participant_mut::<HttpRuntime>(0).unwrap();
     let end = Instant::now() + Duration::from_secs(5);
-    while owner.step(member, &mut cx(), &mut budget(), now()).unwrap() != Poll::Ready(phase) {
+    let expiring = phase == RawFiniteState::RetiringReply;
+    let before_expiry = if expiring {
+        RawFiniteState::Delivering
+    } else {
+        phase
+    };
+    while owner.step(member, &mut cx(), &mut budget(), now()).unwrap() != Poll::Ready(before_expiry)
+    {
         assert!(
             Instant::now() < end,
             "first request stalled at {:?}",
             member.state()
         );
     }
+    let instant = if expiring {
+        let deadline = MonotonicInstant::new(ClockId::new(1), 100);
+        assert!(
+            member
+                .step(&mut cx(), &mut WorkBudget::new(), deadline)
+                .is_pending()
+        );
+        assert_eq!(member.state(), RawFiniteState::RetiringReply);
+        deadline
+    } else {
+        now()
+    };
     let assert_delivered = |peer: &mut TcpStream| {
         let mut wire = Vec::new();
         peer.read_to_end(&mut wire).unwrap();
@@ -926,13 +945,13 @@ fn check_shared_listener_loss(phase: RawFiniteState, left_budget: fn() -> WorkBu
     ));
 
     thing
-        .step(&mut owner, &mut cx(), now(), |_, _| WorkBudget::new())
+        .step(&mut owner, &mut cx(), instant, |_, _| WorkBudget::new())
         .unwrap();
     assert!(owner.description(thing.key()).is_some());
     let mut sibling = connect(addresses[1], "/value");
     for _ in 0..8 {
         thing
-            .step(&mut owner, &mut cx(), now(), |index, _| {
+            .step(&mut owner, &mut cx(), instant, |index, _| {
                 if index == 0 { left_budget() } else { budget() }
             })
             .unwrap();
@@ -959,7 +978,13 @@ fn check_shared_listener_loss(phase: RawFiniteState, left_budget: fn() -> WorkBu
         if phase == RawFiniteState::Delivering {
             assert_delivered(&mut first);
         }
-        assert_eq!(original.delivery, FiniteDelivery::Delivered);
+        if expiring {
+            assert!(matches!(original.first_cause, Some(CoreError::TimedOut(_))));
+            assert_eq!(original.delivery, FiniteDelivery::NotDelivered);
+        } else {
+            assert!(original.first_cause.is_none());
+            assert_eq!(original.delivery, FiniteDelivery::Delivered);
+        }
         assert_eq!(
             original.result.unwrap().data().unwrap().body.as_ref(),
             expected.as_slice()
@@ -990,6 +1015,11 @@ fn shared_listener_loss_fences_a_sibling_with_an_unacknowledged_result() {
 fn shared_listener_loss_refuses_a_candidate_and_preserves_an_accepted_reply() {
     check_shared_listener_loss(RawFiniteState::Dispatching, budget);
     check_shared_listener_loss(RawFiniteState::Delivering, budget);
+}
+
+#[test]
+fn shared_listener_loss_during_reply_retirement_fences_the_publication() {
+    check_shared_listener_loss(RawFiniteState::RetiringReply, budget);
 }
 
 #[test]

@@ -70,8 +70,10 @@ The concrete limits remain loopback/nonzero HTTP/1.1 bodyless GET, exact path/Ho
 one connection/correlation, 16 headers/8192 bytes, 4096 I/O bytes per native poll
 and JSON results <=4096 bytes. Readiness keeps semantic acceptance closed.
 Malformed native input disposes its connection without dispatch and preserves
-the listener. Request timeouts span the original input/reply. Retirement aborts
-the exact connection and listener; any started write reports Unknown delivery.
+the listener. Request timeouts span the original input/reply. After dispatch,
+reply retirement aborts the correlated connection and releases its route's busy
+slot. Participation close also releases the listener lease. A started write
+reports Unknown delivery on abort.
 Drop disposes native owners before program/services, without network waits/tasks.
 An opaque native issuer and monotonic correlation fence the original reply;
 numeric Binding/instance equality cannot substitute a sibling's opportunity.

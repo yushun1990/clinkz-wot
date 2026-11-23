@@ -440,6 +440,17 @@ with an accepted reply continues its original funded writes until completion,
 delivery failure or deadline, subject to its delivery authorization. Explicit
 close or rollback requests `ProducerRetirement::Close` and preserves evidence
 of any partial write. Wrappers forward the retirement intent.
+
+For a finite reply whose request deadline has elapsed, `poll_retire_reply`
+borrows the complete original reply and its first local cause. Terminal success
+releases that exchange's native occupancy and reports delivery. The Binding
+must verify the original opportunity and preserve the installation. A partial
+write reports `Unknown`. Pending retains the same owner. An error requires
+whole-participation `poll_close` with the still-owned reply. The default takes
+that path for Bindings that require the installation to close. Independent
+ingress damage remains observable through `check_ingress`, including during
+retirement. Only Servient can grant a subsequent admission.
+
 The HTTP finite participant can share one listener across up to 32 independently
 prepared Property Read/Write and Thing-root finite collection mappings; native
 method/path collisions refuse before setup. `FiniteIngressBinding::validator` supplies one captured `FiniteValidator`

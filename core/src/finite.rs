@@ -82,6 +82,9 @@ pub struct RawFiniteSettlement {
     pub target: Option<AffordanceTarget>,
     pub recipient: Option<ProducerInstanceKey>,
     pub operation: Option<Operation>,
+    /// First local cause that interrupted this exchange. The handler result
+    /// and native delivery evidence remain independently observable.
+    pub first_cause: Option<crate::CoreError>,
     pub effect: FiniteEffect,
     pub delivery: FiniteDelivery,
     pub result: CoreResult<InteractionOutput>,
@@ -95,6 +98,7 @@ impl core::fmt::Debug for RawFiniteSettlement {
             .field("has_target", &self.target.is_some())
             .field("recipient", &self.recipient)
             .field("operation", &self.operation)
+            .field("first_cause", &self.first_cause)
             .field("effect", &self.effect)
             .field("delivery", &self.delivery)
             // CoreError Debug is redacted and bounded. A successful output is
@@ -154,7 +158,7 @@ pub fn finite_handler_shape(output: &InteractionOutput) -> bool {
 /// but MUST keep semantic ingress closed until the runtime activates locally.
 /// The Binding bounds input/metadata and candidate backing before returning an
 /// ingress. A pending or failed send retains its complete original exchange until
-/// `poll_close` has disposed native work. Close receives the *complete* unmatched
+/// terminal delivery or native retirement. Close receives the *complete* unmatched
 /// input or accepted reply, including the original opportunity. It MUST perform
 /// the supported native refusal/abort or report an uncertain delivery; it must
 /// not silently discard the opportunity. Drop of Binding/Reply performs finite
@@ -271,8 +275,25 @@ pub trait FiniteIngressBinding {
         cx: &mut Context<'_>,
         reply: &RawFiniteReply<Self::Reply>,
     ) -> Poll<CoreResult<()>>;
+    /// Retire only this original reply after an exchange-local terminal cause.
+    /// Ready(Ok) certifies disposal of its native work and reports delivery at
+    /// the same edge as `poll_close`. A partial write is Unknown. Preserve the
+    /// installation and expose any independent ingress loss via `check_ingress`.
+    /// Pending keeps the whole reply with the caller. Err requires participation
+    /// close with that same reply. Whole-participation close must also accept
+    /// the original reply after a Pending retirement. The default requires
+    /// whole-participation close.
+    fn poll_retire_reply(
+        &mut self,
+        _cx: &mut Context<'_>,
+        _reply: &RawFiniteReply<Self::Reply>,
+        cause: &crate::CoreError,
+    ) -> Poll<CoreResult<FiniteDelivery>> {
+        Poll::Ready(Err(cause.clone()))
+    }
     /// The borrowed unmatched ingress or accepted reply stays owned by Servient
-    /// until terminal success. `cause` describes the first local close reason.
+    /// until terminal success. For an interrupted reply, `cause` describes
+    /// its first local cause, including an earlier exchange timeout.
     /// Report whether its original result/refusal was delivered; a partially
     /// sent result MUST be classified Unknown. Pending/error retains the complete
     /// owner for a subsequent close poll.

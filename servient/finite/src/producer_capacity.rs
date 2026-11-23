@@ -216,6 +216,10 @@ impl ProducerFiniteSettlement {
     pub fn effect(&self) -> FiniteEffect {
         self.outcome().effect
     }
+    /// First local interruption of this exchange, retained alongside its result.
+    pub fn first_cause(&self) -> Option<&CoreError> {
+        self.outcome().first_cause.as_ref()
+    }
     pub fn delivery(&self) -> FiniteDelivery {
         self.outcome().delivery
     }

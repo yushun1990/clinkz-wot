@@ -212,6 +212,18 @@ impl FiniteIngressBinding for Native {
             self.actual.poll_send(cx, reply)
         }
     }
+    fn poll_retire_reply(
+        &mut self,
+        cx: &mut Context<'_>,
+        reply: &RawFiniteReply<Self::Reply>,
+        cause: &CoreError,
+    ) -> Poll<CoreResult<FiniteDelivery>> {
+        if self.controls.hold_close.get() {
+            Poll::Pending
+        } else {
+            self.actual.poll_retire_reply(cx, reply, cause)
+        }
+    }
     fn poll_close(
         &mut self,
         cx: &mut Context<'_>,
@@ -227,6 +239,16 @@ impl FiniteIngressBinding for Native {
     }
 }
 type Server = RawFiniteRuntime<Native>;
+fn exchange_limits() -> RawFiniteLimits {
+    RawFiniteLimits {
+        candidates: 1,
+        input_body_bytes: 4096,
+        output_body_bytes: 4096,
+        output_media_capacity: 64,
+        output_retained_bytes: 8192,
+    }
+}
+
 fn exposure(
     owner: &RawProducerServient,
     accounts: Arc<HostResourceAccounts>,
@@ -237,7 +259,7 @@ fn exposure(
     expected: Option<ProducerInstanceKey>,
 ) -> ComposedProducerExposure {
     exposure_with_capacity(
-        owner, accounts, td, app, controls, authority, expected, None,
+        owner, accounts, td, app, controls, authority, expected, None, None,
     )
 }
 #[allow(clippy::too_many_arguments)]
@@ -250,6 +272,7 @@ fn exposure_with_capacity(
     authority: ProducerInstanceAuthority,
     expected: Option<ProducerInstanceKey>,
     capacity: Option<&ProducerFiniteCapacity>,
+    listener: Option<&HttpFiniteListener>,
 ) -> ComposedProducerExposure {
     let addr = td["properties"]["level"]["forms"][0]["href"]
         .as_str()
@@ -308,6 +331,10 @@ fn exposure_with_capacity(
         1000,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let config = match listener {
+        Some(listener) => config.with_listener(listener).unwrap(),
+        None => config,
+    };
     let server = RawFiniteRuntime::try_new(
         Native {
             actual: HttpFiniteBinding::new(
@@ -319,13 +346,7 @@ fn exposure_with_capacity(
         },
         config,
         owner,
-        RawFiniteLimits {
-            candidates: 1,
-            input_body_bytes: 4096,
-            output_body_bytes: 4096,
-            output_media_capacity: 64,
-            output_retained_bytes: 8192,
-        },
+        exchange_limits(),
         FiniteValidation::Required,
         Deadline::NONE,
     )
@@ -1640,6 +1661,9 @@ fn unread_results_and_service_loss_keep_bounded_original_owners_until_acknowledg
 #[path = "support/response_alternatives.rs"]
 mod response_alternatives;
 
+#[path = "support/accepted_timeout.rs"]
+mod accepted_timeout;
+
 #[test]
 fn shared_producer_capacity_preserves_write_effects_unread_failures_and_pending_retirement() {
     let addr = address();
@@ -1651,20 +1675,9 @@ fn shared_producer_capacity_preserves_write_effects_unread_failures_and_pending_
     .unwrap();
     let publication_bank = bank();
     let work_bank = bank();
-    let capacity = ProducerFiniteCapacity::try_new(
-        &owner,
-        RawFiniteLimits {
-            candidates: 1,
-            input_body_bytes: 4096,
-            output_body_bytes: 4096,
-            output_media_capacity: 64,
-            output_retained_bytes: 8192,
-        },
-        1,
-        4,
-        work_bank.clone(),
-    )
-    .unwrap();
+    let capacity =
+        ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 1, 4, work_bank.clone())
+            .unwrap();
     let app = Rc::new(Application::default());
     let controls = Rc::new(Controls::default());
     let mut exposure = exposure_with_capacity(
@@ -1676,6 +1689,7 @@ fn shared_producer_capacity_preserves_write_effects_unread_failures_and_pending_
         authority(Generation::INITIAL),
         None,
         Some(&capacity),
+        None,
     );
     assert_eq!(
         exposure

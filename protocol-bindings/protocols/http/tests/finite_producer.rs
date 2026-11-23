@@ -676,6 +676,11 @@ fn an_original_http_reply_cannot_be_substituted_at_a_sibling_with_the_same_numer
         second.poll_send(&mut cx(), &first_reply),
         Poll::Ready(Err(_))
     ));
+    let timeout = CoreError::TimedOut(ErrorContext::new(ErrorPhase::Binding, RetryClass::Never));
+    assert!(matches!(
+        second.poll_retire_reply(&mut cx(), &first_reply, &timeout),
+        Poll::Ready(Err(_))
+    ));
     for (binding, reply, peer) in [
         (&mut first, &first_reply, &mut peer_a),
         (&mut second, &second_reply, &mut peer_b),
@@ -693,6 +698,18 @@ fn an_original_http_reply_cannot_be_substituted_at_a_sibling_with_the_same_numer
         let mut bytes = String::new();
         peer.read_to_string(&mut bytes).unwrap();
         assert!(bytes.starts_with("HTTP/1.1 200"));
+    }
+    let _peer = request(a);
+    let next = reply(receive(&mut first));
+    assert!(matches!(
+        first.poll_retire_reply(&mut cx(), &first_reply, &timeout),
+        Poll::Ready(Err(_))
+    ));
+    assert!(matches!(
+        first.poll_retire_reply(&mut cx(), &next, &timeout),
+        Poll::Ready(Ok(FiniteDelivery::NotDelivered))
+    ));
+    for binding in [&mut first, &mut second] {
         assert!(matches!(
             binding.poll_close(&mut cx(), None, None, None),
             Poll::Ready(Ok(_))
@@ -735,6 +752,16 @@ fn incomplete_native_request_and_accepted_reply_keep_original_deadline_and_owner
             runtime.step(&mut cx(), &mut work(0), now(10)),
             Poll::Pending
         );
+        if accepted {
+            // This adapter implements only whole-participation close. The
+            // paid retirement attempt takes that path with the same reply.
+            assert_eq!(runtime.state(), RawFiniteState::RetiringReply);
+            assert!(runtime.first_cause().is_none());
+            assert_eq!(
+                runtime.step(&mut cx(), &mut work(1), now(10)),
+                Poll::Ready(RawFiniteState::Closing)
+            );
+        }
         assert!(matches!(
             runtime.first_cause(),
             Some(CoreError::TimedOut(_))
@@ -749,6 +776,10 @@ fn incomplete_native_request_and_accepted_reply_keep_original_deadline_and_owner
             assert_eq!(app.drops.get(), 0);
             let settlement = runtime.take_settlement().unwrap();
             assert_eq!(settlement.recipient, Some(key));
+            assert!(matches!(
+                settlement.first_cause,
+                Some(CoreError::TimedOut(_))
+            ));
             assert_eq!(
                 settlement.result.unwrap().data().unwrap().body.as_ref(),
                 b"1"
@@ -1242,6 +1273,15 @@ fn cleanup_clock_failure_is_attributed_and_completed_delivery_clears_request_dea
 
 #[test]
 fn cancelling_an_actual_partial_http_write_reports_unknown_delivery_and_keeps_the_result() {
+    partial_http_write(false);
+}
+
+#[test]
+fn expiring_an_actual_partial_http_write_retires_only_its_connection() {
+    partial_http_write(true);
+}
+
+fn partial_http_write(expire: bool) {
     let authority = new_authority();
     let key = authority.key();
     let addr = address();
@@ -1261,12 +1301,25 @@ fn cancelling_an_actual_partial_http_write_reports_unknown_delivery_and_keeps_th
     // Header + 4096-byte body cannot fit the one-poll 4096-byte write allowance.
     assert_eq!(runtime.step(&mut cx(), &mut work(1), now(0)), Poll::Pending);
     assert_eq!(runtime.state(), RawFiniteState::Delivering);
-    close(&mut runtime);
-    assert!(matches!(
-        runtime.first_cause(),
-        Some(CoreError::Cancelled(_))
-    ));
+    if expire {
+        assert_eq!(
+            runtime.step(&mut cx(), &mut work(1), now(10)),
+            Poll::Ready(RawFiniteState::Serving)
+        );
+        assert!(runtime.first_cause().is_none());
+        assert!(TcpListener::bind(addr).is_err());
+    } else {
+        close(&mut runtime);
+        assert!(matches!(
+            runtime.first_cause(),
+            Some(CoreError::Cancelled(_))
+        ));
+    }
     let settlement = runtime.take_settlement().unwrap();
+    assert!(matches!(
+        (expire, settlement.first_cause),
+        (true, Some(CoreError::TimedOut(_))) | (false, Some(CoreError::Cancelled(_)))
+    ));
     assert_eq!(settlement.delivery, FiniteDelivery::Unknown);
     assert_eq!(settlement.effect, FiniteEffect::Unknown);
     assert_eq!(

@@ -125,11 +125,33 @@ retain the original bank after runtime/root loss and release it on final disposa
 Short queue credit preserves native/cleanup credit and makes no callback. These
 probes establish accounting/ownership order, not additional protocol coverage.
 
+### Accepted request expiry on a shared listener
+
+Two qualified Things share one cleartext listener and one active work slot.
+A PUT changes the first Thing's value. At its original deadline the peer sees
+EOF before any response bytes. The next PUT to that Thing returns HTTP 204
+while the first settlement is unread. A PUT to the sibling returns 204 while
+the caller holds the first settlement. A newly denied PUT returns 403 and
+leaves the stored value and write count intact. The test repeats with a handler
+that returns an error after changing the value and with a Pending retirement
+poll. The original record retains its Binding-phase timeout, recipient, target,
+operation, sequence, handler result and Completed or Unknown effect. The
+original publication and work banks refund their last reservations on disposal
+after logical retirement and socket release. [HTTP Write regression](../../protocol-bindings/protocols/http/tests/support/accepted_timeout.rs)
+
+A separate peer observes a partial HTTP response before expiry. Its settlement
+reports Unknown delivery and retains the complete output. A foreign or stale
+reply cannot abort a live connection. When an independently polled shared
+listener fails during reply retirement, the publication withdraws, reports
+the Binding failure and retains the earlier timeout on the original exchange.
+[Native reply tests](../../protocol-bindings/protocols/http/tests/finite_producer.rs) · [Listener failure test](../../protocol-bindings/protocols/http/tests/composed_thing/shared_listener.rs)
+
 Focused commands:
 
 ```sh
 cargo test --locked -p clinkz-wot-binding-http --test composed_thing shared_work -- --nocapture
 cargo test --locked -p clinkz-wot-binding-http --test property_write shared_producer_capacity -- --nocapture
+cargo test --locked -p clinkz-wot-binding-http --test property_write accepted_write_timeout
 cargo test --locked -p clinkz-wot-servient-finite --test native_ingress shared_capacity -- --nocapture
 ```
 

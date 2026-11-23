@@ -107,6 +107,8 @@ Progress takes one caller-qualified monotonic instant. The runtime retains the
 original native request deadline across incomplete input, dispatch and pending
 send; expiry, clock mismatch/regression and explicit close keep the first cause,
 complete original exchange and accepted behavior until retirement/acknowledgement.
+Expiry of a prepared reply can retire its work independently under the
+[finite participation contract](../spec/runtime-safety.md#finite-producer-participation-and-work-capacity).
 Zero credits can fence locally but cannot run a native/cleanup poll. Drop remains
 finite local disposal, not a completed network drain.
 Old finite callers migrate directly to the explicit time/validation arguments.

@@ -57,9 +57,10 @@ none owns a copy of current logical permission. Servient progress borrows the
 one logical owner and checks current recipients/behavior under a fixed paid
 count/name-byte lookup envelope. Native progress/close needs no logical owner.
 Accepted work retains its original instance through settlement acknowledgement;
-replacement cannot retarget it, and retiring one Binding does not revoke the
-instance or its siblings. Weak issuer association fences new acceptance after
-the logical owner is dropped. This synchronous manual Host facet uses local
+replacement cannot retarget it. A Binding can retire the original reply and
+keep its installation serving. Loss of a required installation fences the
+affected publication through the logical owner. Weak issuer association fences
+new acceptance after the logical owner is dropped. This synchronous manual Host facet uses local
 reference retention and claims no thread mobility or automatic scheduling.
 
 The complete native exclusive input/reply survives refusal and close. Effect,
