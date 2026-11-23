@@ -289,7 +289,7 @@ mod live {
                 .unwrap();
             let instance = logical(&td, true, true);
             let prepared = prepare_both(&instance, &[&mqtt, &http]).unwrap();
-            let mqtt_definitions = prepared
+            let mut mqtt_definitions = prepared
                 .operations()
                 .iter()
                 .filter_map(|o| o.definition::<MqttNotificationDefinition>().cloned())
@@ -303,7 +303,8 @@ mod live {
                 .participation(
                     &owner.participation_token(),
                     instance.key(),
-                    mqtt_definitions,
+                    &mut mqtt_definitions,
+                    &mut budget(),
                 )
                 .unwrap();
             let http_runtime = HttpActionRuntime::try_new(

@@ -297,11 +297,12 @@ impl Native {
                 .participation(
                     &owner.participation_token(),
                     key,
-                    prepared
+                    &mut prepared
                         .operations()
                         .iter()
                         .filter_map(|o| o.definition::<MqttNotificationDefinition>().cloned())
                         .collect(),
+                    &mut budget(),
                 )
                 .unwrap();
             participants.extend([

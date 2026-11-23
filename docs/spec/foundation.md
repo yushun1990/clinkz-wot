@@ -91,6 +91,12 @@ and metadata for the Binding's promised concurrent emissions. Its instance and
 native owners retain the original funding through outstanding work and unread
 results. Each finite receive uses its own work capacity.
 
+Managed replacement funds disposal of the incumbent's captured routes before
+cutover. A short turn keeps the incumbent serving and the candidate closed.
+Managed retirement verifies the borrowed original membership and drains captured
+rows against the remaining cleanup credit. A partially drained registry entry
+stays fenced at its original Servient, including if the publication guard drops.
+
 The Host notification representation imports the same original data/access
 service owners. A shared prepared mapping pays its actual program/schema/reference
 records, without charging service backing again. Independent associations fund

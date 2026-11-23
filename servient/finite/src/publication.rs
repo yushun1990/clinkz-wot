@@ -116,6 +116,7 @@ pub struct ProducerPublication {
     expected: Option<ProducerInstanceKey>,
     key: ProducerInstanceKey,
     committed: bool,
+    retirement_started: bool,
     cancelled: Cell<bool>,
     action_routes: Option<Vec<CapturedActionRoute>>,
     notification_routes: Option<Vec<CapturedNotificationRoute>>,
@@ -654,6 +655,7 @@ impl RawProducerServient {
             retired: None,
             key,
             committed: false,
+            retirement_started: false,
             cancelled: Cell::new(false),
             action_routes: None,
             notification_routes: None,
@@ -732,6 +734,23 @@ impl RawProducerServient {
             &[&mut dyn ClosedProducerParticipation],
         ) -> CoreResult<Option<CapturedProducerRoutes>>,
     ) -> CoreResult<()> {
+        self.publish_if_current_with_cleanup(publication, participants, coverage, None, capture)
+    }
+
+    /// With a work budget, fund disposal of the actual displaced records after
+    /// the final linked callback and before changing either incarnation's gates.
+    /// Raw callers that retain the displaced entry provide their own cleanup.
+    pub fn publish_if_current_with_cleanup(
+        &mut self,
+        publication: &mut ProducerPublication,
+        participants: &mut [&mut dyn ClosedProducerParticipation],
+        coverage: &PublicationFacts,
+        cleanup: Option<&mut WorkBudget>,
+        capture: impl FnOnce(
+            ProducerInstanceKey,
+            &[&mut dyn ClosedProducerParticipation],
+        ) -> CoreResult<Option<CapturedProducerRoutes>>,
+    ) -> CoreResult<()> {
         if publication.committed
             || publication.cancelled.get()
             || publication.instance.is_none()
@@ -791,6 +810,21 @@ impl RawProducerServient {
         if publication.cancelled.get() {
             return Err(CoreError::Cancelled(context()));
         }
+        if let (Some(entry), Some(budget)) = (self.instances.get(index), cleanup) {
+            let mut records = entry.notification_routes.as_ref().map_or(0, Vec::len)
+                + entry.action_routes.as_ref().map_or(0, Vec::len);
+            if Rc::strong_count(&entry.instance) == 1 {
+                records += entry.instance.behavior_count();
+            }
+            let cutover = entry.permission.gates.len()
+                + self.actions.as_ref().map_or(0, ActionStore::retained_count);
+            budget
+                .consume(WorkClass::HandlerSteps, cutover as u64)
+                .map_err(|_| CoreError::Backpressure(context()))?;
+            budget
+                .consume(WorkClass::CleanupItems, records as u64)
+                .map_err(|_| CoreError::Backpressure(context()))?;
+        }
         Rc::get_mut(&mut publication.permission)
             .expect("unpublished permission")
             .gates
@@ -846,70 +880,103 @@ impl RawProducerServient {
         publication: &mut ProducerPublication,
         participants: &[&dyn ClosedProducerParticipation],
     ) -> CoreResult<()> {
-        self.retire_members(publication, participants, None)
+        self.retire_members(publication, participants.iter().copied(), None)
     }
 
     /// Managed retirement pays for the actual registry, member, route and
     /// invocation records it checks or disposes at this owner.
-    pub fn retire_composed_with_budget(
+    pub fn retire_composed_with_budget<'a>(
         &mut self,
         publication: &mut ProducerPublication,
-        participants: &[&dyn ClosedProducerParticipation],
+        participants: impl ExactSizeIterator<Item = &'a dyn ClosedProducerParticipation> + Clone,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
         self.retire_members(publication, participants, Some(budget))
     }
 
-    fn retire_members(
+    fn retire_members<'a>(
         &mut self,
         publication: &mut ProducerPublication,
-        participants: &[&dyn ClosedProducerParticipation],
+        participants: impl ExactSizeIterator<Item = &'a dyn ClosedProducerParticipation> + Clone,
         mut budget: Option<&mut WorkBudget>,
     ) -> CoreResult<()> {
-        if let Some(budget) = budget.as_deref_mut() {
-            let members = publication.permission.members.len();
-            self.pay_retirement(budget, members * (2 * members + 3) + 1)?;
-        }
+        let members = &publication.permission.members;
         if publication.issuer.as_ptr() != Rc::as_ptr(&self.issuer)
-            || participants.is_empty()
-            || !publication.same_participants(participants.iter().map(|p| p.participation_id()))
-            || !participants.iter().all(|p| p.retired())
-            || publication
-                .instance
-                .as_ref()
-                .is_some_and(|i| i.notification_work.get() != 0)
-            || self
-                .actions
-                .as_ref()
-                .is_some_and(|a| a.retains_instance(publication.key))
+            || members.is_empty()
+            || participants.len() != members.len()
         {
             return Err(CoreError::Validation(context()));
         }
-        let index = self
-            .instances
-            .iter()
-            .position(|e| e.instance.key() == publication.key);
-        if let Some(budget) = budget {
-            let staged = publication.notification_routes.as_ref().map_or(0, Vec::len);
-            let current = index.and_then(|i| self.instances[i].notification_routes.as_ref());
-            let displaced = publication
-                .retired
-                .as_ref()
-                .and_then(|e| e.notification_routes.as_ref());
+        if let Some(budget) = budget.as_deref_mut() {
             budget
-                .consume(
-                    WorkClass::CleanupItems,
-                    (staged + current.map_or(0, Vec::len) + displaced.map_or(0, Vec::len)) as u64,
-                )
+                .consume(WorkClass::CleanupItems, (2 * members.len()) as u64)
                 .map_err(|_| CoreError::Backpressure(context()))?;
         }
-        publication.revoke();
-        if let Some(i) = index {
+        // Managed publication keeps the original order. Match each distinct
+        // original directly. Raw callers may supply the same set in any order.
+        let ids = participants.clone().map(|p| p.participation_id());
+        if !ids
+            .clone()
+            .zip(members)
+            .all(|(id, original)| id.matches(original))
+        {
+            if let Some(budget) = budget.as_deref_mut() {
+                budget
+                    .consume(
+                        WorkClass::CleanupItems,
+                        (2 * members.len() * members.len()) as u64,
+                    )
+                    .map_err(|_| CoreError::Backpressure(context()))?;
+            }
+            if !publication.same_participants(ids) {
+                return Err(CoreError::Validation(context()));
+            }
+        }
+        if !participants.into_iter().all(|p| p.retired()) {
+            return Err(CoreError::Validation(context()));
+        }
+        if !publication.retirement_started {
+            if let Some(budget) = budget.as_deref_mut() {
+                self.pay_retirement(budget, 0)?;
+            }
+            if publication
+                .instance
+                .as_ref()
+                .is_some_and(|i| i.notification_work.get() != 0)
+                || self
+                    .actions
+                    .as_ref()
+                    .is_some_and(|a| a.retains_instance(publication.key))
+            {
+                return Err(CoreError::Validation(context()));
+            }
+            publication.revoke();
+            publication.retirement_started = true;
+        } else if let Some(budget) = budget.as_deref_mut() {
+            budget
+                .consume(WorkClass::CleanupItems, (2 * self.instances.len()) as u64)
+                .map_err(|_| CoreError::Backpressure(context()))?;
+        }
+        if let Some(i) = self
+            .instances
+            .iter()
+            .position(|e| e.instance.key() == publication.key)
+        {
+            // Leave unfinished rows with the fenced registry entry. If the
+            // facade disappears between turns the original Servient can drain it.
+            let entry = &mut self.instances[i];
+            drain_routes(&mut entry.notification_routes, &mut budget)?;
+            drain_routes(&mut entry.action_routes, &mut budget)?;
             self.instances.remove(i);
         }
-        publication.notification_routes = None;
-        publication.instance = None;
+        drain_routes(&mut publication.notification_routes, &mut budget)?;
+        drain_routes(&mut publication.action_routes, &mut budget)?;
+        if let Some(entry) = &mut publication.retired {
+            drain_routes(&mut entry.notification_routes, &mut budget)?;
+            drain_routes(&mut entry.action_routes, &mut budget)?;
+        }
         publication.release_retired();
+        publication.instance = None;
         Ok(())
     }
 
@@ -958,13 +1025,30 @@ impl RawProducerServient {
         {
             return Err(CoreError::Backpressure(context()));
         }
-        budget
-            .consume(
-                WorkClass::CleanupItems,
-                entry.notification_routes.as_ref().map_or(0, Vec::len) as u64,
-            )
-            .map_err(|_| CoreError::Backpressure(context()))?;
+        let entry = &mut self.instances[index];
+        let mut budget = Some(budget);
+        drain_routes(&mut entry.notification_routes, &mut budget)?;
+        drain_routes(&mut entry.action_routes, &mut budget)?;
         self.instances.remove(index);
         Ok(())
     }
+}
+
+/// Remove only records covered by this turn. The vector itself is the cursor.
+fn drain_routes<T>(
+    routes: &mut Option<Vec<T>>,
+    budget: &mut Option<&mut WorkBudget>,
+) -> CoreResult<()> {
+    if let (Some(records), Some(budget)) = (routes.as_mut(), budget.as_deref_mut()) {
+        let count = (records.len() as u64).min(budget.remaining(WorkClass::CleanupItems));
+        budget
+            .consume(WorkClass::CleanupItems, count)
+            .expect("available cleanup credit");
+        records.truncate(records.len() - count as usize);
+        if !records.is_empty() {
+            return Err(CoreError::Backpressure(context()));
+        }
+    }
+    *routes = None;
+    Ok(())
 }

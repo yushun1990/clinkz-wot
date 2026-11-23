@@ -130,7 +130,7 @@ pub fn intercept_with_instance(
     missing: bool,
 ) -> (ComposedProducerInput, Rc<ProbeServices>) {
     let prepared = prepare(&instance, &[provider]).unwrap();
-    let definitions = prepared
+    let mut definitions = prepared
         .operations()
         .iter()
         .map(|o| {
@@ -140,7 +140,12 @@ pub fn intercept_with_instance(
         })
         .collect();
     let runtime = service
-        .participation(&owner.participation_token(), instance.key(), definitions)
+        .participation(
+            &owner.participation_token(),
+            instance.key(),
+            &mut definitions,
+            &mut budget(),
+        )
         .unwrap();
     let op = prepared
         .operations()

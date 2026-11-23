@@ -116,7 +116,7 @@ pub fn input_with_instance(
     expected: Option<ProducerInstanceKey>,
 ) -> ComposedProducerInput {
     let prepared = prepare(&instance, &[provider]).unwrap();
-    let definitions = prepared
+    let mut definitions = prepared
         .operations()
         .iter()
         .map(|p| {
@@ -126,7 +126,12 @@ pub fn input_with_instance(
         })
         .collect();
     let runtime = service
-        .participation(&owner.participation_token(), instance.key(), definitions)
+        .participation(
+            &owner.participation_token(),
+            instance.key(),
+            &mut definitions,
+            &mut budget(),
+        )
         .unwrap();
     ComposedProducerInput {
         instance,

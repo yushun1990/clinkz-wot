@@ -86,9 +86,18 @@ Producer paths. Services cannot be swapped at publication or per emission.
 The application-owned service has at most 32 participation leases and one
 shared publication slot. Each lease takes the caller's operation definitions
 and sizes its native mapping table from their start operations. It checks
-source and topic uniqueness and pairs every control with its start. Managed
-handoff declares both vectors' actual capacities. Retirement with an exclusive
-lease pays cleanup work for its definitions and mappings.
+topic uniqueness across every member of the same incarnation and pairs every
+control with its start. A distinct successor in the same logical slot may reuse
+its predecessor's topic. The existing named Event and root wildcard can coexist.
+
+Native construction takes a caller-supplied lifetime work budget and prepays
+one cleanup item per definition and start mapping before adopting the vectors.
+Refusal leaves the definitions with the caller. Managed handoff declares both
+vectors' actual capacities. The runtime owns their destruction if it is dropped
+between turns. Explicit retirement removes as many records as the current turn
+funds and spends one final item to release the lease. Outstanding publications
+retain the session, ingress gate and original funding. A last settlement can
+therefore release its connection independently of the size of the mapping table.
 
 Setup has a 2-second timeout and uses a clean session with keepalive disabled.
 The service provides no reconnect, retry, replay or idle retention. Native setup

@@ -78,9 +78,13 @@ pub fn publish_prepared_thing(
     }) {
         return Err(CoreError::UnsupportedOperation(context()));
     }
-    owner.publish_if_current(publication, participants, &coverage, |key, participants| {
-        capture_mappings(key, prepared, participants).map(Some)
-    })
+    owner.publish_if_current_with_cleanup(
+        publication,
+        participants,
+        &coverage,
+        Some(budget),
+        |key, participants| capture_mappings(key, prepared, participants).map(Some),
+    )
 }
 
 fn capture_mappings(
@@ -535,7 +539,7 @@ impl ComposedProducerExposure {
                     n.checked_add(registrations.len() * size_of::<Rc<dyn ProducerCapability>>())
                 })
                 // Original Funding, retention-pair Rc allocations and bounded
-                // temporary reference arrays used by qualification/retirement.
+                // temporary references used for qualification and gate capture.
                 .and_then(|n| {
                     n.checked_add(
                         size_of::<ComposedFunding>()
@@ -796,10 +800,11 @@ impl ComposedProducerExposure {
                 .iter_mut()
                 .map(|p| p.as_participation_mut())
                 .collect();
-            owner.publish_if_current(
+            owner.publish_if_current_with_cleanup(
                 &mut self.publication,
                 &mut participants,
                 &stage.coverage,
+                Some(budget),
                 |key, members| capture_mappings(key, &stage.prepared, members).map(Some),
             )
         })();
@@ -846,12 +851,11 @@ impl ComposedProducerExposure {
         owner: &mut RawProducerServient,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
-        let participants: Vec<_> = self
-            .participants
-            .iter()
-            .map(|p| p.as_participation())
-            .collect();
-        owner.retire_composed_with_budget(&mut self.publication, &participants, budget)?;
+        owner.retire_composed_with_budget(
+            &mut self.publication,
+            self.participants.iter().map(|p| p.as_participation()),
+            budget,
+        )?;
         // Typed native close may have ended setup without begin_close() on
         // this facade. Acknowledged retirement permanently ends qualification.
         self.stage = None;

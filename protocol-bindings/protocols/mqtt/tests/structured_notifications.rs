@@ -364,7 +364,7 @@ fn native_schema_views_share_the_original_prepared_backing_and_refuse_equal_fore
         value["events"]["alarm"]["forms"][0]["op"] = serde_json::json!("subscribeevent");
         let instance = instance(authority(1), &value.to_string());
         let prepared = prepare(&instance, &[&producer]).unwrap();
-        let definitions = prepared
+        let mut definitions = prepared
             .operations()
             .iter()
             .map(|o| {
@@ -374,7 +374,12 @@ fn native_schema_views_share_the_original_prepared_backing_and_refuse_equal_fore
             })
             .collect();
         let native = service
-            .participation(&owner.participation_token(), instance.key(), definitions)
+            .participation(
+                &owner.participation_token(),
+                instance.key(),
+                &mut definitions,
+                &mut budget(),
+            )
             .unwrap();
         let native_bytes = native
             .admission_backing_bytes(&owner.participation_token(), instance.key())
@@ -549,7 +554,12 @@ fn additional_native_definitions_cannot_borrow_selected_schema_funding() {
             .clone()
     }));
     let native = service
-        .participation(&owner.participation_token(), instance.key(), definitions)
+        .participation(
+            &owner.participation_token(),
+            instance.key(),
+            &mut definitions,
+            &mut budget(),
+        )
         .unwrap();
     assert_eq!(
         native.qualified_operation_count(),

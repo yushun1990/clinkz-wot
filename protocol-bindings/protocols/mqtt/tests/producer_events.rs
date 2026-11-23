@@ -103,7 +103,7 @@ fn callback_revocation_and_cleanup_failure_retain_original_effect_and_owner() {
             );
             let key = instance.key();
             let prepared = prepare(&instance, &[&provider]).unwrap();
-            let definitions = prepared
+            let mut definitions = prepared
                 .operations()
                 .iter()
                 .map(|o| {
@@ -113,7 +113,12 @@ fn callback_revocation_and_cleanup_failure_retain_original_effect_and_owner() {
                 })
                 .collect();
             let mut native = service
-                .participation(&owner.participation_token(), key, definitions)
+                .participation(
+                    &owner.participation_token(),
+                    key,
+                    &mut definitions,
+                    &mut budget(),
+                )
                 .unwrap();
             let mut publication = owner
                 .prepare_publication(instance, None)
@@ -422,7 +427,7 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
         drop(json);
         let prepared = prepare(&instance, &[&provider]).unwrap();
         assert_eq!(prepared.operations().len(), 4);
-        let definitions = prepared
+        let mut definitions = prepared
             .operations()
             .iter()
             .map(|o| {
@@ -432,7 +437,12 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
             })
             .collect();
         let participant = service
-            .participation(&owner.participation_token(), instance.key(), definitions)
+            .participation(
+                &owner.participation_token(),
+                instance.key(),
+                &mut definitions,
+                &mut budget(),
+            )
             .unwrap();
         let mut exposure = stage(
             &owner,
