@@ -37,15 +37,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "href":format!("mqtt://{address}"),"mqv:filter":topic,"mqv:qos":"0","mqv:retain":false
             }]}}
         }).to_string();
-        let instance=RawProducerInstance::new(authority,vec![])
-            .with_notification_sources(vec![ProducerNotificationSource::event("alarm")]).with_description(Arc::from(description));
+        let instance = RawProducerInstance::new(authority, vec![])
+            .with_notification_sources(vec![ProducerNotificationSource::event("alarm")], &mut budget())
+            .map_err(|r| r.error().error().clone())?
+            .with_description(Arc::from(description));
         let provider=Rc::new(MqttNotificationProducer::new(MqttProducerConfig::for_loopback(address,8192)?,BindingId::new(1),BindingGeneration::INITIAL));
         let service=MqttNotificationService::new(&provider)?;
         let prepared=prepare_thing(instance.description().expect("staged TD"),key,GatewayDefaultV1::LIMITS,
             &mut budget(),&[provider.as_ref()],|s,op| matches!(s,ValidatedProducerScope::Event(n) if instance.supports_notification(&AffordanceTarget::Event(Arc::from(n)),op)))?;
-        let definitions=prepared.operations().iter().map(|o| o.definition::<MqttNotificationDefinition>().expect("selected MQTT").clone()).collect();
+        let mut definitions=prepared.operations().iter().map(|o| o.definition::<MqttNotificationDefinition>().expect("selected MQTT").clone()).collect();
         let mut owner=RawProducerServient::try_empty(RawProducerRegistryLimits {instances:1,behaviors_per_instance:1,target_name_bytes:64})?;
-        let native=service.participation(&owner.participation_token(), key, definitions)?;
+        let native=service.participation(&owner.participation_token(), key, &mut definitions, &mut budget())?;
         let accounts=Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
         let mut exposure=ComposedProducerExposure::try_new(&owner,ComposedProducerInput {instance,prepared,
             providers:ProducerRegistrations::new(vec![provider]),participants:vec![OwnedProducerParticipation::notifications(native)],expected:None,handler_backing_bytes:0},

@@ -1181,11 +1181,15 @@ fn notification_td(address: SocketAddr, topic: &str) -> serde_json::Value {
 fn notification_instance(authority: ProducerInstanceAuthority, text: &str) -> RawProducerInstance {
     RawProducerInstance::new(authority, vec![])
         .with_description(Arc::from(text))
-        .with_notification_sources(vec![match KIND {
-            NotificationKind::ObserveAllProperties | NotificationKind::SubscribeAllEvents => {
-                unreachable!("single-affordance fixture")
-            }
-            NotificationKind::PropertyObservation => ProducerNotificationSource::property(NAME),
-            NotificationKind::Event => ProducerNotificationSource::event(NAME),
-        }])
+        .with_notification_sources(
+            vec![match KIND {
+                NotificationKind::ObserveAllProperties | NotificationKind::SubscribeAllEvents => {
+                    unreachable!("single-affordance fixture")
+                }
+                NotificationKind::PropertyObservation => ProducerNotificationSource::property(NAME),
+                NotificationKind::Event => ProducerNotificationSource::event(NAME),
+            }],
+            &mut budget(),
+        )
+        .unwrap_or_else(|r| panic!("{:?}", r.error().error()))
 }

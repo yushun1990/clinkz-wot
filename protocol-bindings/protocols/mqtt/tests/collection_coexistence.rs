@@ -51,7 +51,8 @@ fn logical(td: &Value, root_action: bool, root_events: bool) -> RawProducerInsta
     }
     let instance = RawProducerInstance::new(authority(1), vec![])
         .with_description(Arc::from(td.to_string()))
-        .with_notification_sources(sources)
+        .with_notification_sources(sources, &mut budget())
+        .unwrap_or_else(|r| panic!("{:?}", r.error().error()))
         .with_actions(vec![RawActionBehavior::new(
             Arc::from("alarm"),
             Behavior,
@@ -289,7 +290,7 @@ mod live {
                 .unwrap();
             let instance = logical(&td, true, true);
             let prepared = prepare_both(&instance, &[&mqtt, &http]).unwrap();
-            let mqtt_definitions = prepared
+            let mut mqtt_definitions = prepared
                 .operations()
                 .iter()
                 .filter_map(|o| o.definition::<MqttNotificationDefinition>().cloned())
@@ -303,7 +304,8 @@ mod live {
                 .participation(
                     &owner.participation_token(),
                     instance.key(),
-                    mqtt_definitions,
+                    &mut mqtt_definitions,
+                    &mut budget(),
                 )
                 .unwrap();
             let http_runtime = HttpActionRuntime::try_new(

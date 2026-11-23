@@ -55,7 +55,7 @@ use core::{
 // registry is externally built before native setup; larger applications need
 // a different indexed/resumable owner, not one unbounded HandlerSteps charge.
 const MAX_INSTANCES: usize = 32;
-const MAX_BEHAVIORS_PER_INSTANCE: usize = 16;
+const MAX_HANDLERS_PER_INSTANCE: usize = 16;
 const MAX_TARGET_NAME_BYTES: usize = 256;
 
 /// Handler storage and dispatch identity, independent of a native route.
@@ -90,6 +90,9 @@ pub struct RawProducerInstance {
     action_query: Option<Box<dyn clinkz_wot_core::action::ActionQueryPolicy>>,
     notification_sources: Vec<ProducerNotificationSource>,
     notification_work: Cell<usize>,
+    // Includes unread terminal Action entries. Taking a settlement removes
+    // its entry; the returned settlement still pins this instance's backing.
+    action_entries: Cell<usize>,
     action_result_accounts: Option<Arc<clinkz_wot_core::host_accounts::HostResourceAccounts>>,
     // Last to drop: original accepted work retains the actual shared capacity
     // owner through behavior/native/result disposal and acknowledgement.
@@ -106,6 +109,7 @@ impl RawProducerInstance {
             action_query: None,
             notification_sources: Vec::new(),
             notification_work: Cell::new(0),
+            action_entries: Cell::new(0),
             action_result_accounts: None,
             retained_owner: None,
         }
@@ -127,9 +131,34 @@ impl RawProducerInstance {
         self
     }
 
-    pub fn with_notification_sources(mut self, sources: Vec<ProducerNotificationSource>) -> Self {
+    /// Prepay one lifetime cleanup item per original source before taking its
+    /// table. The last instance owner can be an unread result after replacement.
+    pub fn with_notification_sources(
+        mut self,
+        sources: Vec<ProducerNotificationSource>,
+        lifetime: &mut WorkBudget,
+    ) -> Result<Self, BindingInputRejection<(Self, Vec<ProducerNotificationSource>)>> {
+        if lifetime
+            .consume(WorkClass::CleanupItems, sources.len() as u64)
+            .is_err()
+        {
+            let error = CoreError::Backpressure(context().with_thing(self.key().slot()));
+            return Err(BindingInputRejection::new(
+                (self, sources),
+                BindingOperationalError::new(error),
+            ));
+        }
         self.notification_sources = sources;
-        self
+        Ok(self)
+    }
+    fn retains_publication_work(&self) -> bool {
+        self.notification_work.get() != 0 || self.action_entries.get() != 0
+    }
+    pub fn behavior_count(&self) -> usize {
+        self.behaviors.len()
+            + self.actions.len()
+            + usize::from(self.action_query.is_some())
+            + self.notification_sources.len()
     }
     pub fn supports_notification(&self, target: &AffordanceTarget, operation: Operation) -> bool {
         self.notification_sources.iter().any(|s| {
@@ -295,9 +324,18 @@ impl RawProducerInstance {
 #[derive(Clone, Copy, Debug)]
 pub struct RawProducerRegistryLimits {
     pub instances: usize,
+    /// Total caller-provisioned registrations, including notification sources.
     pub behaviors_per_instance: usize,
     /// Maximum UTF-8 bytes per registered or accepted native target name.
     pub target_name_bytes: usize,
+}
+
+impl RawProducerRegistryLimits {
+    // Finite and Action dispatch scan only executable handlers. A wider table
+    // of notification sources does not increase their atomic lookup envelope.
+    fn handler_limit(self) -> usize {
+        self.behaviors_per_instance.min(MAX_HANDLERS_PER_INSTANCE)
+    }
 }
 
 struct InstanceEntry {
@@ -357,7 +395,7 @@ impl RawProducerServient {
         limits: RawProducerRegistryLimits,
     ) -> Result<Self, BindingInputRejection<Vec<RawProducerInstance>>> {
         let valid = (1..=MAX_INSTANCES).contains(&limits.instances)
-            && (1..=MAX_BEHAVIORS_PER_INSTANCE).contains(&limits.behaviors_per_instance)
+            && limits.behaviors_per_instance != 0
             && limits.target_name_bytes <= MAX_TARGET_NAME_BYTES
             && !instances.is_empty()
             && instances.len() <= limits.instances
@@ -386,15 +424,9 @@ impl RawProducerServient {
     }
 
     fn valid_instance(instance: &RawProducerInstance, limits: RawProducerRegistryLimits) -> bool {
-        (!instance.behaviors.is_empty()
-            || !instance.actions.is_empty()
-            || instance.action_query.is_some()
-            || !instance.notification_sources.is_empty())
-            && instance.behaviors.len()
-                + instance.actions.len()
-                + instance.notification_sources.len()
-                + usize::from(instance.action_query.is_some())
-                <= limits.behaviors_per_instance
+        let behaviors = instance.behavior_count();
+        (1..=limits.behaviors_per_instance).contains(&behaviors)
+            && behaviors - instance.notification_sources.len() <= limits.handler_limit()
             && instance
                 .notification_sources
                 .iter()
@@ -439,7 +471,9 @@ impl RawProducerServient {
             .find(|entry| entry.instance.key() == key && entry.permission.is_current())
         {
             entry.permission.revoke();
-            if let Some(actions) = &mut self.actions {
+            if entry.instance.action_entries.get() != 0
+                && let Some(actions) = &mut self.actions
+            {
                 actions.revoke(key);
             }
             true
@@ -491,7 +525,9 @@ impl RawProducerServient {
         };
         self.instances[index].permission.revoke();
         let displaced = core::mem::replace(&mut self.instances[index], entry);
-        if let Some(actions) = &mut self.actions {
+        if displaced.instance.action_entries.get() != 0
+            && let Some(actions) = &mut self.actions
+        {
             actions.revoke(expected);
         }
         drop(displaced);
@@ -560,7 +596,7 @@ impl RawProducerServient {
             return Ok(progress);
         }
         let mut units = (self.limits.instances
-            + self.limits.behaviors_per_instance * (self.limits.target_name_bytes + 1)
+            + self.limits.handler_limit() * (self.limits.target_name_bytes + 1)
             + 1) as u64;
         if runtime.validation == FiniteValidation::Required {
             // Prepay the complete declared value/media traversal, before

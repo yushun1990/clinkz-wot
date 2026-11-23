@@ -103,7 +103,7 @@ fn callback_revocation_and_cleanup_failure_retain_original_effect_and_owner() {
             );
             let key = instance.key();
             let prepared = prepare(&instance, &[&provider]).unwrap();
-            let definitions = prepared
+            let mut definitions = prepared
                 .operations()
                 .iter()
                 .map(|o| {
@@ -113,7 +113,12 @@ fn callback_revocation_and_cleanup_failure_retain_original_effect_and_owner() {
                 })
                 .collect();
             let mut native = service
-                .participation(&owner.participation_token(), key, definitions)
+                .participation(
+                    &owner.participation_token(),
+                    key,
+                    &mut definitions,
+                    &mut budget(),
+                )
                 .unwrap();
             let mut publication = owner
                 .prepare_publication(instance, None)
@@ -414,15 +419,19 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
         json["events"]["notice"]["data"]["type"] = serde_json::json!("string");
         json["events"]["notice"]["forms"][0]["mqv:filter"] = serde_json::json!("multi/notice");
         let instance = RawProducerInstance::new(authority(1), vec![])
-            .with_notification_sources(vec![
-                ProducerNotificationSource::event("alarm"),
-                ProducerNotificationSource::event("notice"),
-            ])
+            .with_notification_sources(
+                vec![
+                    ProducerNotificationSource::event("alarm"),
+                    ProducerNotificationSource::event("notice"),
+                ],
+                &mut budget(),
+            )
+            .unwrap_or_else(|r| panic!("{:?}", r.error().error()))
             .with_description(Arc::from(json.to_string()));
         drop(json);
         let prepared = prepare(&instance, &[&provider]).unwrap();
         assert_eq!(prepared.operations().len(), 4);
-        let definitions = prepared
+        let mut definitions = prepared
             .operations()
             .iter()
             .map(|o| {
@@ -432,7 +441,12 @@ fn one_thing_keeps_distinct_event_schemas_and_native_topics() {
             })
             .collect();
         let participant = service
-            .participation(&owner.participation_token(), instance.key(), definitions)
+            .participation(
+                &owner.participation_token(),
+                instance.key(),
+                &mut definitions,
+                &mut budget(),
+            )
             .unwrap();
         let mut exposure = stage(
             &owner,

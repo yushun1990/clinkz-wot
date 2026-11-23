@@ -1681,3 +1681,184 @@ fn extra_expanded_event_data_refuses_before_native_start_and_supported_td_still_
         assert_empty(&bank);
     });
 }
+
+#[test]
+fn a_root_wildcard_shares_a_topic_only_with_the_event_it_decodes() {
+    check_wildcard_attribution(false);
+}
+
+#[test]
+fn wildcard_attribution_holds_across_two_independent_producer_connections() {
+    check_wildcard_attribution(true);
+}
+
+fn check_wildcard_attribution(separate_connections: bool) {
+    runtime().block_on(async {
+        let broker = Broker::start();
+        let prefix = "attribution/events";
+        let mut owner = owner();
+        let provider = MqttNotificationProducer::new(
+            MqttProducerConfig::for_loopback(broker.address, 8192).unwrap(),
+            BindingId::new(7),
+            BindingGeneration::INITIAL,
+        );
+        let native_service = MqttNotificationService::new(&provider).unwrap();
+        let other =
+            separate_connections.then(|| MqttNotificationService::new(&provider.clone()).unwrap());
+        let leaf_service = other.as_ref().unwrap_or(&native_service);
+        let accounts = bank();
+        let candidate = |owner: &RawProducerServient,
+                         property_topic: &str,
+                         ready_topic: &str,
+                         alarm_topic: &str,
+                         split: bool,
+                         root_last: bool|
+         -> CoreResult<_> {
+            let mut td = event_collection_td(broker.address, prefix);
+            td["properties"] = property_td(broker.address, property_topic)["properties"].clone();
+            td["events"]["ready"]["forms"][0]["mqv:filter"] = ready_topic.into();
+            td["events"]["alarm"]["forms"][0]["mqv:filter"] = alarm_topic.into();
+            let instance = RawProducerInstance::new(authority(1), vec![])
+                .with_description(Arc::from(td.to_string()))
+                .with_notification_sources(
+                    vec![
+                        ProducerNotificationSource::AllEvents,
+                        ProducerNotificationSource::event("alarm"),
+                        ProducerNotificationSource::event("ready"),
+                        ProducerNotificationSource::property("temperature"),
+                    ],
+                    &mut budget(),
+                )
+                .unwrap_or_else(|r| panic!("{:?}", r.error().error()));
+            let prepared = prepare(&instance, &[&provider])?;
+            let mut groups = [Vec::new(), Vec::new()];
+            for op in prepared.operations() {
+                let leaf = op.site.site() != clinkz_wot_core::thing::AffordanceSite::Thing;
+                groups[usize::from(split && (leaf != root_last))].push(
+                    op.definition::<MqttNotificationDefinition>()
+                        .unwrap()
+                        .clone(),
+                );
+            }
+            let mut participants = Vec::new();
+            for (mut defs, service) in groups.into_iter().zip([&native_service, leaf_service]) {
+                if defs.is_empty() {
+                    continue;
+                }
+                participants.push(OwnedProducerParticipation::notifications(
+                    service.participation(
+                        &owner.participation_token(),
+                        instance.key(),
+                        &mut defs,
+                        &mut budget(),
+                    )?,
+                ));
+            }
+            Ok((
+                td,
+                ComposedProducerInput {
+                    instance,
+                    prepared,
+                    participants,
+                    expected: None,
+                    providers: ProducerRegistrations::new(vec![Rc::new(provider.clone())]),
+                    handler_backing_bytes: 0,
+                },
+            ))
+        };
+        let alarm = format!("{prefix}/alarm");
+        let ready = format!("{prefix}/ready");
+        for (split, root_last) in [(false, false), (true, false), (true, true)] {
+            for (property_topic, ready_topic) in [
+                (alarm.as_str(), ready.as_str()),
+                ("outside/temperature", alarm.as_str()),
+            ] {
+                assert!(matches!(
+                    candidate(
+                        &owner,
+                        property_topic,
+                        ready_topic,
+                        "outside/alarm",
+                        split,
+                        root_last
+                    ),
+                    Err(CoreError::UnsupportedOperation(_))
+                ));
+                assert!(!native_service.connected() && !leaf_service.connected());
+                assert_eq!(native_service.locally_published(), 0);
+                assert_eq!(leaf_service.locally_published(), 0);
+            }
+        }
+        let (td, input) =
+            candidate(&owner, "outside/temperature", &ready, &alarm, true, false).unwrap();
+        let mut producer = stage(&owner, input, &accounts);
+        let end = Instant::now() + Duration::from_secs(3);
+        loop {
+            producer
+                .step(&mut owner, &mut cx(), now(), |_, _| budget())
+                .unwrap();
+            match producer.publish(&mut owner, &mut budget()) {
+                Ok(()) => break,
+                Err(CoreError::Backpressure(_)) => (),
+                Err(error) => panic!("{error:?}"),
+            }
+            assert!(Instant::now() < end);
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        assert!(native_service.connected() && leaf_service.connected());
+        let cs = service(&broker, 8192);
+        let access = Arc::new(Access::default());
+        let consumer_owner = consumer_owner();
+        let mut root = from_definition(
+            definition(&cs, td, &accounts, access.clone(), Arc::new(MqttJsonData)),
+            &consumer_owner,
+            4,
+            access,
+        );
+        let mut cursor = subscribe(&mut root, NotificationOverflow::Terminate);
+        active(&mut root, &cursor).await;
+        let key = producer.key();
+        let leaf = producer
+            .participant_mut::<MqttNotificationRuntime>(1)
+            .unwrap();
+        for (target, payload) in [
+            (
+                AffordanceTarget::Property("temperature".into()),
+                PublicationData::PropertyValue(Payload::new(b"23".as_slice(), "application/json")),
+            ),
+            (AffordanceTarget::Event("alarm".into()), support::data(b"7")),
+        ] {
+            let mut emitted = owner
+                .publish_notification(
+                    leaf,
+                    key,
+                    target.clone(),
+                    payload,
+                    Deadline::NONE,
+                    now(),
+                    &mut budget(),
+                )
+                .ok()
+                .unwrap();
+            finish(&mut emitted).await;
+            assert_eq!(emitted.acknowledge().ok().unwrap().target, target);
+        }
+        accounted(&mut root, &cursor, 1).await;
+        let item = root.front(&mut cursor, &mut budget()).unwrap().unwrap();
+        assert_eq!(
+            item.target,
+            clinkz_wot_core::thing::AffordanceSite::Event("alarm")
+        );
+        assert_eq!(item.data.unwrap().body, b"7");
+        assert_eq!(leaf_service.locally_published(), 2);
+        if separate_connections {
+            assert_eq!(native_service.locally_published(), 0);
+        }
+        drop((cursor, root, producer));
+        assert!(!native_service.connected() && !leaf_service.connected());
+        owner
+            .retire_revoked_publication(key, &mut budget())
+            .unwrap();
+        assert_empty(&accounts);
+    });
+}

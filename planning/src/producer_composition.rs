@@ -4,6 +4,7 @@
 #![allow(clippy::result_large_err)]
 use crate::{finite_producer::PRODUCER_DESCRIPTION_BYTES, producer_property_read::td_error};
 use alloc::{boxed::Box, rc::Rc, string::String, vec::Vec};
+use clinkz_wot_core::notification::NotificationKind;
 pub use clinkz_wot_core::publication::{PublicationFacts, PublicationObserver, PublicationState};
 use clinkz_wot_core::{
     BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext, ErrorPhase, Operation,
@@ -144,6 +145,10 @@ pub struct PreparedOperation {
     definition: Box<dyn Any>,
 }
 impl PreparedOperation {
+    pub fn notification_start(&self) -> Option<NotificationKind> {
+        NotificationKind::for_operation(self.operation)
+            .filter(|kind| kind.start_operation() == self.operation)
+    }
     /// The concrete Binding obtains its own typed, immutable definition. This
     /// loan confers no right to create logical authority or shut down I/O.
     pub fn definition<T: 'static>(&self) -> Option<&T> {
@@ -159,6 +164,7 @@ impl PreparedOperation {
 pub struct PreparedThing {
     operations: Vec<PreparedOperation>,
     retained_bytes: usize,
+    notification_mappings: usize,
 }
 impl PreparedThing {
     pub fn operations(&self) -> &[PreparedOperation] {
@@ -166,6 +172,11 @@ impl PreparedThing {
     }
     pub fn retained_bytes(&self) -> usize {
         self.retained_bytes
+    }
+    /// One publication route per selected start Form/operation, including
+    /// alternatives. Stop operations retain definitions but add no route.
+    pub fn notification_mapping_count(&self) -> usize {
+        self.notification_mappings
     }
 }
 
@@ -241,6 +252,7 @@ pub fn prepare_thing(
     let mut facts = PublicationFacts::default();
     observe_providers(providers, &mut facts)?;
     let mut operations = Vec::new();
+    let mut notification_mappings = 0;
     let mut retained_bytes = core::mem::size_of::<PreparedThing>();
     visit_thing(
         description,
@@ -283,14 +295,16 @@ pub fn prepare_thing(
                 return Err(busy());
             }
             retained_bytes = next;
-            operations.push(PreparedOperation {
+            let operation = PreparedOperation {
                 site: input.site.clone(),
                 form: input.form,
                 operation: input.operation,
                 binding: selected.1,
                 provider: selected.0,
                 definition: selected.2,
-            });
+            };
+            notification_mappings += usize::from(operation.notification_start().is_some());
+            operations.push(operation);
             Ok(())
         },
     )?;
@@ -298,6 +312,7 @@ pub fn prepare_thing(
     Ok(PreparedThing {
         operations,
         retained_bytes,
+        notification_mappings,
     })
 }
 

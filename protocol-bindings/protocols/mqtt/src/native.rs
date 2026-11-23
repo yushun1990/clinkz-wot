@@ -50,7 +50,7 @@ struct Session {
     received: usize,
     started: Option<Instant>,
     first_cause: Option<CoreError>,
-    leases: Vec<Weak<Lease>>,
+    live_leases: usize,
     busy: bool,
     locally_published: u64,
 }
@@ -240,7 +240,7 @@ impl MqttNotificationService {
                 received: 0,
                 started: None,
                 first_cause: None,
-                leases: Vec::with_capacity(MAX_LEASES),
+                live_leases: 0,
                 busy: false,
                 locally_published: 0,
             })),
@@ -261,39 +261,68 @@ impl MqttNotificationService {
         self.session.borrow().first_cause.clone()
     }
 
+    /// Adopt the caller's definitions and one mapping per start. The caller
+    /// funds topic comparisons within this member and against the registration's
+    /// live inventories. The cleanup allowance covers disposal of definitions
+    /// and mappings, including abandonment between turns. Refusal leaves all
+    /// definitions with the caller.
     pub fn participation(
         &self,
         owner: &ProducerOwnerToken,
         key: ProducerInstanceKey,
-        definitions: Vec<MqttNotificationDefinition>,
+        definitions: &mut Vec<MqttNotificationDefinition>,
+        lifetime: &mut WorkBudget,
     ) -> CoreResult<MqttNotificationRuntime> {
-        if definitions.is_empty() || definitions.len() > 32 {
+        let mut session = self.session.borrow_mut();
+        if session.live_leases == MAX_LEASES {
+            return Err(CoreError::Backpressure(
+                ErrorContext::new(ErrorPhase::Admission, RetryClass::Safe)
+                    .with_redacted_cause(652, "MQTT service participation leases occupied"),
+            ));
+        }
+        if matches!(*session.phase.get(), Phase::Failed | Phase::Closed)
+            || definitions.iter().any(|d| {
+                !Rc::ptr_eq(&d.registration, &session.registration)
+                    || NotificationKind::for_operation(d.operation) != Some(d.schemas.kind())
+            })
+        {
             return Err(unsupported());
         }
-        let mut session = self.session.borrow_mut();
-        session.leases.retain(|w| w.strong_count() != 0);
-        if session.leases.len() == MAX_LEASES
-            || matches!(*session.phase.get(), Phase::Failed | Phase::Closed)
-            || definitions
-                .iter()
-                .any(|d| !Rc::ptr_eq(&d.registration, &session.registration))
+        let starts = definitions
+            .iter()
+            .filter(|d| d.operation == d.schemas.kind().start_operation())
+            .count();
+        let records = definitions.len().checked_add(starts).ok_or_else(busy)?;
+        // Each start will be compared with every preceding start in this member.
+        // Widen before multiplying so the pair count can be checked against the
+        // caller's credit before sorting or allocating any mapping.
+        let pairs = (starts as u128 * starts.saturating_sub(1) as u128) / 2;
+        if pairs > u128::from(lifetime.remaining(WorkClass::BindingPolls)) {
+            return Err(busy());
+        }
+        lifetime
+            .consume(WorkClass::CleanupItems, records as u64)
+            .map_err(|_| busy())?;
+        // This native subset has one start and at most one stop per source
+        // and family. Reuse the caller's vector as the coverage index.
+        definitions.sort_unstable_by(|a, b| a.coordinate().cmp(&b.coordinate()));
+        if definitions
+            .windows(2)
+            .any(|pair| pair[0].coordinate() == pair[1].coordinate())
         {
             return Err(unsupported());
         }
         let mut mappings: Vec<NotificationMapping> = Vec::new();
-        for d in &definitions {
-            let kind = NotificationKind::for_operation(d.operation).ok_or_else(unsupported)?;
-            if d.operation != kind.start_operation() {
-                continue;
-            }
-            if mappings.len() == 16
-                || mappings
-                    .iter()
-                    .any(|e| e.target == d.target && e.kind == kind || e.topic == d.topic)
-            {
-                return Err(unsupported());
-            }
-            mappings.push(NotificationMapping {
+        mappings.try_reserve_exact(starts).map_err(|_| busy())?;
+        lifetime
+            .consume(WorkClass::BindingPolls, pairs as u64)
+            .expect("topic comparison credit checked");
+        for d in definitions
+            .iter()
+            .filter(|d| d.operation == d.schemas.kind().start_operation())
+        {
+            let kind = d.schemas.kind();
+            let mapping = NotificationMapping {
                 target: d.target.clone(),
                 kind,
                 topic: Arc::clone(&d.topic),
@@ -301,54 +330,45 @@ impl MqttNotificationService {
                 services: Rc::new(JsonNoSec {
                     schemas: d.schemas.clone(),
                 }),
-            });
+            };
+            if mappings
+                .iter()
+                .any(|prior| prior.conflicts_with(&mapping, true))
+            {
+                return Err(unsupported());
+            }
+            mappings.push(mapping);
         }
         if mappings.is_empty()
             || definitions.iter().any(|d| {
-                !mappings.iter().any(|e| {
-                    e.target == d.target
-                        && Some(e.kind) == NotificationKind::for_operation(d.operation)
-                        && e.topic == d.topic
-                        && e.services.schemas == d.schemas
-                })
-            })
-            || definitions.iter().enumerate().any(|(i, d)| {
-                definitions[..i]
-                    .iter()
-                    .any(|p| p.target == d.target && p.operation == d.operation)
+                NotificationMapping::find(&mappings, &d.target, d.schemas.kind())
+                    .is_none_or(|e| e.topic != d.topic || e.services.schemas != d.schemas)
             })
         {
             return Err(unsupported());
         }
-        // Refuse ambiguous attribution between independent logical sources.
-        // A staged successor may reuse its old numeric slot/topic, but cannot
-        // inherit its original mapping identity or pending publication.
-        if session.leases.iter().filter_map(Weak::upgrade).any(|l| {
-            if l.closing.get() {
-                return false;
-            }
-            if l.token.same_owner(owner) && l.key.slot().slot() == key.slot().slot() {
-                return false;
-            }
-            l.mappings
-                .iter()
-                .any(|a| mappings.iter().any(|b| filters_overlap(&a.topic, &b.topic)))
-        }) {
-            return Err(unsupported());
-        }
+        session
+            .registration
+            .topics
+            .check(owner, key, &mappings, lifetime)?;
         let gate = Rc::new(ProducerIngressGate::default());
+        let inventory = Rc::new(Inventory {
+            owner: owner.clone(),
+            key,
+            neighbors: RefCell::default(),
+            mappings,
+            definitions: core::mem::take(definitions),
+        });
         let lease = Rc::new(Lease {
             session: Rc::clone(&self.session),
-            token: owner.clone(),
-            key,
-            mappings,
-            definitions,
             closing: Cell::new(false),
             gate: Rc::clone(&gate),
             funding: RefCell::new(None),
         });
-        session.leases.push(Rc::downgrade(&lease));
+        session.registration.topics.insert(&inventory);
+        session.live_leases += 1;
         Ok(MqttNotificationRuntime {
+            inventory: Some(inventory),
             lease: Some(lease),
             token: owner.clone(),
             key,
@@ -387,12 +407,129 @@ struct NotificationMapping {
     route: NotificationRoute,
     services: Rc<JsonNoSec>,
 }
-struct Lease {
-    session: Rc<RefCell<Session>>,
-    token: ProducerOwnerToken,
+impl MqttNotificationDefinition {
+    fn coordinate(&self) -> (&AffordanceTarget, Operation) {
+        (&self.target, self.operation)
+    }
+}
+impl NotificationMapping {
+    fn conflicts_with(&self, other: &Self, same_instance: bool) -> bool {
+        if !filters_overlap(&self.topic, &other.topic) {
+            return false;
+        }
+        // A collection and its own named Event may share exactly the topic
+        // that the Consumer decodes into that Event. Every other overlap
+        // would attribute a publication to another source.
+        let (root, leaf) = if self.kind == NotificationKind::SubscribeAllEvents {
+            (self, other)
+        } else {
+            (other, self)
+        };
+        !(same_instance
+            && root.kind == NotificationKind::SubscribeAllEvents
+            && leaf.kind == NotificationKind::Event
+            && matches!(&leaf.target, AffordanceTarget::Event(name)
+                if wildcard_member(&root.topic, &leaf.topic) == Some(name.as_ref())))
+    }
+    fn find<'a>(
+        mappings: &'a [Self],
+        target: &AffordanceTarget,
+        kind: NotificationKind,
+    ) -> Option<&'a Self> {
+        // Starts were collected in definition order, including both root families.
+        let key = (target, kind.start_operation());
+        let index = mappings
+            .binary_search_by(|e| (&e.target, e.kind.start_operation()).cmp(&key))
+            .ok()?;
+        Some(&mappings[index])
+    }
+}
+// One registration addresses one broker. Each live inventory supplies its own
+// links, so independent sessions share attribution without pooling their slots
+// or retaining storage for departed members. Both insertion and unlink are O(1).
+#[derive(Default)]
+pub(super) struct TopicOwners {
+    first: RefCell<Weak<Inventory>>,
+}
+#[derive(Default)]
+struct Neighbors {
+    previous: Weak<Inventory>,
+    next: Weak<Inventory>,
+}
+impl TopicOwners {
+    fn check(
+        &self,
+        owner: &ProducerOwnerToken,
+        key: ProducerInstanceKey,
+        mappings: &[NotificationMapping],
+        budget: &mut WorkBudget,
+    ) -> CoreResult<()> {
+        let mut next = self.first.borrow().upgrade();
+        while let Some(existing) = next {
+            budget
+                .consume(WorkClass::BindingPolls, 1)
+                .map_err(|_| busy())?;
+            next = existing.neighbors.borrow().next.upgrade();
+            let same_owner = existing.owner.same_owner(owner);
+            // A successor may stage in its predecessor's namespace. Their
+            // separate gates still order which incarnation can publish.
+            if same_owner && existing.key != key && existing.key.slot().slot() == key.slot().slot()
+            {
+                continue;
+            }
+            let comparisons = existing
+                .mappings
+                .len()
+                .checked_mul(mappings.len())
+                .ok_or_else(busy)?;
+            budget
+                .consume(WorkClass::BindingPolls, comparisons as u64)
+                .map_err(|_| busy())?;
+            let same_instance = same_owner && existing.key == key;
+            if existing
+                .mappings
+                .iter()
+                .any(|a| mappings.iter().any(|b| a.conflicts_with(b, same_instance)))
+            {
+                return Err(unsupported());
+            }
+        }
+        Ok(())
+    }
+
+    fn insert(&self, inventory: &Rc<Inventory>) {
+        let added = Rc::downgrade(inventory);
+        let next = self.first.replace(added.clone());
+        if let Some(next) = next.upgrade() {
+            next.neighbors.borrow_mut().previous = added;
+        }
+        inventory.neighbors.borrow_mut().next = next;
+    }
+
+    fn remove(&self, inventory: &Inventory) {
+        let Neighbors { previous, next } = inventory.neighbors.take();
+        if let Some(prior) = previous.upgrade() {
+            prior.neighbors.borrow_mut().next = next.clone();
+        } else {
+            self.first.replace(next.clone());
+        }
+        if let Some(next) = next.upgrade() {
+            next.neighbors.borrow_mut().previous = previous;
+        }
+    }
+}
+
+// The runtime alone owns the variable inventory and its prepaid destruction.
+// A publication pins only the fixed session lease, gate and original funding.
+struct Inventory {
+    owner: ProducerOwnerToken,
     key: ProducerInstanceKey,
+    neighbors: RefCell<Neighbors>,
     mappings: Vec<NotificationMapping>,
     definitions: Vec<MqttNotificationDefinition>,
+}
+struct Lease {
+    session: Rc<RefCell<Session>>,
     closing: Cell<bool>,
     gate: Rc<ProducerIngressGate>,
     // Last disposal includes native publications which outlive the exposure.
@@ -401,7 +538,8 @@ struct Lease {
 impl Drop for Lease {
     fn drop(&mut self) {
         let mut s = self.session.borrow_mut();
-        if !s.leases.iter().any(|w| w.strong_count() != 0) {
+        s.live_leases -= 1;
+        if s.live_leases == 0 {
             s.connect = None;
             s.stream = None;
             if *s.phase.get() != Phase::New && *s.phase.get() != Phase::Failed {
@@ -412,6 +550,7 @@ impl Drop for Lease {
 }
 
 pub struct MqttNotificationRuntime {
+    inventory: Option<Rc<Inventory>>,
     lease: Option<Rc<Lease>>,
     token: ProducerOwnerToken,
     key: ProducerInstanceKey,
@@ -430,9 +569,30 @@ impl MqttNotificationRuntime {
         };
         if self.closed {
             if Rc::strong_count(lease) == 1 {
-                if budget.consume(WorkClass::CleanupItems, 1).is_err() {
+                let inventory = Rc::get_mut(self.inventory.as_mut().expect("live inventory"))
+                    .expect("closing unlinked the registration's weak inventory");
+                // Bound the actual work of this turn even when the inventory
+                // is larger than the profile's entire cleanup quantum.
+                let available = usize::try_from(budget.remaining(WorkClass::CleanupItems))
+                    .unwrap_or(usize::MAX);
+                let definitions = available.min(inventory.definitions.len());
+                let mappings = (available - definitions).min(inventory.mappings.len());
+                budget
+                    .consume(WorkClass::CleanupItems, (definitions + mappings) as u64)
+                    .expect("available credit");
+                inventory
+                    .definitions
+                    .truncate(inventory.definitions.len() - definitions);
+                inventory
+                    .mappings
+                    .truncate(inventory.mappings.len() - mappings);
+                if !inventory.definitions.is_empty()
+                    || !inventory.mappings.is_empty()
+                    || budget.consume(WorkClass::CleanupItems, 1).is_err()
+                {
                     return Ok(Poll::Pending);
                 }
+                self.inventory = None;
                 self.lease = None;
                 return Ok(Poll::Ready(()));
             }
@@ -461,7 +621,7 @@ impl MqttNotificationRuntime {
         operation: Operation,
         definition: &dyn Any,
     ) -> bool {
-        let Some(l) = &self.lease else {
+        let Some(l) = &self.inventory else {
             return false;
         };
         let Some(d) = definition.downcast_ref::<MqttNotificationDefinition>() else {
@@ -473,8 +633,12 @@ impl MqttNotificationRuntime {
             && form == d.form
             && operation == d.operation
             && l.definitions
-                .iter()
-                .any(|native| Arc::ptr_eq(&native.schemas, &d.schemas) && native == d)
+                .binary_search_by(|native| native.coordinate().cmp(&d.coordinate()))
+                .ok()
+                .is_some_and(|i| {
+                    let native = &l.definitions[i];
+                    Arc::ptr_eq(&native.schemas, &d.schemas) && native == d
+                })
     }
 }
 impl ClosedProducerParticipation for MqttNotificationRuntime {
@@ -517,22 +681,35 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
         {
             return None;
         }
-        let mut bytes = size_of::<Self>()
+        let inventory = self.inventory.as_ref()?;
+        let fixed = size_of::<Self>()
             + size_of::<Lease>()
+            + size_of::<Inventory>() + 2 * size_of::<usize>()
             + size_of::<Option<MqttPublication>>() + core::mem::align_of::<Option<MqttPublication>>()
             + DATA_BACKING
             // A provisioned callback envelope, including decoded JSON keys and
             // strings, retained with this original managed participation.
             + MqttJsonData.policy().temporary_bytes as usize
-            + 32 * size_of::<usize>()
-            + l.mappings.capacity() * size_of::<NotificationMapping>()
-            + l.definitions.capacity() * size_of::<MqttNotificationDefinition>();
-        for d in &l.definitions {
+            + 32 * size_of::<usize>();
+        let mut bytes = fixed
+            .checked_add(
+                inventory
+                    .mappings
+                    .capacity()
+                    .checked_mul(size_of::<NotificationMapping>())?,
+            )?
+            .checked_add(
+                inventory
+                    .definitions
+                    .capacity()
+                    .checked_mul(size_of::<MqttNotificationDefinition>())?,
+            )?;
+        for d in &inventory.definitions {
             bytes = bytes.checked_add(
                 target_name_bytes(&d.target) + d.topic.len() + 4 * size_of::<usize>(),
             )?;
         }
-        for e in &l.mappings {
+        for e in &inventory.mappings {
             bytes = bytes.checked_add(
                 target_name_bytes(&e.target)
                     + e.topic.len()
@@ -549,8 +726,14 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
     fn begin_retire(&mut self, _: ProducerRetirement) {
         self.closed = true;
         self.gate.withdraw();
-        if let Some(l) = &self.lease {
-            l.closing.set(true);
+        if let Some(l) = &self.lease
+            && !l.closing.replace(true)
+        {
+            l.session
+                .borrow()
+                .registration
+                .topics
+                .remove(self.inventory.as_ref().expect("live inventory"));
         }
     }
     fn ready_for(&self, owner: &ProducerOwnerToken, key: ProducerInstanceKey) -> bool {
@@ -575,7 +758,7 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
         self.covers_definition(key, binding, site, form, operation, definition)
     }
     fn qualified_operation_count(&self) -> Option<usize> {
-        Some(self.lease.as_ref().map_or(0, |l| l.definitions.len()))
+        Some(self.inventory.as_ref().map_or(0, |l| l.definitions.len()))
     }
     fn notification_publication(
         &self,
@@ -589,26 +772,12 @@ impl ClosedProducerParticipation for MqttNotificationRuntime {
         Rc<dyn ProducerNotificationServices>,
         usize,
     )> {
-        let target = match site {
-            AffordanceSite::Thing => AffordanceTarget::Thing,
-            AffordanceSite::Property(n) => AffordanceTarget::Property(Arc::from(n)),
-            AffordanceSite::Event(n) => AffordanceTarget::Event(Arc::from(n)),
-            _ => return None,
-        };
-        let kind = NotificationKind::for_operation(
-            definition
-                .downcast_ref::<MqttNotificationDefinition>()?
-                .operation,
-        )?;
+        let d = definition.downcast_ref::<MqttNotificationDefinition>()?;
+        let kind = d.schemas.kind();
         if !self.covers_definition(key, binding, site, form, kind.start_operation(), definition) {
             return None;
         }
-        let e = self
-            .lease
-            .as_ref()?
-            .mappings
-            .iter()
-            .find(|e| e.target == target && e.kind == kind)?;
+        let e = NotificationMapping::find(&self.inventory.as_ref()?.mappings, &d.target, kind)?;
         Some((e.route.clone(), e.services.clone(), DATA_BACKING))
     }
     fn ingress_gate(&self) -> &Rc<ProducerIngressGate> {
@@ -644,12 +813,7 @@ impl ProducerNotificationBinding for MqttNotificationRuntime {
         target: &AffordanceTarget,
         kind: NotificationKind,
     ) -> Option<&NotificationRoute> {
-        self.lease
-            .as_ref()?
-            .mappings
-            .iter()
-            .find(|e| e.target == *target && e.kind == kind)
-            .map(|e| &e.route)
+        Some(&NotificationMapping::find(&self.inventory.as_ref()?.mappings, target, kind)?.route)
     }
     fn start_publication(
         &mut self,
@@ -663,7 +827,11 @@ impl ProducerNotificationBinding for MqttNotificationRuntime {
         else {
             return Err(reject(data, unsupported()));
         };
-        let Some(e) = l.mappings.iter().find(|e| e.route.same_mapping(route)) else {
+        let Some(e) = self
+            .inventory
+            .as_ref()
+            .and_then(|i| i.mappings.iter().find(|e| e.route.same_mapping(route)))
+        else {
             return Err(reject(data, unsupported()));
         };
         if data.kind() != e.kind {

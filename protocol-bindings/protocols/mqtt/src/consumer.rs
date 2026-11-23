@@ -531,8 +531,8 @@ impl ConsumerSession {
                 i.loss = i.loss.saturating_add(1);
             } else {
                 let target = if i.kind == NotificationKind::SubscribeAllEvents {
-                    let prefix = i.topic.strip_suffix('+').expect("prepared wildcard");
-                    AffordanceTarget::Event(Arc::from(&topic[prefix.len()..]))
+                    let member = wildcard_member(&i.topic, topic).expect("matched Event wildcard");
+                    AffordanceTarget::Event(Arc::from(member))
                 } else {
                     i.target.clone()
                 };

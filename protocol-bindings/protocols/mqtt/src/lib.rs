@@ -47,10 +47,11 @@ impl MqttProducerConfig {
 struct Registration {
     config: MqttProducerConfig,
     binding: (BindingId, BindingGeneration),
+    topics: native::TopicOwners,
 }
 
-/// Actual immutable startup registration; shared native services retain this
-/// exact owner. Preparation and runtime cannot pair only by protocol/id tag.
+/// Startup registration with immutable configuration. Its native services
+/// share topic ownership and retain this exact registration through setup.
 #[derive(Clone)]
 pub struct MqttNotificationProducer {
     registration: Rc<Registration>,
@@ -61,6 +62,7 @@ impl MqttNotificationProducer {
             registration: Rc::new(Registration {
                 config,
                 binding: (id, generation),
+                topics: native::TopicOwners::default(),
             }),
         }
     }
@@ -114,15 +116,13 @@ fn validate_data(
 /// Only exact filters and a terminal single-level wildcard are supported.
 /// Reject overlapping distinct interests rather than invent duplicate delivery
 /// suppression or competing-consumer semantics.
+fn wildcard_member<'a>(filter: &str, topic: &'a str) -> Option<&'a str> {
+    let prefix = filter.strip_suffix("/+")?;
+    let member = topic.strip_prefix(prefix)?.strip_prefix('/')?;
+    (!member.contains('/')).then_some(member)
+}
 fn topic_matches(filter: &str, topic: &str) -> bool {
-    if let Some(prefix) = filter.strip_suffix("/+") {
-        topic
-            .strip_prefix(prefix)
-            .and_then(|s| s.strip_prefix('/'))
-            .is_some_and(|name| !name.contains('/'))
-    } else {
-        filter == topic
-    }
+    filter == topic || wildcard_member(filter, topic).is_some()
 }
 fn filters_overlap(a: &str, b: &str) -> bool {
     topic_matches(a, b) || topic_matches(b, a)

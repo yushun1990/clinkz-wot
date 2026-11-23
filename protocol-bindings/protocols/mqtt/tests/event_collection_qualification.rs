@@ -369,14 +369,19 @@ fn actual_services_ambiguity_short_credit_and_root_source_coverage_are_checked_w
     drop(d);
     let no_root_source = RawProducerInstance::new(authority(1), vec![])
         .with_description(Arc::from(td.to_string()))
-        .with_notification_sources(vec![
-            ProducerNotificationSource::event("alarm"),
-            ProducerNotificationSource::event("ready"),
-        ]);
+        .with_notification_sources(
+            vec![
+                ProducerNotificationSource::event("alarm"),
+                ProducerNotificationSource::event("ready"),
+            ],
+            &mut budget(),
+        )
+        .unwrap_or_else(|r| panic!("{:?}", r.error().error()));
     assert!(prepare(&no_root_source, &[&p]).is_err());
     let no_leaf_source = RawProducerInstance::new(authority(1), vec![])
         .with_description(Arc::from(td.to_string()))
-        .with_notification_sources(vec![ProducerNotificationSource::AllEvents]);
+        .with_notification_sources(vec![ProducerNotificationSource::AllEvents], &mut budget())
+        .unwrap_or_else(|r| panic!("{:?}", r.error().error()));
     assert!(
         prepare(&no_leaf_source, &[&p]).is_err(),
         "root source cannot satisfy advertised leaf operations"

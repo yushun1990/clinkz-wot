@@ -76,6 +76,47 @@ RAM bound or automatic aggregation across independent capacities is inferred.
 The [runtime contract](runtime-safety.md#finite-producer-participation-and-work-capacity)
 owns ordering and default dedicated-policy scope.
 
+### Host Producer notification mapping capacity
+
+Managed publication reserves one `BindingRoutesGlobalMax` item for each
+captured notification start mapping and one `RouteReadinessTokensGlobalMax`
+item for each required native member with its own ingress gate. Admission
+checks the corresponding per-Thing limits and acquires both global debits
+at the publication's original bank. A short reservation reports its resource,
+ceiling and requested count, and rolls back the candidate's acquisitions.
+
+These are logical allowances. The publication also funds the actual capacity
+of its route, member and gate vectors, the Binding's declared native backing,
+and metadata for the Binding's promised concurrent emissions. Its instance and
+native owners retain the original funding through outstanding work and unread
+results. Each finite receive uses its own work capacity.
+
+The logical instance takes a caller-funded lifetime cleanup item for each
+notification source it adopts. This allowance follows the instance through
+retirement, replacement and the last unread settlement. Each instance tracks
+its own retained Action entries and notification work through acknowledgement.
+
+The publication also takes one lifetime cleanup work item per captured Action
+or notification route when it first adopts the table. Commit transfers the
+funded rows to the registry. They can be disposed if the Servient drops while
+the exposure or native work is still live. Rechecking the same captured routes
+uses their existing lifetime allowance. Explicit retirement and atomic cutover
+still fund the work performed in their own turns.
+
+Managed admission checks the configured cleanup quantum before native setup.
+Lost-owner reclamation must be able to search the bounded registry, inspect the
+original members and withdraw their gates. A serving replacement must also be
+able to dispose of the displaced route rows and any handlers for which the
+registry could become the last owner in one cutover turn. An insufficient
+quantum returns `CleanupWorkItemsPerStepMax` with the required work and the
+original closed candidate. A short individual turn on an admitted replacement
+keeps the incumbent serving. An incumbent may also close and drain rows at its
+original owner before a smaller-quantum replacement retries.
+
+Explicit retirement verifies the original members, spends remaining credit on
+captured rows, and pays one item to remove the fenced registry entry. A partially
+drained entry stays at its original Servient if the publication guard drops.
+
 The Host notification representation imports the same original data/access
 service owners. A shared prepared mapping pays its actual program/schema/reference
 records, without charging service backing again. Independent associations fund

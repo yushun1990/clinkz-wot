@@ -245,8 +245,8 @@ Bound mapping storage by the records or bytes retained and fund the work to
 qualify and bind them. Reserve participant slots for the native participations
 the publication requires. An exhausted resource justifies a capacity refusal
 only when the publication or interaction needs more of that resource, including
-shared backing or work credit. Host route capture and publication binding
-currently compare the mapping count to the 32-participant ceiling. [Route capture](../servient/src/producer_composition.rs#L94) · [Publication binding](../servient/finite/src/publication.rs#L113)
+shared backing or work credit. The selected Host accounting is specified in
+the [Producer resource contract](../docs/spec/foundation.md#host-producer-notification-mapping-capacity).
 
 Before acceptance, the Binding owns an offered packet, stream or SDK slot,
 its bounded buffering and its native refusal path. It can wait for capacity,

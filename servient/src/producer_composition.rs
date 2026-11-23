@@ -5,7 +5,7 @@
 #![allow(clippy::result_large_err)]
 pub use crate::producer_execution::{OwnedProducerParticipation, ProducerWork};
 use crate::{
-    host_accounts::HostResourceAccounts,
+    host_accounts::{HostCapacityReservation, HostResourceAccounts},
     producer::{Funding, QualificationFunding},
 };
 use alloc::{rc::Rc, sync::Arc, vec::Vec};
@@ -17,8 +17,8 @@ use clinkz_wot_foundation::{ResourceKind as K, WorkClass};
 use clinkz_wot_foundation::{ResourceLimits, WorkBudget};
 use clinkz_wot_planning::finite_producer::PRODUCER_DESCRIPTION_BYTES;
 use clinkz_wot_planning::producer_composition::{
-    PreparedThing, ProducerCapability, ProducerQualification, ProducerRegistrations,
-    PublicationFacts,
+    FormSite, PreparedOperation, PreparedThing, ProducerCapability, ProducerQualification,
+    ProducerRegistrations, PublicationFacts,
 };
 use clinkz_wot_servient_finite::{
     CapturedActionRoute, CapturedNotificationRoute, CapturedProducerRoutes,
@@ -27,6 +27,9 @@ use clinkz_wot_servient_finite::{
 use clinkz_wot_servient_finite::{MAX_PRODUCER_PARTICIPANTS, RawProducerInstance};
 use clinkz_wot_td::ValidatedProducerScope;
 use core::{any::Any, mem::size_of};
+
+// The existing bounded eligible-provider walk is independent of native membership.
+const MAX_PRODUCER_REGISTRATIONS: usize = 32;
 
 /// Final qualification is fallible, publication is not. Retain the prepared
 /// definitions separately from this logical publication and all physical
@@ -43,8 +46,25 @@ pub fn publish_prepared_thing(
     limits: &ResourceLimits,
     budget: &mut WorkBudget,
 ) -> CoreResult<()> {
+    check_publication_limits(
+        limits,
+        prepared.notification_mapping_count(),
+        participants.len(),
+        publication.key(),
+    )?;
+    owner.check_cleanup_quantum(
+        publication.key(),
+        publication.expected_incumbent(),
+        participants.len(),
+        limits.get(K::CleanupWorkItemsPerStepMax).unwrap_or(0),
+    )?;
     let qualification = ProducerQualification::begin(providers, PublicationFacts::default())?;
-    pay_coverage(prepared, participants.len(), budget)?;
+    pay_coverage(
+        prepared,
+        participants.len(),
+        publication.behavior_count(),
+        budget,
+    )?;
     let description = publication
         .staged_description()
         .ok_or_else(|| CoreError::Validation(context()))?;
@@ -64,9 +84,13 @@ pub fn publish_prepared_thing(
     }) {
         return Err(CoreError::UnsupportedOperation(context()));
     }
-    owner.publish_if_current(publication, participants, &coverage, |key, participants| {
-        capture_mappings(key, prepared, participants).map(Some)
-    })
+    owner.publish_if_current_with_cleanup(
+        publication,
+        participants,
+        &coverage,
+        Some(budget),
+        |key, participants| capture_mappings(key, prepared, participants).map(Some),
+    )
 }
 
 fn capture_mappings(
@@ -88,38 +112,18 @@ fn capture_notification_routes<'a>(
     participants: impl ExactSizeIterator<Item = &'a dyn ClosedProducerParticipation> + Clone,
 ) -> CoreResult<Vec<CapturedNotificationRoute>> {
     let mut routes = Vec::new();
-    let count = prepared
-        .operations()
-        .iter()
-        .filter(|o| {
-            matches!(
-                o.operation,
-                Operation::ObserveProperty
-                    | Operation::ObserveAllProperties
-                    | Operation::SubscribeEvent
-                    | Operation::SubscribeAllEvents
-            )
-        })
-        .count();
-    // This manually driven Host publication has a fixed comparison envelope.
-    // Larger sets require another indexed/resumable representation.
-    if count > MAX_PRODUCER_PARTICIPANTS {
-        return Err(CoreError::UnsupportedOperation(context()));
-    }
-    routes.try_reserve_exact(count).map_err(|_| busy())?;
+    routes
+        .try_reserve_exact(prepared.notification_mapping_count())
+        .map_err(|_| busy())?;
     for operation in prepared.operations() {
-        use clinkz_wot_planning::producer_composition::FormSite;
-        let target = match (&operation.site, operation.operation) {
-            (FormSite::Thing, Operation::ObserveAllProperties | Operation::SubscribeAllEvents) => {
-                clinkz_wot_core::AffordanceTarget::Thing
-            }
-            (FormSite::Property(n), Operation::ObserveProperty) => {
-                clinkz_wot_core::AffordanceTarget::Property(Arc::from(n.as_str()))
-            }
-            (FormSite::Event(n), Operation::SubscribeEvent) => {
-                clinkz_wot_core::AffordanceTarget::Event(Arc::from(n.as_str()))
-            }
-            _ => continue,
+        let Some(kind) = operation.notification_start() else {
+            continue;
+        };
+        let target = match &operation.site {
+            FormSite::Thing => AffordanceTarget::Thing,
+            FormSite::Property(n) => AffordanceTarget::Property(Arc::from(n.as_str())),
+            FormSite::Event(n) => AffordanceTarget::Event(Arc::from(n.as_str())),
+            FormSite::Action(_) => return Err(CoreError::UnsupportedOperation(context())),
         };
         let participant = participants
             .clone()
@@ -149,24 +153,21 @@ fn capture_notification_routes<'a>(
         if route.binding() != operation.binding || data_bytes == 0 {
             return Err(CoreError::Validation(context()));
         }
-        if routes
-            .iter()
-            .any(|r: &CapturedNotificationRoute| r.target == target && r.route.same_mapping(&route))
-        {
-            return Err(CoreError::UnsupportedOperation(context()));
-        }
         routes.push(CapturedNotificationRoute {
             target,
-            kind: clinkz_wot_core::notification::NotificationKind::for_operation(
-                operation.operation,
-            )
-            .unwrap(),
+            kind,
             route,
             services,
             data_bytes,
         });
     }
     Ok(routes)
+}
+
+fn action_operations(prepared: &PreparedThing) -> impl Iterator<Item = &PreparedOperation> {
+    prepared.operations().iter().filter(|o| {
+        matches!(o.site, FormSite::Action(_)) || o.operation == Operation::QueryAllActions
+    })
 }
 
 fn capture_action_routes<'a>(
@@ -176,27 +177,12 @@ fn capture_action_routes<'a>(
 ) -> CoreResult<Vec<CapturedActionRoute>> {
     let mut routes = Vec::new();
     routes
-        .try_reserve_exact(
-            prepared
-                .operations()
-                .iter()
-                .filter(|o| {
-                    matches!(
-                        o.site,
-                        clinkz_wot_planning::producer_composition::FormSite::Action(_)
-                    ) || o.operation == Operation::QueryAllActions
-                })
-                .count(),
-        )
+        .try_reserve_exact(action_operations(prepared).count())
         .map_err(|_| busy())?;
-    for operation in prepared.operations() {
+    for operation in action_operations(prepared) {
         let target = match &operation.site {
-            clinkz_wot_planning::producer_composition::FormSite::Action(name) => {
-                AffordanceTarget::Action(Arc::from(name.as_str()))
-            }
-            clinkz_wot_planning::producer_composition::FormSite::Thing
-                if operation.operation == Operation::QueryAllActions =>
-            {
+            FormSite::Action(name) => AffordanceTarget::Action(Arc::from(name.as_str())),
+            FormSite::Thing if operation.operation == Operation::QueryAllActions => {
                 AffordanceTarget::Thing
             }
             _ => continue,
@@ -261,16 +247,34 @@ fn capture_action_routes<'a>(
 fn pay_coverage(
     prepared: &PreparedThing,
     participants: usize,
+    behaviors: usize,
     budget: &mut WorkBudget,
 ) -> CoreResult<()> {
-    if participants > MAX_PRODUCER_PARTICIPANTS {
-        return Err(CoreError::Validation(context()));
+    let operations = prepared.operations().len();
+    let mappings = prepared.notification_mapping_count();
+    if behaviors > operations {
+        return Err(CoreError::UnsupportedOperation(context()));
     }
-    let units = prepared
-        .operations()
-        .len()
-        .checked_mul(2 * participants + 32)
-        .and_then(|n| u64::try_from(n).ok())
+    budget
+        .consume(WorkClass::HandlerSteps, operations as u64)
+        .map_err(|_| busy())?;
+    let actions = action_operations(prepared).count();
+    // Count record comparisons in the complete-set walks. An Action behavior
+    // can advertise invoke, query and cancel in the reverse behavior check.
+    let comparisons = [
+        (operations, 3 * participants), // coverage both ways, then capture
+        (operations, 4 * behaviors),    // behavior lookup and reverse coverage
+        (mappings + actions, 2 * behaviors), // routes and behaviors both ways
+        (actions, actions),             // duplicate Action routes
+        (mappings, mappings),           // duplicate captured mappings
+        (behaviors, behaviors),         // duplicate registrations
+        (participants, participants),   // duplicate member identities
+    ];
+    let units = comparisons
+        .into_iter()
+        .try_fold(0u64, |total, (rows, width)| {
+            total.checked_add((rows as u64).checked_mul(width as u64)?)
+        })
         .ok_or_else(busy)?;
     budget
         .consume(WorkClass::HandlerSteps, units)
@@ -278,12 +282,65 @@ fn pay_coverage(
     Ok(())
 }
 
+fn slot_limit(resource: K, limit: u64, count: usize, key: ProducerInstanceKey) -> CoreError {
+    CoreError::LimitExceeded {
+        resource,
+        limit,
+        requested: Some(count as u64),
+        observed: None,
+        context: context().with_thing(key.slot()),
+    }
+}
+
+fn check_publication_limits(
+    limits: &ResourceLimits,
+    mappings: usize,
+    participants: usize,
+    key: ProducerInstanceKey,
+) -> CoreResult<()> {
+    for (kind, count) in [
+        (K::BindingRoutesPerThingMax, mappings),
+        (K::BindingRoutesGlobalMax, mappings),
+        (K::RouteReadinessTokensPerThingMax, participants),
+        (K::RouteReadinessTokensGlobalMax, participants),
+    ] {
+        let mut limit = limits.get(kind).unwrap_or(0);
+        if kind == K::RouteReadinessTokensPerThingMax {
+            limit = limit.min(MAX_PRODUCER_PARTICIPANTS as u64);
+        }
+        if count as u64 > limit {
+            return Err(slot_limit(kind, limit, count, key));
+        }
+    }
+    Ok(())
+}
+
+fn reserve_slots(
+    accounts: &Arc<HostResourceAccounts>,
+    limits: &ResourceLimits,
+    kind: K,
+    count: usize,
+    key: ProducerInstanceKey,
+) -> CoreResult<HostCapacityReservation> {
+    let ceiling = limits.get(kind).unwrap_or(0);
+    let mut slots = accounts.reserve(kind, 0).expect("empty Host reservation");
+    if count != 0 && !slots.try_grow_up_to(count as u64, ceiling) {
+        return Err(slot_limit(
+            kind,
+            ceiling.min(accounts.account(kind).limit()),
+            count,
+            key,
+        ));
+    }
+    Ok(slots)
+}
+
 fn check_participant_coverage<'a>(
     key: ProducerInstanceKey,
     prepared: &PreparedThing,
     participants: impl ExactSizeIterator<Item = &'a dyn ClosedProducerParticipation> + Clone,
 ) -> CoreResult<()> {
-    if participants.len() == 0 || participants.len() > MAX_PRODUCER_PARTICIPANTS {
+    if participants.len() == 0 {
         return Err(CoreError::Validation(context()));
     }
     for operation in prepared.operations() {
@@ -377,7 +434,7 @@ pub struct ComposedProducerExposure {
     publication: ProducerPublication,
     stage: Option<ProducerStage>,
     publication_failure: Option<CoreError>,
-    _funding: Rc<Funding>,
+    _funding: Rc<ComposedFunding>,
 }
 
 struct ProducerStage {
@@ -388,10 +445,16 @@ struct ProducerStage {
 }
 
 struct ComposedAdmission {
-    funding: Rc<Funding>,
+    funding: Rc<ComposedFunding>,
     qualification: QualificationFunding,
     coverage: PublicationFacts,
     routes: CapturedProducerRoutes,
+}
+
+struct ComposedFunding {
+    _backing: Funding,
+    _notification_mappings: HostCapacityReservation,
+    _members: HostCapacityReservation,
 }
 
 impl ComposedProducerExposure {
@@ -408,27 +471,40 @@ impl ComposedProducerExposure {
             let mut coverage = PublicationFacts::default();
             let registrations = input.providers.snapshot(&mut coverage)?;
             if input.participants.is_empty()
-                || input.participants.len() > MAX_PRODUCER_PARTICIPANTS
                 || registrations.is_empty()
-                || registrations.len() > MAX_PRODUCER_PARTICIPANTS
+                || registrations.len() > MAX_PRODUCER_REGISTRATIONS
                 || input.prepared.operations().is_empty()
             {
                 return Err(CoreError::Validation(context()));
             }
-            let units = input
-                .prepared
-                .operations()
-                .len()
-                .checked_mul(2 * input.participants.len() + 32)
-                .and_then(|n| n.checked_add(MAX_PRODUCER_PARTICIPANTS * MAX_PRODUCER_PARTICIPANTS))
-                .and_then(|n| u64::try_from(n).ok())
-                .ok_or_else(busy)?;
-            budget
-                .consume(WorkClass::HandlerSteps, units)
-                .map_err(|_| busy())?;
+            let mappings = input.prepared.notification_mapping_count();
+            let members = input.participants.len();
+            let key = input.instance.key();
+            check_publication_limits(&limits, mappings, members, key)?;
+            let notification_mappings =
+                reserve_slots(&accounts, &limits, K::BindingRoutesGlobalMax, mappings, key)?;
+            let member_slots = reserve_slots(
+                &accounts,
+                &limits,
+                K::RouteReadinessTokensGlobalMax,
+                members,
+                key,
+            )?;
+            pay_coverage(
+                &input.prepared,
+                members,
+                input.instance.behavior_count(),
+                budget,
+            )?;
             // Validate the raw owner's bounded registration envelope before
             // traversing or accounting caller-supplied handler collections.
             owner.check_publication_input(&input.instance, input.expected)?;
+            owner.check_cleanup_quantum(
+                key,
+                input.expected,
+                members,
+                limits.get(K::CleanupWorkItemsPerStepMax).unwrap_or(0),
+            )?;
             if input.participants.iter().enumerate().any(|(i, p)| {
                 !p.has_original_native()
                     || input.participants[..i]
@@ -452,7 +528,7 @@ impl ComposedProducerExposure {
             let mut bytes = size_of::<Self>()
                 .checked_add(input.instance.backing_bytes().ok_or_else(busy)?)
                 .and_then(|n| n.checked_add(input.prepared.retained_bytes()))
-                .and_then(|n| n.checked_add(ProducerPublication::staging_backing_bytes()))
+                .and_then(|n| n.checked_add(ProducerPublication::staging_backing_for(members)))
                 .and_then(|n| n.checked_add(input.handler_backing_bytes))
                 .and_then(|n| {
                     n.checked_add(CapturedActionRoute::backing_bytes(
@@ -475,10 +551,10 @@ impl ComposedProducerExposure {
                     n.checked_add(registrations.len() * size_of::<Rc<dyn ProducerCapability>>())
                 })
                 // Original Funding, retention-pair Rc allocations and bounded
-                // temporary reference arrays used by qualification/retirement.
+                // temporary references used for qualification and gate capture.
                 .and_then(|n| {
                     n.checked_add(
-                        size_of::<Funding>()
+                        size_of::<ComposedFunding>()
                             + (input.participants.len() + 3) * 8 * size_of::<usize>()
                             + (registrations.len() + 2 * input.participants.len())
                                 * size_of::<&dyn ClosedProducerParticipation>(),
@@ -503,7 +579,7 @@ impl ComposedProducerExposure {
                     )
                     .ok_or_else(busy)?;
             }
-            let funding = Rc::new(Funding::reserve(
+            let backing = Funding::reserve(
                 &accounts,
                 &[
                     (K::EngineLiveBytesGlobalMax, bytes),
@@ -511,7 +587,12 @@ impl ComposedProducerExposure {
                     (K::CleanupItemsMax, input.participants.len() + 1),
                     (K::ThingsGlobalMax, 1),
                 ],
-            )?);
+            )?;
+            let funding = Rc::new(ComposedFunding {
+                _backing: backing,
+                _notification_mappings: notification_mappings,
+                _members: member_slots,
+            });
             let provider_bytes = final_check_bytes(&registrations)?;
             let temporary = usize::try_from(
                 limits
@@ -587,7 +668,7 @@ impl ComposedProducerExposure {
         } = input;
         let refs: Vec<_> = participants.iter().map(|p| p.as_participation()).collect();
         let mut publication =
-            match owner.prepare_composed_publication(instance, expected, &refs, routes) {
+            match owner.prepare_composed_publication(instance, expected, &refs, routes, budget) {
                 Ok(publication) => publication,
                 Err(rejection) => {
                     let (instance, error) = rejection.into_parts();
@@ -693,7 +774,12 @@ impl ComposedProducerExposure {
             .as_ref()
             .ok_or_else(|| CoreError::Validation(context()))?;
         let result = (|| {
-            pay_coverage(&stage.prepared, self.participants.len(), budget)?;
+            pay_coverage(
+                &stage.prepared,
+                self.participants.len(),
+                self.publication.behavior_count(),
+                budget,
+            )?;
             for participant in &self.participants {
                 if !participant.has_original_native() {
                     return Err(CoreError::StaleHandle(context()));
@@ -726,10 +812,11 @@ impl ComposedProducerExposure {
                 .iter_mut()
                 .map(|p| p.as_participation_mut())
                 .collect();
-            owner.publish_if_current(
+            owner.publish_if_current_with_cleanup(
                 &mut self.publication,
                 &mut participants,
                 &stage.coverage,
+                Some(budget),
                 |key, members| capture_mappings(key, &stage.prepared, members).map(Some),
             )
         })();
@@ -776,18 +863,11 @@ impl ComposedProducerExposure {
         owner: &mut RawProducerServient,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
-        budget
-            .consume(
-                WorkClass::CleanupItems,
-                (MAX_PRODUCER_PARTICIPANTS + 128) as u64,
-            )
-            .map_err(|_| busy())?;
-        let participants: Vec<_> = self
-            .participants
-            .iter()
-            .map(|p| p.as_participation())
-            .collect();
-        owner.retire_composed(&mut self.publication, &participants)?;
+        owner.retire_composed_with_budget(
+            &mut self.publication,
+            self.participants.iter().map(|p| p.as_participation()),
+            budget,
+        )?;
         // Typed native close may have ended setup without begin_close() on
         // this facade. Acknowledged retirement permanently ends qualification.
         self.stage = None;

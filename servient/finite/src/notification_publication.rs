@@ -257,18 +257,13 @@ impl RawProducerServient {
         BindingInputRejection<PublicationData>,
     > {
         let admit = (|| -> CoreResult<_> {
+            let busy = || CoreError::Backpressure(context());
             budget
-                .consume(
-                    WorkClass::HandlerSteps,
-                    (self.limits.instances
-                        + (self.limits.behaviors_per_instance + MAX_PRODUCER_PARTICIPANTS)
-                            * (self.limits.target_name_bytes + 1)) as u64,
-                )
-                .map_err(|_| CoreError::Backpressure(context()))?;
-            if target_name_bytes(&target)
-                .ok_or_else(|| CoreError::UnsupportedOperation(context()))?
-                > self.limits.target_name_bytes
-            {
+                .consume(WorkClass::HandlerSteps, self.instances.len() as u64)
+                .map_err(|_| busy())?;
+            let name_bytes = target_name_bytes(&target)
+                .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
+            if name_bytes > self.limits.target_name_bytes {
                 return Err(CoreError::Backpressure(context()));
             }
             match deadline.checked_is_elapsed_at(now) {
@@ -279,21 +274,36 @@ impl RawProducerServient {
             let entry = self
                 .instances
                 .iter()
-                .find(|e| e.instance.key() == key && e.permission.is_current())
+                .find(|e| e.instance.key() == key)
                 .ok_or_else(|| CoreError::StaleHandle(context()))?;
+            budget
+                .consume(
+                    WorkClass::HandlerSteps,
+                    (2 * entry.permission.check_work()) as u64,
+                )
+                .map_err(|_| busy())?;
+            if !entry.permission.is_current() || binding.producer_instance() != key {
+                return Err(CoreError::StaleHandle(context()));
+            }
             if !data.kind().accepts_target(&target) {
                 return Err(CoreError::Validation(context()));
             }
+            let routes = entry.notification_routes.as_deref().unwrap_or_default();
+            // Target lookup by the participant and Servient, then native route
+            // identity at start. The original publication bounds these walks.
+            let work = routes
+                .len()
+                .checked_mul(2 * name_bytes + 3)
+                .ok_or_else(busy)?;
+            budget
+                .consume(WorkClass::HandlerSteps, work as u64)
+                .map_err(|_| busy())?;
             let route = binding
                 .notification_route(&target, data.kind())
                 .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
-            let captured = entry
-                .notification_routes
-                .as_ref()
-                .and_then(|rs| {
-                    rs.iter()
-                        .find(|r| r.target == target && r.route.same_mapping(route))
-                })
+            let captured = routes
+                .iter()
+                .find(|r| r.target == target && r.route.same_mapping(route))
                 .ok_or_else(|| CoreError::UnsupportedOperation(context()))?;
             if captured.kind != data.kind() {
                 return Err(CoreError::Validation(context()));

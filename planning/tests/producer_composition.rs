@@ -131,6 +131,61 @@ fn covered(_: ValidatedProducerScope<'_>, _: Operation) -> bool {
 }
 
 #[test]
+fn alternative_forms_on_one_event_each_contribute_one_start_mapping() {
+    use clinkz_wot_foundation::ResourceKind;
+    let forms: Vec<_> = (1..=33)
+        .map(|i| serde_json::json!({"href": format!("http://127.0.0.1:1237/{i}")}))
+        .collect();
+    let description = serde_json::json!({
+        "@context": "https://www.w3.org/2022/wot/td/v1.1", "title": "Alternatives",
+        "security": ["n"], "securityDefinitions": {"n": {"scheme": "nosec"}},
+        "events": {"alarm": {"data": {"type": "number"}, "forms": forms}}
+    })
+    .to_string();
+    let providers: &[&dyn ProducerCapability] = &[&Provider(1, "event")];
+    let instance = key();
+    let mut limits = GatewayDefaultV1::LIMITS.clone();
+    assert!(limits.set(ResourceKind::FormsPerContextMax, Some(32)));
+    let error = prepare_thing(
+        &description,
+        instance,
+        &limits,
+        &mut work(),
+        providers,
+        covered,
+    )
+    .err()
+    .unwrap();
+    assert_eq!(
+        error.limit_details().unwrap().0,
+        ResourceKind::FormsPerContextMax
+    );
+
+    assert!(limits.set(ResourceKind::FormsPerContextMax, Some(33)));
+    let prepared = prepare_thing(
+        &description,
+        instance,
+        &limits,
+        &mut work(),
+        providers,
+        covered,
+    )
+    .unwrap();
+    assert_eq!(prepared.operations().len(), 66);
+    assert_eq!(prepared.notification_mapping_count(), 33);
+    check_final_thing(
+        &description,
+        instance,
+        &limits,
+        &mut work(),
+        providers,
+        &prepared,
+        covered,
+    )
+    .unwrap();
+}
+
+#[test]
 fn each_scope_form_and_effective_operation_selects_actual_registration() {
     let providers = [
         Provider(1, "property"),

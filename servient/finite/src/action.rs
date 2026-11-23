@@ -249,6 +249,30 @@ extern crate std;
 use self::std::time::{Duration, Instant};
 use clinkz_wot_core::action::{ProducerActionBinding, ProducerActionReply};
 
+/// One store entry, including its unread terminal result, belongs to exactly
+/// one instance. A taken settlement keeps the instance alive independently.
+struct InvocationOwner(Rc<super::RawProducerInstance>);
+impl InvocationOwner {
+    fn new(instance: &Rc<super::RawProducerInstance>) -> Self {
+        // Admission has already reserved a slot within the Action store limit.
+        instance
+            .action_entries
+            .set(instance.action_entries.get() + 1);
+        Self(Rc::clone(instance))
+    }
+}
+impl core::ops::Deref for InvocationOwner {
+    type Target = super::RawProducerInstance;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl Drop for InvocationOwner {
+    fn drop(&mut self) {
+        self.action_entries.set(self.action_entries.get() - 1);
+    }
+}
+
 struct Invocation {
     native_owner: Option<Weak<()>>,
     native_finished: Option<Instant>,
@@ -279,7 +303,7 @@ struct Invocation {
     work_bytes: usize,
     result_lease: ActionResultLease,
     // Last: original behavior/services and retained funding outlive all children.
-    instance: Rc<super::RawProducerInstance>,
+    instance: InvocationOwner,
 }
 
 pub(super) struct ActionStore {
@@ -294,8 +318,8 @@ pub(super) struct ActionStore {
 }
 
 impl ActionStore {
-    pub(super) fn retains_instance(&self, key: ProducerInstanceKey) -> bool {
-        self.entries.iter().any(|entry| entry.instance.key() == key)
+    pub(super) fn retained_count(&self) -> usize {
+        self.entries.len()
     }
 }
 
@@ -801,7 +825,7 @@ impl RawProducerServient {
             .instances
             .checked_add(
                 self.limits
-                    .behaviors_per_instance
+                    .handler_limit()
                     .saturating_mul(self.limits.target_name_bytes + 1),
             )
             .and_then(|n| n.checked_add(limits.input_bytes))
@@ -929,7 +953,7 @@ impl RawProducerServient {
             id,
             token,
             permission: Rc::clone(&instance.permission),
-            instance: Rc::clone(&instance.instance),
+            instance: InvocationOwner::new(&instance.instance),
             behavior: index,
             binding: request.invoke.binding,
             mapping: request.invoke.mapping,
@@ -989,7 +1013,7 @@ impl RawProducerServient {
             .instances
             .checked_add(
                 self.limits
-                    .behaviors_per_instance
+                    .handler_limit()
                     .saturating_mul(self.limits.target_name_bytes + 1),
             )
             .and_then(|n| n.checked_add(store.limits.invocations))
@@ -1104,7 +1128,7 @@ impl RawProducerServient {
         let units = self
             .limits
             .instances
-            .checked_add(self.limits.behaviors_per_instance)
+            .checked_add(self.limits.handler_limit())
             .and_then(|n| n.checked_add(store.limits.input_bytes))
             .and_then(|n| n.checked_add(store.limits.input_fields))
             .and_then(|n| n.checked_add(lookup))
@@ -1457,7 +1481,7 @@ impl ActionStore {
             close_failure: entry.close_failure,
             _validator: entry.validator,
             _result_lease: entry.result_lease,
-            _retained: entry.instance,
+            _retained: Rc::clone(&entry.instance.0),
         })
     }
 }

@@ -157,6 +157,7 @@ impl Native {
         broker: SocketAddr,
         definition_bank: &Arc<HostResourceAccounts>,
         work_bank: &Arc<HostResourceAccounts>,
+        retained_calls: usize,
     ) -> Self {
         let compiler = Rc::new(
             HttpFiniteProducer::compiling(
@@ -187,7 +188,7 @@ impl Native {
                 owner,
                 finite_limits(),
                 1,
-                8,
+                retained_calls,
                 work_bank.clone(),
             )
             .unwrap(),
@@ -223,7 +224,11 @@ impl Native {
                     true,
                     true,
                 )])
-                .with_notification_sources(vec![ProducerNotificationSource::event("alarm")]);
+                .with_notification_sources(
+                    vec![ProducerNotificationSource::event("alarm")],
+                    &mut budget(),
+                )
+                .unwrap_or_else(|r| panic!("{:?}", r.error().error()));
             providers.extend([
                 self.actions.clone() as Rc<dyn ProducerCapability>,
                 self.mqtt.clone(),
@@ -296,11 +301,12 @@ impl Native {
                 .participation(
                     &owner.participation_token(),
                     key,
-                    prepared
+                    &mut prepared
                         .operations()
                         .iter()
                         .filter_map(|o| o.definition::<MqttNotificationDefinition>().cloned())
                         .collect(),
+                    &mut budget(),
                 )
                 .unwrap();
             participants.extend([
@@ -417,6 +423,7 @@ fn host_turns_join_independent_publications_all_families_replacement_and_complet
             broker.address,
             &definition_bank,
             &work_bank,
+            8,
         );
         let compiler = native.finite.clone();
         let td = description(http, action, broker.address, true, "alpha");
@@ -823,6 +830,7 @@ fn either_mqtt_failure_observer_withdraws_the_mixed_things_http_ingress() {
                 broker.address,
                 &accounts,
                 &accounts,
+                8,
             );
             let app = Rc::new(App::default());
             let (mut thing, definition) = native.stage(
@@ -948,3 +956,6 @@ fn either_mqtt_failure_observer_withdraws_the_mixed_things_http_ingress() {
         }
     });
 }
+
+#[path = "notification_capacity.rs"]
+mod notification_capacity;

@@ -356,10 +356,14 @@ fn property_and_event_with_same_name_keep_schemas_targets_and_stop_independent()
         td["events"] = serde_json::json!({ "temperature": event["events"]["alarm"].clone() });
         let instance = RawProducerInstance::new(authority(1), vec![])
             .with_description(Arc::from(td.to_string()))
-            .with_notification_sources(vec![
-                ProducerNotificationSource::property(NAME),
-                ProducerNotificationSource::event(NAME),
-            ]);
+            .with_notification_sources(
+                vec![
+                    ProducerNotificationSource::property(NAME),
+                    ProducerNotificationSource::event(NAME),
+                ],
+                &mut budget(),
+            )
+            .unwrap_or_else(|r| panic!("{:?}", r.error().error()));
         let mut e = stage(&o, input_with_instance(&o, instance, &p, &ps, None), &bank);
         publish(&mut o, &mut e).await;
         let one = consumer_owner(1);

@@ -83,10 +83,35 @@ qualification scratch at the Host bank before any managed setup. The raw logical
 root and startup registrations remain caller-provisioned, as in existing composed
 Producer paths. Services cannot be swapped at publication or per emission.
 
-The native service is application-owned infrastructure with a fixed policy:
-at most 32 participation leases, each with at most 16 notification sources/32 operation
-definitions; one shared publication slot; 2-second setup timeout; clean session,
-keepalive disabled; no reconnect, retry, replay or idle retention. Native setup
+The application-owned service has at most 32 participation leases and one
+shared publication slot. Each lease takes the caller's operation definitions
+and sizes its native mapping table from their start operations. The actual
+Producer registration checks topic attribution across its services before a
+member takes its definitions. A member with `n` starts funds
+`n × (n − 1) / 2` topic comparisons from `BindingPolls`. If this allowance or
+the lifetime cleanup allowance is short, the caller retains the definitions in
+their original order and both allowances remain available. Each live inventory
+supplies its own weak links. The caller also funds one `BindingPolls` item per
+live inventory visited and one per candidate/existing start pair subject to
+comparison. Closing a member unlinks its inventory in constant time. Each
+control must pair with its start.
+A distinct successor in the same logical slot may reuse
+its predecessor's topic. Within one Thing, a root Event wildcard may overlap
+the exact topic of the named Event that its final topic level identifies. A
+Property or differently named Event on that topic refuses before native setup,
+including when the root and leaf use separate broker connections.
+
+Native construction takes a caller-supplied lifetime work budget and prepays
+one cleanup item per definition and start mapping before adopting the vectors.
+Refusal leaves the definitions with the caller. Managed handoff declares both
+vectors' actual capacities. The runtime owns their destruction if it is dropped
+between turns. Explicit retirement removes as many records as the current turn
+funds and spends one final item to release the lease. Outstanding publications
+retain the session, ingress gate and original funding. A last settlement can
+therefore release its connection independently of the size of the mapping table.
+
+Setup has a 2-second timeout and uses a clean session with keepalive disabled.
+The service provides no reconnect, retry, replay or idle retention. Native setup
 and health, emission and retirement require explicit caller progress. Native
 socket/SDK state and this fixed service policy have their own Binding/deployment
 owner; Host bank charges are not total process RAM claims. One service can share
@@ -479,7 +504,8 @@ captured schemas. Every cursor keeps its own bounded queue, permission, loss,
 stop and settlement. Distinct overlapping filters in one Consumer service refuse
 before acceptance: MQTT can deliver extra copies for overlapping subscriptions,
 and this subset supplies no deduplication or exactly-once claim. Independent
-Producer slots likewise refuse overlapping namespaces. A staged successor may
+Producer slots using the same registration refuse overlapping namespaces even
+on separate connections. A staged successor may
 reuse its original slot's topics with fresh mapping identity and original-work
 fencing. One Thing's leaf/root mappings may coexist.
 
