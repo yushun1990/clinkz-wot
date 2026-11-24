@@ -67,6 +67,15 @@ Actual native owner retirement cannot be derived from the last logical route:
 packet/reply jobs and bounded idle pools have independent lives. Adopt owner
 policy and a final-use destruction barrier instead.
 
+A finite request deadline can expire after behavior has run while the installed
+listener and its route are still usable. Closing that route would unnecessarily
+withdraw a published Thing. Clearing the timer alone would leave an outstanding
+reply or allow a late write. Servient keeps the original reply, result and work
+lease until its Binding confirms disposal of that exchange. The Binding decides
+whether it can isolate the connection. Loss of ingress or inability to isolate
+the reply requires participation retirement. This works with the current serial
+HTTP driver and requires neither moving its listener nor copying a response.
+
 For a continuing Consumer Action the usable choice is an Invoke with every
 described control able to use its original continuation. Selecting each operation
 in isolation can discard the only usable Query. Asking the caller to try separate

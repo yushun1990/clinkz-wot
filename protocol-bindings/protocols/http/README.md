@@ -660,6 +660,11 @@ Pass caller-clock time to progress. Native request deadlines do not reset with
 polls; dispatch prepays the declared complete result traversal before the codec.
 The original result/behavior remain owned through cancellation, partial writes
 and settlement acknowledgement. Closing one HTTP owner leaves siblings usable.
+If an accepted request expires before delivery, HTTP aborts its correlated
+connection and frees the route for the next request. An untouched response
+reports `NotDelivered`, and an interrupted write reports `Unknown`. The timeout
+is available on the original settlement. A healthy, still-published listener
+can continue receiving under its configured work and result capacity.
 
 Raw mode still enforces HTTP's native encoding envelope. Unencodable successful
 output refuses before a response write and retains its original value/effect

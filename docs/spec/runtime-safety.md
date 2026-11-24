@@ -263,6 +263,27 @@ requires the same actual logical owner and sufficient bounds for every field
 of `RawFiniteLimits`; rejection returns the complete original participant.
 Publication/readiness MUST NOT require a vacant shared work opportunity.
 
+If the native request deadline expires while a participant holds a
+prepared reply, the runtime stops sending and enters `RetiringReply`. Servient
+retains the original reply and accepted behavior through the Binding's funded
+retirement poll. While retirement is pending, a turn with `BindingPolls` or
+`CleanupItems` checks the installed pair and ingress even after logical
+withdrawal. A failed check starts whole-participation close with the same reply.
+Both retirement polls require `CleanupItems`. On success the settlement records
+the exchange's first local cause alongside the handler result, effect and delivery.
+A request timeout alone supplies no reason to withdraw the published Thing.
+Before returning to Serving, check the captured pair, ingress health, original
+owner and gate again.
+Every later request goes through ordinary admission and current authorization.
+
+When the Binding requires whole-participation close or the installation fails,
+withdraw its gate and retire with the original work. Report the participation's
+first failure independently of an earlier exchange timeout. A withdrawn
+publication cannot reopen through reply cleanup. Caller lifetime expiry, clock
+violations, expiry before a reply is prepared, and failed native sends retain
+their existing whole-participation close path. An accepted reply may finish on
+its own socket while an independently failed listener fences new ingress.
+
 The optional capacity has separately bounded active and retained obligations
 (1 through 32 active, active through 32 retained) at one explicit original work
 bank. Retained counts active work, unread outcomes and acknowledged outcomes

@@ -628,11 +628,7 @@ impl RawProducerServient {
         if budget.consume(WorkClass::HandlerSteps, units).is_err() {
             return Ok(Poll::Pending);
         }
-        if !runtime.pair_is_current() {
-            runtime.fail(CoreError::Validation(context()));
-            return Ok(Poll::Ready(runtime.state));
-        }
-        if let Err(error) = runtime.binding.check_ingress() {
+        if let Err(error) = runtime.check_installed_ingress() {
             runtime.fail(error);
             return Ok(Poll::Ready(runtime.state));
         }
@@ -828,6 +824,8 @@ pub enum RawFiniteState {
     Serving,
     Dispatching,
     Delivering,
+    /// The original reply is expiring. Its native owner still holds the lane.
+    RetiringReply,
     Closing,
     Closed,
 }
@@ -853,6 +851,8 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     state: RawFiniteState,
     ingress_gate: Rc<ProducerIngressGate>,
     first_cause: Option<CoreError>,
+    // Moves into this reply's settlement even if participation later fails.
+    exchange_cause: Option<CoreError>,
     validation: FiniteValidation,
     validation_work: u64,
     security_work: u64,
@@ -872,8 +872,8 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
 impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     /// Associate a native owner with one Servient, without moving or copying
     /// logical authority/behavior. Rejection returns the complete native pair.
-    /// `deadline` bounds the caller's logical interaction/lifetime envelope;
-    /// native requests retain their independent Binding-owned deadline.
+    /// `deadline` bounds this participation's lifetime. Each native request
+    /// retains its independent Binding-owned deadline.
     pub fn try_new(
         binding: B,
         configuration: B::Configuration,
@@ -908,6 +908,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             state: RawFiniteState::Starting,
             ingress_gate: Rc::new(ProducerIngressGate::default()),
             first_cause: None,
+            exchange_cause: None,
             settlement: None,
             validation,
             validation_work,
@@ -948,6 +949,8 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             self.state
         }
     }
+    /// First cause closing this participation. An isolated request timeout
+    /// belongs to the original settlement.
     pub fn first_cause(&self) -> Option<&CoreError> {
         self.first_cause.as_ref()
     }
@@ -1007,26 +1010,27 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     }
 
     pub fn begin_close(&mut self) {
-        self.ingress_gate.withdraw();
-        if self.state != RawFiniteState::Closed {
-            if (self.ingress.is_some() || self.reply.is_some()) && self.first_cause.is_none() {
-                self.first_cause = Some(CoreError::Cancelled(ErrorContext::new(
-                    ErrorPhase::Cleanup,
-                    RetryClass::Never,
-                )));
-            }
-            // Unaccepted ingress retains its *entire* original native input and
-            // opportunity for the Binding's refusal/retirement path.
-            self.state = RawFiniteState::Closing;
-        }
+        let cause = (self.ingress.is_some() || self.reply.is_some()).then(|| {
+            CoreError::Cancelled(ErrorContext::new(ErrorPhase::Cleanup, RetryClass::Never))
+        });
+        self.close_participation(cause);
     }
 
     fn fail(&mut self, error: CoreError) {
+        self.close_participation(Some(error));
+    }
+
+    fn close_participation(&mut self, cause: Option<CoreError>) {
         self.ingress_gate.withdraw();
-        if self.first_cause.is_none() {
-            self.first_cause = Some(error);
+        if let Some(cause) = cause {
+            if self.reply.is_some() {
+                self.exchange_cause.get_or_insert_with(|| cause.clone());
+            }
+            self.first_cause.get_or_insert(cause);
         }
-        self.begin_close();
+        if self.state != RawFiniteState::Closed {
+            self.state = RawFiniteState::Closing;
+        }
     }
 
     fn pair_is_current(&self) -> bool {
@@ -1040,6 +1044,13 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                     .is_some_and(|v| v.additional_validation_work() == self.validation_work))
     }
 
+    fn check_installed_ingress(&self) -> CoreResult<()> {
+        if !self.pair_is_current() {
+            return Err(CoreError::Validation(context()));
+        }
+        self.binding.check_ingress()
+    }
+
     fn check_time(&mut self, now: MonotonicInstant) {
         if self.state == RawFiniteState::Closed {
             return;
@@ -1047,7 +1058,10 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         let monotonic_failure = self
             .last_now
             .is_some_and(|last| now.checked_duration_since(last).is_none());
-        let cleanup = self.state == RawFiniteState::Closing;
+        let cleanup = matches!(
+            self.state,
+            RawFiniteState::Closing | RawFiniteState::RetiringReply
+        );
         let admitted = self.native_started || cleanup;
         let interaction_phase = if cleanup {
             ErrorPhase::Cleanup
@@ -1059,9 +1073,11 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         } else {
             ErrorPhase::Binding
         };
+        let lifetime_elapsed = self.deadline.checked_is_elapsed_at(now);
+        let request_elapsed = self.io_deadline.checked_is_elapsed_at(now);
         let comparisons = [
-            (self.deadline.checked_is_elapsed_at(now), interaction_phase),
-            (self.io_deadline.checked_is_elapsed_at(now), native_phase),
+            (lifetime_elapsed, interaction_phase),
+            (request_elapsed, native_phase),
         ];
         // Check the actual deadline domains before the general progress clock.
         // This preserves Handler versus Binding attribution when both fail.
@@ -1092,11 +1108,16 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             } else {
                 CoreError::Validation(context)
             });
-        } else if let Some(phase) = comparisons
-            .iter()
-            .find_map(|(elapsed, phase)| (*elapsed == Some(true)).then_some(*phase))
-        {
-            self.fail(CoreError::TimedOut(timing_context(phase)));
+        } else if lifetime_elapsed == Some(true) {
+            self.fail(CoreError::TimedOut(timing_context(interaction_phase)));
+        } else if request_elapsed == Some(true) && self.state != RawFiniteState::RetiringReply {
+            let timeout = CoreError::TimedOut(timing_context(native_phase));
+            if self.state == RawFiniteState::Delivering {
+                self.exchange_cause = Some(timeout);
+                self.state = RawFiniteState::RetiringReply;
+            } else {
+                self.fail(timeout);
+            }
         }
         self.last_now = Some(now);
     }
@@ -1115,6 +1136,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 }),
                 recipient: reply.recipient,
                 operation: reply.operation,
+                first_cause: self.exchange_cause.take(),
                 effect: reply.effect,
                 delivery,
                 result: reply.result,
@@ -1138,6 +1160,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 target: None,
                 recipient: single.map(|c| c.instance),
                 operation: single.map(|c| c.operation),
+                first_cause: self.first_cause.clone(),
                 effect: FiniteEffect::NotInvoked,
                 delivery,
                 result: Err(self.first_cause.clone().expect("close has a first cause")),
@@ -1157,6 +1180,28 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             );
         } else {
             self.settlement = Some(settlement);
+        }
+    }
+
+    fn finish_retirement(&mut self, delivery: FiniteDelivery) {
+        self.settle_ingress(delivery);
+        self.settle_reply(delivery);
+        self.work = None;
+        self.io_deadline = Deadline::NONE;
+        if self.state == RawFiniteState::Closing {
+            self.state = RawFiniteState::Closed;
+            return;
+        }
+        // The retirement callback and original reply destructor have now run.
+        // Neither can grant fresh authority or certify the installed service.
+        if let Err(error) = self.check_installed_ingress() {
+            self.fail(error);
+        } else if self.issuer.strong_count() == 0 {
+            self.fail(CoreError::StaleHandle(context()));
+        } else if !self.ingress_gate.is_open() {
+            self.begin_close();
+        } else {
+            self.state = RawFiniteState::Serving;
         }
     }
 
@@ -1195,21 +1240,29 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             return Poll::Ready(self.state);
         }
         // Serving is only a native state, not a lasting grant of publication
-        // authority. A revoked gate must fence every subsequent receive, while
-        // Dispatching/Delivering/Closing still own their original work.
+        // authority. A withdrawn gate fences each subsequent receive while
+        // outstanding work keeps its original owner.
         let unread = self.state == Serving && self.settlement.is_some();
         let class = match self.state {
-            Closing => WorkClass::CleanupItems,
+            RetiringReply | Closing => WorkClass::CleanupItems,
             _ => WorkClass::BindingPolls,
         };
-        if budget.remaining(class) == 0 || (self.state == Serving && !self.ingress_gate.is_open()) {
+        let poll_funded = budget.remaining(class) != 0;
+        // A pending reply still depends on its installed service after logical
+        // withdrawal. Either a native turn or a cleanup turn can observe loss.
+        let check_retiring = self.state == RetiringReply
+            && (poll_funded || budget.remaining(WorkClass::BindingPolls) != 0);
+        if (!poll_funded && !check_retiring)
+            || (self.state == Serving && !self.ingress_gate.is_open())
+        {
             return if unread || (self.state == Dispatching && self.issuer.strong_count() != 0) {
                 Poll::Ready(self.state)
             } else {
                 Poll::Pending
             };
         }
-        if matches!(self.state, Starting | Serving | Dispatching) && self.issuer.strong_count() == 0
+        if matches!(self.state, Starting | Serving | Dispatching | RetiringReply)
+            && self.issuer.strong_count() == 0
         {
             self.fail(CoreError::StaleHandle(context()));
             return Poll::Ready(self.state);
@@ -1218,8 +1271,9 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             self.fail(CoreError::Validation(context()));
             return Poll::Ready(self.state);
         }
-        if matches!(self.state, Serving | Dispatching | Delivering)
-            && self.ingress_gate.is_open()
+        let check_published =
+            matches!(self.state, Serving | Dispatching | Delivering) && self.ingress_gate.is_open();
+        if (check_retiring || check_published)
             && let Err(error) = self.binding.check_ingress()
         {
             if self.state != Delivering {
@@ -1234,10 +1288,13 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         if unread || self.state == Dispatching {
             return Poll::Ready(self.state);
         }
+        if !poll_funded {
+            return Poll::Pending;
+        }
         // Reserve terminal handoff work before the native poll. Charge only
         // on actual FIFO insertion. Queue pressure cannot hide ingress loss.
         let queue_work = if self.capacity.is_some()
-            && matches!(self.state, Delivering | Closing)
+            && matches!(self.state, Delivering | RetiringReply | Closing)
             && (self.ingress.is_some() || self.reply.is_some())
         {
             self.completed.insertion_work()
@@ -1407,30 +1464,31 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                     }
                 }
             }
-            Closing => {
+            RetiringReply | Closing => {
                 budget.consume(class, 1).expect("prechecked cleanup poll");
-                match self.binding.poll_close(
-                    cx,
-                    self.ingress.as_ref(),
-                    self.reply.as_ref(),
-                    self.first_cause.as_ref(),
-                ) {
+                let cause = self.exchange_cause.as_ref().or(self.first_cause.as_ref());
+                let retired = if self.state == RetiringReply {
+                    self.binding.poll_retire_reply(
+                        cx,
+                        self.reply.as_ref().expect("retiring original reply"),
+                        cause.expect("exchange retirement cause"),
+                    )
+                } else {
+                    self.binding
+                        .poll_close(cx, self.ingress.as_ref(), self.reply.as_ref(), cause)
+                };
+                match retired {
                     Poll::Pending => Poll::Pending,
                     Poll::Ready(Err(e)) => {
-                        if self.first_cause.is_none() {
-                            self.first_cause = Some(e);
-                        }
+                        self.fail(e);
                         Poll::Ready(Closing)
                     }
                     Poll::Ready(Ok(delivery)) => {
                         budget
                             .consume(WorkClass::QueueOperations, queue_work)
                             .expect("prechecked terminal handoff");
-                        self.settle_ingress(delivery);
-                        self.settle_reply(delivery);
-                        self.work = None;
-                        self.state = Closed;
-                        Poll::Ready(Closed)
+                        self.finish_retirement(delivery);
+                        Poll::Ready(self.state)
                     }
                 }
             }

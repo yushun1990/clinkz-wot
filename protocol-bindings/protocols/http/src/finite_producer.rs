@@ -501,10 +501,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
             Poll::Ready(_) => {
                 // Unsupported/malformed/disconnected input never escapes as a
                 // semantic candidate. Disposing it leaves the listener usable.
-                drop(self.connection.take());
-                self.finish_shared();
-                self.accepted_mapping = None;
-                self.request_deadline = Deadline::NONE;
+                self.finish_exchange();
                 Poll::Pending
             }
             Poll::Pending => {
@@ -537,11 +534,7 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         cx: &mut Context<'_>,
         reply: &RawFiniteReply<Self::Reply>,
     ) -> Poll<CoreResult<()>> {
-        if reply.ingress.reply.issuer.as_ptr() != Arc::as_ptr(&self.issuer)
-            || reply.ingress.reply.correlation != self.correlation
-            || self.accepted_mapping != Some(reply.ingress.reply.mapping)
-            || self.closed
-        {
+        if !self.owns_reply(&reply.ingress.reply) {
             return Poll::Ready(Err(crate::producer::producer_unsupported()));
         }
         let Some(connection) = self.connection.as_mut() else {
@@ -553,13 +546,25 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         match connection.poll(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Ok(())) => {
-                drop(self.connection.take());
-                self.finish_shared();
-                self.request_deadline = Deadline::NONE;
+                self.finish_exchange();
                 Poll::Ready(Ok(()))
             }
             Poll::Ready(Err(_)) => Poll::Ready(Err(self.failure(ErrorPhase::Binding))),
         }
+    }
+
+    fn poll_retire_reply(
+        &mut self,
+        _: &mut Context<'_>,
+        reply: &RawFiniteReply<Self::Reply>,
+        _: &CoreError,
+    ) -> Poll<CoreResult<FiniteDelivery>> {
+        if !self.owns_reply(&reply.ingress.reply) {
+            return Poll::Ready(Err(crate::producer::producer_unsupported()));
+        }
+        let delivery = self.abort_delivery();
+        self.finish_exchange();
+        Poll::Ready(Ok(delivery))
     }
 
     fn poll_close(
@@ -569,16 +574,13 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         _: Option<&RawFiniteReply<Self::Reply>>,
         _: Option<&CoreError>,
     ) -> Poll<CoreResult<FiniteDelivery>> {
-        let delivery = if self.connection.as_ref().is_some_and(|c| c.write_started()) {
-            FiniteDelivery::Unknown
-        } else {
-            FiniteDelivery::NotDelivered
-        };
+        let delivery = self.abort_delivery();
         self.closed = true;
         // Abort is this native facet's retirement policy; no refusal is claimed
         // delivered and a partial write is never reported as NotDelivered.
         drop(self.connection.take());
         self.accepted_mapping = None;
+        self.request_deadline = Deadline::NONE;
         self.release_shared();
         drop(self.listener.take());
         Poll::Ready(Ok(delivery))
@@ -586,7 +588,23 @@ impl FiniteIngressBinding for HttpFiniteBinding {
 }
 
 impl HttpFiniteBinding {
-    fn finish_shared(&self) {
+    fn owns_reply(&self, reply: &HttpFiniteReply) -> bool {
+        !self.closed
+            && reply.issuer.as_ptr() == Arc::as_ptr(&self.issuer)
+            && reply.correlation == self.correlation
+            && self.accepted_mapping == Some(reply.mapping)
+    }
+    fn abort_delivery(&self) -> FiniteDelivery {
+        if self.connection.as_ref().is_some_and(|c| c.write_started()) {
+            FiniteDelivery::Unknown
+        } else {
+            FiniteDelivery::NotDelivered
+        }
+    }
+    fn finish_exchange(&mut self) {
+        drop(self.connection.take());
+        self.accepted_mapping = None;
+        self.request_deadline = Deadline::NONE;
         if let Some(lease) = self.shared_lease {
             self.configuration.listener.as_ref().unwrap().finish(lease);
         }

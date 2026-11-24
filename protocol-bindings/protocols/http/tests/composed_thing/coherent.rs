@@ -1154,10 +1154,9 @@ fn explicit_close_and_deadline_interrupt_a_draining_reply_truthfully() {
                 .step(&mut owner, &mut cx(), instant, |_, _| budget())
                 .unwrap();
         }
-        let cause = thing.progress_failure(0).unwrap();
         assert!(matches!(
-            (deadline, cause),
-            (true, CoreError::TimedOut(_)) | (false, CoreError::Cancelled(_))
+            (deadline, thing.progress_failure(0)),
+            (true, None) | (false, Some(CoreError::Cancelled(_)))
         ));
         let original = thing
             .participant_mut::<HttpRuntime>(0)
@@ -1165,6 +1164,10 @@ fn explicit_close_and_deadline_interrupt_a_draining_reply_truthfully() {
             .take_settlement()
             .unwrap();
         assert_eq!(original.recipient, Some(thing.key()));
+        assert!(matches!(
+            (deadline, original.first_cause),
+            (true, Some(CoreError::TimedOut(_))) | (false, Some(CoreError::Cancelled(_)))
+        ));
         assert_eq!(original.delivery, FiniteDelivery::Unknown);
         let expected = counts.property_body();
         assert_eq!(

@@ -502,7 +502,12 @@ impl<B: FiniteIngressBinding> ClosedProducerParticipation for RawFiniteRuntime<B
             .checked_add(self.limits.output_retained_bytes)
     }
     fn begin_retire(&mut self, intent: ProducerRetirement) {
-        if intent == ProducerRetirement::Drain && self.state == RawFiniteState::Delivering {
+        if intent == ProducerRetirement::Drain
+            && matches!(
+                self.state,
+                RawFiniteState::Delivering | RawFiniteState::RetiringReply
+            )
+        {
             self.ingress_gate.withdraw();
         } else {
             self.begin_close();

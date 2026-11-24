@@ -492,7 +492,7 @@ id = "independent-settlement-and-retirement"
 requirements = ["SAFE-CLEANUP-001", "SPI-RETIRE-001"]
 participants = ["accepted-work", "cleanup-owner", "native-infrastructure"]
 preconditions = ["local-terminal-keeps-original-release-owner", "whole-owner-transfer-is-acknowledged", "physical-release-waits-for-final-use"]
-ownership = "Logical release never closes sibling service or certifies remote rollback; infrastructure shutdown has its own authority."
+ownership = "Logical release never closes sibling service or certifies remote rollback; infrastructure shutdown has its own authority. Expiry of an accepted finite reply retains its first cause on the settlement. The Binding can release that exchange while the original participation continues under current authority. Independent ingress loss fences the affected dependents."
 
 [[composition]]
 id = "consumer-capacity-turn"

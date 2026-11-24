@@ -34,10 +34,20 @@ fn cx() -> Context<'static> {
     Context::from_waker(Waker::noop())
 }
 fn address() -> SocketAddr {
-    TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
+    test_listener().local_addr().unwrap()
+}
+fn test_listener() -> TcpListener {
+    // A TD advertises its endpoint before native setup binds it. Keep both
+    // advertised endpoints and raw peers distinct across this binary's tests.
+    static SELECTED: std::sync::Mutex<std::collections::BTreeSet<SocketAddr>> =
+        std::sync::Mutex::new(std::collections::BTreeSet::new());
+    let mut selected = SELECTED.lock().unwrap();
+    loop {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        if selected.insert(listener.local_addr().unwrap()) {
+            return listener;
+        }
+    }
 }
 fn bank() -> Arc<HostResourceAccounts> {
     Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS))
@@ -137,6 +147,7 @@ fn denied() -> CoreError {
 #[derive(Default)]
 struct Controls {
     hold_send: Cell<bool>,
+    hold_reply_retirement: Cell<bool>,
     hold_close: Cell<bool>,
     lose_service: RefCell<PublicationState<bool>>,
 }
@@ -212,6 +223,18 @@ impl FiniteIngressBinding for Native {
             self.actual.poll_send(cx, reply)
         }
     }
+    fn poll_retire_reply(
+        &mut self,
+        cx: &mut Context<'_>,
+        reply: &RawFiniteReply<Self::Reply>,
+        cause: &CoreError,
+    ) -> Poll<CoreResult<FiniteDelivery>> {
+        if self.controls.hold_reply_retirement.get() {
+            Poll::Pending
+        } else {
+            self.actual.poll_retire_reply(cx, reply, cause)
+        }
+    }
     fn poll_close(
         &mut self,
         cx: &mut Context<'_>,
@@ -227,6 +250,16 @@ impl FiniteIngressBinding for Native {
     }
 }
 type Server = RawFiniteRuntime<Native>;
+fn exchange_limits() -> RawFiniteLimits {
+    RawFiniteLimits {
+        candidates: 1,
+        input_body_bytes: 4096,
+        output_body_bytes: 4096,
+        output_media_capacity: 64,
+        output_retained_bytes: 8192,
+    }
+}
+
 fn exposure(
     owner: &RawProducerServient,
     accounts: Arc<HostResourceAccounts>,
@@ -237,7 +270,7 @@ fn exposure(
     expected: Option<ProducerInstanceKey>,
 ) -> ComposedProducerExposure {
     exposure_with_capacity(
-        owner, accounts, td, app, controls, authority, expected, None,
+        owner, accounts, td, app, controls, authority, expected, None, None,
     )
 }
 #[allow(clippy::too_many_arguments)]
@@ -250,6 +283,7 @@ fn exposure_with_capacity(
     authority: ProducerInstanceAuthority,
     expected: Option<ProducerInstanceKey>,
     capacity: Option<&ProducerFiniteCapacity>,
+    listener: Option<&HttpFiniteListener>,
 ) -> ComposedProducerExposure {
     let addr = td["properties"]["level"]["forms"][0]["href"]
         .as_str()
@@ -308,6 +342,10 @@ fn exposure_with_capacity(
         1000,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let config = match listener {
+        Some(listener) => config.with_listener(listener).unwrap(),
+        None => config,
+    };
     let server = RawFiniteRuntime::try_new(
         Native {
             actual: HttpFiniteBinding::new(
@@ -319,13 +357,7 @@ fn exposure_with_capacity(
         },
         config,
         owner,
-        RawFiniteLimits {
-            candidates: 1,
-            input_body_bytes: 4096,
-            output_body_bytes: 4096,
-            output_media_capacity: 64,
-            output_retained_bytes: 8192,
-        },
+        exchange_limits(),
         FiniteValidation::Required,
         Deadline::NONE,
     )
@@ -382,7 +414,12 @@ impl Fixture {
             None,
         );
         let server = exposure.participant_mut::<Server>(0).unwrap();
-        let _ = server.step(&mut cx(), &mut work(), now(0));
+        assert_eq!(
+            server.step(&mut cx(), &mut work(), now(0)),
+            Poll::Ready(RawFiniteState::InstalledClosed),
+            "startup failed: {:?}",
+            server.first_cause()
+        );
         let addr = server
             .closed_binding()
             .unwrap()
@@ -902,7 +939,8 @@ fn consumer_requires_the_prepared_native_write_completion_and_never_replays_unce
         b"HTTP/1.1 204 No Content\r\n",
         b"", b"HTTP/1.1 204 No Content\r\n\r\n",
     ] {
-        let listener=TcpListener::bind("127.0.0.1:0").unwrap(); let addr=listener.local_addr().unwrap();
+        let listener = test_listener();
+        let addr = listener.local_addr().unwrap();
         let peer=std::thread::spawn(move || {
             let (mut stream,_)=listener.accept().unwrap(); stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
             let mut bytes=Vec::new();let mut buf=[0;4096];
@@ -934,7 +972,7 @@ fn empty_write_reply_is_checked_through_eof_across_native_read_boundaries() {
         for head_bytes in [4096, 8192, 1024, 4095, 4097, 8191] {
             for fragmented in [false, true] {
                 for extra_byte in [true, false] {
-                    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+                    let listener = test_listener();
                     let addr = listener.local_addr().unwrap();
                     let (head_sent, head_ready) = std::sync::mpsc::channel();
                     let (finish, finish_peer) = std::sync::mpsc::channel();
@@ -1015,7 +1053,7 @@ fn empty_write_reply_is_checked_through_eof_across_native_read_boundaries() {
 fn waiting_for_write_eof_keeps_original_funding_and_supports_cancellation_and_deadlines() {
     io().block_on(async {
         for fault in ["cancel", "timeout", "revoke", "root", "abandon"] {
-            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let listener = test_listener();
             let addr = listener.local_addr().unwrap();
             let (head_sent, head_ready) = std::sync::mpsc::channel();
             let (closed, peer_closed) = std::sync::mpsc::channel();
@@ -1640,6 +1678,9 @@ fn unread_results_and_service_loss_keep_bounded_original_owners_until_acknowledg
 #[path = "support/response_alternatives.rs"]
 mod response_alternatives;
 
+#[path = "support/accepted_timeout.rs"]
+mod accepted_timeout;
+
 #[test]
 fn shared_producer_capacity_preserves_write_effects_unread_failures_and_pending_retirement() {
     let addr = address();
@@ -1651,20 +1692,9 @@ fn shared_producer_capacity_preserves_write_effects_unread_failures_and_pending_
     .unwrap();
     let publication_bank = bank();
     let work_bank = bank();
-    let capacity = ProducerFiniteCapacity::try_new(
-        &owner,
-        RawFiniteLimits {
-            candidates: 1,
-            input_body_bytes: 4096,
-            output_body_bytes: 4096,
-            output_media_capacity: 64,
-            output_retained_bytes: 8192,
-        },
-        1,
-        4,
-        work_bank.clone(),
-    )
-    .unwrap();
+    let capacity =
+        ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 1, 4, work_bank.clone())
+            .unwrap();
     let app = Rc::new(Application::default());
     let controls = Rc::new(Controls::default());
     let mut exposure = exposure_with_capacity(
@@ -1676,6 +1706,7 @@ fn shared_producer_capacity_preserves_write_effects_unread_failures_and_pending_
         authority(Generation::INITIAL),
         None,
         Some(&capacity),
+        None,
     );
     assert_eq!(
         exposure
