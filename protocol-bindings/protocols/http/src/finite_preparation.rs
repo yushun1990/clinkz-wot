@@ -28,6 +28,7 @@ pub struct HttpFiniteProducer {
     timeout_ticks: u64,
     security: Option<HttpServerSecurity>,
     assigned: Option<AssignedSocket>,
+    listener: Option<HttpFiniteListener>,
     preparation: Preparation,
     compilations: Cell<usize>,
     checks: Cell<usize>,
@@ -51,11 +52,25 @@ impl HttpFiniteProducer {
             timeout_ticks,
             security: None,
             assigned: None,
+            listener: None,
             preparation: Preparation::Specialized,
             compilations: Cell::new(0),
             checks: Cell::new(0),
             bindings: Cell::new(0),
         })
+    }
+
+    /// Use the deployment's fixed shared listener for this registration's routes.
+    /// Each exposed Thing acquires and releases its own route set at native start and close.
+    pub fn with_listener(mut self, listener: &HttpFiniteListener) -> CoreResult<Self> {
+        if self.assigned.is_some()
+            || self.listen.address.port() == 0
+            || !listener.compatible(self.listen, self.timeout_ticks)
+        {
+            return Err(crate::producer::producer_unsupported());
+        }
+        self.listener = Some(listener.clone());
+        Ok(self)
     }
 
     /// A draft registration for a TD using a loopback base with port zero.
@@ -85,6 +100,7 @@ impl HttpFiniteProducer {
     pub fn at_endpoint(&self, endpoint: &HttpProducerEndpoint) -> CoreResult<Self> {
         if self.listen.address.ip() != endpoint.listen.address.ip()
             || self.listen.secure
+            || self.listener.is_some()
             || !matches!(self.preparation, Preparation::Specialized)
         {
             return Err(crate::producer::producer_unsupported());
@@ -118,6 +134,7 @@ impl HttpFiniteProducer {
             timeout_ticks,
             security: Some(security),
             assigned: None,
+            listener: None,
             preparation: Preparation::Specialized,
             compilations: Cell::new(0),
             checks: Cell::new(0),
@@ -163,6 +180,23 @@ impl HttpFiniteProducer {
     pub fn mapping_bindings(&self) -> usize {
         self.bindings.get()
     }
+    fn build_binding(
+        &self,
+        mut config: HttpFiniteConfig,
+    ) -> CoreResult<(HttpFiniteBinding, HttpFiniteConfig)> {
+        if let Some(security) = &self.security {
+            config = config.with_security(security.clone())?;
+        }
+        if let Some(listener) = &self.listener {
+            config = config.with_listener(listener)?;
+        }
+        let mut native = HttpFiniteBinding::new(config.clone(), self.id, self.generation);
+        if let Some(socket) = &self.assigned {
+            native.use_assigned(socket.clone());
+        }
+        Ok((native, config))
+    }
+
     fn compile_definition(
         &self,
         input: ProducerOperationInput<'_>,
@@ -276,10 +310,7 @@ impl FiniteProducerCompiler for HttpFiniteProducer {
             self.timeout_ticks,
         )
         .map_err(|_| crate::producer::producer_unsupported())?;
-        Ok(Some((
-            HttpFiniteBinding::new(config.clone(), self.id, self.generation),
-            config,
-        )))
+        self.build_binding(config).map(Some)
     }
 
     fn check_final(
@@ -450,20 +481,13 @@ impl FiniteProducerService for HttpFiniteProducer {
                 .ok_or_else(crate::producer::producer_unsupported)?;
             mappings.push((target, program.clone()));
         }
-        let mut config = HttpFiniteConfig::try_from_mappings(
+        let config = HttpFiniteConfig::try_from_mappings(
             self.listen,
             mappings,
             instance,
             self.timeout_ticks,
         )
         .map_err(|r| r.into_parts().1.into_parts().1)?;
-        if let Some(security) = &self.security {
-            config = config.with_security(security.clone())?;
-        }
-        let mut native = HttpFiniteBinding::new(config.clone(), self.id, self.generation);
-        if let Some(socket) = &self.assigned {
-            native.use_assigned(socket.clone());
-        }
-        Ok((native, config))
+        self.build_binding(config)
     }
 }

@@ -73,6 +73,17 @@ pub struct PublicationObserver<'a> {
 }
 
 impl PublicationFacts {
+    /// Start a new qualification with the same observed versions. The original
+    /// proof can be retained across a short or refused qualification turn.
+    pub fn try_clone(&self) -> CoreResult<Self> {
+        let mut observed = Vec::new();
+        observed
+            .try_reserve_exact(self.observed.len())
+            .map_err(|_| busy())?;
+        observed.extend(self.observed.iter().cloned());
+        Ok(Self { observed })
+    }
+
     pub fn observer(&mut self) -> PublicationObserver<'_> {
         PublicationObserver {
             observed: &mut self.observed,

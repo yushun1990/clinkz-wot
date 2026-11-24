@@ -115,6 +115,11 @@ impl RawProducerInstance {
         }
     }
 
+    /// Recover the original finite behavior registrations from an owned instance.
+    pub fn into_finite_behaviors(self) -> Vec<RawFiniteBehavior> {
+        self.behaviors
+    }
+
     /// Install Action behavior on this *same* logical authority. An instance
     /// may have only Action behaviors; no finite native driver is implied.
     pub fn with_actions(mut self, actions: Vec<RawActionBehavior>) -> Self {
@@ -283,8 +288,12 @@ impl RawProducerInstance {
     /// Source-independent retained description. Raw callers remain responsible
     /// for qualification; the preparation facade supplies the checked value.
     pub fn with_description(mut self, description: Arc<str>) -> Self {
-        self.description = Some(description);
+        self.set_description(description);
         self
+    }
+    /// Replace the description during exclusive preparation of this instance.
+    pub fn set_description(&mut self, description: Arc<str>) {
+        self.description = Some(description);
     }
 
     /// Controlled layouts and description/target backing. Application handler

@@ -10,7 +10,7 @@ use crate::producer_composition::{
     qualification_bytes,
 };
 use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
-use clinkz_wot_core::{producer::*, *};
+use clinkz_wot_core::{producer::*, publication::ProducerOwnerToken, *};
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::producer_composition::*;
 use clinkz_wot_servient_finite::{
@@ -21,7 +21,7 @@ pub use clinkz_wot_servient_finite::{
     RawFiniteBehavior, RawFiniteLimits, RawProducerRegistryLimits,
 };
 use core::{
-    any::Any,
+    fmt,
     task::{Context, Poll},
 };
 
@@ -137,14 +137,213 @@ impl<L: 'static> FiniteProducerRegistration<L> {
 }
 
 struct InstalledBase {
-    description: Arc<str>,
     services: Vec<ServiceRef>,
-    lease: Box<dyn Any>,
+    lease: Box<dyn AsRef<str>>,
 }
-type AcquireBase = dyn Fn(&str, &mut WorkBudget) -> CoreResult<InstalledBase>;
+type AcquireBase = dyn Fn() -> CoreResult<InstalledBase>;
 struct BaseSetup {
     acquire: Box<AcquireBase>,
     backing_bytes: usize,
+}
+
+/// The original application-owned arguments to an exposure.
+pub struct ExposureInput {
+    pub description: Arc<str>,
+    pub behaviors: Vec<RawFiniteBehavior>,
+    pub policy: ExposurePolicy,
+}
+
+/// The caller owns the original inputs and any closed endpoint awaiting credit.
+/// Dropping this value releases a staged endpoint and its reservations locally.
+pub struct ExposureError {
+    error: CoreError,
+    state: ExposureState,
+}
+enum ExposureState {
+    Refused(ExposureInput),
+    Assigned(Box<ExposureCandidate>),
+}
+impl ExposureError {
+    fn refused(
+        error: CoreError,
+        description: Arc<str>,
+        behaviors: Vec<RawFiniteBehavior>,
+        policy: ExposurePolicy,
+    ) -> Self {
+        Self {
+            error,
+            state: ExposureState::Refused(ExposureInput {
+                description,
+                behaviors,
+                policy,
+            }),
+        }
+    }
+    pub fn error(&self) -> &CoreError {
+        &self.error
+    }
+    /// Whether this retry currently owns a closed, funded base on its original Host.
+    pub fn is_staged(&self) -> bool {
+        matches!(self.state, ExposureState::Assigned(_))
+    }
+    /// Roll back any closed setup and recover the original TD, handlers and policy.
+    pub fn into_input(self) -> ExposureInput {
+        match self.state {
+            ExposureState::Refused(input) => input,
+            ExposureState::Assigned(candidate) => candidate.into_input(),
+        }
+    }
+    /// Resume on the original Host when a closed endpoint has already been acquired.
+    pub fn retry(
+        self,
+        host: &mut HostProducer,
+        budget: &mut WorkBudget,
+    ) -> Result<ComposedProducerExposure, Self> {
+        match self.state {
+            ExposureState::Refused(input) => {
+                host.expose(input.description, input.behaviors, input.policy, budget)
+            }
+            ExposureState::Assigned(candidate) => {
+                if !candidate
+                    .issuer
+                    .same_owner(&host.owner.participation_token())
+                {
+                    return Err(Self {
+                        error: CoreError::StaleHandle(ErrorContext::new(
+                            ErrorPhase::Admission,
+                            RetryClass::Never,
+                        )),
+                        state: ExposureState::Assigned(candidate),
+                    });
+                }
+                candidate.finish(host, budget)
+            }
+        }
+    }
+}
+impl fmt::Debug for ExposureError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.error, f)
+    }
+}
+impl fmt::Display for ExposureError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.error, f)
+    }
+}
+impl core::error::Error for ExposureError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+// Pure definitions and specialized service owners drop before their funding.
+struct ExposureSetup {
+    installed: Option<Vec<ServiceRef>>,
+    prepared: Option<PreparedThing>,
+    participants: Option<Vec<OwnedProducerParticipation>>,
+    providers: ProducerRegistrations,
+    needs_base: bool,
+    funding: FiniteSetupFunding,
+}
+struct ExposureCandidate {
+    issuer: ProducerOwnerToken,
+    description: Arc<str>,
+    instance: RawProducerInstance,
+    policy: ExposurePolicy,
+    setup: ExposureSetup,
+}
+impl ExposureCandidate {
+    fn into_input(self) -> ExposureInput {
+        ExposureInput {
+            description: self.description,
+            behaviors: self.instance.into_finite_behaviors(),
+            policy: self.policy,
+        }
+    }
+    fn fail(self, error: CoreError) -> ExposureError {
+        let state = if self.setup.installed.is_some() && matches!(error, CoreError::Backpressure(_))
+        {
+            ExposureState::Assigned(Box::new(self))
+        } else {
+            ExposureState::Refused(self.into_input())
+        };
+        ExposureError { error, state }
+    }
+
+    fn prepare_members(
+        &mut self,
+        host: &HostProducer,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Vec<OwnedProducerParticipation>> {
+        let setup = &mut self.setup;
+        host.owner
+            .check_publication_input(&self.instance, self.policy.replaces)?;
+        drop(PublicationFacts::lock_current(&[&setup.funding.facts])?);
+        if setup.needs_base {
+            let lease = setup.funding.stage.base.as_deref().expect("assigned base");
+            let description = description_at_base(&self.description, lease.as_ref(), budget)?;
+            self.instance.set_description(description.into());
+            setup.needs_base = false;
+        }
+        if let Some(participants) = setup.participants.take() {
+            return Ok(participants);
+        }
+        let limits =
+            host.preparation_limits(&self.instance, &self.policy, setup.funding.stage.base_bytes)?;
+        if setup.prepared.is_none() {
+            let providers = setup.providers.snapshot(&mut setup.funding.facts)?;
+            setup.prepared = Some(prepare(&self.instance, &providers, &limits, budget)?);
+        }
+        let prepared = setup.prepared.as_ref().expect("prepared candidate");
+        host.assemble(
+            setup.installed.as_deref().unwrap_or(&host.services),
+            prepared,
+            self.instance.key(),
+            &limits,
+            &mut setup.funding.counts,
+            budget,
+        )
+    }
+
+    fn finish(
+        mut self,
+        host: &HostProducer,
+        budget: &mut WorkBudget,
+    ) -> Result<ComposedProducerExposure, ExposureError> {
+        let participants = match self.prepare_members(host, budget) {
+            Ok(participants) => participants,
+            Err(error) => return Err(self.fail(error)),
+        };
+        let mut funding = Some(self.setup.funding);
+        let result = ComposedProducerExposure::admit(
+            &host.owner,
+            ComposedProducerInput {
+                instance: self.instance,
+                prepared: self.setup.prepared.take().expect("prepared candidate"),
+                providers: self.setup.providers,
+                participants,
+                expected: self.policy.replaces,
+                handler_backing_bytes: self.policy.handler_backing_bytes,
+            },
+            host.limits.clone(),
+            host.accounts.clone(),
+            budget,
+            &mut funding,
+        );
+        match result {
+            Ok(exposure) => Ok(exposure),
+            Err(rejection) => {
+                let (input, failure) = rejection.into_parts();
+                self.instance = input.instance;
+                self.setup.funding = funding.expect("refused candidate keeps funding");
+                self.setup.prepared = Some(input.prepared);
+                self.setup.providers = input.providers;
+                self.setup.participants = Some(input.participants);
+                Err(self.fail(failure.into_parts().1))
+            }
+        }
+    }
 }
 
 /// Deployment-owned finite services, logical publications and shared work capacity.
@@ -203,9 +402,8 @@ impl HostProducer {
             return Err(invalid());
         }
         let draft = registrations.iter().map(|r| r.draft.clone()).collect();
-        let setup = move |description: &str, budget: &mut WorkBudget| {
+        let setup = move || {
             let lease = acquire()?;
-            let description = description_at_base(description, lease.as_ref(), budget)?.into();
             let services = registrations
                 .iter()
                 .map(|r| match &r.at_base {
@@ -214,7 +412,6 @@ impl HostProducer {
                 })
                 .collect::<CoreResult<_>>()?;
             Ok(InstalledBase {
-                description,
                 services,
                 lease: Box::new(lease),
             })
@@ -271,60 +468,156 @@ impl HostProducer {
     }
 
     /// Prepare the application's TD and behaviors and return its closed candidate.
-    /// `poll_publish` completes installation under caller-supplied time and credit.
+    /// A refusal returns the application inputs. After base acquisition, short
+    /// finalization credit returns a retry on the same funded endpoint.
     pub fn expose(
         &mut self,
         description: Arc<str>,
         behaviors: Vec<RawFiniteBehavior>,
         policy: ExposurePolicy,
         budget: &mut WorkBudget,
-    ) -> CoreResult<ComposedProducerExposure> {
-        // This owner outlives all provisional inputs, including their destructors
-        // on a refusal after native acquisition.
-        let mut prepaid;
-        let slot = match policy.replaces {
-            Some(old) => ThingSlotId::new(
-                old.slot().slot(),
-                old.slot().generation().checked_next().ok_or_else(busy)?,
-            ),
-            None => ThingSlotId::new(SlotIndex::new(self.next_slot), Generation::INITIAL),
+    ) -> Result<ComposedProducerExposure, ExposureError> {
+        let (authority, next_slot) = match self.new_authority(policy.replaces) {
+            Ok(next) => next,
+            Err(error) => {
+                return Err(ExposureError::refused(
+                    error,
+                    description,
+                    behaviors,
+                    policy,
+                ));
+            }
         };
-        let next_slot = if policy.replaces.is_none() {
-            self.next_slot.checked_add(1).ok_or_else(busy)?
-        } else {
-            self.next_slot
-        };
-        let authority = ProducerInstanceAuthority::try_new(slot)?;
-        let key = authority.key();
-        let mut instance =
+        let instance =
             RawProducerInstance::new(authority, behaviors).with_description(description.clone());
+        let setup = match self.prepare_exposure(&instance, &policy, budget) {
+            Ok(setup) => setup,
+            Err(error) => {
+                return Err(ExposureError::refused(
+                    error,
+                    description,
+                    instance.into_finite_behaviors(),
+                    policy,
+                ));
+            }
+        };
+        let candidate = ExposureCandidate {
+            issuer: self.owner.participation_token(),
+            description,
+            instance,
+            policy,
+            setup,
+        };
+        let result = candidate.finish(self, budget);
+        // A staged retry owns this logical slot even while other Things publish.
+        if result
+            .as_ref()
+            .err()
+            .is_none_or(|failure| failure.is_staged())
+        {
+            self.next_slot = next_slot;
+        }
+        result
+    }
+
+    fn new_authority(
+        &self,
+        replaces: Option<ProducerInstanceKey>,
+    ) -> CoreResult<(ProducerInstanceAuthority, u32)> {
+        let (slot, next) = match replaces {
+            Some(old) => (
+                ThingSlotId::new(
+                    old.slot().slot(),
+                    old.slot().generation().checked_next().ok_or_else(busy)?,
+                ),
+                self.next_slot,
+            ),
+            None => (
+                ThingSlotId::new(SlotIndex::new(self.next_slot), Generation::INITIAL),
+                self.next_slot.checked_add(1).ok_or_else(busy)?,
+            ),
+        };
+        Ok((ProducerInstanceAuthority::try_new(slot)?, next))
+    }
+
+    fn preparation_limits(
+        &self,
+        instance: &RawProducerInstance,
+        policy: &ExposurePolicy,
+        base_bytes: usize,
+    ) -> CoreResult<ResourceLimits> {
+        let known = instance
+            .backing_bytes()
+            .and_then(|n| n.checked_add(policy.handler_backing_bytes))
+            .and_then(|n| n.checked_add(base_bytes))
+            .ok_or_else(busy)?;
+        let live = ResourceKind::EngineLiveBytesGlobalMax;
+        let available = self
+            .config
+            .candidate_bytes
+            .checked_sub(known)
+            .ok_or_else(|| CoreError::LimitExceeded {
+                resource: live,
+                limit: self.config.candidate_bytes as u64,
+                requested: Some(known as u64),
+                observed: None,
+                context: ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
+                    .with_thing(instance.key().slot()),
+            })? as u64;
+        Ok((*self.limits).clone().with_limit(
+            live,
+            Some(available.min(self.limits.get(live).unwrap_or(0))),
+        ))
+    }
+
+    fn prepare_exposure(
+        &self,
+        instance: &RawProducerInstance,
+        policy: &ExposurePolicy,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ExposureSetup> {
         self.owner
-            .check_publication_input(&instance, policy.replaces)?;
+            .check_publication_input(instance, policy.replaces)?;
+        let key = instance.key();
         let bytes = self.config.candidate_bytes;
         let storage = ProducerStorage::reserve(&self.accounts, bytes)?;
         let mut facts = PublicationFacts::default();
-        let mut providers = capabilities(&self.services, &mut facts)?;
+        let providers = capabilities(&self.services, &mut facts)?;
         let scratch = QualificationFunding::reserve(
             &self.accounts,
             setup_scratch(&self.limits, &providers, &self.services, bytes)?,
         )?;
-        let base_bytes = self.acquire.as_ref().map_or(0, |base| base.backing_bytes);
-        let preparation_limit = |instance: &RawProducerInstance| -> CoreResult<ResourceLimits> {
-            let known = instance
-                .backing_bytes()
-                .and_then(|n| n.checked_add(policy.handler_backing_bytes))
-                .and_then(|n| n.checked_add(base_bytes))
-                .ok_or_else(busy)?;
-            let available = bytes.checked_sub(known).ok_or_else(busy)? as u64;
-            let live = ResourceKind::EngineLiveBytesGlobalMax;
-            Ok((*self.limits).clone().with_limit(
-                live,
-                Some(available.min(self.limits.get(live).unwrap_or(0))),
-            ))
+        // A staged retry can retain both the application's original and finalized TD.
+        let base_bytes = match &self.acquire {
+            Some(base) => base
+                .backing_bytes
+                .checked_add(instance.description().ok_or_else(invalid)?.len())
+                .and_then(|n| {
+                    n.checked_add(2 * size_of::<usize>() + size_of::<ExposureCandidate>())
+                })
+                .ok_or_else(busy)?,
+            None => 0,
         };
-        let mut preparation_limits = preparation_limit(&instance)?;
-        let mut prepared = prepare(&instance, &providers, &preparation_limits, budget)?;
-        let members = selected_members(&prepared);
+        let limits = self.preparation_limits(instance, policy, base_bytes)?;
+        let draft = prepare(instance, &providers, &limits, budget)?;
+        // Replacing the base preserves every Form/operation row. Each row has
+        // one winner and a registration assembles at most one native member.
+        let members = if self.acquire.is_some() {
+            let ceiling = self
+                .limits
+                .get(ResourceKind::RouteReadinessTokensPerThingMax)
+                .unwrap_or(0)
+                .min(
+                    self.limits
+                        .get(ResourceKind::RouteReadinessTokensGlobalMax)
+                        .unwrap_or(0),
+                );
+            let possible = draft.operations().len().min(self.services.len()) as u64;
+            // A zero ceiling is reported by the normal one-member limit check.
+            possible.min(ceiling).max(1) as usize
+        } else {
+            selected_members(&draft)
+        };
         check_publication_limits(&self.limits, 0, members, key)?;
         self.owner.check_cleanup_quantum(
             key,
@@ -335,7 +628,7 @@ impl HostProducer {
                 .unwrap_or(0),
         )?;
         let counts = MemberFunding::reserve(&self.accounts, &self.limits, members, key)?;
-        prepaid = Some(FiniteSetupFunding {
+        let mut funding = FiniteSetupFunding {
             stage: ProducerStageFunding {
                 base: None,
                 base_cleanup: None,
@@ -345,63 +638,50 @@ impl HostProducer {
             },
             counts,
             facts,
-        });
-        let funding = prepaid.as_mut().unwrap();
-        let installed;
-        let services = if let Some(acquire) = &self.acquire {
-            // No draft output can certify a mapping at the address about to be assigned.
-            drop(prepared);
-            drop(PublicationFacts::lock_current(&[&funding.facts])?);
-            funding.stage.base_cleanup = Some(
-                self.accounts
-                    .reserve(ResourceKind::CleanupItemsMax, 1)
-                    .ok_or_else(busy)?,
-            );
-            budget
-                .consume(WorkClass::BindingPolls, 1 + self.services.len() as u64)
-                .map_err(|_| busy())?;
-            budget
-                .consume(WorkClass::CleanupItems, 1)
-                .map_err(|_| busy())?;
-            let base = (acquire.acquire)(&description, budget)?;
-            funding.stage.base = Some(base.lease);
-            instance = instance.with_description(base.description);
-            installed = base.services;
-            providers = capabilities(&installed, &mut funding.facts)?;
-            if setup_scratch(
-                &self.limits,
-                &providers,
-                &installed,
-                funding.facts.backing_bytes().ok_or_else(busy)?,
-            )? > funding.stage.scratch.bytes() as usize
-            {
-                return Err(busy());
-            }
-            preparation_limits = preparation_limit(&instance)?;
-            prepared = prepare(&instance, &providers, &preparation_limits, budget)?;
-            &installed
-        } else {
-            &self.services
         };
-        let participants = self.assemble(services, &prepared, key, &preparation_limits, budget)?;
-        let exposure = ComposedProducerExposure::admit(
-            &self.owner,
-            ComposedProducerInput {
-                instance,
-                prepared,
+        let Some(acquire) = &self.acquire else {
+            return Ok(ExposureSetup {
+                installed: None,
+                prepared: Some(draft),
+                participants: None,
                 providers: ProducerRegistrations::new(providers),
-                participants,
-                expected: policy.replaces,
-                handler_backing_bytes: policy.handler_backing_bytes,
-            },
-            self.limits.clone(),
-            self.accounts.clone(),
-            budget,
-            &mut prepaid,
-        )
-        .map_err(cause)?;
-        self.next_slot = next_slot;
-        Ok(exposure)
+                needs_base: false,
+                funding,
+            });
+        };
+        drop(draft);
+        drop(PublicationFacts::lock_current(&[&funding.facts])?);
+        funding.stage.base_cleanup = Some(
+            self.accounts
+                .reserve(ResourceKind::CleanupItemsMax, 1)
+                .ok_or_else(busy)?,
+        );
+        budget
+            .consume(WorkClass::BindingPolls, 1 + self.services.len() as u64)
+            .map_err(|_| busy())?;
+        budget
+            .consume(WorkClass::CleanupItems, 1)
+            .map_err(|_| busy())?;
+        let base = (acquire.acquire)()?;
+        funding.stage.base = Some(base.lease);
+        let providers = capabilities(&base.services, &mut funding.facts)?;
+        if setup_scratch(
+            &self.limits,
+            &providers,
+            &base.services,
+            funding.facts.backing_bytes().ok_or_else(busy)?,
+        )? > funding.stage.scratch.bytes() as usize
+        {
+            return Err(busy());
+        }
+        Ok(ExposureSetup {
+            installed: Some(base.services),
+            prepared: None,
+            participants: None,
+            providers: ProducerRegistrations::new(providers),
+            needs_base: true,
+            funding,
+        })
     }
 
     fn assemble(
@@ -410,6 +690,7 @@ impl HostProducer {
         prepared: &PreparedThing,
         key: ProducerInstanceKey,
         preparation_limits: &ResourceLimits,
+        counts: &mut MemberFunding,
         budget: &mut WorkBudget,
     ) -> CoreResult<Vec<OwnedProducerParticipation>> {
         let mut remaining = (preparation_limits
@@ -417,7 +698,10 @@ impl HostProducer {
             .unwrap_or(0) as usize)
             .checked_sub(prepared.retained_bytes())
             .ok_or_else(busy)?;
-        let mut participants = Vec::with_capacity(selected_members(prepared));
+        let members = selected_members(prepared);
+        check_publication_limits(&self.limits, 0, members, key)?;
+        counts.retain_selected(members, key)?;
+        let mut participants = Vec::with_capacity(members);
         for (index, service) in services.iter().enumerate() {
             budget
                 .consume(

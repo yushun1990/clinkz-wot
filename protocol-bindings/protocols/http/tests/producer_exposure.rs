@@ -154,6 +154,7 @@ fn expose(
         },
         &mut work(),
     )
+    .map_err(|e| e.error().clone())
 }
 fn step(host: &mut HostProducer, exposure: &mut ComposedProducerExposure) {
     host.step(
@@ -165,6 +166,12 @@ fn step(host: &mut HostProducer, exposure: &mut ComposedProducerExposure) {
     .unwrap();
 }
 fn publish(host: &mut HostProducer, exposure: &mut ComposedProducerExposure) {
+    publication_result(host, exposure).unwrap();
+}
+fn publication_result(
+    host: &mut HostProducer,
+    exposure: &mut ComposedProducerExposure,
+) -> CoreResult<()> {
     let end = Instant::now() + Duration::from_secs(2);
     loop {
         if let Poll::Ready(result) = host.poll_publish(
@@ -174,8 +181,7 @@ fn publish(host: &mut HostProducer, exposure: &mut ComposedProducerExposure) {
             &mut work(),
             |_, _| work(),
         ) {
-            result.unwrap();
-            return;
+            return result;
         }
         assert!(Instant::now() < end, "closed installation stalled");
     }
@@ -192,6 +198,14 @@ fn http_wire(host: &mut HostProducer, exposure: &mut ComposedProducerExposure) -
     let path = td["properties"]["relative"]["forms"][0]["href"]
         .as_str()
         .unwrap();
+    get(host, exposure, address, path)
+}
+fn get(
+    host: &mut HostProducer,
+    exposure: &mut ComposedProducerExposure,
+    address: SocketAddr,
+    path: &str,
+) -> String {
     let mut peer = TcpStream::connect(address).unwrap();
     write!(
         peer,
@@ -536,7 +550,7 @@ fn finalization_and_rollback_use_the_original_candidates_prepaid_bank() {
             ExposurePolicy::default(),
             &mut work().with_remaining(WorkClass::CleanupItems, 0)
         ),
-        Err(CoreError::Backpressure(_))
+        Err(e) if matches!(e.error(), CoreError::Backpressure(_))
     ));
     assert!(matches!(
         host.expose(
@@ -548,7 +562,7 @@ fn finalization_and_rollback_use_the_original_candidates_prepaid_bank() {
             },
             &mut work()
         ),
-        Err(CoreError::Backpressure(_))
+        Err(e) if matches!(e.error(), CoreError::LimitExceeded { resource: EngineLiveBytesGlobalMax, .. })
     ));
     assert_eq!(uses.get(), 0);
 
@@ -574,5 +588,358 @@ fn finalization_and_rollback_use_the_original_candidates_prepaid_bank() {
     assert_eq!(read_http(&mut host, &mut first).0, "17");
     retire(&mut host, &mut first);
     drop((first, second, host));
+    empty(&accounts);
+}
+
+fn http_registration(listen: HttpProducerConfig, id: u32) -> HttpFiniteProducer {
+    HttpFiniteProducer::try_new(listen, BindingId::new(id), BindingGeneration::INITIAL, 100)
+        .unwrap()
+}
+
+#[test]
+fn assigned_base_prepays_a_split_final_membership_and_refunds_unused_slots() {
+    use ResourceKind::{CleanupItemsMax, RouteReadinessTokensGlobalMax};
+    for (split, allowance) in [(true, 2), (false, 2), (false, 1)] {
+        let accounts = bank();
+        let fixed_socket = TcpListener::bind(zero()).unwrap();
+        let fixed = fixed_socket.local_addr().unwrap();
+        let listen = HttpProducerConfig::for_loopback(fixed).unwrap();
+        let pressure = Rc::new(RefCell::new(Vec::new()));
+        let mut host = HostProducer::with_assigned_base(
+            vec![
+                FiniteProducerRegistration::fixed(http_registration(listen, 20)),
+                FiniteProducerRegistration::at_base(draft(), HttpFiniteProducer::at_endpoint),
+            ],
+            {
+                let accounts = accounts.clone();
+                let pressure = pressure.clone();
+                move || {
+                    assert_eq!(
+                        accounts.account(RouteReadinessTokensGlobalMax).used(),
+                        allowance
+                    );
+                    // One cleanup item per member, the logical Thing and the closed base.
+                    assert_eq!(accounts.account(CleanupItemsMax).used(), allowance + 2);
+                    for kind in [RouteReadinessTokensGlobalMax, CleanupItemsMax] {
+                        let a = accounts.account(kind);
+                        pressure
+                            .borrow_mut()
+                            .push(accounts.reserve(kind, a.limit() - a.used()).unwrap());
+                    }
+                    HttpProducerEndpoint::acquire(zero())
+                }
+            },
+            4096,
+            limits(),
+            Arc::new(GatewayDefaultV1::LIMITS.clone().with_limit(
+                ResourceKind::RouteReadinessTokensPerThingMax,
+                Some(allowance),
+            )),
+            accounts.clone(),
+        )
+        .unwrap();
+        let count = Rc::new(Cell::new(0));
+        let mut td = source(true, None);
+        td["base"] = json!(format!("http://{fixed}/"));
+        let other = if split {
+            format!("http://{fixed}/constant")
+        } else {
+            "constant".to_owned()
+        };
+        td["properties"]["other"] =
+            json!({"type":"integer","readOnly":true,"forms":[{"href":other}]});
+        if split {
+            for (kind, free) in [(RouteReadinessTokensGlobalMax, 1), (CleanupItemsMax, 3)] {
+                let hold = accounts
+                    .reserve(kind, accounts.account(kind).limit() - free)
+                    .unwrap();
+                assert!(expose(&mut host, &td, &["relative", "other"], 27, &count, None).is_err());
+                assert!(pressure.borrow().is_empty());
+                drop(hold);
+            }
+        }
+        let mut thing = expose(&mut host, &td, &["relative", "other"], 27, &count, None).unwrap();
+        for kind in [RouteReadinessTokensGlobalMax, CleanupItemsMax] {
+            let a = accounts.account(kind);
+            assert_eq!(a.limit() - a.used(), allowance - if split { 2 } else { 1 });
+        }
+        drop(fixed_socket);
+        publish(&mut host, &mut thing);
+        // Each later Read requires its own independent exchange/cleanup capacity.
+        pressure.borrow_mut().clear();
+        let (body, result) = read_http(&mut host, &mut thing);
+        assert_eq!(body, "27");
+        assert_eq!(result.binding().0, BindingId::new(10));
+        let td: Value = serde_json::from_str(host.description(thing.key()).unwrap()).unwrap();
+        let assigned = addr(td["base"].as_str().unwrap());
+        assert_ne!(assigned, fixed);
+        assert_eq!(
+            get(
+                &mut host,
+                &mut thing,
+                if split { fixed } else { assigned },
+                "constant"
+            ),
+            "27"
+        );
+        assert_eq!(
+            outcome(&mut host, &mut thing).binding().0,
+            BindingId::new(if split { 20 } else { 10 })
+        );
+        assert_eq!(count.get(), 2);
+        retire(&mut host, &mut thing);
+        drop((result, thing, host, pressure));
+        empty(&accounts);
+    }
+}
+
+struct UniqueReading {
+    reading: Reading,
+    drops: Rc<Cell<usize>>,
+}
+impl RawFiniteHandler for UniqueReading {
+    fn authorize(&self, input: &InteractionInput) -> CoreResult<()> {
+        self.reading.authorize(input)
+    }
+    fn handle(
+        &self,
+        context: HandlerContext<'_>,
+        input: &InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        self.reading.handle(context, input)
+    }
+}
+impl Drop for UniqueReading {
+    fn drop(&mut self) {
+        self.drops.set(self.drops.get() + 1);
+    }
+}
+
+#[test]
+fn refusal_returns_the_original_handler_and_short_finalization_resumes_on_the_original_socket() {
+    let accounts = bank();
+    let acquired = Acquired::default();
+    let mut host = deployment(
+        udp::Datagram::new(),
+        &[21],
+        accounts.clone(),
+        acquired.clone(),
+    );
+    let td: Arc<str> = source(true, None).to_string().into();
+    let calls = Rc::new(Cell::new(0));
+    let drops = Rc::new(Cell::new(0));
+    let handler = UniqueReading {
+        reading: Reading(41, calls.clone()),
+        drops: drops.clone(),
+    };
+    let failure = host
+        .expose(
+            td.clone(),
+            vec![RawFiniteBehavior::new(
+                AffordanceTarget::Property("relative".into()),
+                Operation::ReadProperty,
+                handler,
+            )],
+            ExposurePolicy {
+                replaces: None,
+                handler_backing_bytes: 48,
+            },
+            &mut WorkBudget::new(),
+        )
+        .err()
+        .unwrap();
+    assert!(matches!(failure.error(), CoreError::Backpressure(_)));
+    assert!(!failure.is_staged());
+    assert!(acquired.borrow().is_empty());
+    assert_eq!(drops.get(), 0);
+    let original = failure.into_input();
+    assert!(Arc::ptr_eq(&original.description, &td));
+    assert_eq!(original.policy.handler_backing_bytes, 48);
+    let short = || work().with_remaining(WorkClass::CodecOutputBytes, 24);
+    let failure = host
+        .expose(
+            original.description,
+            original.behaviors,
+            original.policy,
+            &mut short(),
+        )
+        .err()
+        .unwrap();
+    assert!(matches!(failure.error(), CoreError::Backpressure(_)));
+    assert!(failure.is_staged());
+    let address = acquired.borrow()[0];
+    assert!(TcpListener::bind(address).is_err());
+    let failure = failure.retry(&mut host, &mut short()).err().unwrap();
+    assert!(matches!(failure.error(), CoreError::Backpressure(_)));
+    // This turn reaches HTTP response preparation with an exhausted Binding lane.
+    let mut response_short = work().with_remaining(
+        WorkClass::BindingPolls,
+        4096 + clinkz_wot_planning::security::PREPARATION_WORK,
+    );
+    let failure = failure.retry(&mut host, &mut response_short).err().unwrap();
+    assert_eq!(response_short.remaining(WorkClass::BindingPolls), 0);
+    assert!(failure.is_staged());
+    assert!(matches!(failure.error(), CoreError::Backpressure(_)));
+    // The unselected datagram service needs its own work during final qualification.
+    let failure = failure
+        .retry(
+            &mut host,
+            &mut work().with_remaining(WorkClass::ProviderProbes, 0),
+        )
+        .err()
+        .unwrap();
+    assert!(failure.is_staged());
+    assert!(matches!(failure.error(), CoreError::Backpressure(_)));
+    let mut foreign = deployment(udp::Datagram::new(), &[22], bank(), Acquired::default());
+    let failure = failure.retry(&mut foreign, &mut work()).err().unwrap();
+    assert!(matches!(failure.error(), CoreError::StaleHandle(_)));
+    assert_eq!(acquired.borrow().as_slice(), &[address]);
+    assert_eq!((calls.get(), drops.get()), (0, 0));
+    let mut sibling = expose(
+        &mut host,
+        &source(true, None),
+        &["relative"],
+        3,
+        &calls,
+        None,
+    )
+    .unwrap();
+    publish(&mut host, &mut sibling);
+    let mut thing = failure.retry(&mut host, &mut work()).unwrap();
+    publish(&mut host, &mut thing);
+    let final_td: Value = serde_json::from_str(host.description(thing.key()).unwrap()).unwrap();
+    assert_eq!(addr(final_td["base"].as_str().unwrap()), address);
+    assert_eq!(acquired.borrow().len(), 2);
+    assert_eq!(read_http(&mut host, &mut thing).0, "41");
+    assert_eq!(read_http(&mut host, &mut sibling).0, "3");
+    assert_eq!((calls.get(), drops.get()), (2, 0));
+    retire(&mut host, &mut thing);
+    retire(&mut host, &mut sibling);
+    drop((thing, sibling, host));
+    assert_eq!(drops.get(), 1);
+    empty(&accounts);
+}
+
+#[test]
+fn a_short_composed_handoff_preserves_the_acquisition_facts_and_can_be_abandoned() {
+    let accounts = bank();
+    let acquired = Acquired::default();
+    let service = udp::Datagram::new();
+    let enabled = service.enabled.clone();
+    let mut host = deployment(service, &[21], accounts.clone(), acquired.clone());
+    let baseline = ResourceKind::ALL.map(|kind| accounts.account(kind).used());
+    let source: Arc<str> = source(true, None).to_string().into();
+    let calls = Rc::new(Cell::new(0));
+    for invalidate in [false, true] {
+        let failure = host
+            .expose(
+                source.clone(),
+                vec![RawFiniteBehavior::new(
+                    AffordanceTarget::Property("relative".into()),
+                    Operation::ReadProperty,
+                    Reading(9, calls.clone()),
+                )],
+                ExposurePolicy::default(),
+                &mut work().with_remaining(WorkClass::HandlerSteps, 2),
+            )
+            .err()
+            .unwrap();
+        assert!(matches!(failure.error(), CoreError::Backpressure(_)));
+        let address = *acquired.borrow().last().unwrap();
+        assert!(TcpListener::bind(address).is_err());
+        let failure = if invalidate {
+            enabled.borrow_mut().replace(false);
+            enabled.borrow_mut().replace(true);
+            let stale = failure.retry(&mut host, &mut work()).err().unwrap();
+            assert!(matches!(stale.error(), CoreError::StaleHandle(_)));
+            TcpListener::bind(address)
+                .expect("stale candidate released before returning the refusal");
+            stale
+        } else {
+            failure
+        };
+        let original = failure.into_input();
+        assert!(Arc::ptr_eq(&source, &original.description));
+        assert_eq!(original.behaviors.len(), 1);
+        TcpListener::bind(address).expect("the caller released the staged endpoint");
+        assert_eq!(
+            ResourceKind::ALL.map(|kind| accounts.account(kind).used()),
+            baseline
+        );
+    }
+    assert_eq!(calls.get(), 0);
+    assert_eq!(acquired.borrow().len(), 2);
+    drop(host);
+    empty(&accounts);
+}
+
+#[test]
+fn fixed_registration_shares_one_listener_across_independent_publications() {
+    let accounts = bank();
+    let socket = TcpListener::bind(zero()).unwrap();
+    let address = socket.local_addr().unwrap();
+    let listen = HttpProducerConfig::for_loopback(address).unwrap();
+    let listener = HttpFiniteListener::new(listen, 100).unwrap();
+    let mismatch = HttpFiniteListener::new(listen, 101).unwrap();
+    assert!(
+        http_registration(listen, 10)
+            .with_listener(&mismatch)
+            .is_err()
+    );
+    assert!(draft().with_listener(&listener).is_err());
+    let fixed = http_registration(listen, 10)
+        .with_listener(&listener)
+        .unwrap();
+    let mut host = HostProducer::new(
+        vec![FiniteProducerRegistration::fixed(fixed)],
+        limits(),
+        Arc::new(GatewayDefaultV1::LIMITS.clone()),
+        accounts.clone(),
+    )
+    .unwrap();
+    let make_td = |path: &str| {
+        let mut td = source(true, None);
+        td["base"] = json!(format!("http://{address}/"));
+        td["properties"]["relative"]["forms"][0]["href"] = json!(path);
+        td
+    };
+    let calls = Rc::new(Cell::new(0));
+    let mut alpha = expose(
+        &mut host,
+        &make_td("alpha"),
+        &["relative"],
+        11,
+        &calls,
+        None,
+    )
+    .unwrap();
+    let mut beta = expose(&mut host, &make_td("beta"), &["relative"], 22, &calls, None).unwrap();
+    drop(socket);
+    publish(&mut host, &mut alpha);
+    publish(&mut host, &mut beta);
+    let (value, unread) = read_http(&mut host, &mut alpha);
+    assert_eq!(value, "11");
+    assert_eq!(unread.recipient(), Some(alpha.key()));
+    let mut collision = expose(
+        &mut host,
+        &make_td("alpha"),
+        &["relative"],
+        33,
+        &calls,
+        None,
+    )
+    .unwrap();
+    assert!(publication_result(&mut host, &mut collision).is_err());
+    assert!(host.description(collision.key()).is_none());
+    retire(&mut host, &mut collision);
+    assert_eq!(read_http(&mut host, &mut beta).0, "22");
+    drop(unread);
+    retire(&mut host, &mut alpha);
+    assert!(TcpListener::bind(address).is_err());
+    assert_eq!(read_http(&mut host, &mut beta).0, "22");
+    assert_eq!(calls.get(), 3);
+    retire(&mut host, &mut beta);
+    TcpListener::bind(address).expect("final route released the shared socket");
+    drop((alpha, beta, collision, host, listener));
     empty(&accounts);
 }

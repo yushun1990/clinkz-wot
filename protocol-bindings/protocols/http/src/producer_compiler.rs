@@ -171,9 +171,12 @@ impl HttpProducerConfig {
         )?;
         let (response_work, _) =
             clinkz_wot_planning::responses::preparation(document, input.owner, input.form_index)?;
-        budget
+        if budget
             .consume(WorkClass::BindingPolls, response_work)
-            .map_err(|_| producer_unsupported())?;
+            .is_err()
+        {
+            return Ok(None);
+        }
         // Shared DataSchema meaning is prepared once. HTTP supplies JSON
         // decoding; accepting extension-free schemas is not validation support.
         let mut schema_work = 0;

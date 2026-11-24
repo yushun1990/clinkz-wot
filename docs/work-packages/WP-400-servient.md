@@ -632,17 +632,24 @@ through the exposure. [HTTP application](../../protocol-bindings/protocols/http/
 For a setup-assigned base, this Host entry first prepares the complete draft
 and checks behavior coverage in both directions. It reserves candidate backing,
 qualification scratch, member capacity and rollback before acquiring the
-closed endpoint. It replaces only the top-level base, then runs fresh selection
-against the full registration set while holding the lease. The existing composed
-handoff checks the final definitions, installed members and current configuration
-through commit. Candidate backing transfers to the serving owners on the
-original bank. The preparation-only balance, base pin and callback scratch end
-at commit or rollback. Deployment declares the peak backing for its base
+closed endpoint. The final member allowance is bounded by the number of
+Form/operation pairs, eligible registrations and readiness limits. Selection
+releases surplus readiness and cleanup slots. The entry replaces the top-level
+base and runs fresh selection against the full registration set while holding
+the lease. A refused exposure returns the application's original TD, behaviors
+and policy through `ExposureError::into_input`. A short finalization turn returns
+a staged error. Its `retry` method resumes on the original Host and endpoint.
+Recovering the inputs or dropping the staged error releases the lease. The
+composed handoff checks the final definitions, installed members and original
+configuration observations through commit. Candidate backing transfers to the
+serving owners on the original bank. The preparation-only balance, base pin
+and callback scratch end at commit or rollback. Deployment declares the peak backing for its base
 acquisition and specialization callbacks. Each finite service declares its
-setup callback peak. The current HTTP adapter transfers one exclusive listener
-to its selected participant. The existing finite driver accepts one exchange
-at a time per participant. Its independently funded outcomes can survive later
-Reads, replacement and logical retirement. [Public exposure controls](../../protocol-bindings/protocols/http/tests/producer_exposure.rs)
+setup callback peak. Assigned HTTP transfers the original socket to its selected
+participant. A fixed HTTP registration can use the deployment's shared listener
+so independent Things own separate route leases on one address. The finite
+driver accepts one exchange at a time per participant. Its independently funded
+outcomes can survive later Reads, replacement and logical retirement. [Public exposure controls](../../protocol-bindings/protocols/http/tests/producer_exposure.rs)
 
 Property values and Event data use the same instance registry and closed
 whole-TD publication with explicit `ProducerNotificationSource` families and

@@ -472,7 +472,7 @@ impl ProducerStorage {
 /// finite entry transfers the serving part without competing for its bytes again.
 pub(crate) struct ProducerStageFunding {
     // Drop the original closed lease before refunding its rollback allowance.
-    pub base: Option<Box<dyn Any>>,
+    pub base: Option<Box<dyn AsRef<str>>>,
     pub base_cleanup: Option<HostCapacityReservation>,
     pub base_bytes: usize,
     pub storage: ProducerStorage,
@@ -512,24 +512,23 @@ impl MemberFunding {
         })
     }
 
-    fn fit(
+    pub(crate) fn retain_selected(
         &mut self,
-        limits: &ResourceLimits,
         members: usize,
         key: ProducerInstanceKey,
     ) -> CoreResult<()> {
-        for (slot, kind, need) in [
-            (&mut self.members, K::RouteReadinessTokensGlobalMax, members),
-            (&mut self.cleanup_items, K::CleanupItemsMax, members + 1),
-        ] {
-            let limit = limits.get(kind).unwrap_or(0);
-            let held = slot.amount();
-            if held > need as u64 {
-                slot.release_part(held - need as u64);
-            } else if (need as u64) > held && !slot.try_grow_up_to(need as u64 - held, limit) {
-                return Err(slot_limit(kind, limit, need, key));
-            }
+        let held = self.members.amount();
+        if members as u64 > held {
+            return Err(slot_limit(
+                K::RouteReadinessTokensGlobalMax,
+                held,
+                members,
+                key,
+            ));
         }
+        let surplus = held - members as u64;
+        self.members.release_part(surplus);
+        self.cleanup_items.release_part(surplus);
         Ok(())
     }
 }
@@ -569,10 +568,12 @@ impl ComposedProducerExposure {
         prepaid: &mut Option<FiniteSetupFunding>,
     ) -> Result<Self, BindingInputRejection<ComposedProducerInput>> {
         let admission = (|| -> CoreResult<ComposedAdmission> {
-            let mut coverage = prepaid
-                .as_mut()
-                .map(|p| core::mem::take(&mut p.facts))
-                .unwrap_or_default();
+            // A short final turn leaves the acquisition observations with the
+            // candidate. A retry must still prove the original versions current.
+            let mut coverage = match prepaid {
+                Some(paid) => paid.facts.try_clone()?,
+                None => PublicationFacts::default(),
+            };
             let registrations = input.providers.snapshot(&mut coverage)?;
             if input.participants.is_empty()
                 || registrations.is_empty()
@@ -677,22 +678,36 @@ impl ComposedProducerExposure {
                 .retained_bytes()
                 .checked_add(registrations.len() * size_of::<Rc<dyn ProducerCapability>>())
                 .ok_or_else(busy)?;
-            let temporary = qualification_bytes(
-                &limits,
-                &registrations,
-                qualification.backing_bytes().ok_or_else(busy)?,
-            )?;
+            let original_facts = match prepaid {
+                Some(paid) => paid.facts.backing_bytes().ok_or_else(busy)?,
+                None => 0,
+            };
+            let observations = qualification
+                .backing_bytes()
+                .and_then(|n| n.checked_add(original_facts))
+                .ok_or_else(busy)?;
+            let temporary = qualification_bytes(&limits, &registrations, observations)?;
             let peak = bytes
                 .checked_add(stage_bytes)
                 .and_then(|n| n.checked_add(prepaid.as_ref().map_or(0, |p| p.stage.base_bytes)))
                 .ok_or_else(busy)?;
             if let Some(paid) = prepaid {
-                if paid.stage.storage.live.amount() < peak as u64
-                    || paid.stage.scratch.bytes() < temporary as u64
-                {
-                    return Err(busy());
+                for (kind, held, needed) in [
+                    (
+                        K::EngineLiveBytesGlobalMax,
+                        paid.stage.storage.live.amount(),
+                        peak,
+                    ),
+                    (
+                        K::AdmissionTemporaryBytesGlobalMax,
+                        paid.stage.scratch.bytes(),
+                        temporary,
+                    ),
+                ] {
+                    if needed as u64 > held {
+                        return Err(slot_limit(kind, held, needed, key));
+                    }
                 }
-                paid.counts.fit(&limits, members, key)?;
             } else {
                 *prepaid = Some(FiniteSetupFunding {
                     stage: ProducerStageFunding {

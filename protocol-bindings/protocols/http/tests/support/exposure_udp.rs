@@ -6,6 +6,7 @@ use clinkz_wot_td::semantic::{SemanticScope, UriVariableScope};
 use std::{any::Any, task::Poll};
 
 pub struct Datagram {
+    pub enabled: Rc<RefCell<PublicationState<bool>>>,
     socket: Rc<UdpSocket>,
     leased: Rc<Cell<bool>>,
 }
@@ -14,6 +15,7 @@ impl Datagram {
         let socket = UdpSocket::bind(zero()).unwrap();
         socket.set_nonblocking(true).unwrap();
         Self {
+            enabled: Rc::new(RefCell::new(PublicationState::new(true))),
             socket: Rc::new(socket),
             leased: Rc::new(Cell::new(false)),
         }
@@ -22,7 +24,8 @@ impl Datagram {
         self.socket.local_addr().unwrap()
     }
     fn matches(&self, input: ProducerOperationInput<'_>) -> CoreResult<bool> {
-        if input.site.site() != AffordanceSite::Property("absolute")
+        if !*self.enabled.borrow().get()
+            || input.site.site() != AffordanceSite::Property("absolute")
             || input.operation != Operation::ReadProperty
             || input.form != 0
             || input.target != format!("udp://{}/read", self.address())
@@ -74,8 +77,8 @@ impl ProducerCapability for Datagram {
     fn identity(&self) -> (BindingId, BindingGeneration) {
         (BindingId::new(70), BindingGeneration::INITIAL)
     }
-    fn observe_configuration(&self, _: &mut PublicationObserver<'_>) -> CoreResult<()> {
-        Ok(())
+    fn observe_configuration(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.enabled.borrow().observe(facts)
     }
     fn definition_bytes(&self, d: &dyn Any) -> Option<usize> {
         d.downcast_ref::<SocketAddr>().map(size_of_val)
@@ -92,7 +95,10 @@ impl ProducerCapability for Datagram {
             .matches(i)?
             .then(|| Box::new(self.address()) as Box<dyn Any>))
     }
-    fn supports(&self, i: ProducerOperationInput<'_>, _: &mut WorkBudget) -> CoreResult<bool> {
+    fn supports(&self, i: ProducerOperationInput<'_>, budget: &mut WorkBudget) -> CoreResult<bool> {
+        budget.consume(WorkClass::ProviderProbes, 1).map_err(|_| {
+            CoreError::Backpressure(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
+        })?;
         self.matches(i)
     }
     fn check_final(
