@@ -1,421 +1,146 @@
 # ClinkZ-WoT roadmap
 
-Design target: v6.0 semantic Engine over Binding-owned native runtimes, selected
-by ADR-0025 and active on master. Architecture activation does not transfer
-implementation acceptance or release qualification.
+The v1 delivery target is a Rust Engine that consumes and exposes Things through
+Properties, Actions, Events and described collections, with secure interactions,
+client-side Discovery/Directory, portable shared semantics and Host HTTP/HTTPS
+production delivery. Zenoh/pico and real embedded protocol and hardware
+qualification have separate delivery horizons. [Enduring product goals](docs/architecture/00-system-goals-and-context.md)
 
-The enduring [product goals](docs/architecture/00-system-goals-and-context.md)
-remain unchanged. Release target remains v1 with both WoT roles and
-Property/Action/Event capability families, described collections, security,
-client-only Discovery/Directory, portable shared semantics and Host HTTP/HTTPS
-production delivery. Zenoh/pico and real embedded protocol/hardware qualification
-remain separate future work.
+## Delivery strategy
 
-## Delivery strategy: reusable, composable Engine execution
-
-The near-term engineering objective is **complete the reusable, composable WoT
-Engine execution architecture** through correct protocol/Engine authority,
-independent logical associations, checked reusable preparation and separately
-funded admitted work. The finite Host Consumer now has managed TD-ID
-registrations, non-revoking association views and independent `ConsumerCalls`
-capacity (PR #276). Independently bound continuing Actions and notifications
-now join that managed authority through
-[optional Host execution turns](docs/evidence/consumer-execution-composition.md).
-Optional [Producer turns](docs/evidence/host-execution-integration.md) now join
-independently published Things and existing mixed Consumer capacities in a
-deployment-supplied Host loop. These are scoped capabilities, not all-profile
-execution or architecture closure.
-The [caller-owned continuing Action increment](docs/evidence/continuing-action-runtime-independence.md)
-now executes a source-free NoSec Invoke/Query/Cancel path through the same
-semantic kernel as Host Actions, with independent native storage and original
-funding. Compilation reuse, logical instance independence, executor independence
-and runtime/storage independence are distinct delivery dimensions. Selected
-finite Read and continuing Action evidence advances the last dimension; it does
-not complete constrained preparation, notifications, Producers, credentials,
-embedded driving or runtime independence.
-Basic Property/Action/Event and described collection coverage in
-both roles has reached a meaningful milestone. These real execution paths do
-not establish architecture completion or v1 qualification.
-
-Separate invariant preparation from instance binding and accepted interaction
-work without prescribing a universal program format or new public type hierarchy.
-Broader DataSchema validation and security services must develop on that correct
-boundary, rather than make isolated schema constraints the next major objective.
-Use existing real Bindings to expose compatibility and ownership assumptions,
-then refine the shared architecture with executable evidence.
+One application should be able to publish independent Things on a shared service,
+consume Things through unrelated Bindings, and continue working while earlier
+results await collection. TD owns shared meaning. Planning qualifies a usable
+Consumer interaction or the entire final Producer description against actual
+services. Core defines the interaction, data and security semantics. Servient
+owns instance authority, publication, application dispatch and admitted work.
+The Binding owns native matching, correlation, distribution and physical release.
+Compatible instances can share compiled instructions and a pool of calls.
+Servient checks the original instance’s current permission. Active work, native
+reply rights and retained results each have their own release point. [ADR-0025](docs/ADRs/0025-semantic-engine-and-binding-runtimes.org) · [Selected Engine target](workspace/0132-engine-lifecycle-design.md#ownership-and-lifetime)
 
 ### Capability coverage
 
-This coarse coverage is grounded in the linked source and integration fixtures.
-The original baseline was recorded at
-`dbf81f55536b8789c253b1f90199cee85d3ed6af`; implemented increments update their
-affected cells. Source and scoped evidence remain the availability authority;
-this is not a package acceptance record.
-
-**Semantic representation:** [TD models and shared interpretation](td/src/semantic.rs)
-cover all three families and Thing-root collection Forms, including operation
-applicability/defaults and distinct schema roles. The
-[operation vocabulary](core/src/operation.rs) represents all 18 TD 1.1 operations.
-These facts do not establish executable support; schema and extension processing
-still have supported-subset limits.
-The [finite structured DataSchema increment](docs/evidence/structured-dataschema.md)
-adds reusable nested object/required-field constraints, integer boundaries and
-Unicode string lengths through actual HTTP Consumer/Producer execution. Broader
-schema/media/profile coverage remains open.
-The [TD security/HTTPS increment](docs/evidence/td-security-https.md) now executes
-finite Property Read and structured Property Write through verified TLS.
-The [composition correction](docs/evidence/security-composition.md) adds Basic,
-header API keys, their conjunction and distinguishable alternatives with actual
-independent services, selected Consumer meaning and complete Producer qualification.
-Other authentication mechanisms/operation families and production security
-qualification remain open.
-
-| Capability | Raw execution kernels | TD-driven Consumer composition | TD-driven Producer composition | Actual Binding I/O evidence |
-| --- | --- | --- | --- | --- |
-| Property read | Finite Consumer/Producer paths | Owned preparation and captured services | Qualified final TD and local publication | HTTP in both roles; independent test datagram Consumer |
-| Property write | Finite Consumer/Producer paths | Operation-scoped value schema, captured Binding/data/access services | Complete qualified final TD, captured input/output validation and local publication | Engine Consumer-to-Producer HTTP PUT/204; Read/Write on one Property/listener; downstream test datagram Consumer |
-| Property observe / unobserve | Consumer notification conversation/stop and typed Producer value publication | Selected observable Property Form and captured value/access services | Qualified observable sources, value mappings and publication services | Engine Producer-to-Engine Consumers through Mosquitto; mapped unobserve, independent authority and final release; downstream TD-prepared test datagram Consumer |
-| Action invoke | Separate finite Consumer and continuing invocation owners; Producer continuing store | Explicit synchronous subset plus retained continuing invocation with captured mappings/services | Continuing HTTP mapping with captured validation and controls | Engine Consumer-to-Producer HTTP acceptance, pending and validated completion; independent downstream datagram Consumer |
-| Action query / cancel | Retained Consumer/Producer invocation controls | Independently selected described Forms, opaque native continuation and original instance authority | Qualified described HTTP control routes | Engine Consumer-to-Producer HTTP query/cancel, uncertainty, replacement and final release; distinct downstream invoke/control Bindings over real datagrams |
-| Event subscribe / unsubscribe and Producer emission | Consumer Event conversation; distinct Producer emission and settlement | TD-ordered selection across independent Bindings, captured services, validated delivery and logical stop/unsubscribe | Qualified MQTT Event sources and emission; broker-native subscribe/unsubscribe without control data or dataResponse | Engine Producer-to-Engine Consumers through Mosquitto, shared native subscriptions, independent logical authority and final release. [Independent stream and datagram Event peers](tools/architecture-fixtures/open-consumer/tests/event_selection.rs) exercise selection and retirement |
-| Thing-root ReadAllProperties | Finite root operation with derived readable Property map | Actual root Form/Binding and captured schema/data/access services | Complete final-TD qualification and a distinct root behavior | Engine Consumer-to-Producer HTTP GET; multiple Properties in one native request, schema/refusal/lifecycle/resource cases |
-| Thing-root ReadMultipleProperties | Finite root operation with retained readable schemas and separate per-call member set | Actual root Form/Binding; captured request encoder and exact selected-map validator | Complete final-TD qualification; original input supplied to root result validation | [Engine Consumer-to-Producer tests](protocol-bindings/protocols/http/tests/read_multiple_properties.rs): explicit HTTP POST/200 JSON name array; different subsets from one TD, malformed/partial results and lifecycle/resource cases |
-| Thing-root WriteAllProperties | Finite root write with independent writable input schema and optional bounded member report | Complete map validation and group authorization before native effects | Complete final-TD qualification, captured validator and one root behavior | [Engine Consumer-to-Producer HTTP PUT/204](protocol-bindings/protocols/http/tests/write_all_properties.rs); real partial effects, uncertain completion, no replay, cancellation/replacement and final release |
-| Thing-root WriteMultipleProperties | Finite root write with retained per-call writable set and optional bounded member report | Actual root Form/Binding, captured map validation and set-aware permission | Complete final-TD qualification and one distinct root behavior | [Engine Consumer-to-Producer HTTP PUT/204](protocol-bindings/protocols/http/tests/write_multiple_properties.rs); changing subsets, partial effects and lifecycle/resource evidence; independent test datagrams exercise richer member/atomicity reports with TD-driven Consumer and raw Producer |
-| Thing-root ObserveAllProperties / UnobserveAllProperties | One root notification authority, independent cursor/stop and complete named Property maps | Explicit collection kind, selected root Form, original readable schemas and captured map/access services | Complete final-TD qualification and a distinct root publication source | [Engine Producer-to-Consumers through Mosquitto](protocol-bindings/protocols/mqtt/tests/observe_all_properties.rs); one native subscription, member validation, shared stop, loss/replacement, late work and physical release |
-| Thing-root QueryAllActions | One root status observation over original Producer invocation owners; finite Consumer settlement | Selected root Form, named Action output schemas and actual status/access services | Complete final-TD qualification, root policy/route and complete native inventory | [Engine Consumer-to-Producer HTTP GET/200](protocol-bindings/protocols/http/tests/query_all_actions.rs); concurrent same-Action instances, native status identity, failed/retained outcomes, authority, slice-only Consumer/Producer results and original funding through final owner disposal |
-| Thing-root SubscribeAllEvents / UnsubscribeAllEvents | One root conversation with per-occurrence Event identity and independent logical stop | Selected root Form, exact named Event roles and actual captured data/access services | Complete final-TD qualification and distinct AllEvents source/route | [Engine Producer-to-Consumers through Mosquitto](protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs); one native wildcard subscription, heterogeneous schemas, adversarial identity, loss/replacement, uncertain controls, borrowed payload/name delivery and original funding through disposal |
-
-The [continuing Action integration](protocol-bindings/protocols/http/tests/action_consumer.rs)
-proves bounded structured DataSchema input/output through the HTTP JSON,
-endpoint NoSec Consumer-to-Producer mapping. Acceptance, pending execution,
-validated completion, local cancellation
-and remote cancellation uncertainty remain separate. Described controls use
-independently selected actual registrations; native continuation and original
-services survive the initiating exchange. The
-[downstream Action fixture](tools/architecture-fixtures/open-consumer/tests/action.rs)
-adds real datagrams, different invoke/control Binding implementations and funded
-late validation/retirement evidence. These are Host/manual execution claims;
-the [Action ownership increment](docs/evidence/consumer-action-composition.md)
-adds reuse of one actual endpoint-specialized continuing definition across
-independent Consumers and execution capacities, original service funding and
-prepared-declaration refusal. General security/schema, cross-endpoint Action
-lowering, constrained TD integration and broader execution, and production qualification remain open.
-Completed output now preserves the returning operation's representation and
-data limits against shared Action meaning, with independent HTTP body-allowance
-and downstream JSON/plain-text evidence at the same scoped increment.
-The [mixed Consumer increment](docs/evidence/consumer-execution-composition.md)
-executes independently authorized finite HTTP, continuing HTTP Actions and MQTT
-notifications under managed Consumer lifecycle, with aggregate progress/cleanup
-and a deployment-supplied Host loop. The [Producer preparation increment](docs/evidence/producer-preparation-reuse.md)
-now reuses actual HTTP Property Read response/validation compilation across
-independent fully qualified publications. Broader Producer families, mixed
-security, authenticated source evidence and constrained continuing execution beyond
-the scoped source-free Action path remain open.
-
-The [Property Write integration](protocol-bindings/protocols/http/tests/property_write.rs)
-proves the bounded endpoint NoSec HTTP subset, including
-pre-effect validation/authorization, ambiguous response refusal, cancellation,
-replacement, retained late outcomes and final release. The
-[secure Write integration](protocol-bindings/protocols/http/tests/security_write.rs)
-adds structured values, verified HTTPS/Basic and independent effect/delivery
-evidence. Unsupported required
-schema/security assertions refuse preparation; no automatic uncertain-write
-replay or readback confirmation is claimed.
-
-Here **Open** means no joined implementation for that role/operation, even when
-a raw primitive exists. Finite read/write evidence is in
-[native ingress](servient/finite/tests/native_ingress.rs); composed Producer
-read/Action evidence is in
-[composed Thing](protocol-bindings/protocols/http/tests/composed_thing.rs) and
-[HTTP Actions](protocol-bindings/protocols/http/tests/action_producer.rs).
-[Producer Events](protocol-bindings/protocols/mqtt/tests/producer_events.rs)
-exercise the [declared MQTT subset](protocol-bindings/protocols/mqtt/README.md)
-through complete TD qualification and native broker delivery.
-[Consumer Events](protocol-bindings/protocols/mqtt/tests/consumer_events.rs)
-join the existing Producer to TD-selected Consumer subscriptions, per-item
-validation, stop/unsubscribe and cleanup, with native matching/distribution and
-shared connection ownership inside MQTT. Retained deliveries are discarded with
-visible loss; no replay or reciprocal response capability is claimed.
-[Structured leaf notifications](docs/evidence/structured-dataschema.md#notification-execution)
-apply the common structured DataSchema meaning in both MQTT roles, while actual
-collection/control/response/security support remains separately qualified.
-[Property observation](protocol-bindings/protocols/mqtt/tests/property_observation.rs)
-reuses the notification owner with Property value schemas, future-only native
-values and mapped unobserve. Establishment performs no Read, invents no initial
-value and grants no Event response right. Its declared loss policy reports drops
-or terminates, without coalescing. [Property qualification](protocol-bindings/protocols/mqtt/tests/property_qualification.rs)
-checks actual sources, full advertisement, supported schema/mapping and selected
-Consumer services before effects.
-[Collection observation](protocol-bindings/protocols/mqtt/tests/observe_all_properties.rs)
-adds future-only complete readable maps on one exact root topic. Named members
-retain their individual schemas; one root conversation never becomes N leaf
-observations. [Qualification](protocol-bindings/protocols/mqtt/tests/collection_qualification.rs)
-checks root support, full member meaning, real services and final advertisement.
-The [declared mapping](protocol-bindings/protocols/mqtt/README.md#thing-root-property-observation)
-requires a combined observe/unobserve Form and does not provide deltas, atomic
-snapshots, arbitrary wildcard extraction or fleet-scale evidence.
-[Event collection subscription](protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs)
-adds one native wildcard interaction with retained individual Event identity and
-schemas, independent cursors and stop, explicit control/response refusal and
-original resource release. Its [qualification](protocol-bindings/protocols/mqtt/tests/event_collection_qualification.rs)
-and [mapping](protocol-bindings/protocols/mqtt/README.md#thing-root-event-subscription)
-are bounded Host/manual NoSec, type-only, non-retained QoS 0 evidence. It adds no
-arbitrary wildcard, general response-channel, replay or fleet-scale claim.
-[Combined collection evidence](protocol-bindings/protocols/mqtt/tests/collection_coexistence.rs)
-qualifies both root families on one Thing, with distinct same-named Action/Event
-schemas, independent HTTP/MQTT lifecycles and original funding through result disposal.
-[Downstream Consumer composition](tools/architecture-fixtures/open-consumer/tests/support/composition.rs)
-exercises prepared finite I/O and TD-selected Property observation with an external test Binding; the
-[notification fixtures](servient/finite/tests/notification.rs) exercise Event
-lifecycle semantics in memory. Test Bindings are not production protocols.
-
-**Production qualification:** narrow HTTP Property Read evidence retains its
-[recorded scope](docs/evidence/WP-600-http-consumer-property-read.toml).
-Current joined paths are bounded Host/manual subsets, mostly NoSec/type-only
-with the structured and security increments scoped above;
-their real I/O does not establish complete family, general DataSchema/security,
-production HTTPS, constrained-profile or v1 qualification. Those remain delivery work.
-
-### Engineering priorities and dependencies
-
-| Priority | Product and architectural outcome | Evidence appropriate to the outcome |
+| Capability | What an application can exercise | Remaining foundation work |
 | --- | --- | --- |
-| 1 — Producer native/semantic authority boundary | Remove the Binding-to-Servient execution authority leak (Review 10 F1). Binding owns native matching, correlation, I/O and retirement; Servient alone decides logical admission, dispatch and revocation. Begin with the existing real HTTP continuing Action path; do not prescribe a universal RPC/session or a callback facade that secretly forwards Engine authority. | HTTP Action invoke/query/cancel and original continuation/result/cleanup work through native candidates/opportunities and a protocol-neutral Servient handoff. The HTTP Binding no longer depends on `servient-finite` to dispatch application work; failure before/after publication, late outcomes and independent native release remain truthful. |
-| 2 — Reusable definition compilation and checked instance binding (0081) | Converge the already accepted definition/instance/authority split into useful cross-instance preparation and compilation reuse **before** extending the same coupling to more runtime families. Reuse only genuinely invariant work with checked Binding dependencies/operands; endpoint-specialized mappings remain specialized. No universal `CompiledProgram`, cache or persisted image is prescribed. | With fixed compatible definitions and increasing Thing instances, distinguish definition-compilation work from necessary TD input checks, instance binding/admission and native specialization. Demonstrate a real qualifying reuse path, changed-dependency refusal/recompilation, independent permissions/accounts and final physical release; do not label semantic-content sharing alone as compiler reuse. |
-| 3 — Continuing Consumer notification composition | Independent Host notification associations/capacity, actual mapping reuse, named occurrence policy and notification F2/F3 corrections are implemented at the scoped evidence below. Extend original per-occurrence context to qualified source/verification evidence where required; preserve native sharing/stop/response rights. | Real MQTT notification conversations remain independently authorized under shared compatible native interests. A concrete evidence-bearing source mapping tests per-occurrence policy without treating an unauthenticated topic as a verified principal; queued delivery, stop, loss, late work and physical cleanup retain their original owners. |
-| 4 — Continuing Action and multi-capability reuse | Independent continuing Action associations/capacity, actual prepared-definition reuse and Action F2/F3 corrections are implemented at the [scoped evidence](docs/evidence/consumer-action-composition.md). [Mixed Consumer turns](docs/evidence/consumer-execution-composition.md) now integrate finite HTTP, continuing HTTP Actions and MQTT under managed authority. [HTTP Producer preparation reuse](docs/evidence/producer-preparation-reuse.md) now separates shared response/validation instructions from independent complete publication. Extend other justified families without a mega-Runtime. | Original invoke/query/cancel mappings and late outcomes survive initial exchange, replacement and retirement. Actual shared content/services are funded once, prepared declarations cannot silently change during runtime construction, and mixed capabilities retain independent progress and cleanup. The scoped Producer evidence includes complete qualification, changed-dependency refusal, native collisions, independent publication failure/retirement and original physical release; broader Producer reuse remains open. |
-| 5 — Secure execution and Discovery clients | Broaden actual DataSchema/media/security execution, Host HTTPS and explicit bounded trusted Discovery/Directory retrieval where their dependencies are ready; these can proceed independently of the cross-family sequence. | Supported assertions, security branches and trusted retrieval execute through actual providers and peers without source-TD callbacks, silent weakening, credential leakage or fabricated interoperability claims. |
-| 6 — Product integration and supported profiles | Optional Host Consumer and composed Producer turns now join existing capabilities alongside manual poll/step APIs. Broaden supported deployment integration, Host HTTP/HTTPS delivery, selected portable/static representations and scoped v1 qualification without prescribing Tokio, a universal scheduler, mega-Runtime or one execution owner per Thing. | Applications progress independent publications and mixed Consumer work through a deployment-supplied loop with independent semantic/native ownership, explicit outcomes and complete cleanup. Broader role/operation/profile combinations still need integration, conformance, resource/performance and lifecycle evidence; unsupported combinations remain explicit. |
+| Consumer choice and instance authority | A managed Host Consumer can retain named finite mappings and draw from a separate call pool. Continuing Actions select a complete Invoke/Query/Cancel combination in Form order across compatible registrations. Events can select either of two independent Bindings. Both searches account for competing providers under one effective configuration. [Managed Consumer](servient/finite/src/consumer_managed.rs) · [HTTP Query Form orders](protocol-bindings/protocols/http/tests/action_consumer.rs) · [Downstream Action](tools/architecture-fixtures/open-consumer/tests/action.rs) · [Event selection](tools/architecture-fixtures/open-consumer/tests/event_selection.rs) | Continuing preparation still filters some URI-variable, response and security meaning before actual providers can qualify it. Repeated preparations from one admitted TD need a shared source of resolved facts. |
+| Producer publication | On Host, qualification rejects empty affordance Forms and checks each advertised operation, behavior and provider. Closed setup verifies the exact native members and endpoints. Changes in eligibility or readiness can prevent commit. A single MQTT participant serves 33 funded Event mappings with the finite pool occupied. Mapping and participant shortages refuse independently. [Host publication](servient/src/producer_composition.rs) · [Coherence and source-free commit](protocol-bindings/protocols/http/tests/composed_thing/coherent.rs) · [Mapping capacity](protocol-bindings/protocols/mqtt/tests/support/notification_capacity.rs) | The draft-to-staging payer, concurrent candidates on one bank, and peak versus post-commit backing need evidence. The installation interface uses Host ownership and synchronization. |
+| Finite Properties and collections | Both roles execute HTTP Read/Write and root ReadAll, ReadMultiple, WriteAll and WriteMultiple. Direct verified HTTPS supports selected data and security combinations. With shared Host capacity an expired, accepted HTTP PUT can release its connection while the same Thing and a sibling keep serving and the caller keeps its outcome. [Root ReadMultiple](protocol-bindings/protocols/http/tests/read_multiple_properties.rs) · [Root WriteMultiple](protocol-bindings/protocols/http/tests/write_multiple_properties.rs) · [Structured values](docs/evidence/structured-dataschema.md) · [Composed security](docs/evidence/security-composition.md) · [Retirement over HTTP](protocol-bindings/protocols/http/tests/support/accepted_timeout.rs) | Each finite Producer participant still drives one native exchange. Phase-specific cleanup, checked outgoing data and authorization through the actual credential use remain incomplete. |
+| Continuing Actions | HTTP Invoke, Query and Cancel retain the original invocation across exchanges. QueryAllActions observes a root inventory with per-invocation identity, output and visibility. A source-free Consumer can drive an invocation with caller-owned storage. [HTTP root status](protocol-bindings/protocols/http/tests/query_all_actions.rs) · [Caller-owned Action](docs/evidence/continuing-action-runtime-independence.md) | Producer retention reads process time. Aggregate handle construction starts before its work is charged. The Consumer close path still prepays access and validation work. |
+| Observations and Events | Both roles execute MQTT observe/unobserve, subscribe/unsubscribe and the corresponding root collections. One root conversation preserves member identity and schema. The broker owns distribution. A completed QoS 0 packet releases the shared writer while its result is held. A downstream Consumer can reply to an occurrence. [Root Properties](protocol-bindings/protocols/mqtt/tests/observe_all_properties.rs) · [Root Events](protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs) · [Writer lifetime](protocol-bindings/protocols/mqtt/tests/producer_events.rs) · [Occurrence replies](tools/architecture-fixtures/open-consumer/tests/notification.rs) | Application-controlled Producer subscriptions need setup acceptance, a returned control operand and per-delivery reply ownership in both roles. |
+| Definition reuse and deployment | HTTP Read in both roles can skip actual invariant lowering when binding a compatible instance. Mixed Host turns drive both roles. Caller-owned finite Read and continuing Consumer Action execute with supplied storage and time. [Consumer costs](docs/evidence/consumer-execution-reuse.md#measured-costs-and-benefit) · [Producer reuse](docs/evidence/producer-preparation-reuse.md) · [Host turns](docs/evidence/host-execution-integration.md) · [Caller-owned Read](docs/evidence/constrained-finite-execution.md) | Continuing definitions can still specialize endpoints. A second mapping, costs on the normal deployment turn, and caller-owned Producer and notification lifetimes remain open. |
 
-Priorities express concentration, not sequential package gates. Security/HTTPS,
-Discovery and portable-profile work can advance with available dependencies;
-they need not wait for universal reuse or all-family architectural closure.
-Basic operation evidence remains valuable without closing a package or milestone.
+## Engineering priorities and dependencies
+
+Finite Producer admission can use already qualified inputs. Consumer
+qualification can use existing finite and continuing interactions. They meet
+when a Producer accepts a callback subscription that its Consumer can later
+control. [Dependencies of the selected design](workspace/0132-engine-lifecycle-design.md#convergence-by-dependency)
 
 ### Near-term capability growth and priority
 
-The roadmap distinguishes shared semantic definitions and validation meaning;
-Binding-specific compiled artifacts with their actual compatibility dependencies;
-per-instance identity, endpoint operands, policy, authority and accounting;
-per-interaction lifecycle and result ownership; and Binding-owned native
-infrastructure that may be shared independently of Thing cardinality. These are
-responsibility and lifetime distinctions, not five mandatory public abstractions.
-Detailed contracts remain in [Planning](docs/spec/planning.md),
-[Core](docs/spec/interaction-core.md), [Binding SPI](docs/spec/binding-spi.md),
-[Runtime safety](docs/spec/runtime-safety.md) and [Foundation](docs/spec/foundation.md).
+**Publish a Thing with caller-owned storage and retire each admitted finite
+exchange independently.** A serial HTTP participant can discard one expired
+reply. The general driver still keeps its ingress, reply, deadline and active
+permit on the participant. It checks result-queue credit before entering native
+retirement.
+The publication interface also carries Host owner tokens, reference-counted gates
+and retained owners. Increasing the pool size leaves both constraints in place.
+A caller-owned Producer tests the two decisions together before more families
+come to depend on them. [Finite driver](servient/finite/src/host.rs) · [Installation interface](core/src/publication.rs) · [Current finite capacity contract](docs/spec/runtime-safety.md#finite-producer-participation-and-work-capacity)
 
-The ownership direction in
-[Review 10](docs/reviews/review-10-engine-execution-architecture.md) supersedes
-the earlier ReadAllProperties-first implementation sequence. Existing checked
-content/mapping reuse is a foundation, not a reason to preserve per-instance
-Runtime containers or prepaid idle Call Slots. Persistent usability must be
-independent of simultaneous execution capacity. Each admitted obligation retains
-its original instance, checked mapping, operands, accounts, result and cleanup.
-An endpoint specialized into a native artifact remains specialized.
+Use a curated, source-free Property mapping with a complete final TD, caller
+slots, supplied monotonic time and a downstream Binding that lends native
+buffers over real I/O. Install closed and check the prepared coverage against
+the actual deployment and its ready members before publishing. Every dispatch
+needs current membership, permission, behavior and capacity. Under pressure
+the original owner keeps the unaccepted offer, reply right and deadline. Two
+accepted requests on one participation can complete out of order. One can
+retire with native and cleanup credit while its sibling stalls. A later turn
+can hand off the original result with its first cause, effect and delivery
+evidence. Revoking the Thing fences new work. Dropping an old result after
+replacement releases only its own backing. Compare moving an opportunity,
+retaining a funded loan, and copying into funded result storage where the
+native lifetime requires it. Use
+the comparison to settle the common handoff and revise the affected SPI and
+runtime contracts before migrating the composed Host path. HTTP can keep its
+serial native policy. [Selected admission and release boundary](workspace/0132-engine-lifecycle-design.md#admission-and-release)
 
-The finite Consumer association/capacity separation is implemented by PR #276:
-the managed owner resolves TD IDs/configurations without retaining application
-handles or prepaying vacant finite call slots. Independently bound continuing
-facets share that original authority; no universal multi-family configuration
-registry or automatic scheduling/physical drain is introduced.
+### Qualify the interaction through its first effect
 
-Retain the **Producer execution authority correction (Review 10 F1)** while
-broadening composition. HTTP Action invoke/query/cancel now supplies native
-candidates, opportunities and failure handoff into Servient-owned authorization,
-dispatch and revocation; MQTT follows the same authority separation. The
-[Binding contract](docs/spec/binding-spi.md#producer-action-candidates-and-native-participation)
-owns the exact handoffs. Preserve original native correlation, continuing Action
-and result/cleanup ownership. Future composition must not reintroduce the reverse
-dependency through a dispatch callback or a universal RPC/session abstraction.
+Lend resolved TD facts to the actual Binding, codec and access service. Let
+each qualify its part of a complete interaction, including control Forms,
+response alternatives and all required security operands. Correct the shared
+resolver's rejection of the standard 2019/2022 context pair at TD admission.
+[Continuing preparation](docs/spec/planning.md#continuing-consumer-action-preparation)
 
-Resolve [topic 0081](workspace/0081-reusable-plan-and-thing-identity.md)
-at two distinct levels. **The architectural decision is already selected:**
-reusable immutable preparation/definition, checked Binding-specific lowering,
-per-instance identity/operands/policy/authority and independently owned native
-infrastructure are different lifetimes; a Thing or Plan Set generation cannot
-mandate a fresh complete compilation or duplicate physical backing. Keep this
-decision active across subsequent SPI changes so they cannot reintroduce one full
-program per Thing. Topic 0081's historical investigation is migrated into the
-current Planning and compiled-plan contracts; concrete representations remain
-Binding-specific choices.
+Carry the generating party and data role into validation. For the same object
+bytes, a Consumer must accept a permitted additional field on Read and refuse to
+send it on Write. This requires revising Core's direction-independent validation
+contract. For credentials, distinguish the logical target, next hop and
+authorized audience at each use. Use two controlled peers to observe where each
+credential goes. Rotate a provider immediately before entry to determine whether
+an immutable snapshot suffices or the provider must serialize the check and
+effect. Recheck permission after reentrant callbacks and when a control or
+callback supplies its destination. [Data and security contracts](docs/spec/interaction-core.md) · [TD 1.1 data behavior](https://www.w3.org/TR/2023/REC-wot-thing-description11-20231205/#behavior-data)
 
-**0081 remains open in implementation scope:** extend genuinely useful invariant
-compilation/native lowering reuse to further supported mappings where evidence
-justifies it, preserving complete dependency/operand checks and independent
-instance authority/funding. Existing HTTP reuse is a scoped result, and retained
-Action/notification definitions remain endpoint-specialized. Runtime/storage
-independence is separately unfinished; it neither requires nor is established
-by identical native Binding artifacts across incompatible environments. The
-source-free caller-owned Action path advances execution representation without
-claiming new native compilation reuse or closing 0081.
+### Carry admitted work across exchanges
 
-**The capability is cross-instance compilation-work reuse, alongside
-schema/content reuse.** Ordinary finite `prepare_with_content` shares semantic
-content and still invokes the selected native preparation capability. The explicit
-[HTTP definition path](docs/spec/binding-spi.md#explicit-http-definition-compilation)
-separates native instruction lowering from dependency checking and fresh endpoint
-binding; its [evidence](docs/evidence/consumer-execution-reuse.md#explicit-http-definition-compilation)
-does not establish reuse in every Binding or interaction family. Before
-generalizing the Action/Notification instance handoffs, assess that concrete
-prepare-once/checked-bind-many path for genuinely equivalent compiled work,
-with a complete Binding dependency/operand contract and separately funded
-instance admission. If a native artifact includes a fixed endpoint or other
-instance-dependent data, it remains specialized; other immutable compilation
-work may still be reused. Evaluate definition count versus instance count and
-separate actual compilation from input validation, mapping qualification and
-binding costs. Neither post-compilation interning nor shared transport sessions
-alone meets this objective. Automatic caching, disk persistence, universal
-`CompiledProgram` and fleet-scale throughput are independent optional choices,
-not prerequisites.
+- **Continuing Actions.** Use the existing invocation and its original control
+  mappings to separate paid remote Query/Cancel from local retirement. Finite
+  Consumer and continuing Action close each need to progress with native and
+  cleanup credit, then validate or hand off the late value when that phase is
+  funded. Supply the Producer retention clock and pay for aggregate inventory
+  work before allocating handles or looking them up. This can advance on the
+  existing Action path. [Core drivers](core/src/execution.rs) · [Action progress](core/src/execution/action.rs) · [Producer store](servient/finite/src/action.rs)
+- **Two-ended subscriptions.** Join qualified setup and control to Producer
+  admission and retained work. The Consumer offers its callback address. The
+  Producer can deny it or accept a funded obligation and return the ID used
+  for separately authorized cancellation. A missing or malformed ID preserves
+  remote uncertainty. Validate the occurrence and any application reply with
+  their own target, authority and owner. A delayed cancellation must leave a
+  same-subscriber successor on the same route able to receive and stop with its
+  own ID. Retain broker-owned fan-out, one root control across distinct members
+  and explicit refusal when required source evidence is unavailable. Run the
+  representative notification/response lifetime with caller-owned storage as
+  well as Host driving. [Consumer participation](core/src/notification.rs) · [Producer emission](core/src/publication.rs) · [Selected subscription contract](workspace/0132-engine-lifecycle-design.md#when-a-producer-accepts-a-subscription)
 
-The [notification association/capacity increment](docs/evidence/consumer-notification-composition.md)
-now shares an actual prepared mapping across independent Consumer associations,
-funds admitted conversations separately and repairs notification F2/F3 service
-ownership/declaration fencing. Original named Event coordinates reach fresh queued
-delivery/response policy; MQTT keeps native matching/distribution and physical
-leases. This is a scoped Host/manual capability, not completion of priority 3:
-authenticated source provenance still needs an evidence-bearing mapping/verifier,
-retained original trust/dependency context and forged/absent/ambiguous/stale-proof
-checks. Neither topics nor NoSec payloads establish that claim. Cross-endpoint
-notification lowering remains open; continuing associations bind explicitly to
-the managed parent independently of finite named configurations.
-The [continuing Action increment](docs/evidence/consumer-action-composition.md)
-now applies the independently retained definition/association/capacity boundary
-and corrects Action F2/F3 through real HTTP execution. The
-[Host composition increment](docs/evidence/consumer-execution-composition.md)
-now supplies aggregate active/cleanup notification progress and optional borrowed
-turns over existing family capacities, retaining manual use. The existing mixed
-Producer collection fixture remains separate evidence. The
-[Producer preparation increment](docs/evidence/producer-preparation-reuse.md) proves
-one explicit invariant HTTP Read compilation across independent qualified
-Things, with fresh routes/behavior/authority and independent publication and
-retirement. Entire prepared Things remain description-specific. Independent
-Things now execute through one compatible Binding-owned HTTP listener with
-independent complete qualification, publication/replacement, permission and
-retirement ([native topology evidence](docs/evidence/producer-shared-http-listener.md)).
-The existing SPI supports this topology; no Engine routing or universal runtime
-is needed. [Independent finite Producer capacity](docs/evidence/producer-finite-capacity.md)
-now lets these publications share bounded active work without an idle exclusive
-input/result opportunity per Thing. Native settlement returns execution credit
-while unread or caller-held outcomes retain their original bounded funding.
-HTTP keeps its existing serial native exchange policy per participation; the
-default dedicated opportunity remains available.
-[Host Producer turns](docs/evidence/host-execution-integration.md) now retain
-typed Servient execution alongside erased native membership, including scoped
-revoked Action cleanup, and compose with existing Consumer capacities. Real
-HTTP/Mosquitto execution joins independent publications, actual definition reuse,
-shared finite capacity, replacement, original Pending/error cleanup and retained
-outcomes through final physical/account release. Shared continuing-family
-capacity, broader Producer compilation reuse, shared secure infrastructure,
-broader profiles and production qualification remain open.
+### Fund preparation, measure reuse and migrate callers
 
-Host applications can progress the supported mixed Consumer work and cleanup
-through one integration turn. Deployment-supplied native wakes and maintenance
-turns provide time and work credit; semantic Query/Cancel/response choices stay
-explicit. The [runtime contract](docs/spec/runtime-safety.md#host-consumer-execution-turns)
-owns exact wake, result-observation and drain limits. The implementation provides
-no scheduler or execution state container. Low-level poll/step remains important
-for deployments without an async runtime; the Host example demonstrates one
-possible supplied runtime/timer, not a dependency required by the Engine. Producer
-turns use the existing publication's complete native set; explicit installation,
-publication, emission, result acknowledgement and final retirement are application
-integration decisions. Storage-only erasure and per-handle revoked Action cleanup
-were execution API gaps; copying another application loop would not fix them.
-Broader Producer reuse, authenticated notification provenance, mixed secure
-execution, constrained continuing capabilities beyond the source-free Action slice,
-and broader Host integration remain
-independently useful work, without an all-family migration gate.
+Whole-publication correctness gives staging a stable observable outcome.
+Account for provisional preparation, closed installation and rollback through
+their actual last use. Concurrent candidates on one bank must be able to
+commit or refuse independently. Measure reservations and actual backing during
+staging and after commit before choosing shared scratch. Keep candidate funding
+separate from the serving instance, the work it accepts and the resources a
+Binding can share. [Producer preparation](planning/src/producer_composition.rs) · [Resource ownership](docs/spec/foundation.md)
 
-Select subsequent increments against remaining product capabilities and the
-actual assumptions exposed by those integrations. Preserve distinct Property,
-continuing Action, Event/control/response and collection semantics. A native
-collection interaction never silently becomes N leaf calls or subscriptions;
-sharing content never shares current permission or changes effect certainty.
-Complete Producer qualification remains mandatory for the entire retained final
-TD, while Consumer partial support still requires complete support of each
-selected interaction. Correct local defects as prerequisites where relevant;
-do not substitute another isolated repair for the architectural capability.
+Measure compilation reuse as soon as a mapping's invariant inputs are known.
+Compare fresh specialization with checked reuse on HTTP and a worthwhile second
+mapping, for example MQTT root Event member/filter instructions bound to
+different prefixes. Count actual lowerings and compare source-to-ready work,
+peak and retained backing, warm dispatch and the ordinary deployment turn for
+one and many instances. Hold active work fixed while varying idle Things.
+Use the comparison to decide where specialized mappings or indexes pay for
+themselves. [Measured HTTP baseline](docs/evidence/consumer-execution-reuse.md#measured-costs-and-benefit) · [Scale criteria](workspace/0132-engine-lifecycle-design.md#compilation-reuse-and-the-cost-of-scale)
 
-**HTTP SSE is an optional notification mapping**, selected when it advances the
-chosen capability. It is neither a mandatory predecessor nor a standing next
-task. Existing HTTP or independent test Bindings with real I/O may be economical
-participants; other native interactions may better expose an unproved boundary.
-Protocol choice follows capability and interoperability needs, while Host
-HTTP/HTTPS remains the selected first production direction.
+Migrate ordinary callers with each usable successor. Consumers need named
+operations and a bound Read fast path on checked associations with separate
+capacity. Producers need behavior binding, qualified publication and handles
+for admitted work. Migrate restricted and static callers before retiring their
+Read façade, Plan-Set and route-stage builders. Retain the raw layers used by
+composition. Foundation completion requires the joined public paths, consistent
+domain contracts, representative Host and caller-owned execution, and independent
+review at one revision, including the execution-only dependency graph and
+the supported no-pointer-atomics build. [Public caller census](docs/reviews/review-11-engine-architecture-audit.md#public-api-and-caller-census) · [Foundation completion criteria](workspace/0132-engine-lifecycle-design.md#foundation-completion-and-product-development) · [Work-package dependencies](docs/work-packages/index.toml)
 
-### Joined Producer composition: retained boundary
-
-Use the existing direct real-HTTP finite Producer implementation as an economical
-integration participant where suitable, not as the universal SPI model or as a
-mandatory protocol-specific predecessor. Another supported Binding is equally
-valid if it better exposes an architectural defect. A deliberately limited TD is
-permissible only if its **entire final retained description** is supported and
-qualified; silently dropping unsupported Forms/operations is not a solution.
-
-An integrated Producer claim requires the following observable composition:
-
-1. TD interprets common WoT semantics, resolves extension vocabulary IRIs and
-   preserves extension metadata; concrete Bindings interpret protocol
-   vocabularies. Planning coordinates selection of **actual** registered
-   Binding/configuration, codec, schema, security and behavior services and
-   pure construction of owned source-independent execution facts.
-2. Native preparation and closed installation retain real physical owners,
-   acquire no application-dispatch authority, and allow endpoint-derived facts
-   to be checked against the final TD.
-3. Before Serving, the final retained TD, all effective operations/Forms,
-   behaviors, services, collisions and required readiness pass complete
-   qualification. A single local, non-fallible publication commit binds the
-   final description and current logical authority; prepublication ingress
-   cannot dispatch.
-4. Real native ingress passes fresh recipient, policy, payload and capacity
-   checks; Servient captures the actual behavior; validated result and native
-   delivery retain original identity, effect certainty and owners.
-5. Refusal, cancellation/timeout, replacement, late results and close exercise
-   first-cause retention, bounded cleanup/acknowledgement and actual final
-   physical release. A working HTTP exchange or raw local activation alone
-   proves none of the missing publication obligations.
-
-Broaden this foothold in independently useful changes. Prove each claimed
-boundary with proportionate tests; do not invent a global all-protocol proof
-gate, a universal runtime/session/RPC abstraction, or certification paperwork
-for unimplemented combinations. If existing preparation or runtime APIs impede
-the joined path, replace them rather than maintain compatibility facades.
-
-### Continuing capability growth
-
-Operation-scoped preparation and shared instance authority belong to
-[WP-200](docs/work-packages/WP-200-planning.md#consumer-operation-composition)
-and [WP-400](docs/work-packages/WP-400-servient.md#joined-consumer-execution),
-with separate native facets in [WP-300](docs/work-packages/WP-300-bindings.md#consumer-capability-composition).
-The optional HTTP observation mapping remains in
-[WP-600](docs/work-packages/WP-600-protocol-bindings.md#td-driven-consumer-observation).
-
-Bindings keep native matching, multicast/distribution, correlation, session
-sharing, retries and physical infrastructure; the Engine owns independent
-logical acceptance and application dispatch.
-
-Introduce a materially different protocol interaction where it tests an
-unproven boundary (for example shared broker-native subscription or multi-party
-distribution), not to satisfy an arbitrary protocol count. Check third-party
-Cargo-linked, startup-registered capabilities without a Core whitelist. Prepared
-definitions may be reused under proved configuration compatibility; one Thing
-never implies one physical connection, one native subscription or one plan-set.
-
-Shared DataSchema/media validation, security selection and authorization,
-resource/work ownership, Host/constrained support and diagnostics accompany
-the operations that use them; they are not postponed until an all-family gate.
-Client-only Discovery/Directory and Host HTTPS have separate deliverable paths.
-Real embedded hardware/transport and Zenoh/pico production remain outside the
-selected v1 release but inside the enduring product goals.
-
-Exact package/capability dependencies remain in
-[the work-package DAG](docs/work-packages/index.toml). The responsibility
-contracts are [Planning](docs/spec/planning.md),
-[Binding SPI](docs/spec/binding-spi.md), [Core](docs/spec/interaction-core.md) and
-[Runtime safety](docs/spec/runtime-safety.md). This roadmap adds **no** new
-architecture authority, API freeze, PR-specific continuation state, mandatory
-review gate or milestone status transition.
+Bounded trusted Discovery/Directory retrieval and disjoint Host HTTPS work can
+advance on their own dependencies. Product webhook hosting, proxy support,
+authenticated notification profiles, strict ingestion and sustained workload
+qualification require evidence for the advertised deployment. The selected
+baseline permits a service gap for an exclusive route that must close before
+replacement. A v1 commitment to continuous service through failed replacement
+is an open product decision. [Discovery client evidence](docs/evidence/remote-discovery.md) · [Deployment decisions](workspace/0132-engine-lifecycle-design.md#decisions-that-still-need-evidence)
 
 ## Milestones
 
@@ -431,8 +156,3 @@ review gate or milestone status transition.
 | M5C — Host HTTP/HTTPS production | OPEN | Real supported mapping and security/lifetime qualification |
 | M6 — Integration/conformance | OPEN | Joined capability, profile, resource/performance and removal evidence |
 | M7 — v1 release | OPEN | Independent technical release acceptance after M6 |
-
-No milestone closes because this target is accepted or historical CI is green.
-Source, tests and exact review evidence establish implemented/admitted capability;
-GitHub owns live branch/PR/CI state. This roadmap stores no task continuation,
-execution checklist or next action.
