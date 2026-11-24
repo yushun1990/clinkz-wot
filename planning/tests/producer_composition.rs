@@ -263,7 +263,7 @@ fn each_scope_form_and_effective_operation_selects_actual_registration() {
 
 #[test]
 fn a_definition_that_exceeds_fixed_backing_reports_the_required_bytes() {
-    use clinkz_wot_foundation::{ResourceKind::EngineLiveBytesGlobalMax as Live, ResourceLimits};
+    use clinkz_wot_foundation::ResourceKind::EngineLiveBytesGlobalMax as Live;
     let instance = key();
     // Read and Write each retain a prepared target for the same Form.
     let forms: Vec<_> = (0..16)
@@ -277,14 +277,14 @@ fn a_definition_that_exceeds_fixed_backing_reports_the_required_bytes() {
     })
     .to_string();
     let providers: &[&dyn ProducerCapability] = &[&Provider(1, "property")];
-    let prepare = |limits: &ResourceLimits| {
-        prepare_thing(&text, instance, limits, &mut work(), providers, covered)
-    };
-    let needed = prepare(GatewayDefaultV1::LIMITS).unwrap().retained_bytes() as u64;
-    let limited = GatewayDefaultV1::LIMITS
-        .clone()
-        .with_limit(Live, Some(needed - 1));
-    let error = prepare(&limited).err().unwrap();
+    let limits = GatewayDefaultV1::LIMITS;
+    let needed = prepare_thing(&text, instance, limits, &mut work(), providers, covered)
+        .unwrap()
+        .retained_bytes() as u64;
+    let limited = limits.clone().with_limit(Live, Some(needed - 1));
+    let error = prepare_thing(&text, instance, &limited, &mut work(), providers, covered)
+        .err()
+        .unwrap();
     assert_eq!(
         error.limit_details(),
         Some((Live, needed - 1, Some(needed), None))
