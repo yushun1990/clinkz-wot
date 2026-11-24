@@ -58,10 +58,12 @@ use both. Each adapter owns its concrete definitions and native assembly.
 
 Two deployments constrain that same exposure at different points.
 
-- **Host with an address learned during setup.** Fund draft preparation,
-  acquisition, finalization and rollback before taking a native lease. With
-  ingress closed, the Binding reports its actual endpoint. TD and Planning use
-  that fact to finalize the description and qualify every advertised Form,
+- **Host with an address learned during setup.** Check known requirements,
+  including behavior coverage, during funded draft preparation. Reserve
+  acquisition, finalization and rollback before taking a native lease.
+  The Binding reports the endpoint it acquired with ingress closed. TD resolves
+  relative Forms against the final base. While the lease is held, Planning
+  builds any newly required mappings and qualifies every advertised Form,
   effective operation, alternative and behavior. The Binding checks native
   mappings, collisions and readiness. Servient verifies the exact members and
   holds those facts, selected services and competitors' answers current while
@@ -98,13 +100,15 @@ queues and a serial HTTP driver can each implement these contracts.
 From one admitted TD, let an application choose a named finite operation,
 Action or Event in TD Form order or pin a permitted choice. Planning selects
 the first complete viable mapping or control tuple under one effective
-configuration. Multiple owners at that preference refuse as ambiguous. An
-unused later Form cannot veto an earlier unique choice. Default admission
-requires one supported interaction and reports per-operation support. A
-separately bounded detailed inventory reports ambiguity on assessed alternatives
-and distinguishes deferred or coarse answers from qualified support. A caller
-may explicitly require a stricter set. Unsupported meaning,
-selected ambiguity, exhausted credit and live denial have distinct outcomes.
+configuration. Ambiguity on a later unused Form or a different affordance
+leaves a uniquely selected operation callable without a pin. If multiple owners
+qualify at the preferred viable choice, selecting that operation or explicitly
+requiring a set that includes it returns ambiguity. Default admission requires
+at least one statically supported interaction and reports support per operation.
+A separately funded inventory locates assessed ambiguity by affordance,
+operation and Form. It distinguishes coarse or deferred answers from qualified
+support. Unsupported meaning, selected ambiguity, exhausted credit and live
+denial have distinct outcomes.
 [Finite preparation](planning/src/open_consumer.rs) · [Deferred and continuing preparation](docs/spec/planning.md)
 
 Lend resolved meaning to the actual Binding, codec and access service for all
