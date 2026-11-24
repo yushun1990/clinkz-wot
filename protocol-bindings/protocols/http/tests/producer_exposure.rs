@@ -127,15 +127,8 @@ impl RawFiniteHandler for Reading {
         )))
     }
 }
-fn expose(
-    host: &mut HostProducer,
-    td: &Value,
-    names: &[&str],
-    value: u8,
-    count: &Rc<Cell<usize>>,
-    replaces: Option<ProducerInstanceKey>,
-) -> CoreResult<ComposedProducerExposure> {
-    let behaviors = names
+fn read_behaviors(names: &[&str], value: u8, count: &Rc<Cell<usize>>) -> Vec<RawFiniteBehavior> {
+    names
         .iter()
         .map(|&name| {
             RawFiniteBehavior::new(
@@ -144,10 +137,19 @@ fn expose(
                 Reading(value, count.clone()),
             )
         })
-        .collect();
+        .collect()
+}
+fn expose(
+    host: &mut HostProducer,
+    td: &Value,
+    names: &[&str],
+    value: u8,
+    count: &Rc<Cell<usize>>,
+    replaces: Option<ProducerInstanceKey>,
+) -> CoreResult<ComposedProducerExposure> {
     host.expose(
         td.to_string().into(),
-        behaviors,
+        read_behaviors(names, value, count),
         ExposurePolicy {
             replaces,
             handler_backing_bytes: 32,
@@ -941,5 +943,294 @@ fn fixed_registration_shares_one_listener_across_independent_publications() {
     retire(&mut host, &mut beta);
     TcpListener::bind(address).expect("final route released the shared socket");
     drop((alpha, beta, collision, host, listener));
+    empty(&accounts);
+}
+
+#[test]
+fn oversized_native_backing_releases_the_endpoint_and_returns_the_original_inputs() {
+    const BUFFER: usize = 64 * 1024;
+    let service = udp::Datagram::with_receive_bytes(BUFFER);
+    let absolute = service.address();
+    let acquired = Acquired::default();
+    let make_host = |bytes, accounts| {
+        let acquired = acquired.clone();
+        HostProducer::with_assigned_base(
+            vec![
+                FiniteProducerRegistration::at_base(draft(), HttpFiniteProducer::at_endpoint),
+                FiniteProducerRegistration::fixed(service.clone()),
+            ],
+            move || {
+                let endpoint = HttpProducerEndpoint::acquire(zero())?;
+                acquired.borrow_mut().push(addr(endpoint.as_ref()));
+                Ok(endpoint)
+            },
+            4096,
+            HostProducerLimits {
+                candidate_bytes: bytes,
+                ..limits()
+            },
+            Arc::new(GatewayDefaultV1::LIMITS.clone()),
+            accounts,
+        )
+        .unwrap()
+    };
+    let accounts = bank();
+    let mut small = make_host(BUFFER, accounts.clone());
+    let baseline = ResourceKind::ALL.map(|k| accounts.account(k).used());
+    let calls = Rc::new(Cell::new(0));
+    let td: Arc<str> = source(true, Some(absolute)).to_string().into();
+    let failure = small
+        .expose(
+            td.clone(),
+            read_behaviors(&["relative", "absolute"], 76, &calls),
+            ExposurePolicy::default(),
+            &mut work(),
+        )
+        .err()
+        .unwrap();
+    assert!(
+        !failure.is_staged(),
+        "fixed native backing cannot grow on retry"
+    );
+    let (kind, available, requested, _) = failure.error().limit_details().unwrap();
+    assert_eq!(kind, ResourceKind::EngineLiveBytesGlobalMax);
+    assert!(available < BUFFER as u64 && requested.unwrap() >= BUFFER as u64);
+    assert_eq!(acquired.borrow().len(), 1);
+    TcpListener::bind(acquired.borrow()[0]).expect("terminal refusal releases the socket");
+    assert_eq!(
+        ResourceKind::ALL.map(|k| accounts.account(k).used()),
+        baseline
+    );
+    let original = failure.into_input();
+    assert!(Arc::ptr_eq(&original.description, &td));
+    assert_eq!(original.behaviors.len(), 2);
+    drop(small);
+    empty(&accounts);
+    let mut large = make_host(2 * BUFFER, accounts.clone());
+    let mut thing = large
+        .expose(
+            original.description,
+            original.behaviors,
+            original.policy,
+            &mut work(),
+        )
+        .unwrap();
+    publish(&mut large, &mut thing);
+    assert_eq!(read_http(&mut large, &mut thing).0, "76");
+    assert_eq!(read_udp(&mut large, &mut thing, absolute), 76);
+    assert_eq!(calls.get(), 2);
+    retire(&mut large, &mut thing);
+    drop((large, thing));
+    empty(&accounts);
+}
+
+#[test]
+fn a_busy_specializer_resumes_on_its_original_endpoint() {
+    struct Configuration {
+        metadata: RefCell<()>,
+        attempts: Cell<usize>,
+        prefix: Cell<usize>,
+        final_udp: udp::Datagram,
+    }
+    struct Endpoint {
+        http: HttpProducerEndpoint,
+        config: Rc<Configuration>,
+    }
+    impl AsRef<str> for Endpoint {
+        fn as_ref(&self) -> &str {
+            self.http.as_ref()
+        }
+    }
+
+    let accounts = bank();
+    let acquired = Acquired::default();
+    let config = Rc::new(Configuration {
+        metadata: RefCell::new(()),
+        attempts: Cell::new(0),
+        prefix: Cell::new(0),
+        final_udp: udp::Datagram::new(),
+    });
+    let mut host = HostProducer::with_assigned_base(
+        vec![
+            FiniteProducerRegistration::at_base(udp::Datagram::new(), |_, lease: &Endpoint| {
+                lease.config.prefix.set(lease.config.prefix.get() + 1);
+                Ok(lease.config.final_udp.clone())
+            }),
+            FiniteProducerRegistration::at_base(draft(), |http, lease: &Endpoint| {
+                lease.config.attempts.set(lease.config.attempts.get() + 1);
+                let _metadata = lease.config.metadata.try_borrow().map_err(|_| {
+                    CoreError::Backpressure(ErrorContext::new(
+                        ErrorPhase::Prepare,
+                        RetryClass::Safe,
+                    ))
+                })?;
+                http.at_endpoint(&lease.http)
+            }),
+        ],
+        {
+            let acquired = acquired.clone();
+            let config = config.clone();
+            move || {
+                let http = HttpProducerEndpoint::acquire(zero())?;
+                acquired.borrow_mut().push(addr(http.as_ref()));
+                Ok(Endpoint {
+                    http,
+                    config: config.clone(),
+                })
+            }
+        },
+        4096,
+        limits(),
+        Arc::new(GatewayDefaultV1::LIMITS.clone()),
+        accounts.clone(),
+    )
+    .unwrap();
+    let calls = Rc::new(Cell::new(0));
+    let td: Arc<str> = source(true, None).to_string().into();
+    let baseline = ResourceKind::ALL.map(|k| accounts.account(k).used());
+    enum AfterWait {
+        RecoverInputs,
+        InvalidateView,
+        Publish,
+    }
+    for (index, action) in [
+        AfterWait::RecoverInputs,
+        AfterWait::InvalidateView,
+        AfterWait::Publish,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let exclusive = config.metadata.borrow_mut();
+        let observing = matches!(action, AfterWait::RecoverInputs)
+            .then(|| config.final_udp.enabled.borrow_mut());
+        let before = config.attempts.get();
+        let failure = host
+            .expose(
+                td.clone(),
+                read_behaviors(&["relative"], 31, &calls),
+                ExposurePolicy::default(),
+                &mut work(),
+            )
+            .err()
+            .unwrap();
+        assert!(failure.is_staged());
+        assert!(
+            matches!(failure.error(), CoreError::Backpressure(context) if context.retry_class() == RetryClass::Safe)
+        );
+        let failure = if let Some(guard) = observing {
+            assert_eq!(config.attempts.get(), before);
+            drop(guard);
+            // The first view already exists. Resume its observation, then reach
+            // the second specializer while its metadata is still borrowed.
+            failure.retry(&mut host, &mut work()).err().unwrap()
+        } else {
+            failure
+        };
+        assert_eq!(config.attempts.get(), before + 1);
+        let address = acquired.borrow()[index];
+        assert!(TcpListener::bind(address).is_err());
+        let tried = config.attempts.get();
+        let failure = failure
+            .retry(&mut host, &mut WorkBudget::new())
+            .err()
+            .unwrap();
+        assert!(failure.is_staged());
+        assert_eq!(config.attempts.get(), tried);
+        let mut one = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1);
+        let failure = failure.retry(&mut host, &mut one).err().unwrap();
+        assert_eq!(one.remaining(WorkClass::BindingPolls), 0);
+        assert_eq!(config.attempts.get(), tried + 1);
+        assert_eq!(config.prefix.get(), index + 1);
+        drop(exclusive);
+        match action {
+            AfterWait::Publish => {
+                let mut thing = failure.retry(&mut host, &mut work()).unwrap();
+                publish(&mut host, &mut thing);
+                let final_td: Value =
+                    serde_json::from_str(host.description(thing.key()).unwrap()).unwrap();
+                assert_eq!(addr(final_td["base"].as_str().unwrap()), address);
+                assert_eq!(read_http(&mut host, &mut thing).0, "31");
+                retire(&mut host, &mut thing);
+            }
+            AfterWait::InvalidateView => {
+                config.final_udp.enabled.borrow_mut().replace(false);
+                config.final_udp.enabled.borrow_mut().replace(true);
+                let stale = failure.retry(&mut host, &mut work()).err().unwrap();
+                assert!(matches!(stale.error(), CoreError::StaleHandle(_)));
+                assert!(!stale.is_staged());
+                assert_eq!(config.attempts.get(), tried + 1);
+            }
+            AfterWait::RecoverInputs => {
+                let input = failure.into_input();
+                assert!(Arc::ptr_eq(&input.description, &td));
+                assert_eq!(input.behaviors.len(), 1);
+            }
+        }
+        assert_eq!(config.prefix.get(), index + 1);
+        assert_eq!(acquired.borrow().len(), index + 1);
+        TcpListener::bind(address).expect("released original native endpoint");
+        assert_eq!(
+            ResourceKind::ALL.map(|k| accounts.account(k).used()),
+            baseline
+        );
+    }
+    assert_eq!(calls.get(), 1);
+    drop(host);
+    empty(&accounts);
+}
+
+#[test]
+fn a_one_token_bank_serves_two_forms_and_refuses_a_genuine_second_member() {
+    use ResourceKind::RouteReadinessTokensGlobalMax as Slots;
+    let accounts = Arc::new(HostResourceAccounts::new(
+        &GatewayDefaultV1::LIMITS.clone().with_limit(Slots, Some(1)),
+    ));
+    let acquired = Acquired::default();
+    let service = udp::Datagram::new();
+    let absolute = service.address();
+    let mut host = deployment(service, &[21], accounts.clone(), acquired.clone());
+    let calls = Rc::new(Cell::new(0));
+    let mut td = source(true, None);
+    td["properties"]["other"] =
+        json!({"type":"integer","readOnly":true,"forms":[{"href":"other"}]});
+    let mut thing = expose(&mut host, &td, &["relative", "other"], 14, &calls, None).unwrap();
+    assert_eq!(accounts.account(Slots).used(), 1);
+    publish(&mut host, &mut thing);
+    assert_eq!(read_http(&mut host, &mut thing).0, "14");
+    assert_eq!(
+        get(&mut host, &mut thing, acquired.borrow()[0], "other"),
+        "14"
+    );
+    assert_eq!(
+        outcome(&mut host, &mut thing).recipient(),
+        Some(thing.key())
+    );
+    let occupied = expose(&mut host, &td, &["relative", "other"], 14, &calls, None)
+        .err()
+        .unwrap();
+    assert_eq!(occupied.limit_details(), Some((Slots, 1, Some(1), None)));
+    assert_eq!(acquired.borrow().len(), 1);
+    retire(&mut host, &mut thing);
+    drop(thing);
+    let split = host
+        .expose(
+            source(true, Some(absolute)).to_string().into(),
+            read_behaviors(&["relative", "absolute"], 15, &calls),
+            ExposurePolicy::default(),
+            &mut work(),
+        )
+        .err()
+        .unwrap();
+    assert_eq!(
+        split.error().limit_details(),
+        Some((Slots, 1, Some(2), None))
+    );
+    assert!(!split.is_staged());
+    assert_eq!(acquired.borrow().len(), 2);
+    TcpListener::bind(acquired.borrow()[1])
+        .expect("unfundable final membership released the lease");
+    assert_eq!(calls.get(), 2);
+    drop(host);
     empty(&accounts);
 }

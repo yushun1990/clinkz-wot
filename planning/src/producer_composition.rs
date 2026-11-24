@@ -318,6 +318,15 @@ pub fn prepare_thing(
     let mut operations = Vec::new();
     let mut notification_mappings = 0;
     let mut retained_bytes = core::mem::size_of::<PreparedThing>();
+    let live = ResourceKind::EngineLiveBytesGlobalMax;
+    let limit = limits.get(live).unwrap_or(0);
+    let exceeded = |requested| CoreError::LimitExceeded {
+        resource: live,
+        limit,
+        requested,
+        observed: None,
+        context: context().with_thing(instance.slot()),
+    };
     visit_thing(
         description,
         instance,
@@ -350,13 +359,10 @@ pub fn prepare_thing(
                 )
                 .and_then(|n| n.checked_add(input.site.name_bytes()))
                 .and_then(|n| n.checked_add(binding_bytes))
-                .ok_or_else(busy)?;
-            if u64::try_from(next).map_or(true, |n| {
-                n > limits
-                    .get(ResourceKind::EngineLiveBytesGlobalMax)
-                    .unwrap_or(0)
-            }) {
-                return Err(busy());
+                .ok_or_else(|| exceeded(None))?;
+            let requested = u64::try_from(next).map_err(|_| exceeded(None))?;
+            if requested > limit {
+                return Err(exceeded(Some(requested)));
             }
             retained_bytes = next;
             let operation = PreparedOperation {

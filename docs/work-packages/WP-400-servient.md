@@ -633,19 +633,25 @@ For a setup-assigned base, this Host entry first prepares the complete draft
 and checks behavior coverage in both directions. It reserves candidate backing,
 qualification scratch, member capacity and rollback before acquiring the
 closed endpoint. The final member allowance is bounded by the number of
-Form/operation pairs, eligible registrations and readiness limits. Selection
+Form/operation pairs, eligible registrations, Host policy and the bank's
+hard readiness limit. Admission reserves against current usage. Final selection
 releases surplus readiness and cleanup slots. The entry replaces the top-level
 base and runs fresh selection against the full registration set while holding
 the lease. A refused exposure returns the application's original TD, behaviors
-and policy through `ExposureError::into_input`. A short finalization turn returns
-a staged error. Its `retry` method resumes on the original Host and endpoint.
-Recovering the inputs or dropping the staged error releases the lease. The
-composed handoff checks the final definitions, installed members and original
-configuration observations through commit. Candidate backing transfers to the
+and policy through `ExposureError::into_input`. A busy specializer or short
+finalization turn returns a staged error. Its `retry` method resumes on the
+original Host and endpoint with caller credit. Completed registration views keep
+their original configuration observations. Recovering the inputs or dropping
+the staged error releases the lease. When a definition or native participant
+exceeds its fixed backing allowance, the exposure returns `LimitExceeded` and
+releases the lease before returning the inputs.
+
+The composed handoff checks the final definitions, installed members and
+original configuration observations through commit. Candidate backing transfers to the
 serving owners on the original bank. The preparation-only balance, base pin
-and callback scratch end at commit or rollback. Deployment declares the peak backing for its base
-acquisition and specialization callbacks. Each finite service declares its
-setup callback peak. Assigned HTTP transfers the original socket to its selected
+and callback scratch end at commit or rollback. Deployment declares the peak
+backing for its base acquisition and specialization callbacks. Each finite
+service declares its setup callback peak. Assigned HTTP transfers the original socket to its selected
 participant. A fixed HTTP registration can use the deployment's shared listener
 so independent Things own separate route leases on one address. The finite
 driver accepts one exchange at a time per participant. Its independently funded

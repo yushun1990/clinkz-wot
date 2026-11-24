@@ -118,6 +118,7 @@ impl<L: 'static> FiniteProducerRegistration<L> {
     /// Specialization is pure. Its inputs come from the original lease and the
     /// service configuration observed before acquisition. The returned view
     /// reports any additional dependencies used for final qualification.
+    /// Backpressure defers this registration on the same lease until the caller retries.
     pub fn at_base<S: FiniteProducerService + 'static>(
         service: S,
         specialize: fn(&S, &L) -> CoreResult<S>,
@@ -136,11 +137,30 @@ impl<L: 'static> FiniteProducerRegistration<L> {
     }
 }
 
-struct InstalledBase {
-    services: Vec<ServiceRef>,
-    lease: Box<dyn AsRef<str>>,
+/// Keep the concrete lease and its matching registration functions together
+/// until every service has had a turn on the acquired endpoint.
+trait RegisteredBase: AsRef<str> {
+    fn specialize(&self, index: usize) -> CoreResult<ServiceRef>;
 }
-type AcquireBase = dyn Fn() -> CoreResult<InstalledBase>;
+struct DeploymentBase<L> {
+    lease: L,
+    registrations: Rc<[FiniteProducerRegistration<L>]>,
+}
+impl<L: AsRef<str>> AsRef<str> for DeploymentBase<L> {
+    fn as_ref(&self) -> &str {
+        self.lease.as_ref()
+    }
+}
+impl<L: AsRef<str>> RegisteredBase for DeploymentBase<L> {
+    fn specialize(&self, index: usize) -> CoreResult<ServiceRef> {
+        let registration = &self.registrations[index];
+        match &registration.at_base {
+            Some(specialize) => specialize(&self.lease),
+            None => Ok(registration.draft.clone()),
+        }
+    }
+}
+type AcquireBase = dyn Fn() -> CoreResult<Box<dyn RegisteredBase>>;
 struct BaseSetup {
     acquire: Box<AcquireBase>,
     backing_bytes: usize,
@@ -153,7 +173,7 @@ pub struct ExposureInput {
     pub policy: ExposurePolicy,
 }
 
-/// The caller owns the original inputs and any closed endpoint awaiting credit.
+/// The caller owns the original inputs and any closed endpoint awaiting finalization.
 /// Dropping this value releases a staged endpoint and its reservations locally.
 pub struct ExposureError {
     error: CoreError,
@@ -237,13 +257,48 @@ impl core::error::Error for ExposureError {
     }
 }
 
+struct AssignedServices {
+    views: Vec<ServiceRef>,
+    observed: usize,
+    // Move the original pin into publication funding once the TD is finalized.
+    pending: Option<Box<dyn RegisteredBase>>,
+}
+
+impl AssignedServices {
+    /// Keep each specialized view, including one whose observations are busy.
+    /// The completed prefix keeps its original versions through commit.
+    fn specialize(
+        &mut self,
+        count: usize,
+        facts: &mut PublicationFacts,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<Option<&str>> {
+        let Some(base) = self.pending.as_deref() else {
+            return Ok(None);
+        };
+        while self.observed < count {
+            budget
+                .consume(WorkClass::BindingPolls, 1)
+                .map_err(|_| busy())?;
+            if self.observed == self.views.len() {
+                self.views.push(base.specialize(self.observed)?);
+            }
+            self.views[self.observed]
+                .clone()
+                .capability()
+                .observe_configuration(&mut facts.observer())?;
+            self.observed += 1;
+        }
+        Ok(Some(base.as_ref()))
+    }
+}
+
 // Pure definitions and specialized service owners drop before their funding.
 struct ExposureSetup {
-    installed: Option<Vec<ServiceRef>>,
+    assigned: Option<AssignedServices>,
     prepared: Option<PreparedThing>,
     participants: Option<Vec<OwnedProducerParticipation>>,
     providers: ProducerRegistrations,
-    needs_base: bool,
     funding: FiniteSetupFunding,
 }
 struct ExposureCandidate {
@@ -262,7 +317,7 @@ impl ExposureCandidate {
         }
     }
     fn fail(self, error: CoreError) -> ExposureError {
-        let state = if self.setup.installed.is_some() && matches!(error, CoreError::Backpressure(_))
+        let state = if self.setup.assigned.is_some() && matches!(error, CoreError::Backpressure(_))
         {
             ExposureState::Assigned(Box::new(self))
         } else {
@@ -280,11 +335,32 @@ impl ExposureCandidate {
         host.owner
             .check_publication_input(&self.instance, self.policy.replaces)?;
         drop(PublicationFacts::lock_current(&[&setup.funding.facts])?);
-        if setup.needs_base {
-            let lease = setup.funding.stage.base.as_deref().expect("assigned base");
-            let description = description_at_base(&self.description, lease.as_ref(), budget)?;
+        if let Some(assigned) = &mut setup.assigned
+            && let Some(base) =
+                assigned.specialize(host.services.len(), &mut setup.funding.facts, budget)?
+        {
+            let description = description_at_base(&self.description, base, budget)?;
+            let providers: Vec<_> = assigned
+                .views
+                .iter()
+                .cloned()
+                .map(Service::capability)
+                .collect();
+            let required = setup_scratch(
+                &host.limits,
+                &providers,
+                &assigned.views,
+                setup.funding.facts.backing_bytes().ok_or_else(busy)?,
+            )?;
+            remaining_backing(
+                ResourceKind::AdmissionTemporaryBytesGlobalMax,
+                setup.funding.stage.scratch.bytes(),
+                Some(required),
+                self.instance.key(),
+            )?;
+            setup.providers.replace(providers);
             self.instance.set_description(description.into());
-            setup.needs_base = false;
+            setup.funding.stage.base = Some(assigned.pending.take().expect("finalized base"));
         }
         if let Some(participants) = setup.participants.take() {
             return Ok(participants);
@@ -297,7 +373,12 @@ impl ExposureCandidate {
         }
         let prepared = setup.prepared.as_ref().expect("prepared candidate");
         host.assemble(
-            setup.installed.as_deref().unwrap_or(&host.services),
+            setup
+                .assigned
+                .as_ref()
+                .map_or(host.services.as_slice(), |assigned| {
+                    assigned.views.as_slice()
+                }),
             prepared,
             self.instance.key(),
             &limits,
@@ -402,25 +483,21 @@ impl HostProducer {
             return Err(invalid());
         }
         let draft = registrations.iter().map(|r| r.draft.clone()).collect();
-        let setup = move || {
-            let lease = acquire()?;
-            let services = registrations
-                .iter()
-                .map(|r| match &r.at_base {
-                    Some(specialize) => specialize(&lease),
-                    None => Ok(r.draft.clone()),
-                })
-                .collect::<CoreResult<_>>()?;
-            Ok(InstalledBase {
-                services,
-                lease: Box::new(lease),
-            })
+        let registrations: Rc<[_]> = registrations.into();
+        let setup = move || -> CoreResult<Box<dyn RegisteredBase>> {
+            Ok(Box::new(DeploymentBase {
+                lease: acquire()?,
+                registrations: registrations.clone(),
+            }))
         };
+        let backing_bytes = base_backing_bytes
+            .checked_add(size_of::<DeploymentBase<L>>() - size_of::<L>())
+            .ok_or_else(invalid)?;
         Self::build(
             draft,
             Some(BaseSetup {
                 acquire: Box::new(setup),
-                backing_bytes: base_backing_bytes,
+                backing_bytes,
             }),
             config,
             limits,
@@ -468,8 +545,8 @@ impl HostProducer {
     }
 
     /// Prepare the application's TD and behaviors and return its closed candidate.
-    /// A refusal returns the application inputs. After base acquisition, short
-    /// finalization credit returns a retry on the same funded endpoint.
+    /// A refusal returns the application inputs. After base acquisition, a busy
+    /// specializer or short finalization turn can resume on the same funded endpoint.
     pub fn expose(
         &mut self,
         description: Arc<str>,
@@ -549,21 +626,14 @@ impl HostProducer {
         let known = instance
             .backing_bytes()
             .and_then(|n| n.checked_add(policy.handler_backing_bytes))
-            .and_then(|n| n.checked_add(base_bytes))
-            .ok_or_else(busy)?;
+            .and_then(|n| n.checked_add(base_bytes));
         let live = ResourceKind::EngineLiveBytesGlobalMax;
-        let available = self
-            .config
-            .candidate_bytes
-            .checked_sub(known)
-            .ok_or_else(|| CoreError::LimitExceeded {
-                resource: live,
-                limit: self.config.candidate_bytes as u64,
-                requested: Some(known as u64),
-                observed: None,
-                context: ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
-                    .with_thing(instance.key().slot()),
-            })? as u64;
+        let available = remaining_backing(
+            live,
+            self.config.candidate_bytes as u64,
+            known,
+            instance.key(),
+        )?;
         Ok((*self.limits).clone().with_limit(
             live,
             Some(available.min(self.limits.get(live).unwrap_or(0))),
@@ -603,15 +673,13 @@ impl HostProducer {
         // Replacing the base preserves every Form/operation row. Each row has
         // one winner and a registration assembles at most one native member.
         let members = if self.acquire.is_some() {
+            let global = ResourceKind::RouteReadinessTokensGlobalMax;
             let ceiling = self
                 .limits
                 .get(ResourceKind::RouteReadinessTokensPerThingMax)
                 .unwrap_or(0)
-                .min(
-                    self.limits
-                        .get(ResourceKind::RouteReadinessTokensGlobalMax)
-                        .unwrap_or(0),
-                );
+                .min(self.limits.get(global).unwrap_or(0))
+                .min(self.accounts.account(global).limit());
             let possible = draft.operations().len().min(self.services.len()) as u64;
             // A zero ceiling is reported by the normal one-member limit check.
             possible.min(ceiling).max(1) as usize
@@ -639,47 +707,39 @@ impl HostProducer {
             counts,
             facts,
         };
-        let Some(acquire) = &self.acquire else {
-            return Ok(ExposureSetup {
-                installed: None,
-                prepared: Some(draft),
-                participants: None,
-                providers: ProducerRegistrations::new(providers),
-                needs_base: false,
-                funding,
-            });
+        let (assigned, prepared) = if let Some(acquire) = &self.acquire {
+            drop(draft);
+            drop(PublicationFacts::lock_current(&[&funding.facts])?);
+            funding.stage.base_cleanup = Some(
+                self.accounts
+                    .reserve(ResourceKind::CleanupItemsMax, 1)
+                    .ok_or_else(busy)?,
+            );
+            // Admit the first pass before binding, then charge each actual
+            // callback on the turn that invokes it, including a retried callback.
+            if budget.remaining(WorkClass::BindingPolls) < 1 + self.services.len() as u64 {
+                return Err(busy());
+            }
+            budget
+                .consume(WorkClass::BindingPolls, 1)
+                .map_err(|_| busy())?;
+            budget
+                .consume(WorkClass::CleanupItems, 1)
+                .map_err(|_| busy())?;
+            let base = AssignedServices {
+                views: Vec::with_capacity(self.services.len()),
+                observed: 0,
+                pending: Some((acquire.acquire)()?),
+            };
+            (Some(base), None)
+        } else {
+            (None, Some(draft))
         };
-        drop(draft);
-        drop(PublicationFacts::lock_current(&[&funding.facts])?);
-        funding.stage.base_cleanup = Some(
-            self.accounts
-                .reserve(ResourceKind::CleanupItemsMax, 1)
-                .ok_or_else(busy)?,
-        );
-        budget
-            .consume(WorkClass::BindingPolls, 1 + self.services.len() as u64)
-            .map_err(|_| busy())?;
-        budget
-            .consume(WorkClass::CleanupItems, 1)
-            .map_err(|_| busy())?;
-        let base = (acquire.acquire)()?;
-        funding.stage.base = Some(base.lease);
-        let providers = capabilities(&base.services, &mut funding.facts)?;
-        if setup_scratch(
-            &self.limits,
-            &providers,
-            &base.services,
-            funding.facts.backing_bytes().ok_or_else(busy)?,
-        )? > funding.stage.scratch.bytes() as usize
-        {
-            return Err(busy());
-        }
         Ok(ExposureSetup {
-            installed: Some(base.services),
-            prepared: None,
+            assigned,
+            prepared,
             participants: None,
             providers: ProducerRegistrations::new(providers),
-            needs_base: true,
             funding,
         })
     }
@@ -693,11 +753,13 @@ impl HostProducer {
         counts: &mut MemberFunding,
         budget: &mut WorkBudget,
     ) -> CoreResult<Vec<OwnedProducerParticipation>> {
-        let mut remaining = (preparation_limits
-            .get(ResourceKind::EngineLiveBytesGlobalMax)
-            .unwrap_or(0) as usize)
-            .checked_sub(prepared.retained_bytes())
-            .ok_or_else(busy)?;
+        let live = ResourceKind::EngineLiveBytesGlobalMax;
+        let mut remaining = remaining_backing(
+            live,
+            preparation_limits.get(live).unwrap_or(0),
+            Some(prepared.retained_bytes()),
+            key,
+        )?;
         let members = selected_members(prepared);
         check_publication_limits(&self.limits, 0, members, key)?;
         counts.retain_selected(members, key)?;
@@ -718,9 +780,9 @@ impl HostProducer {
                 let backing = member
                     .admission_backing_bytes(&self.owner.participation_token(), key)
                     .ok_or_else(invalid)?
-                    .checked_add(size_of::<OwnedProducerParticipation>() + member.overhead())
-                    .ok_or_else(busy)?;
-                remaining = remaining.checked_sub(backing).ok_or_else(busy)?;
+                    .checked_add(size_of::<OwnedProducerParticipation>())
+                    .and_then(|n| n.checked_add(member.overhead()));
+                remaining = remaining_backing(live, remaining, backing, key)?;
                 participants.push(member);
             }
         }
@@ -787,6 +849,26 @@ impl HostProducer {
     ) -> CoreResult<()> {
         self.owner.retire_revoked_publication(key, budget)
     }
+}
+
+/// A candidate's prepaid storage has a fixed size for its entire lifetime.
+fn remaining_backing(
+    resource: ResourceKind,
+    available: u64,
+    required: Option<usize>,
+    key: ProducerInstanceKey,
+) -> CoreResult<u64> {
+    let requested = required.and_then(|n| u64::try_from(n).ok());
+    requested
+        .and_then(|n| available.checked_sub(n))
+        .ok_or_else(|| CoreError::LimitExceeded {
+            resource,
+            limit: available,
+            requested,
+            observed: None,
+            context: ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
+                .with_thing(key.slot()),
+        })
 }
 
 fn capabilities(

@@ -5,16 +5,22 @@ use clinkz_wot_planning::{producer_composition::*, type_schema::prepare_type_sch
 use clinkz_wot_td::semantic::{SemanticScope, UriVariableScope};
 use std::{any::Any, task::Poll};
 
+#[derive(Clone)]
 pub struct Datagram {
+    receive_bytes: usize,
     pub enabled: Rc<RefCell<PublicationState<bool>>>,
     socket: Rc<UdpSocket>,
     leased: Rc<Cell<bool>>,
 }
 impl Datagram {
     pub fn new() -> Self {
+        Self::with_receive_bytes(16)
+    }
+    pub fn with_receive_bytes(receive_bytes: usize) -> Self {
         let socket = UdpSocket::bind(zero()).unwrap();
         socket.set_nonblocking(true).unwrap();
         Self {
+            receive_bytes,
             enabled: Rc::new(RefCell::new(PublicationState::new(true))),
             socket: Rc::new(socket),
             leased: Rc::new(Cell::new(false)),
@@ -78,7 +84,12 @@ impl ProducerCapability for Datagram {
         (BindingId::new(70), BindingGeneration::INITIAL)
     }
     fn observe_configuration(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
-        self.enabled.borrow().observe(facts)
+        self.enabled
+            .try_borrow()
+            .map_err(|_| {
+                CoreError::Backpressure(ErrorContext::new(ErrorPhase::Prepare, RetryClass::Safe))
+            })?
+            .observe(facts)
     }
     fn definition_bytes(&self, d: &dyn Any) -> Option<usize> {
         d.downcast_ref::<SocketAddr>().map(size_of_val)
@@ -113,7 +124,7 @@ impl ProducerCapability for Datagram {
 impl FiniteProducerService for Datagram {
     type Binding = Native;
     fn setup_peak_bytes(&self) -> usize {
-        4096
+        4096 + self.receive_bytes
     }
     fn assemble<'a>(
         &self,
@@ -130,6 +141,7 @@ impl FiniteProducerService for Datagram {
         let config = (key, address);
         Ok((
             Native {
+                receive: vec![0; self.receive_bytes].into_boxed_slice(),
                 config,
                 socket: self.socket.clone(),
                 lease: self.leased.clone(),
@@ -141,6 +153,7 @@ impl FiniteProducerService for Datagram {
 }
 
 pub struct Native {
+    receive: Box<[u8]>,
     config: (ProducerInstanceKey, SocketAddr),
     socket: Rc<UdpSocket>,
     lease: Rc<Cell<bool>>,
@@ -169,7 +182,7 @@ impl FiniteIngressBinding for Native {
         &self.config
     }
     fn engine_backing_bytes(&self) -> Option<usize> {
-        Some(64)
+        64usize.checked_add(self.receive.len())
     }
     fn qualified_operation_count(&self) -> Option<usize> {
         Some(1)
@@ -213,9 +226,8 @@ impl FiniteIngressBinding for Native {
         _: &mut Context<'_>,
         _: MonotonicInstant,
     ) -> Poll<CoreResult<FiniteIngress<SocketAddr>>> {
-        let mut bytes = [0; 16];
-        match self.socket.recv_from(&mut bytes) {
-            Ok((n, peer)) if &bytes[..n] == b"READ" => Poll::Ready(Ok(FiniteIngress {
+        match self.socket.recv_from(&mut self.receive) {
+            Ok((n, peer)) if &self.receive[..n] == b"READ" => Poll::Ready(Ok(FiniteIngress {
                 candidates: vec![FiniteCandidate {
                     instance: self.config.0,
                     target: AffordanceTarget::Property("absolute".into()),

@@ -262,6 +262,36 @@ fn each_scope_form_and_effective_operation_selects_actual_registration() {
 }
 
 #[test]
+fn a_definition_that_exceeds_fixed_backing_reports_the_required_bytes() {
+    use clinkz_wot_foundation::{ResourceKind::EngineLiveBytesGlobalMax as Live, ResourceLimits};
+    let instance = key();
+    // Read and Write each retain a prepared target for the same Form.
+    let forms: Vec<_> = (0..16)
+        .map(|i| serde_json::json!({"href": i.to_string()}))
+        .collect();
+    let text = serde_json::json!({
+        "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"Read mappings",
+        "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
+        "base": format!("http://127.0.0.1/{}/", "a".repeat(900)),
+        "properties":{"p":{"forms":forms}}
+    })
+    .to_string();
+    let providers: &[&dyn ProducerCapability] = &[&Provider(1, "property")];
+    let prepare = |limits: &ResourceLimits| {
+        prepare_thing(&text, instance, limits, &mut work(), providers, covered)
+    };
+    let needed = prepare(GatewayDefaultV1::LIMITS).unwrap().retained_bytes() as u64;
+    let limited = GatewayDefaultV1::LIMITS
+        .clone()
+        .with_limit(Live, Some(needed - 1));
+    let error = prepare(&limited).err().unwrap();
+    assert_eq!(
+        error.limit_details(),
+        Some((Live, needed - 1, Some(needed), None))
+    );
+}
+
+#[test]
 fn absent_ambiguous_and_unregistered_controls_refuse_purely() {
     let p = Provider(1, "property");
     let a = Provider(2, "action");
