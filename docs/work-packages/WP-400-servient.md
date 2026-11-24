@@ -619,6 +619,31 @@ hardware/profile qualification or package/gate/milestone completion.
 
 ## Owned composed Host Producer
 
+The finite application entry is `HostProducer::expose`. Deployment registers
+each linked service and its work capacity once. The application supplies the
+TD, behaviors and replacement policy. Fixed services receive their selected
+operations by registration position. A service using the deployment's assigned
+base also receives its own typed view of the closed lease. Each Binding builds
+its native configuration. Servient associates it with the original instance
+and the shared finite work bank. The application drives `poll_publish` with
+its clock, context and credit, reads the committed TD, and takes funded results
+through the exposure. [HTTP application](../../protocol-bindings/protocols/http/examples/serve_properties.rs)
+
+For a setup-assigned base, this Host entry first prepares the complete draft
+and checks behavior coverage in both directions. It reserves candidate backing,
+qualification scratch, member capacity and rollback before acquiring the
+closed endpoint. It replaces only the top-level base, then runs fresh selection
+against the full registration set while holding the lease. The existing composed
+handoff checks the final definitions, installed members and current configuration
+through commit. Candidate backing transfers to the serving owners on the
+original bank. The preparation-only balance, base pin and callback scratch end
+at commit or rollback. Deployment declares the peak backing for its base
+acquisition and specialization callbacks. Each finite service declares its
+setup callback peak. The current HTTP adapter transfers one exclusive listener
+to its selected participant. The existing finite driver accepts one exchange
+at a time per participant. Its independently funded outcomes can survive later
+Reads, replacement and logical retirement. [Public exposure controls](../../protocol-bindings/protocols/http/tests/producer_exposure.rs)
+
 Property values and Event data use the same instance registry and closed
 whole-TD publication with explicit `ProducerNotificationSource` families and
 captured notification mappings/services. `publish_notification` checks the

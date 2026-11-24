@@ -6,9 +6,9 @@
 pub use crate::producer_execution::{OwnedProducerParticipation, ProducerWork};
 use crate::{
     host_accounts::{HostCapacityReservation, HostResourceAccounts},
-    producer::{Funding, QualificationFunding},
+    producer::QualificationFunding,
 };
-use alloc::{rc::Rc, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::{
     AffordanceTarget, BindingInputRejection, BindingOperationalError, producer::ProducerInstanceKey,
 };
@@ -29,7 +29,7 @@ use clinkz_wot_td::ValidatedProducerScope;
 use core::{any::Any, mem::size_of};
 
 // The existing bounded eligible-provider walk is independent of native membership.
-const MAX_PRODUCER_REGISTRATIONS: usize = 32;
+pub(crate) const MAX_PRODUCER_REGISTRATIONS: usize = 32;
 
 /// Final qualification is fallible, publication is not. Retain the prepared
 /// definitions separately from this logical publication and all physical
@@ -292,7 +292,7 @@ fn slot_limit(resource: K, limit: u64, count: usize, key: ProducerInstanceKey) -
     }
 }
 
-fn check_publication_limits(
+pub(crate) fn check_publication_limits(
     limits: &ResourceLimits,
     mappings: usize,
     participants: usize,
@@ -441,20 +441,110 @@ struct ProducerStage {
     prepared: PreparedThing,
     _registrations: ProducerRegistrations,
     coverage: PublicationFacts,
-    _qualification: QualificationFunding,
+    _funding: ProducerStageFunding,
+}
+
+pub(crate) struct ProducerStorage {
+    live: HostCapacityReservation,
+    cleanup: HostCapacityReservation,
+}
+impl ProducerStorage {
+    pub(crate) fn reserve(accounts: &Arc<HostResourceAccounts>, bytes: usize) -> CoreResult<Self> {
+        Ok(Self {
+            live: accounts
+                .reserve(K::EngineLiveBytesGlobalMax, bytes as u64)
+                .ok_or_else(busy)?,
+            cleanup: accounts
+                .reserve(K::CleanupBytesMax, bytes as u64)
+                .ok_or_else(busy)?,
+        })
+    }
+
+    fn split(&mut self, bytes: usize) -> CoreResult<Self> {
+        Ok(Self {
+            live: self.live.split(bytes as u64).ok_or_else(busy)?,
+            cleanup: self.cleanup.split(bytes as u64).ok_or_else(busy)?,
+        })
+    }
+}
+
+/// Candidate-owned backing before the first native acquisition. The ordinary
+/// finite entry transfers the serving part without competing for its bytes again.
+pub(crate) struct ProducerStageFunding {
+    // Drop the original closed lease before refunding its rollback allowance.
+    pub base: Option<Box<dyn Any>>,
+    pub base_cleanup: Option<HostCapacityReservation>,
+    pub base_bytes: usize,
+    pub storage: ProducerStorage,
+    pub scratch: QualificationFunding,
+}
+
+pub(crate) struct FiniteSetupFunding {
+    pub stage: ProducerStageFunding,
+    pub counts: MemberFunding,
+    pub facts: PublicationFacts,
+}
+
+pub(crate) struct MemberFunding {
+    members: HostCapacityReservation,
+    cleanup_items: HostCapacityReservation,
+    _thing: HostCapacityReservation,
+}
+impl MemberFunding {
+    pub(crate) fn reserve(
+        accounts: &Arc<HostResourceAccounts>,
+        limits: &ResourceLimits,
+        members: usize,
+        key: ProducerInstanceKey,
+    ) -> CoreResult<Self> {
+        Ok(Self {
+            members: reserve_slots(
+                accounts,
+                limits,
+                K::RouteReadinessTokensGlobalMax,
+                members,
+                key,
+            )?,
+            cleanup_items: accounts
+                .reserve(K::CleanupItemsMax, (members + 1) as u64)
+                .ok_or_else(busy)?,
+            _thing: accounts.reserve(K::ThingsGlobalMax, 1).ok_or_else(busy)?,
+        })
+    }
+
+    fn fit(
+        &mut self,
+        limits: &ResourceLimits,
+        members: usize,
+        key: ProducerInstanceKey,
+    ) -> CoreResult<()> {
+        for (slot, kind, need) in [
+            (&mut self.members, K::RouteReadinessTokensGlobalMax, members),
+            (&mut self.cleanup_items, K::CleanupItemsMax, members + 1),
+        ] {
+            let limit = limits.get(kind).unwrap_or(0);
+            let held = slot.amount();
+            if held > need as u64 {
+                slot.release_part(held - need as u64);
+            } else if (need as u64) > held && !slot.try_grow_up_to(need as u64 - held, limit) {
+                return Err(slot_limit(kind, limit, need, key));
+            }
+        }
+        Ok(())
+    }
 }
 
 struct ComposedAdmission {
-    funding: Rc<ComposedFunding>,
-    qualification: QualificationFunding,
     coverage: PublicationFacts,
     routes: CapturedProducerRoutes,
+    notification_mappings: HostCapacityReservation,
+    serving_bytes: usize,
 }
 
 struct ComposedFunding {
-    _backing: Funding,
+    _storage: ProducerStorage,
     _notification_mappings: HostCapacityReservation,
-    _members: HostCapacityReservation,
+    _counts: MemberFunding,
 }
 
 impl ComposedProducerExposure {
@@ -467,8 +557,22 @@ impl ComposedProducerExposure {
         accounts: Arc<HostResourceAccounts>,
         budget: &mut WorkBudget,
     ) -> Result<Self, BindingInputRejection<ComposedProducerInput>> {
+        Self::admit(owner, input, limits, accounts, budget, &mut None)
+    }
+
+    pub(crate) fn admit(
+        owner: &RawProducerServient,
+        input: ComposedProducerInput,
+        limits: Arc<ResourceLimits>,
+        accounts: Arc<HostResourceAccounts>,
+        budget: &mut WorkBudget,
+        prepaid: &mut Option<FiniteSetupFunding>,
+    ) -> Result<Self, BindingInputRejection<ComposedProducerInput>> {
         let admission = (|| -> CoreResult<ComposedAdmission> {
-            let mut coverage = PublicationFacts::default();
+            let mut coverage = prepaid
+                .as_mut()
+                .map(|p| core::mem::take(&mut p.facts))
+                .unwrap_or_default();
             let registrations = input.providers.snapshot(&mut coverage)?;
             if input.participants.is_empty()
                 || registrations.is_empty()
@@ -483,13 +587,6 @@ impl ComposedProducerExposure {
             check_publication_limits(&limits, mappings, members, key)?;
             let notification_mappings =
                 reserve_slots(&accounts, &limits, K::BindingRoutesGlobalMax, mappings, key)?;
-            let member_slots = reserve_slots(
-                &accounts,
-                &limits,
-                K::RouteReadinessTokensGlobalMax,
-                members,
-                key,
-            )?;
             pay_coverage(
                 &input.prepared,
                 members,
@@ -527,7 +624,6 @@ impl ComposedProducerExposure {
             )?;
             let mut bytes = size_of::<Self>()
                 .checked_add(input.instance.backing_bytes().ok_or_else(busy)?)
-                .and_then(|n| n.checked_add(input.prepared.retained_bytes()))
                 .and_then(|n| n.checked_add(ProducerPublication::staging_backing_for(members)))
                 .and_then(|n| n.checked_add(input.handler_backing_bytes))
                 .and_then(|n| {
@@ -546,9 +642,6 @@ impl ComposedProducerExposure {
                     n.checked_add(
                         input.participants.capacity() * size_of::<OwnedProducerParticipation>(),
                     )
-                })
-                .and_then(|n| {
-                    n.checked_add(registrations.len() * size_of::<Rc<dyn ProducerCapability>>())
                 })
                 // Original Funding, retention-pair Rc allocations and bounded
                 // temporary references used for qualification and gate capture.
@@ -579,32 +672,40 @@ impl ComposedProducerExposure {
                     )
                     .ok_or_else(busy)?;
             }
-            let backing = Funding::reserve(
-                &accounts,
-                &[
-                    (K::EngineLiveBytesGlobalMax, bytes),
-                    (K::CleanupBytesMax, bytes),
-                    (K::CleanupItemsMax, input.participants.len() + 1),
-                    (K::ThingsGlobalMax, 1),
-                ],
+            let stage_bytes = input
+                .prepared
+                .retained_bytes()
+                .checked_add(registrations.len() * size_of::<Rc<dyn ProducerCapability>>())
+                .ok_or_else(busy)?;
+            let temporary = qualification_bytes(
+                &limits,
+                &registrations,
+                qualification.backing_bytes().ok_or_else(busy)?,
             )?;
-            let funding = Rc::new(ComposedFunding {
-                _backing: backing,
-                _notification_mappings: notification_mappings,
-                _members: member_slots,
-            });
-            let provider_bytes = final_check_bytes(&registrations)?;
-            let temporary = usize::try_from(
-                limits
-                    .get(K::AdmissionTemporaryBytesPerOperationMax)
-                    .unwrap_or(0),
-            )
-            .ok()
-            .and_then(|n| n.checked_add(PRODUCER_DESCRIPTION_BYTES * 512))
-            .and_then(|n| n.checked_add(provider_bytes))
-            .and_then(|n| n.checked_add(qualification.backing_bytes()?))
-            .ok_or_else(busy)?;
-            let scratch = QualificationFunding::reserve(&accounts, temporary)?;
+            let peak = bytes
+                .checked_add(stage_bytes)
+                .and_then(|n| n.checked_add(prepaid.as_ref().map_or(0, |p| p.stage.base_bytes)))
+                .ok_or_else(busy)?;
+            if let Some(paid) = prepaid {
+                if paid.stage.storage.live.amount() < peak as u64
+                    || paid.stage.scratch.bytes() < temporary as u64
+                {
+                    return Err(busy());
+                }
+                paid.counts.fit(&limits, members, key)?;
+            } else {
+                *prepaid = Some(FiniteSetupFunding {
+                    stage: ProducerStageFunding {
+                        base: None,
+                        base_cleanup: None,
+                        base_bytes: 0,
+                        storage: ProducerStorage::reserve(&accounts, peak)?,
+                        scratch: QualificationFunding::reserve(&accounts, temporary)?,
+                    },
+                    counts: MemberFunding::reserve(&accounts, &limits, members, key)?,
+                    facts: PublicationFacts::default(),
+                });
+            }
             let description = input
                 .instance
                 .description()
@@ -615,14 +716,7 @@ impl ComposedProducerExposure {
                 &limits,
                 budget,
                 &input.prepared,
-                |scope, op| match scope {
-                    ValidatedProducerScope::Thing => input
-                        .instance
-                        .supports(&clinkz_wot_core::AffordanceTarget::Thing, op),
-                    ValidatedProducerScope::Property(n) => input.instance.supports_property(n, op),
-                    ValidatedProducerScope::Action(n) => input.instance.supports_action(n, op),
-                    ValidatedProducerScope::Event(n) => input.instance.supports_event(n, op),
-                },
+                |scope, op| instance_supports(&input.instance, scope, op),
             )?;
             if !input.instance.behaviors_described_by(|site, op| {
                 input
@@ -640,9 +734,9 @@ impl ComposedProducerExposure {
             )?;
             drop(PublicationFacts::lock_current(&[&coverage])?);
             Ok(ComposedAdmission {
-                funding,
-                qualification: scratch,
                 coverage,
+                notification_mappings,
+                serving_bytes: bytes,
                 routes: CapturedProducerRoutes {
                     actions: routes,
                     notifications: notification_routes,
@@ -650,10 +744,10 @@ impl ComposedProducerExposure {
             })
         })();
         let ComposedAdmission {
-            funding,
-            qualification,
             coverage,
             routes,
+            notification_mappings,
+            serving_bytes,
         } = match admission {
             Ok(funding) => funding,
             Err(error) => return Err(reject(input, error)),
@@ -685,6 +779,18 @@ impl ComposedProducerExposure {
                     ));
                 }
             };
+        // Every fallible handoff is complete. Until here the caller's candidate
+        // reservation also covers disposal of any rejected provisional outputs.
+        let paid = prepaid.take().expect("admitted candidate funding");
+        let mut stage = paid.stage;
+        let funding = Rc::new(ComposedFunding {
+            _storage: stage
+                .storage
+                .split(serving_bytes)
+                .expect("checked serving backing"),
+            _counts: paid.counts,
+            _notification_mappings: notification_mappings,
+        });
         publication
             .retain_owner(funding.clone())
             .expect("new unpublished instance is exclusive");
@@ -701,15 +807,34 @@ impl ComposedProducerExposure {
                 prepared,
                 _registrations: providers,
                 coverage,
-                _qualification: qualification,
+                _funding: stage,
             }),
             publication_failure: None,
             _funding: funding,
         })
     }
 
+    /// Original funded outcome from the finite work bank, independent of the
+    /// concrete Binding and of future admissions and retirement.
+    pub fn take_finite_settlement(
+        &mut self,
+    ) -> Option<Box<clinkz_wot_servient_finite::ProducerFiniteSettlement>> {
+        self.participants
+            .iter_mut()
+            .find_map(OwnedProducerParticipation::take_finite_settlement)
+    }
+
+    pub fn members_retired(&self) -> bool {
+        self.participants
+            .iter()
+            .all(|p| p.has_original_native() && p.retired())
+    }
+
     pub fn key(&self) -> ProducerInstanceKey {
         self.publication.key()
+    }
+    pub(crate) fn is_staging(&self) -> bool {
+        self.stage.is_some()
     }
     pub fn is_committed(&self) -> bool {
         self.publication.is_committed()
@@ -886,6 +1011,37 @@ impl Drop for ComposedProducerExposure {
 fn busy() -> CoreError {
     CoreError::Backpressure(context())
 }
+pub(crate) fn instance_supports(
+    instance: &RawProducerInstance,
+    scope: ValidatedProducerScope<'_>,
+    op: Operation,
+) -> bool {
+    match scope {
+        ValidatedProducerScope::Thing => instance.supports(&AffordanceTarget::Thing, op),
+        ValidatedProducerScope::Property(n) => instance.supports_property(n, op),
+        ValidatedProducerScope::Action(n) => instance.supports_action(n, op),
+        ValidatedProducerScope::Event(n) => instance.supports_event(n, op),
+    }
+}
+
+pub(crate) fn qualification_bytes(
+    limits: &ResourceLimits,
+    providers: &[Rc<dyn ProducerCapability>],
+    observations: usize,
+) -> CoreResult<usize> {
+    let callbacks = final_check_bytes(providers)?;
+    usize::try_from(
+        limits
+            .get(K::AdmissionTemporaryBytesPerOperationMax)
+            .unwrap_or(0),
+    )
+    .ok()
+    .and_then(|n| n.checked_add(PRODUCER_DESCRIPTION_BYTES * 512))
+    .and_then(|n| n.checked_add(callbacks))
+    .and_then(|n| n.checked_add(observations))
+    .ok_or_else(busy)
+}
+
 fn final_check_bytes(providers: &[Rc<dyn ProducerCapability>]) -> CoreResult<usize> {
     providers.iter().try_fold(0, |maximum, provider| {
         provider

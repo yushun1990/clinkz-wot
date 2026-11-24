@@ -24,7 +24,7 @@ reply rights and retained results each have their own release point. [ADR-0025](
 | Capability | What an application can exercise | Remaining foundation work |
 | --- | --- | --- |
 | Consumer choice and instance authority | A managed Host Consumer can retain named finite mappings and use a separate call pool. Continuing Actions choose a compatible Invoke/Query/Cancel tuple in Form order. Events can select either of two independent Bindings. Both continuing searches account for competing providers under one effective configuration. [Managed Consumer](servient/finite/src/consumer_managed.rs) · [HTTP Query Form orders](protocol-bindings/protocols/http/tests/action_consumer.rs) · [Event selection](tools/architecture-fixtures/open-consumer/tests/event_selection.rs) | Finite preparation can refuse a usable Read because two providers support a later Form. Continuing preparation filters some URI-variable, response and security meaning before actual providers can qualify it. [Finite selection](planning/src/open_consumer.rs) |
-| Producer publication | For a supplied final description, Host qualification checks all advertised operations, behaviors and eligible providers through one local commit with the ready native members. Changed coverage can refuse publication with ingress closed. One MQTT participant serves 33 funded Event mappings with the finite pool occupied. [Host publication](servient/src/producer_composition.rs) · [Coherent commit](protocol-bindings/protocols/http/tests/composed_thing/coherent.rs) · [Mapping capacity](protocol-bindings/protocols/mqtt/tests/support/notification_capacity.rs) | The managed caller assembles native participants. Coverage is saved before native setup. A lease that determines the final address needs funded acquisition, final qualification and rollback on the public path. [HTTP application](protocol-bindings/protocols/http/examples/serve_properties.rs) · [Mixed caller](protocol-bindings/protocols/mqtt/tests/collection_coexistence.rs) |
+| Producer publication | The finite Host entry exposes a supplied TD or resolves its Forms against a setup-assigned base. A Read reaches the advertised HTTP address alongside an independently registered datagram Property. Ambiguous final ownership rolls back the candidate. One MQTT participant serves 33 funded Event mappings on the composed path. [Public exposure](protocol-bindings/protocols/http/tests/producer_exposure.rs) · [Mapping capacity](protocol-bindings/protocols/mqtt/tests/support/notification_capacity.rs) | Source-free caller-owned Producer installation and independently retiring concurrent requests on one participation remain open. Applications combining finite and continuing families still assemble native members. [Mixed caller](protocol-bindings/protocols/mqtt/tests/collection_coexistence.rs) |
 | Finite Properties and collections | Both roles execute HTTP Read/Write and root ReadAll, ReadMultiple, WriteAll and WriteMultiple. Direct verified HTTPS supports selected data and security combinations. With shared Host capacity an expired, accepted HTTP PUT can release its connection while the same Thing and a sibling keep serving and the caller keeps its outcome. [Root ReadMultiple](protocol-bindings/protocols/http/tests/read_multiple_properties.rs) · [Root WriteMultiple](protocol-bindings/protocols/http/tests/write_multiple_properties.rs) · [Structured values](docs/evidence/structured-dataschema.md) · [Composed security](docs/evidence/security-composition.md) · [Retirement over HTTP](protocol-bindings/protocols/http/tests/support/accepted_timeout.rs) | Each finite Producer participant still drives one native exchange. Phase-specific cleanup, checked outgoing data and authorization through the actual credential use remain incomplete. |
 | Continuing Actions | HTTP Invoke, Query and Cancel retain the original invocation across exchanges. QueryAllActions observes a root inventory with per-invocation identity, output and visibility. A source-free Consumer can drive an invocation with caller-owned storage. [HTTP root status](protocol-bindings/protocols/http/tests/query_all_actions.rs) · [Caller-owned Action](docs/evidence/continuing-action-runtime-independence.md) | Producer retention reads process time. Aggregate handle construction starts before its work is charged. The Consumer close path still prepays access and validation work. |
 | Observations and Events | Both roles execute MQTT observe/unobserve, subscribe/unsubscribe and the corresponding root collections. One root conversation preserves member identity and schema. A completed QoS 0 packet releases the shared writer while its result is held. A downstream Consumer can reply to an occurrence. [Root Properties](protocol-bindings/protocols/mqtt/tests/observe_all_properties.rs) · [Root Events](protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs) · [Writer lifetime](protocol-bindings/protocols/mqtt/tests/producer_events.rs) · [Occurrence replies](tools/architecture-fixtures/open-consumer/tests/notification.rs) | A recoverable emission cleanup error revokes a healthy Thing. Application-controlled subscriptions also need setup acceptance, a returned control operand and per-delivery ownership in both roles. [Emission settlement](servient/finite/src/notification_publication.rs) |
@@ -41,19 +41,20 @@ application accepts a subscription that another application can control.
 
 **Expose a finite Property through the ordinary Producer API, serve its
 advertised address and retire each accepted exchange independently.** This
-comes first because the Host application still assembles the installation and
-the finite driver owns one active reply per participant. Longer-lived Actions
-and subscriptions need a truthful publication and a way to release each request.
+remains the priority because the finite driver owns one active reply per
+participant and the general source-free Producer handoff is still open. Longer-lived
+Actions and subscriptions need a truthful publication and a way to release
+each request.
 [Installation interface](core/src/publication.rs) · [Finite driver](servient/finite/src/host.rs)
 
 Start with the application that exposes the Thing. Deployment registers linked
 Bindings, services and capacity at startup. For each exposure the application
 supplies its TD, behaviors and policy. Each selected Binding assembles its own
 closed native participants. Servient publishes the final TD, exposes revocation
-and lets the application drive accepted work through its own handles. Migrate a
-real Host caller to this operation. Use the same application code with an
-existing Binding, an independently registered Binding and a TD whose Forms
-use both. Each adapter owns its concrete definitions and native assembly.
+and lets the application drive accepted work through its own handles. The HTTP
+finite example uses this operation. The same entry serves a TD with Forms on
+both HTTP and an independently registered datagram service. Each adapter owns
+its concrete definitions and native assembly.
 [Host application](protocol-bindings/protocols/http/examples/serve_properties.rs) · [Mixed exposure](protocol-bindings/protocols/mqtt/tests/collection_coexistence.rs)
 
 Two deployments constrain that same exposure at different points.
@@ -162,11 +163,10 @@ callback supplies its destination. [Data and security contracts](docs/spec/inter
 
 ### Measure staging and reuse on the public paths
 
-Once a public exposure funds its draft and rollback, stage concurrent
-candidates on one bank and commit or refuse them independently. Measure
-reservations and actual backing at peak and after commit before choosing shared
-scratch. Candidate, serving instance, accepted work and shared native service
-each release their backing at their own last use. [Producer preparation](planning/src/producer_composition.rs) · [Resource ownership](docs/spec/foundation.md)
+Concurrent finite Host candidates can commit or roll back independently on one
+bank. Measure actual backing alongside reservations at peak and after commit
+before choosing shared scratch. Candidate, serving instance, accepted work and shared native
+service each release their backing at their own last use. [Producer preparation](planning/src/producer_composition.rs) · [Resource ownership](docs/spec/foundation.md)
 
 Measure compilation reuse as soon as a mapping's invariant inputs are known.
 Compare fresh specialization with checked reuse on HTTP and a worthwhile second

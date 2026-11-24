@@ -49,6 +49,10 @@ pub(crate) struct QualificationFunding {
     _temporary: HostCapacityReservation,
 }
 impl QualificationFunding {
+    pub(crate) fn bytes(&self) -> u64 {
+        self._temporary.amount()
+    }
+
     pub(crate) fn reserve(bank: &Arc<HostResourceAccounts>, bytes: usize) -> CoreResult<Self> {
         let engine = bank
             .reserve(K::EngineLiveBytesGlobalMax, bytes as u64)

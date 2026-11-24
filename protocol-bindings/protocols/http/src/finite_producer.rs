@@ -14,6 +14,9 @@ use std::{
     task::{Context, Poll},
 };
 
+pub(super) const MAX_FINITE_MAPPINGS: usize = 32;
+pub(super) type AssignedSocket = Arc<std::sync::Mutex<Option<std::net::TcpListener>>>;
+
 /// Complete immutable source-free operands for one bounded HTTP participant.
 /// This is native configuration, not a final-TD qualification certificate.
 /// The program comes from pure HTTP preparation; callers provision the owned
@@ -54,7 +57,8 @@ impl HttpFiniteConfig {
     ) -> Result<Self, BindingInputRejection<(HttpProducerProgram, AffordanceTarget)>> {
         // Program fields are private and produced by the HTTP compiler. Check
         // actual listen operands as well as the bounded native target backing.
-        if program.instructions.secure != listen.secure
+        if listen.address.port() == 0
+            || program.instructions.secure != listen.secure
             || program.listen_address() != listen.listen_address()
             || !Self::valid_target(&target, &program)
             || request_timeout_ticks == 0
@@ -84,8 +88,9 @@ impl HttpFiniteConfig {
         instance: ProducerInstanceKey,
         request_timeout_ticks: u64,
     ) -> Result<Self, BindingInputRejection<Vec<(AffordanceTarget, HttpProducerProgram)>>> {
-        if mappings.is_empty()
-            || mappings.len() > 32
+        if listen.address.port() == 0
+            || mappings.is_empty()
+            || mappings.len() > MAX_FINITE_MAPPINGS
             || request_timeout_ticks == 0
             || mappings.iter().enumerate().any(|(i, (target, program))| {
                 program.instructions.secure != listen.secure
@@ -167,6 +172,9 @@ pub struct HttpFiniteBinding {
     identity: (BindingId, BindingGeneration),
     issuer: Arc<()>,
     connection: Option<NativeConnection>,
+    // An assigned socket has one move into its original ready participation.
+    // Other registrations may qualify it, but cannot take or rebind it twice.
+    assigned: Option<AssignedSocket>,
     listener: Option<TcpListener>,
     shared_lease: Option<u64>,
     correlation: u64,
@@ -200,6 +208,7 @@ impl HttpFiniteBinding {
             identity: (id, generation),
             issuer: Arc::new(()),
             connection: None,
+            assigned: None,
             listener: None,
             shared_lease: None,
             correlation: 0,
@@ -208,6 +217,11 @@ impl HttpFiniteBinding {
             failed: None,
             closed: false,
         }
+    }
+
+    #[cfg(feature = "prepare")]
+    pub(super) fn use_assigned(&mut self, socket: AssignedSocket) {
+        self.assigned = Some(socket);
     }
 
     fn native_error(&self, phase: ErrorPhase) -> CoreError {
@@ -269,6 +283,12 @@ impl FiniteIngressBinding for HttpFiniteBinding {
                     * core::mem::size_of::<(AffordanceTarget, HttpProducerProgram)>()
                 + 4 * core::mem::size_of::<usize>()
                 + 64
+                + if self.assigned.is_some() {
+                    core::mem::size_of::<std::sync::Mutex<Option<std::net::TcpListener>>>()
+                        + 2 * core::mem::size_of::<usize>()
+                } else {
+                    0
+                }
                 + if self.configuration.security.is_some() {
                     8192
                 } else {
@@ -404,6 +424,14 @@ impl FiniteIngressBinding for HttpFiniteBinding {
         }
         if self.listener.is_some() {
             return Poll::Ready(Ok(()));
+        }
+        if let Some(assigned) = &self.assigned {
+            self.listener = assigned.lock().unwrap().take();
+            return if self.bound_address() == Some(self.configuration.listen_address()) {
+                Poll::Ready(Ok(()))
+            } else {
+                Poll::Ready(Err(self.failure(ErrorPhase::Prepare)))
+            };
         }
         let address = self.configuration.listen_address();
         let socket = match socket2::Socket::new(

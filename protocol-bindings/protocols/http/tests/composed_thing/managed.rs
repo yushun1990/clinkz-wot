@@ -930,6 +930,8 @@ fn review_retiring_an_unpublished_exposure_releases_qualification_scratch() {
         addresses,
         Rc::new(Counts::default()),
     );
+    let prepared_bytes = input.prepared.retained_bytes() as u64;
+    let cleanup_before = accounts.account(ResourceKind::CleanupBytesMax).used();
     let mut exposure = ComposedProducerExposure::try_new(
         &owner,
         input,
@@ -939,6 +941,7 @@ fn review_retiring_an_unpublished_exposure_releases_qualification_scratch() {
     )
     .ok()
     .unwrap();
+    let staged_cleanup = accounts.account(ResourceKind::CleanupBytesMax).used() - cleanup_before;
     let phase_bytes = scratch(&accounts);
     let total_before_retirement = live(&accounts);
     let remaining = accounts
@@ -967,7 +970,13 @@ fn review_retiring_an_unpublished_exposure_releases_qualification_scratch() {
         remaining,
         "successfully retired exposure cannot use final qualification scratch"
     );
-    assert_eq!(live(&accounts), total_before_retirement - phase_bytes);
+    let stage_released =
+        staged_cleanup - (accounts.account(ResourceKind::CleanupBytesMax).used() - cleanup_before);
+    assert!(stage_released >= prepared_bytes);
+    assert_eq!(
+        live(&accounts),
+        total_before_retirement - phase_bytes - stage_released
+    );
     assert!(live(&accounts) > 0); // lifetime/layout/cleanup owners are still alive
     let input = http_input(
         &owner,

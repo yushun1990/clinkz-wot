@@ -139,6 +139,17 @@ impl HostCapacityReservation {
         self.amount += amount;
         true
     }
+    /// Transfer already reserved units to an independent owner on the same bank.
+    /// Total use and peak stay constant throughout the handoff.
+    pub fn split(&mut self, amount: u64) -> Option<Self> {
+        self.amount = self.amount.checked_sub(amount)?;
+        Some(Self {
+            bank: self.bank.clone(),
+            kind: self.kind,
+            amount,
+        })
+    }
+
     /// Release only capacity held by this original move-only lease.
     pub fn release_part(&mut self, amount: u64) {
         self.amount = self

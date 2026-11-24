@@ -252,8 +252,8 @@ impl HttpProducerConfig {
         if input.target.len() > 64 {
             return Err(producer_unsupported());
         }
-        let target =
-            Target::parse_for(input.target, self.secure).map_err(|_| producer_unsupported())?;
+        let target = Target::parse_port(input.target, self.secure, self.address.port() == 0)
+            .map_err(|_| producer_unsupported())?;
         if target.address != self.address {
             return Err(producer_unsupported());
         }

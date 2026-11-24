@@ -136,6 +136,28 @@ pub trait ProducerCapability {
     ) -> CoreResult<bool>;
 }
 
+/// A linked Host finite service constructs its native configuration from only its
+/// selected mappings. Assembly is bounded and pure. Servient owns the driver,
+/// dispatch, work capacity and publication. Execution-only Bindings do not
+/// depend on this preparation facet.
+pub trait FiniteProducerService: ProducerCapability {
+    type Binding: clinkz_wot_core::finite::FiniteIngressBinding + 'static;
+
+    /// Maximum additional controlled backing in one prepare or assembly call,
+    /// including its returned owners until Servient accounts their actual size.
+    /// An in-place change to this bound must invalidate observed configuration.
+    fn setup_peak_bytes(&self) -> usize;
+
+    fn assemble<'a>(
+        &self,
+        instance: ProducerInstanceKey,
+        operations: impl Iterator<Item = &'a PreparedOperation>,
+    ) -> CoreResult<(
+        Self::Binding,
+        <Self::Binding as clinkz_wot_core::finite::FiniteIngressBinding>::Configuration,
+    )>;
+}
+
 pub struct PreparedOperation {
     pub site: FormSite,
     pub form: u32,
@@ -145,6 +167,10 @@ pub struct PreparedOperation {
     definition: Box<dyn Any>,
 }
 impl PreparedOperation {
+    /// Position in the exact eligible registration set used by this selection.
+    pub fn registration(&self) -> usize {
+        self.provider
+    }
     pub fn notification_start(&self) -> Option<NotificationKind> {
         NotificationKind::for_operation(self.operation)
             .filter(|kind| kind.start_operation() == self.operation)
@@ -178,6 +204,44 @@ impl PreparedThing {
     pub fn notification_mapping_count(&self) -> usize {
         self.notification_mappings
     }
+}
+
+/// Replace only the document base. Original Form hrefs, extensions and JSON
+/// number lexemes survive. The normal TD walk resolves the resulting document.
+pub fn description_at_base(
+    description: &str,
+    base: &str,
+    budget: &mut WorkBudget,
+) -> CoreResult<String> {
+    use alloc::collections::BTreeMap;
+    use serde_json::value::RawValue;
+    if description.len() > PRODUCER_DESCRIPTION_BYTES || base.len() > PRODUCER_DESCRIPTION_BYTES {
+        return Err(unsupported());
+    }
+    budget
+        .consume(
+            WorkClass::CodecInputBytes,
+            (description.len() + base.len()) as u64,
+        )
+        .map_err(|_| busy())?;
+    clinkz_wot_td::core::data_type::BaseUri::parse(base).map_err(|_| unsupported())?;
+    let mut fields: BTreeMap<String, &RawValue> =
+        serde_json::from_str(description).map_err(|_| CoreError::Validation(context()))?;
+    let encoded = serde_json::value::to_raw_value(base).map_err(|_| unsupported())?;
+    // The source already bounds all original members. Include the new encoded
+    // base, key, colon and comma before emitting the final document.
+    budget
+        .consume(
+            WorkClass::CodecOutputBytes,
+            (description.len() + encoded.get().len() + 8) as u64,
+        )
+        .map_err(|_| busy())?;
+    fields.insert("base".into(), &encoded);
+    let result = serde_json::to_string(&fields).map_err(|_| unsupported())?;
+    if result.len() > PRODUCER_DESCRIPTION_BYTES {
+        return Err(unsupported());
+    }
+    Ok(result)
 }
 
 fn context() -> ErrorContext {

@@ -8,7 +8,7 @@ use clinkz_wot_core::{
     publication::{ClosedProducerParticipation, ProducerNotificationBinding},
 };
 use clinkz_wot_foundation::{MonotonicInstant, WorkBudget};
-use clinkz_wot_servient_finite::{RawFiniteRuntime, RawProducerServient};
+use clinkz_wot_servient_finite::{ProducerFiniteSettlement, RawFiniteRuntime, RawProducerServient};
 use core::{
     any::Any,
     mem::size_of,
@@ -36,6 +36,7 @@ trait StoredParticipation {
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn native(&self) -> &(dyn ClosedProducerParticipation + 'static);
     fn native_mut(&mut self) -> &mut (dyn ClosedProducerParticipation + 'static);
+    fn take_finite_settlement(&mut self) -> Option<Box<ProducerFiniteSettlement>>;
     fn overhead(&self) -> usize;
     fn step(
         &mut self,
@@ -48,6 +49,7 @@ trait StoredParticipation {
 struct Stored<T> {
     native: T,
     turn: Turn<T>,
+    settlement: fn(&mut T) -> Option<Box<ProducerFiniteSettlement>>,
 }
 impl<T: ClosedProducerParticipation + Any> StoredParticipation for Stored<T> {
     fn as_any_mut(&mut self) -> &mut dyn Any {
@@ -58,6 +60,9 @@ impl<T: ClosedProducerParticipation + Any> StoredParticipation for Stored<T> {
     }
     fn native_mut(&mut self) -> &mut (dyn ClosedProducerParticipation + 'static) {
         &mut self.native
+    }
+    fn take_finite_settlement(&mut self) -> Option<Box<ProducerFiniteSettlement>> {
+        (self.settlement)(&mut self.native)
     }
     fn overhead(&self) -> usize {
         size_of::<Self>() - size_of::<T>()
@@ -85,19 +90,41 @@ impl OwnedProducerParticipation {
     /// Construction is pure. The turn must preserve original services, work,
     /// outcomes and cleanup; it must not publish, acknowledge or replay work.
     pub fn new<T: ClosedProducerParticipation + Any>(native: T, turn: Turn<T>) -> Self {
+        Self::with_settlement(native, turn, |_| None)
+    }
+    fn with_settlement<T: ClosedProducerParticipation + Any>(
+        native: T,
+        turn: Turn<T>,
+        settlement: fn(&mut T) -> Option<Box<ProducerFiniteSettlement>>,
+    ) -> Self {
         let original = native.participation_id().downgrade();
         Self {
-            native: Box::new(Stored { native, turn }),
+            native: Box::new(Stored {
+                native,
+                turn,
+                settlement,
+            }),
             original,
             failure: None,
         }
     }
     pub fn finite<B: FiniteIngressBinding + 'static>(native: RawFiniteRuntime<B>) -> Self {
-        Self::new(native, |native, owner, cx, now, credit| {
-            owner
-                .step(native, cx, &mut credit(ProducerWork::Participation), now)
-                .map(|_| ())
-        })
+        Self::with_settlement(
+            native,
+            |native, owner, cx, now, credit| {
+                owner
+                    .step(native, cx, &mut credit(ProducerWork::Participation), now)
+                    .map(|_| ())
+            },
+            RawFiniteRuntime::take_retained_settlement,
+        )
+    }
+    pub(crate) fn take_finite_settlement(&mut self) -> Option<Box<ProducerFiniteSettlement>> {
+        if self.has_original_native() {
+            self.native.take_finite_settlement()
+        } else {
+            None
+        }
     }
     pub fn actions<B: ProducerActionBinding + Any>(native: B) -> Self {
         Self::new(native, |native, owner, _, _, credit| {
