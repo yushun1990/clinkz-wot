@@ -2,19 +2,22 @@
 
 **Status** DISCUSSING
 
-**Recommendation.** Replace mandatory byte estimates and caller-supplied work budgets on the
-ordinary Host path with bounded storage at each owner and explicit checks when an obligation
-changes hands. Before accepting work, secure its result and cleanup path. Admit reversible
-setup in stages. Use advance reservations when a deployment promises that a later stage will
-have capacity. Drive ordinary calls with a deployment-configured quantum and keep explicit
-metering and caller-owned storage available for constrained execution.
+**Recommendation.** Use one publication and execution lifecycle per capability on Host and
+caller-owned deployments. Before accepting an obligation, secure its actual result and
+cleanup path. Admit reversible setup in stages. A deployment can guarantee specified local
+capacity by supplying the same owners' storage earlier. Make that promise only where the
+deployment can back it. Remove the general `WorkBudget` from execution, including manual
+driving. Give each driver bounded operations it can call and keep counters at the few owners
+that must enforce a cumulative limit. Retire the flat resource schema and its compatibility
+APIs as their callers migrate.
 
 Under the proposed default, a Host can acquire an assigned socket and subsequently lose the
-race for a final member slot. The caller recovers its inputs, the candidate owns the closed
-lease through disposal and a coexisting incumbent keeps serving. After an exchange is
-accepted, its space to settle survives even if another caller fills the result queue. Keep
-#308 paused and rebuild the exposure path on this distinction after contract review. The
-comparison uses master `fadb3aa6714c5faa20ba74e533f7a0aa8386e339` and #308
+race for a final member slot. The candidate holds the endpoint with ingress closed until
+rollback releases it. The caller recovers its inputs and a coexisting incumbent keeps
+serving. After an exchange is accepted, its space to settle survives even if another caller
+fills the result queue. Keep #308 paused and rebuild the exposure path on this distinction
+after contract review. The comparison uses master
+`fadb3aa6714c5faa20ba74e533f7a0aa8386e339` and #308
 `733e4d708b51c3db1b8357899eb93b5485a11bf4`.
 [PR #308](https://github.com/yushun1990/clinkz-wot/pull/308) ·
 [Current publication contract](../docs/spec/runtime-safety.md#L513-L526)
@@ -34,7 +37,8 @@ Concurrent call capacity and scheduling are deployment decisions.
 
 Core defines the shared meaning of identity, authorized effects, data and outcomes.
 Servient decides when a particular instance may act and when it has accepted an obligation.
-Foundation can supply time, checked arithmetic and move-only permits to either deployment.
+Foundation supplies time and generation primitives. A permit belongs to the pool whose
+capacity it excludes from other users.
 The following boundaries apply to both roles wherever they offer the interaction.
 
 | Obligation | Who can enforce it, and where the obligation ends |
@@ -46,11 +50,11 @@ The following boundaries apply to both roles wherever they offer the interaction
 | Cancel, replace and shut down truthfully | Servient fences the original generation immediately on revocation, records the first cause and retains late output and effect uncertainty. A Binding retires the exact exchange or participation, and owns final release of a shared listener, session or writer. A whole-owner transfer needs an accepting destination. A bounded diagnostic can survive an uncertain remote effect. Surviving local work still needs an owner. |
 
 An arena slot or owned buffer supplies **backing**. A debit on a shared tenant account
-supplies **exclusion** against other users of that account. A work allowance bounds **how
-far one drive may run**. The owner refunds a quota debit at the last use it represents.
-Spent work stays spent. None of these quantities measures kernel buffers, an opaque
-application's heap, or elapsed CPU time. A contract can legitimately require two of them at
-the same transition. [Foundation](../docs/spec/foundation.md) ·
+supplies **exclusion** against other users of that account. A cursor bounds **how far one
+drive may run** when its next step has a known maximum cost. A job can also cap the **total
+work across drives**. The owner refunds a quota debit at last use. Spent work stays spent.
+Kernel buffers, an opaque application's heap and elapsed CPU time have separate owners and
+require separate evidence. [Foundation](../docs/spec/foundation.md) ·
 [Binding delivery and retirement](../docs/spec/binding-spi.md#L62-L97)
 
 ## What master and #308 actually enforce
@@ -175,37 +179,67 @@ legitimately follow the result for longer than its active call. Keep the bank on
 enforces such a policy. Counters for diagnostics can be sampled separately from admission.
 Use a fixed-size fallback when even error reporting is saturated.
 
-### Publication
+### One publication path, including advance reservations
 
-Before acquiring a closed base, check known semantic and behavior requirements and acquire
-one bounded candidate with its rollback storage and deadline. The Binding returns the actual
-endpoint and its unique guard. Resolve and qualify the exact final TD under current
-configuration. Acquire storage and rollback capacity for the actual selected members *before
-each corresponding acquisition*. Try the full set of scarce commit resources together, or
-unwind partial acquisitions in a bounded order. Competing candidates must be able to release
-their leases without waiting for each other's next slot. A short cooperative turn keeps the
-same candidate and completed work. A permanent limit, conflict, cancellation or observed
-expiry fences that candidate and starts rollback immediately. If rollback itself requires
-a second slot, acquire that slot before setup. If a remote effect cannot be reversed, the
-mapping must support a truthful residual outcome or decline the operation.
+Consider two candidates for an assigned address. One draft registration can own both Forms,
+yet the final address can place them on different members. Servient has one job in either
+deployment. Keep ingress closed, resolve the acquired base, qualify every final Form against
+the current eligible registrations and actual behaviors, stage the selected members, then
+commit or roll back. Capacity never selects a cheaper Binding or removes a competitor from
+qualification. [Split-membership case](https://github.com/yushun1990/clinkz-wot/blob/733e4d708b51c3db1b8357899eb93b5485a11bf4/protocol-bindings/protocols/http/tests/producer_exposure.rs#L602-L696)
 
-After the last callback, verify the expected incumbent, exact original members, behaviors,
-coverage and readiness together. Commit the TD, authority and ingress gates in one bounded,
-infallible local transition. An exclusive route that needs break-before-make has the service
-gap already allowed by the roadmap. Closed local ingress can coexist with externally visible
-native setup. Each Binding must identify any remote residue and provide an admissible
-cleanup path.
-[Current qualification and replacement rules](../docs/spec/planning.md#L107-L152) ·
-[Roadmap on exclusive replacement](../PLAN.md)
+| Point in that path | Ordinary admission | Deployment promising local member capacity before taking the base |
+| --- | --- | --- |
+| Before acquiring the closed endpoint | Secure one bounded candidate and the capacity to release the base and return the inputs. | Also set aside actual member slots and their cleanup storage for the promised range of final selections. Bind each reservation to its pool and candidate. Obtain the whole set or unwind before making the promise. |
+| When the exact members are known | Take each selected slot from its owner with its rollback path. If the set cannot be acquired, unwind without waiting on another staged candidate to surrender a slot. | Move the selected slots already held into those same member owners. Return the surplus. A competitor may exhaust the free pool between the two stages. The covered candidate needs no second acquisition from it. |
+| Readiness, publication, dispatch and retirement | Both follow the same path from here. | The same member and reply handles enter the same checks, local commit, cancellation, result and retirement operations. Pool provenance follows each handle through last use. |
+
+The promise must name **which capacity, from which point, until which release**. Reserving
+two Servient records can guarantee room for two members. Guaranteeing *all* subsequent
+local capacity would also require actual usable backing for final qualification, temporary
+overlap, native assembly, retained results to the extent promised, and cleanup. If the final
+member is still unknown, interchangeable slots can come from one bounded pool. Slots private
+to different Bindings must be secured from each possible owner or guaranteed by a concrete
+partition at deployment. A byte receipt cannot reserve a route from an independent service.
+If an opaque SDK, fallible late allocation or unknown final shape defeats the requested
+guarantee, refuse it before acquisition. Proceed under ordinary admission only by explicit
+choice. A narrower guarantee may become possible once final membership is known.
+[What #308 actually prepays](https://github.com/yushun1990/clinkz-wot/blob/733e4d708b51c3db1b8357899eb93b5485a11bf4/servient/src/producer_composition.rs#L447-L535)
+
+Even a fully provisioned candidate can lose authorization, collide on a route, observe a
+different configuration or lose its native service. After the last callback, both deployments
+verify the expected incumbent, exact members, behaviors, coverage and readiness together.
+The bounded local commit publishes the TD and opens the original gates. Short progress keeps
+the candidate and its endpoint. Cancellation, permanent refusal or observed expiry fences
+it and starts rollback. An exclusive route may require a service gap. A visible native
+effect requires a truthful residual outcome or refusal of the mapping.
+[Publication coverage](../docs/spec/planning.md#L107-L152) · [Replacement policy](../PLAN.md)
+
+The same rule applies to Consumer results. An ordinary pool can supply the result cell when
+a call is admitted. Firmware can dedicate that cell at construction. The exchange owns the
+same result storage from acceptance until disposal under either policy. Dedicating it early
+can refuse a competing call that would otherwise fit. The benefit is availability for the
+named caller when it needs the cell.
+
+**Decision for the first successor.** Ship ordinary bounded admission and the ability to
+supply concrete storage. A firmware partition or Host deployment can use those same
+operations with slots it already owns. Introduce advance admission at a particular owner
+only for a stated availability requirement. Its extra logic ends when the reservation is
+moved into the pending operation. If meeting the requirement needs a second publication
+algorithm, a strict flag in dispatch/cleanup, or resource callbacks on unrelated Bindings,
+decline that guarantee for the configuration. A process-wide strict mode has no identified
+v1 consumer. The pressure test in #308 establishes protection from competing *account*
+debits for its case. An allocator or socket availability guarantee needs its own evidence.
+[Two-candidate pressure test](https://github.com/yushun1990/clinkz-wot/blob/733e4d708b51c3db1b8357899eb93b5485a11bf4/protocol-bindings/protocols/http/tests/producer_exposure.rs#L497-L594)
 
 ### Accepting and retiring work
 
-At each effect boundary secure everything the Engine must carry even if ordinary allocation
-and queues immediately fill. This includes the actual input or loan, the reply owner, a
-bounded normal or late result when promised, the minimal failure record and a way to retire
-the work. A status cell suffices only for a failure whose contract owes no data. Recheck
-original permission after reentrant callbacks and before the effect. Keep linked code and
-destructors outside registry locks.
+Every supported deployment must secure what the Engine owes at the effect boundary, even
+if ordinary allocations subsequently fail and queues fill. This includes the actual input
+or loan, the reply owner, a bounded normal or late result when promised, the minimal
+failure record and a way to retire the work. A status cell suffices only for a failure
+whose contract owes no data. Recheck original permission after reentrant callbacks and
+before the effect. Keep linked code and destructors outside registry locks.
 
 A handle can become its own cleanup record in place. An asynchronous transfer needs an
 already available destination that accepts the whole owner. Supported allocation failure
@@ -219,141 +253,213 @@ Process abort or a stopped driver cannot promise eventual completion.
 [Runtime cleanup and Drop](../docs/spec/runtime-safety.md#L535-L574) ·
 [Native delivery/retirement](../docs/spec/binding-spi.md#L62-L97)
 
-### Work per turn and over a job's lifetime
+### Which work needs a meter
 
-Require an enforceable input or batch bound for Engine work and a qualified, cooperative
-bound for each linked callback. A fixed-size transition needs no public counter. A TD walk,
-provider search, codec or fan-out over variable input needs finite input and total-work
-limits and either a bounded atomic step or a cursor. Debit actual work before callback
-entry. A retry continues the cursor or spends the original job's remaining allowance. Bound
-staged lifetimes and candidate count so a stalled preparer cannot monopolize every lease. An
-atomic step larger than every permitted turn must be refused explicitly or divided. Keep a
-linear allowance when multiple alternatives spend one quota. Use a single bounded batch size
-where that is sufficient and distinct units where, for example, bytes and provider calls
-need independent limits. A generic poll count cannot bound the contents of a poll. A wall
-clock can expire an obligation but cannot interrupt linked code.
+Remove the twelve-class vector from bounds passed among Core, Servient, Bindings, handlers
+and codecs. Moving it into the Host loop would leave the same declarations, prepayment and
+cross-phase dependencies in the implementation. A single Engine-wide fuel counter would
+still need a defensible exchange rate between a provider call, a schema visit and a wire
+byte. Use the least mechanism that enforces an observable bound at the owner doing the work.
 
-Give retirement a runnable path under ordinary saturation. A cleanup turn can poll the
-original native close and retain a racing value even if access or codec work has zero
-credit. Delivering that value to the application still requires the applicable checks. A
-zero-work manual turn may observe a fence or return an existing status. Linked callbacks
-require positive credit. Host scheduling can rotate ready owners, reserve opportunities for
-cleanup, and arrange a wake or a bounded retry when progress becomes possible. The
-caller-driven profile supplies its clock, readiness and turns. Progress is conditional on
-these services and on cooperative participants. Test a continuously ready sibling alongside
-a stalled one. [Finite and Action kernels](../core/src/execution.rs) ·
-[Host turn contract](../docs/spec/runtime-safety.md#host-producer-execution-turns)
+| Existing work classes | Target mechanism and reason |
+| --- | --- |
+| `QueueOperations`, `HandlerSteps`, `BindingPolls`, `CleanupItems` | A bounded queue insertion, one bounded handler/native poll, a gate change or disposal of a fixed slot needs no debit. The calling loop already controls how many times it calls an operation. Use a direct queue insertion or bound the actual traversal. For variable destruction or bulk retirement, keep a cursor over the remaining owners and release each on its last use. Secure cleanup storage at admission. A callback must fit its qualified input and per-call bound. |
+| `CodecInputBytes`, `CodecOutputBytes`, `UriBytes` | Enforce actual input, expanded output and retained byte limits at the codec or URI owner. A small bounded value can be processed in one call. For a stream or expansion too large for one turn, process a bounded slice and retain an offset. A concrete Binding may cap bytes written per poll, as MQTT does. Byte limits alone do not bound repeated schema comparisons or provider calls. |
+| `DocumentNodes`, `JsonSchemaNodes`, `PlanningItems`, `SecurityBranches`, `ProviderProbes` | Bound depth, alternatives and candidate sets at admission. Walk a bounded number of nodes or candidates per step. If the finite input bounds and algorithm already bound total work acceptably, the cursor position suffices. Rewinds, nested searches, fallback or repeated probes that can exceed the supported total need a nonrenewable allowance at the owning job, charged before the visit or callback. A permission check on one fixed target still runs at the effect boundary. |
+
+Three examples determine the boundary. A registry lookup can be bounded by maximum key
+length and tree height. Replaying its worst-case comparison/rotation count into a public
+queue budget adds no protection if that bound fits a turn. A Binding can cap the bytes and
+attempts in one native poll using its private state. The TD cursor, however, can rewind and
+repeat a semantic pass with identical input. Its total allowance must survive that rewind
+and new turns. The Linux TD admission fixture exercises the exact lifetime limit and refusal
+one unit below it. Discovery likewise has meaningful session-wide byte/page limits, while
+its current admission driver also sums twelve credit balances to detect progress. Have the
+cursor report advancement, completion or its own exhausted limit directly. A consumer of
+the cursor can then decide when to let the next step run.
+[Registry work formulas](../servient/finite/src/consumer_tree.rs#L23-L45) ·
+[MQTT write chunk](../protocol-bindings/protocols/mqtt/src/native.rs#L950-L976) ·
+[TD rewind boundary](../td/tests/runtime/src/scenarios.rs#L896-L963) ·
+[Discovery admission loop](../discovery/src/http/admission.rs#L78-L134)
+
+Use a second local counter only if exhausting it independently changes a promised outcome,
+for example a Directory session's byte limit and page limit. A finite job that delegates
+parts of one allowance must debit the parent or share its remaining balance. Starting a
+fresh turn, trying another registration or reentering a handler cannot mint more of it.
+Exhaustion ends that search. Previously accepted results and native cleanup stay with
+their owners and keep their own progress path.
+Long-lived subscriptions renew work per bounded delivery under their queue and overflow
+policy. A wall clock fences expired obligations. It cannot preempt a synchronous callback.
+A deployment must restrict, break up or decline a callback whose worst supported input
+would exceed its promised turn bound.
+
+**Cleanup is a different phase.** On master I cancelled a caller-owned Consumer Action
+before its first UDP send. With all other classes funded, independently withholding provider
+credit or codec-input credit left its original socket bound and made zero native close
+calls. Restoring credit closed that socket once, with zero send polls and no further
+validation. In the existing Producer Action control, cleanup alone closes the work even
+after its validator declaration changes. In the target, a bounded close poll can advance
+under ordinary saturation. A pending close keeps the native right. A racing output keeps
+any backing or loan it requires through disposal. Delivering that output still requires
+its own validation and fresh permission. A mapped remote Cancel remains an
+independently authorized effect.
+[Consumer prepayment](../core/src/execution/action.rs#L195-L211) ·
+[Public caller-owned cancellation control](../tools/architecture-fixtures/constrained-consumer/src/action/tests.rs#L1033-L1046) ·
+[Producer cleanup control](../servient/finite/src/action/validation_work_tests.rs#L232-L250)
+
+Manual driving means the caller can perform one bounded step and stop. Observing status or
+a previously recorded fence needs no drive and invokes no linked callback. A variable-size
+operation may accept a count in its own units where the caller needs to choose a batch.
+A batch of zero has the same passive behavior.
+Retain the cursor on yield. A step too large for every supported turn must be divided or
+refused explicitly. A Host driver can rotate through ready owners with a bounded number of
+visits, continue from the previous visit and give draining work a turn when admissions are
+saturated. An I/O wait needs actual readiness or a timer. A local yield needs another turn.
+A caller-owned loop supplies its own clock and progress. Only the driving adapter makes
+these scheduling choices. The Engine needs neither a shared queue of all runnable work nor
+a replacement budget type threaded through every facet.
+[Host Consumer turns](../servient/finite/src/consumer_execution.rs#L12-L52) ·
+[Producer driving](../servient/src/producer_execution.rs#L22-L49)
 
 ### Host, caller-owned execution and the Binding SPI
 
-On Host, configure finite capacities and overload policy once at deployment. The ordinary
-operation is `expose(td, behaviors, replacement)` or a named Consumer interaction. Expose a
-pending candidate or an admitted handle, a terminal refusal that returns recoverable inputs,
-and explicit cancel/close and result retrieval. Give pending work a specific resumption
-condition such as native readiness or the next turn. Report fixed limits with scope, phase
-and required/available amount when known. A terminal report from the owning Host must be
-final even while physical rollback drains. A poll on a foreign Host leaves the original
-candidate with its owner. Resuming accepted work uses its original handle. A fresh attempt
-after an uncertain effect needs an explicit application decision. Normal application code
-should have no reason to estimate a closure's transitive heap, request readiness tokens or
-fill twelve counters per member poll. If a handler transfers heap to a strictly bounded
-deployment, require a bounded representation, a retained application owner or a measured and
-enforced allocation contract at registration.
+A Host configures pool sizes and overload policy when building the service. An application
+calls `expose(td, behaviors, replacement)` or a named Consumer interaction. It gets a pending
+handle, success, or a terminal refusal with a way to recover its inputs. Pending identifies
+the next turn, native readiness or deadline. The same handle supports cancellation, close
+and result retrieval. Terminal failure on the owning Host is final even if physical rollback
+drains. A foreign Host leaves the candidate intact. Retry after an uncertain effect is an
+application decision. Report the enforcing scope, phase and amount when known, and distinguish
+transient contention from a permanently unsupported input or guarantee.
 [#308 application example](https://github.com/yushun1990/clinkz-wot/blob/733e4d708b51c3db1b8357899eb93b5485a11bf4/protocol-bindings/protocols/http/examples/serve_properties.rs#L105-L205)
 
-A third-party Binding declares its own ingress, buffering, concurrency and retirement
-policy. Each implemented facet supplies the owners it needs. Publication supplies a closed
-participation, exclusive ingress supplies its complete input and original reply or loan, and
-an outbound call supplies its own completion and retirement. Each has bounded progress and
-an observable local retirement or abort disposition. It returns protected operands on
-refusal. It owns socket pools, frame limits, backoff and last-user release. Servient alone
-authorizes application dispatch. Host preparation can keep Binding-owned assembly. Remove
-`setup_peak_bytes`, `definition_bytes` and `final_check_temporary_bytes` as ordinary
-registration requirements wherever the concrete owner already bounds growth. A strict quota
-covering those bytes needs an enforced maximum with a quota receipt, a participating
-allocator or an explicitly partitioned pool.
-[#308 preparation SPI](https://github.com/yushun1990/clinkz-wot/blob/733e4d708b51c3db1b8357899eb93b5485a11bf4/planning/src/producer_composition.rs#L90-L160)
+Each Binding facet supplies the actual owner its operation needs. Publication yields a closed
+participation. Exclusive ingress supplies the input and original reply right or loan. An
+outbound exchange retains its completion and retirement. A refusal returns the protected
+operands. The Binding bounds its own buffering, native polls, backoff and last-user release.
+Servient authorizes dispatch. A Host may erase these types or multiplex a shared listener.
+An ordinary third-party Binding can implement the facet without a footprint catalogue,
+reservation provider or executor. A deployment offering a stronger guarantee must control
+the relevant backing, including anything a callback transfers into it.
+[Binding delivery and retirement](../docs/spec/binding-spi.md#L62-L97)
 
-A Host adapter may erase types or share an explicit bank. A source-free caller may lend
-typed slots, mutable slices, a clock and bounded manual steps, with no allocator, pointer
-atomics, TD compiler or runtime imposed by this handoff. A fully backed typed slot can
-replace a mandatory `ResourceReservation` at the caller-owned Read entry. Indirect buffers
-and any second retained result need their own backing. If the Binding lends its sole output
-buffer, the holder can legitimately delay reuse until disposal. A separately funded copy
-buys concurrency. Hard RAM or latency claims require limits on payloads, SDK and callback
-behavior, plus target stack, allocator, interrupt and high-water evidence. Host allocation
-failure follows the participating allocator's actual failure contract. An opaque or aborting
-SDK needs deployment-level containment for stronger promises.
-[Caller-owned Read evidence](../docs/evidence/constrained-finite-execution.md) ·
-[Caller-owned Action evidence](../docs/evidence/continuing-action-runtime-independence.md) ·
-[Profile and environment contract](../docs/spec/foundation.md#L238-L261)
+A source-free caller supplies prepared meaning, typed slots, slices, a clock and manual
+progress. If an assigned base changes compiled meaning, the caller must supply a qualified
+final definition or the candidate must refuse publication. Core shares the effect and
+retirement transitions across representations. The caller's typed Read slot supplies the
+storage that currently also requires a `ResourceReservation`. Scalar inline execution uses
+caller storage without heap allocation, pointer atomics or an executor. Structured schema
+preparation has its own storage requirements and can run elsewhere. A sole loaned output
+buffer can delay the next call until the holder releases it. A separately provisioned
+buffer buys concurrency. A hard RAM or latency promise additionally needs bounded
+callbacks, target stack, allocator/SDK and interrupt evidence. A Host can report a recoverable allocation
+failure only when its allocator permits recovery.
+[Caller-owned Read](../docs/evidence/constrained-finite-execution.md) ·
+[Caller-owned Action](../docs/evidence/continuing-action-runtime-independence.md) ·
+[Environment contract](../docs/spec/foundation.md#L238-L261)
+
+## Disposition of existing resource abstractions
+
+The table gives the target for each family. Each replacement ships with its consuming entry
+point and the check that can falsify the retained guarantee.
+
+| Current abstraction | Decision and destination |
+| --- | --- |
+| `ResourceKind`, `ResourceLimits`, `ResourceProfileId`, `StaticResourceProfile` and the three named profiles | **Delete the exhaustive public schema.** Move applicable fields, units, zero semantics and finite defaults to the owner that checks them. A deployment can compose those settings. Delete the CSV generator, frozen digests and schema-wide checker with the last dependent path. Keep benchmark inputs with the benchmark. [Schema generator](../foundation/build.rs) · [Frozen checks](../tools/check-resource-limits.sh) |
+| `ResourceAccount`, `ResourceReservation`, `AdmissionLedger` | **Replace generic admission receipts.** A loan or slot owns its actual backing. A TD or Planning job owns any bounded scratch and durable output it needs, including their overlap. Keep high-water measurements at the allocation site where useful. Remove the six-bucket ledger and its commit/manual-refund API once their callers move. [Foundation accounting](../foundation/src/resource.rs) |
+| `HostResourceAccounts`, `HostCapacityReservation` | **Relocate shared quota enforcement to the Host deployment that needs it.** If independent tenants or services contend for one configured ceiling, retain atomic admission and a move-only permit that refunds the original quota through last use. Delete the dense bank from Core and remove the mandatory bank parameter. A local pool suffices when it already enforces the ceiling. [Bank and race test](../core/src/host_accounts.rs) |
+| `RawProducerRegistryLimits`, `RawFiniteLimits`, `RawActionLimits`, `RawNotificationLimits`, `DiscoveryLimits`, `BindingIngressLimits` | **Retain concrete bounds** for the registry, exchange, invocation, delivery or retrieval that can enforce them. Keep item and byte ceilings together where either can exhaust capacity independently. The native facet owns its wire limits. The application can observe which owner refused it. [Finite limits](../servient/finite/src/host.rs) · [Discovery limits](../discovery/src/http/mod.rs) |
+| `ProducerFiniteCapacity`, its six-charge `WorkLease`, `ConsumerCalls`, `ConsumerActions`, `ConsumerNotifications`, borrowed `ReadRuntime` and `ActionSlot` | **Retain the pools, slots and distinct release points. Replace the Producer funding bundle** with real active/settlement storage and any separately enforced shared quota. `FiniteIngress`, `RawFiniteReply` and `RawFiniteSettlement` carry the original work and outcome. `ProducerAcceptPermit` proves current authority independently of capacity. [Producer capacity](../servient/finite/src/producer_capacity.rs) · [Native owners](../core/src/finite.rs) · [Accept authority](../core/src/producer.rs) |
+| `CleanupReservation`, `CleanupPhaseContext`, `CleanupTransferEnvelope`, `CleanupTransferAcceptance` | **Replace numeric cleanup funding. Retain whole-owner transfer.** Retire in the original slot or use an already available destination. Carry subject, first cause and deadline. Rejection returns the complete work to its source, acceptance transfers it exactly once. Keep a transfer operation only on facets that actually hand off surviving work. [Current transfer contract](../core/src/binding.rs#L651-L846) |
+| `WorkBudget`, `WorkClass`, `BudgetExceeded`, `ActionWork::prepay`, `work()`/`poll_work()` declarations and per-member budget factories | **Delete across the full call chain.** Replace with bounded polls, byte slices, cursors or a job-local lifetime allowance under the criteria above. Keep explicit yield, I/O wait, exhaustion and terminal dispositions. Remove the Host factories and the manual credit argument together for each migrated operation. [Action entry](../core/src/execution/action.rs) · [Host driving](../servient/finite/src/consumer_execution.rs) |
+| `BindingResourceDeclarations`, `BindingResourceContract::{StrictV1, ConsumerOwnedV2, ConsumerOwnedHostV2}`, lifetime/transient footprints and `BindingStateLayout` | **Delete registration-wide modes and transitive cost declarations.** Use the real type's layout for a supplied slot, enforce indirect backing at its owner and keep bounds on particular native facets. Relocate useful artifact/plan measurements to their builders. Replace handler footprint estimates with a bounded value or a retained application owner wherever the Engine promises backing. [Binding declarations](../core/src/binding.rs) · [Handler footprint](../core/src/handler.rs) |
+| `ConsumerPropertyReadPolicy`, its Host/static build and runtime adapters, schema-2 encoding and configuration digest | **Replace the adapters and delete their policy format** after the public Read path and both source-enabled and prepared-only clients migrate. Preserve operation/Binding/generation and relevant configuration identity. Rebuild or reject an old prepared artifact if its meaning changed. Retire the overlay with its final reader. [Read adapters](../servient/src/consumer_property_read.rs) · [Schema-2 contract](../docs/spec/consumer-resource-ownership.md) |
+| #308's `ProducerStorage`, `MemberFunding`, `FiniteSetupFunding`, `ProducerStageFunding`, `QualificationFunding` and public byte estimates | **Replace staged funding with the candidate's real leases, slots and qualification scratch.** Remove `candidate_bytes`, `handler_backing_bytes`, `base_backing_bytes`, `setup_peak_bytes`, `definition_bytes` and `final_check_temporary_bytes` from ordinary setup. A named advance reservation can live at the supplying pool. Reuse exact final qualification, closed endpoint retention and composed commit. [Funding bundle](https://github.com/yushun1990/clinkz-wot/blob/733e4d708b51c3db1b8357899eb93b5485a11bf4/servient/src/producer_composition.rs#L447-L535) · [Preparation SPI](https://github.com/yushun1990/clinkz-wot/blob/733e4d708b51c3db1b8357899eb93b5485a11bf4/planning/src/producer_composition.rs#L90-L160) |
+| `CoreError::LimitExceeded` and `ResourceFailureDomain` | **Retain bounded failure reporting.** Replace the obligatory global resource key with the enforcing owner's limit and amount where meaningful. Preserve phase, domain, retry information and effect certainty, including when allocating a diagnostic would fail. Protocol fields stay inside the Binding. [Core errors](../core/src/error.rs) |
 
 ## Disposition of #308 and the roadmap
 
-1. **Review the contract change first.** Keep #308 open as a source of behavior and tests.
-   After adoption, supersede the current funding design in a successor change based on
-   master. Migrate the general rules in ADR-0025 and ADR-0015's work amendment, Foundation
-   `RES-OWNER/HANDOFF/WORK`, Runtime Safety
-   `SAFE-PUBLISH/CLEANUP/DROP/CONCUR/OVERFLOW/PROFILE`, Planning isolation/coverage, the
-   Binding ingress/delivery/retirement SPI and Core outcome semantics. Retain the existing
-   authority and lifetime checks on all current paths until the successor is admitted.
-   Distinguish the optional advance-completion guarantee from the required cleanup
-   guarantee. Record the revised rationale in an ADR, reconcile the architecture backbone
-   and authority/API/state projections, and adjust the affected WP-000/100/200/300/400
-   clauses. Migrate affected contract tests with their new owner. Preserve the meanings of
-   StrictV1 and the Consumer schema-2 overlay for retained adapters and their old evidence.
-   Retiring an adapter can remove its bookkeeping with its callers. New meanings require new
-   dispositions. [Authority map](../docs/spec/authority.toml) ·
-   [Work packages](../docs/work-packages/index.toml)
-2. **Rebuild the finite public Producer entry.** Reuse Binding-owned assembly,
-   assigned-socket retention, exact final selection, shared listeners, returned handlers and
-   the tested composed commit. Replace mandatory candidate/scratch estimates and speculative
-   member prepayment on the default path. Move policy-specific pressure assertions to the
-   stronger deployment that promises completion. The head review records four distinct
-   defects. Terminal failure followed by a successful publish violates either design. Two
-   Forms that share one final HTTP member can be refused with three cleanup slots because an
-   unrelated registration raises the speculative member count. Lowering the readiness
-   ceiling to one let both Reads succeed in the review. Configuration callbacks at zero work
-   violate a metered entry. The HTTP execution-only test target also imports
-   preparation-only APIs. Carry all four as successor regressions with the appropriate
-   semantics.
-   [Terminal failure](https://github.com/yushun1990/clinkz-wot/pull/308#discussion_r4680764946)
+1. **Change the accepted contracts before resuming implementation.** Keep #308 paused. Use
+   its public wire cases and independent review when building a successor from master.
+   Amend ADR-0015/0025, Foundation `RES-OWNER/HANDOFF/WORK/SCHEMA/ENV` and the affected
+   Runtime Safety, Planning, Core and Binding clauses. Specify what must already be secured
+   at each acquisition, acceptance and transfer. Keep generation, authority, bounded
+   cleanup, overflow and equivalent Host/caller-owned behavior in force. Adjust the
+   affected work packages and projections with their owning specifications. This proposal
+   carries no milestone or contract status change. [Authority map](../docs/spec/authority.toml)
+   · [Work packages](../docs/work-packages/index.toml)
+2. **Build one finite Producer slice through the public Host and caller-owned entries.**
+   Join #295/#300 publication, #296 independent exchanges and #299 source-free execution.
+   Reuse #308's Binding-owned assembly, assigned socket, exact final qualification and
+   rollback. Let two ordinary candidates acquire closed endpoints for one remaining member
+   slot. Return the loser's inputs and release its original socket while the winner serves.
+   Check split final membership, ambiguity and an unrelated registration. Run cancellation,
+   foreign or stale owners, late completion and result retention through replacement.
+   Verify the wire, actual socket reuse and exact handler/settlement ownership. Keep the
+   four #308 review regressions explicit. Failure reported as terminal stays terminal. Two
+   Reads sharing one final member fit the real cleanup slots. Passive zero-work observation
+   invokes no configuration callback. The execution-only HTTP build accepts its own test
+   targets. [Terminal failure](https://github.com/yushun1990/clinkz-wot/pull/308#discussion_r4680764946)
    · [Cleanup ceiling](https://github.com/yushun1990/clinkz-wot/pull/308#discussion_r4680764964)
    · [Zero-work callback](https://github.com/yushun1990/clinkz-wot/pull/308#discussion_r4680764978)
    · [Feature boundary](https://github.com/yushun1990/clinkz-wot/pull/308#discussion_r4680764987)
-3. **Use the two deployment paths to settle the SPI.** Join the public exposure in #295/#300
-   to exchange retirement in #296 and the source-free Producer in #299. Stage two candidates
-   for one final slot. One must be able to fail after acquisition, release its original
-   endpoint and leave the winner serving. In a deployment promising advance capacity,
-   pressure from the second candidate must leave the first one's reserved local completion
-   path usable. Test split final membership, ambiguity, cancellation, stale and foreign
-   owners, two native offers finishing out of order, and a retained result through
-   replacement. Fill ordinary pools and withhold codec/authorization work while draining the
-   original native right. Check the wire, socket reuse, exact handler/result owner, and
-   bounded wake/turn progress in addition to counters. Preserve execution-only builds and
-   exercise the same lifecycle with a separately authored Binding and caller storage.
-   [Publication objective](https://github.com/yushun1990/clinkz-wot/issues/295) ·
-   [Independent native work](https://github.com/yushun1990/clinkz-wot/issues/296) ·
+   · [Public API](https://github.com/yushun1990/clinkz-wot/issues/300)
+3. **Test an advance reservation at its owner when a deployment needs it.** Repeat the
+   finite case with the same Binding, same pool and same candidate, commit, dispatch and
+   retirement operations. Apply contention before the promise and after it. Early refusal is
+   valid before the promise. After success, exhaust all free slots and deny further
+   allocation of the promised backing. The covered operation must still use its original
+   slots and return them on rollback or last release. The two policies can admit different
+   contenders. For an admitted candidate with the same inputs and environment, compare the
+   published coverage, wire effects, first cause and release sequence across both trials.
+   Verify ordinary dispatch with a Binding that cannot supply the promise and explicit
+   rejection of that guarantee before native acquisition. If this needs a second execution
+   loop or changes Binding selection, narrow or withdraw the promise. Ordinary admission
+   can ship independently. [#308 contention control](https://github.com/yushun1990/clinkz-wot/blob/733e4d708b51c3db1b8357899eb93b5485a11bf4/protocol-bindings/protocols/http/tests/producer_exposure.rs#L497-L594)
+4. **Migrate work bounds through each complete call chain.** For finite Read and continuing
+   Action, change the shared Core step, both storage adapters, the Binding/codec/access
+   facet and their public drivers together. Saturate ordinary pools and settle an original
+   exchange with no new access or codec calls for local close. Preserve late data for its
+   authorized retrieval. A ready sibling and a drain must progress while new admission is
+   refused. Exercise a separately authored Binding and caller-owned UDP on the host, and
+   compile the source-free entry for `thumbv6m-none-eabi`. For TD/Planning/Discovery, move
+   the step and exhaustion result to the traversed job. Repeat exact and one-short lifetime
+   tests across rewind and resumption. Exercise bounded bytes/pages, callback counts and
+   explicit yield versus I/O wait. Remove the migrated calls' cost declarations and budget
+   factories at both ends. [Shared finite step](../core/src/execution.rs) ·
    [Caller-owned execution](https://github.com/yushun1990/clinkz-wot/issues/299) ·
-   [Public API](https://github.com/yushun1990/clinkz-wot/issues/300)
-4. **Extend only the demonstrated boundary.** Exercise admission across Action controls and
-   MQTT deliveries, then callback subscriptions and occurrence replies in #297. A single
-   delivery cleanup failure should leave a healthy Thing serving. A damaged shared stream
-   must fence its dependents. Use #298 to compare staged and held allocator bytes, quota
-   headroom, useful completions and cleanups per turn under contention on ordinary public
-   entry points. Compare one and many idle Things at fixed active demand. Retain explicit
-   reservation wherever a smaller representation loses an owed result or cannot finish local
-   rollback. Consumer selection (#293), per-effect security (#294) and bounded Discovery can
-   progress on their own dependencies. Revisit the durable roadmap after acceptance. Keep
-   milestone status tied to public integration, independent review and the advertised
-   deployment. [Subscription ownership](https://github.com/yushun1990/clinkz-wot/issues/297)
-   · [Cost and reuse](https://github.com/yushun1990/clinkz-wot/issues/298) ·
-   [Roadmap and milestones](../PLAN.md)
+   [Independent exchanges](https://github.com/yushun1990/clinkz-wot/issues/296)
+5. **Delete the superseded path with its last caller.** Move the Host and static Property
+   Read API, crate re-exports, examples, benchmarks and downstream fixture callers onto
+   the supported entry. Remove the old adapter, its profile/overlay input, frozen encoding
+   checks and unused Foundation types when their last in-tree consumers move. In-flight
+   work on a still-supported path keeps its original owner. Preserve old evidence at its Git
+   revision and rebuild prepared artifacts whose configuration meaning changed. The project
+   has no released compatibility obligation. A new wrapper, legacy feature or second
+   execution path would need a named product consumer. [Pre-release compatibility](../PROJECT_GOVERNANCE.md#pre-release-api-compatibility)
+   · [Read API consumer](../tools/architecture-fixtures/consumer-property-read-runner)
+   · [Preparation consumer](../tools/architecture-fixtures/property-read-runner)
 
-**Evidence boundary.** On master I ran seven shared-work HTTP cases, 40 caller-owned
-Consumer fixture tests, the fixture build for `thumbv6m-none-eabi`, 16 MQTT Producer Event
-tests with Mosquitto 2.0.22, 17 remote Discovery tests and five HTTP tests with default
-features disabled. On #308 all twelve public exposure cases passed. HTTP package tests with
-default features disabled failed to compile the new exposure target. The staging
-measurements above used a disposable test on that exact head. The proposed admission and
-progress changes still need the paired Host and caller-owned execution described above.
+Extend the demonstrated boundary to MQTT deliveries and #297 subscriptions. An individual
+cleanup failure can leave a healthy Thing serving. A lost shared transport must fence its
+dependents. Use #298 to measure staged and held allocator bytes, quota headroom, useful
+completions and cleanups per turn on the public paths. Compare one and many idle Things at
+fixed active demand. Retain a concrete reservation where a smaller representation loses an
+owed result or the ability to retire. Consumer selection (#293), per-effect security (#294)
+and bounded Discovery retain their own dependencies. Revise the durable roadmap on
+acceptance. [Publication objective](https://github.com/yushun1990/clinkz-wot/issues/295) ·
+[Subscription ownership](https://github.com/yushun1990/clinkz-wot/issues/297) ·
+[Cost and reuse](https://github.com/yushun1990/clinkz-wot/issues/298) ·
+[Roadmap and milestones](../PLAN.md)
+
+**Evidence boundary.** Master `fadb3aa6` supplied seven shared-work HTTP cases, 40
+caller-owned Consumer tests, 16 MQTT Producer Event tests with Mosquitto 2.0.22, 17 remote
+Discovery tests and five execution-only HTTP tests. For this refinement I reran the 40
+Consumer tests and the `thumbv6m-none-eabi` compile, the Producer Action cleanup control and
+the Linux TD admission harness including lifetime exhaustion on rewind. A disposable
+variant of the caller-owned UDP test independently withheld each of the two credits reported
+above and checked socket reuse. The reproducer is in the proposal PR. On #308 `733e4d70`
+all twelve public exposure cases passed again. The previously observed execution-only HTTP
+test build failure and the two-candidate heap measurement pertain to that head. These
+controls exercise the current contracts. The paired ordinary/advance-reservation trials
+and the revised progress API are successor work.
