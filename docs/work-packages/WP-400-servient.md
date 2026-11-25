@@ -23,6 +23,40 @@ independent review are determined from the current repository for each material
 slice, not from a saved next-action list. New interaction families and Bindings
 are outside this architecture migration.
 
+## Public finite publication, acceptance and retirement
+
+Use one Servient lifecycle with linked Binding-owned assembly on Host and typed
+caller-owned storage for a trusted final TD. Secure rollback before each
+acquisition. Replace the six-charge `WorkLease` with active exchange storage,
+an independently retained settlement and any expressly shared deployment permit.
+Replace handler, candidate, setup and qualification byte estimates with their
+actual owners. Admission of an effect secures the result, validation overlap
+and retirement path. Move any promised continuation and correlation into place
+without a second admission. [Runtime Safety](../spec/runtime-safety.md)
+
+For an advertised advance reservation, use the same Binding and member pool.
+Contend both before and after the promise. After success exhaust the free slots
+and deny allocation of promised backing. Publish or roll back using the original
+slots and release surplus. Compare coverage, first cause, wire effects and
+final release with ordinary admission for the same admitted inputs. A Binding
+unable to supply this promise can serve ordinarily and must refuse that guarantee
+before acquiring its endpoint. This trial is conditional on a deployment need.
+
+Replace the credit factories on `step_consumers` and `ComposedProducerExposure::step`
+with bounded turns through their existing owners. Migrate `ConsumerProgress::step`
+and the custom `OwnedProducerParticipation::new` turn signature with them, and
+remove the `ProducerWork` credit selector. Drive ready siblings and local drains
+while admission is saturated. Hold the only result slot with a second request
+waiting. Taking the result still holds the slot. Its final disposal alone must enable exactly one dispatch via a pool
+wake or promised maintenance turn, including release during waiter registration.
+Exercise a three-owner callback chain. Deferring nested drives bounds a one-poll
+outer turn to one poll while a nested cancellation takes effect immediately.
+If the driver permits nesting, exercise its maximum depth and fan-out.
+
+The implementation increments below record the original Host and caller-owned
+paths. Their account and work-credit oracles characterize those revisions.
+Use the owner and release oracles above for each migrated entry.
+
 ## Raw finite shared-instance slice
 
 The additional [caller-owned finite Read](../spec/runtime-safety.md#caller-owned-finite-read)
@@ -50,9 +84,9 @@ alternatives and remaining runtime-independence work belong to the
 [evidence](../evidence/continuing-action-runtime-independence.md). Existing
 notification/Producer ownership, TD integration, credentials and embedded driving
 are not ported. No package, milestone or gate status changes.
-The generic caller-owned output facet validates each exact application loan at
-`result(budget)`; owned settlement transfer alone cannot seal a later native view.
-Short work and invalid loans keep original evidence/funding, and input inspection
+The generic caller-owned output facet validates each exact application loan.
+Owning a settlement cannot seal a later native view. Yield or invalid data
+preserves original evidence and backing. Input inspection
 lends the original owner's current view rather than an implicit dispatch receipt.
 The existing runtime contract and output-loan regressions own these boundaries.
 
@@ -64,8 +98,7 @@ logical owner. Accepted work retains the original instance through native
 settlement and acknowledgement. Registry mutation/destruction has at most 32
 entries and 16 behaviors per instance with names at most 256 bytes; linked
 callbacks/local destructors remain trusted cooperative code, not preemptible.
-Caller-provisioned runtime slots have independent native/dispatch/cleanup budgets
-and no growing Engine runtime queue. There is no aggregate process-RAM claim.
+Caller-provisioned runtime slots bound the native work and retirement they own. There is no aggregate process-RAM claim.
 
 The optional [finite Producer capacity increment](../evidence/producer-finite-capacity.md)
 separates persistent typed native participation from active work and retained
@@ -96,9 +129,8 @@ constrained execution are separate work.
 
 `FiniteValidation::Required` refuses an absent actual provider input/output service at
 admission and fences start/acceptance/delivery on service loss. Raw mode remains
-explicit. Complete shape/backing checks precede the codec callback; dispatch
-prepays the count/name lookup plus the declared maximum body and both media
-traversals. Invalid output becomes the retained exchange error before the native
+explicit. Check the complete shape and backing before the codec callback.
+Bound the lookup and body/media traversal at their actual owners. Invalid output becomes the retained exchange error before the native
 reply. Input is checked before fresh authorization and handler effects using
 that same original candidate. A service is part of its actual captured
 configuration, not a support tag. The output-only finite API is replaced directly.
@@ -109,7 +141,7 @@ send; expiry, clock mismatch/regression and explicit close keep the first cause,
 complete original exchange and accepted behavior until retirement/acknowledgement.
 Expiry of a prepared reply can retire its work independently under the
 [finite participation contract](../spec/runtime-safety.md#finite-producer-participation-and-work-capacity).
-Zero credits can fence locally but cannot run a native/cleanup poll. Drop remains
+Passive observation can see a recorded fence without polling native work. Drop remains
 finite local disposal, not a completed network drain.
 Old finite callers migrate directly to the explicit time/validation arguments.
 
@@ -150,10 +182,9 @@ names directly; the finite native runtime remains a finite-only facet. The same
 instance may have Property and Action behavior, or only Action behavior. Core
 defines raw Action behavior, independent application continuation, selected
 per-operation Binding mapping association and effect-uncertain result shape.
-The Servient reserves a bounded per-owner invocation slot and declared application
-work footprint before handler entry, retains original behavior/principal and
-monotonic invocation identity, and enforces input/output and paid lookup/step
-ceilings. Separate query/cancel routes may belong to other Bindings. Controls
+Before handler entry the Servient secures an invocation slot, retained result
+and local retirement. It retains the original behavior, principal and monotonic
+invocation identity. Bound input, output and lookup at their actual owners. Separate query/cancel routes may belong to other Bindings. Controls
 recheck current instance, route, principal and policy; neither a copied reference
 nor a native request correlation is execution permission.
 
@@ -162,8 +193,8 @@ of accepted work without redirecting it. Cancel and local abandon allow late
 completion; a funded explicit close or owner retirement first delivers any queued
 application cancellation once (retaining its error) before polling local close.
 Explicit close retains failed/pending cleanup and reports local cancellation
-without claiming remote terminal state. Input traversal and handle-based step
-lookup are prepaid before scanning admitted fields/invocations. While the owner
+without claiming remote terminal state. Bound input traversal and handle lookup,
+including the synchronous callbacks they invoke. While the owner
 lives, capacity, original behavior and result remain charged until settlement
 acknowledgement. Host linked callbacks and local disposal are trusted/cooperative;
 the owner is manually progressed and does not supply a scheduler or guarantee a
@@ -202,11 +233,9 @@ participation may be a lease on shared infrastructure; no Engine distribution,
 native session manager or new protocol integration is introduced.
 
 `RawNotificationLimits` bounds root/queue storage, retained payload backing,
-controls, target names and per-owner Engine reservations. Each slot prepays one
-extra handoff and one response payload; native participation/reply indirect
-backing stays at the Binding owner. These conservative logical allowances are
-not additive shared physical RAM or aggregate Host-account qualification. Linear
-work budgets precede callbacks/queue progress. Stop fences delivery before mapped
+controls and target names. Retain backing for an extra late handoff and the
+promised response when the ordinary queue is full. Native participation and
+reply backing stay at the Binding. Each queue or native operation has a bound. Stop fences delivery before mapped
 cancellation, including unsupported/denied cancellation. Pending/error retains
 original data, reply jobs, first cause and capacity; bounded owner cleanup can
 return complete terminal reports after all cursors are lost. Host-root Drop uses
@@ -326,10 +355,11 @@ Unread native completion remains revocable until a paid settlement handoff with
 fresh time, original authority and captured service/access checks. The HTTP
 Consumer regressions cover direct handoff and additional progress after
 revocation, denial, service/root loss, cancellation or expiry, plus insufficient
-handoff work and callback-time service loss. An actual HTTP query exchange also
-returns its original late output through retirement after a poll error; the
-original error, late output and captured validation failure remain independently
-retained and funded. These repairs do not change package acceptance status.
+handoff work and callback-time service loss. The earlier HTTP Query fixture
+validates a late output during retirement and records a validation failure
+separately from the poll error and bytes. WP-100's successor case releases
+the native slot with the codec unavailable and validates only on a requested
+handoff. [Bounded execution and TD admission](WP-100-core.md#bounded-execution-and-td-admission)
 
 The continuing owner now isolates linked execution from registry borrows under
 [SAFE-CONCUR-001](../spec/runtime-safety.md). Its
@@ -374,11 +404,9 @@ The [Producer turn contract](../spec/runtime-safety.md#host-producer-execution-t
 replaces storage-only participant erasure with the original native member and
 its typed Servient turn. Existing finite, Action and notification capabilities
 retain independent authority, preparation, native ownership and settlement.
-Per-member/lane budgets keep native Action ingress separate from accepted work;
-errors/short credit do not skip siblings. Funded revoked-Action local close no
-longer requires application handle enumeration. Optional revoked-work marking and
-fair selection use one funded Action-store scan; the selected original index is
-progressed without handle lookup/relookup. Manual and aggregate progress share
+Native Action ingress and existing drains can progress independently. A stalled
+participant cannot starve a ready sibling. Marking revoked work and selecting
+an original Action can share a bounded scan, retaining its index through close. Manual and aggregate progress share
 that algorithm while keeping their distinct local-close policies. Publication, emissions, result
 observation/acknowledgement and complete-set retirement remain explicit.
 
@@ -508,7 +536,7 @@ and preparation limits; no package or profile qualification is implied.
 
 Calls and abandoned-handle cleanup retain their original native owner and first
 cause through cancellation errors/Pending, policy/service loss, revocation and
-late completion. Every native/cleanup callback needs credit. A successful raw
+late completion. Each native or cleanup poll has a bounded operation and owner. A successful raw
 result is validated by the captured codec/type service before logical success;
 invalid output remains retained separately until settlement disposal. The
 settlement's `result()` is the application outcome; `native_outcome()` preserves
@@ -586,24 +614,11 @@ can continue after root loss. Drop uses the concrete Binding's finite local
 abort and reports no completed remote drain. All dispatch still occurs in the
 single source-free Servient registry, with fresh policy/current-instance checks.
 
-The Host account bank reserves controlled owner layouts, declared handler and
-configuration indirect backing, description/property backing, one input/result
-opportunity and prepaid cleanup before native setup. Original reservations are
-shared by runtime and behavior, so accepted instances and unread results retain
-them through replacement. Final TD decoding/semantic temporary capacity and its
-overlapping Engine charge are reserved separately before setup, owned only by
-the exposure's qualification phase. Pending qualification keeps them for retry;
-completed qualification releases them after its temporary owners are destroyed
-and before the local publication commit. Cancellation, timeout, setup failure,
-cleanup-only progress and exposure Drop also end that phase without releasing
-the independent lifetime/result/cleanup leases. Caller-provided
-description/handler/provider construction
-precedes admission; output construction stays application-backed until accepted.
-JSON decoding uses bounded input and serde's finite recursion limit with a
-conservative Host temporary allowance, not an allocator-intercepted heap maximum.
-Native OS/SDK allocation and finite disposal remain Binding/deployment policy.
-These are aggregate reservations for this owner, not complete qualification of
-all legacy flat resource fields or a measured maximum-RAM/performance claim.
+The earlier single-Read facade reserved a dedicated opportunity and worst-case
+finalization scratch at its bank before setup. Replace those estimates in the
+public successor. Keep the partial-setup rollback, exact final TD, late result
+and socket-release cases. JSON input size and native SDK limits stay with their
+respective owners.
 
 `joined_producer` exercises the public facade over real HTTP peers and the public
 Consumer using the exact published TD: complete coverage refusals, anonymous/
@@ -686,23 +701,12 @@ mappings refuses a 256-item successor before setup. Its returned successor can r
 with a 257-item policy or after the incumbent closes and drains one row.
 [Retirement fixtures](../../protocol-bindings/protocols/mqtt/tests/support/notification_capacity/retirement.rs)
 
-The existing shared `HostResourceAccounts` bank reserves Engine retained bytes,
-cleanup byte/item allowances and a Thing slot before ownership handoff. Costs
-include controlled layouts, definition storage, captured reference vectors,
-declared handler indirect backing, actual participant configuration/input bounds
-and promised retained result opportunities. Qualification reserves the bounded
-Host common TD allowance plus the maximum declared peak temporary backing of
-the actual sequential support/final-check callbacks, with the overlapping Engine
-charge. Final comparison uses original definitions without a second retained
-set. Unknown bounds refuse admission and return the original owners before a
-callback or native setup. Changes to a registered bound invalidate staged
-coverage. The conservative staging reservation ends on publication, cancellation,
-definitive qualification failure, successful retirement or disposal.
-Successful retirement ends qualification even when callers closed every typed
-native owner directly. Failed retirement and pending pure work preserve their
-applicable owners for retry. Lifetime and cleanup reservations are one shared physical
-reservation owner retained by the exposure, actual participants and original
-logical instance; shared retention references do not debit the bank again.
+The earlier composed path tested contention on its account bank. For ordinary
+staging, replace the conservative reservation with actual candidate and
+qualification storage. Keep the selected definitions and all relevant support
+answers current until the local commit. On refusal or cancellation release
+provisional backing and retire exactly the original closed members. Carry
+the serving owners into the publication. An unread result survives its loss.
 
 Typed participant loans do not permit substitution to escape accounting: an
 extracted native owner retains its original funding, and a replacement object's
@@ -814,9 +818,8 @@ No dependency, milestone, gate or production status changes.
 
 The result-ownership review corrections use slice-only public query/settlement
 views and a per-admission result lease. Live and acknowledged-but-retained results
-share the original store's bounded slots; managed admission additionally reserves
-each result's maximum byte/cleanup capacity from the captured original bank before
-behavior. The [HTTP regressions](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
+share the original store's bounded slots. Before behavior, admission must
+secure the actual outcome storage and retirement path. The [HTTP regressions](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)
 retain the exact allocation across shared settlement/root loss, exhaust retained
 result slots, reuse only disposed capacity and verify rollback for each exhausted
 account. Raw lifecycle tests likewise require disposal before slot reuse.
@@ -853,10 +856,9 @@ schema backing survives normal/cancelled/revoked original work and settlements.
 This does not establish cross-instance continuing definition reuse or broaden
 notification and root status profiles. The structured-data evidence records the
 specific runtime tests; no common interaction state machine is introduced.
-Producer Action publication captures the validator's extra-work allowance;
-invoke prepays both potential validation callbacks and a continuing poll prepays
-output validation. Changed service bounds fence validation without replacing
-original work or requiring handler/codec credits for independent close.
+Qualify the Action validator for both input and immediate or continuing output.
+Changed services fence validated delivery. The original close poll can retire
+work without calling a handler for new effects or entering the codec.
 
 ## Finite TD Security / HTTPS increment
 

@@ -16,11 +16,24 @@ Applicable requirements: AUTH-EVIDENCE-001, MOD-DEPS-001, SAFE-PROFILE-001, PERF
 
 Required evidence follows actual claims: Scoped real execution and conformance, feature/dependency cells, retained-owner cleanup under saturation, measured capability/profile performance and independent v1 technical release review. Historical gates and manifests cannot certify the successor.
 
+## Migration and integration evidence
+
+Exercise the public finite path, then the remaining Read and continuing Action
+call chains, including separately authored native I/O and a source-free
+`thumbv6m-none-eabi` build. Port the Host and static Read builders and
+runtime entries, re-exports, examples, benchmarks and fixtures before deleting
+their adapters. Rebuild prepared artifacts when meaning changes. Delete the
+legacy profile generator, encoding and schema-wide checks with their last
+reader. Keep measurements at their original revision and benchmark inputs with
+their workload. Measure staged and retained allocator bytes, quota headroom,
+useful completions and retirements per turn with active demand held fixed
+across one and many idle Things. [Migration dependencies](../../PLAN.md#engineering-priorities-and-dependencies)
+
 The [Host Consumer turn increment](../evidence/consumer-execution-composition.md)
 provides scoped executable composition of finite HTTP, continuing HTTP Actions
 and MQTT notifications under managed Consumer authority. Native readiness and
-deployment maintenance turns use independent work credit; manual APIs remain
-available. This is integration availability, not all-family Producer reuse,
+deployment maintenance turns exercise the earlier credit-based drivers. Rerun
+the release and isolation cases on the migrated bounded drivers. This is integration availability, not all-family Producer reuse,
 security/source qualification, an embedded-profile claim or release acceptance.
 
 The [Host execution increment](../evidence/host-execution-integration.md) joins

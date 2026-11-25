@@ -10,6 +10,25 @@ execution-only composition does not. Package completion is not a blanket start
 barrier; exact available predecessors and affected authority must support the
 chosen slice under ADR-0013. No new runtime tranche is admitted by this migration.
 
+## Owner-backed Binding handoffs
+
+An independently authored facet supplies closed participation, a moved reply
+or exclusive loan, its own bounded native progress and retirement. Refuse before
+acceptance with the original offer and deadline. Retire registration-wide
+`BindingResourceDeclarations`, StrictV1/schema-2 modes, generic lifetime and
+transient footprints and `BindingStateLayout` with their users. Keep concrete
+wire and ingress bounds. Retire numeric cleanup funding. A facet handing off
+surviving work must transfer the whole owner to an available destination,
+returning it intact on rejection.
+
+Fill the native correlation table with a reply and an invocation slot free.
+An Invoke promising a later lookup must refuse before handler entry. An
+acknowledgement-only Invoke promising no addressable identity, control or root
+inventory must enter once, reply and retire its local continuation without
+taking a correlation slot. For an addressable Invoke, contend reentrantly for
+the last correlation slot and resolve the original ID after the initial reply
+fails. Keep fresh authority on later controls. [Binding contracts](../spec/binding-spi.md)
+
 ## Continuing execution representations
 
 The [caller-owned continuing Action facet](../spec/binding-spi.md) supplies typed
@@ -22,7 +41,7 @@ embedded transport, native registration/preparation and other profiles remain op
 
 ## Dynamic finite destinations
 
-The Host finite seam permits pure paid native destination resolution before
+The Host finite seam permits bounded pure native destination resolution before
 actual-destination authorization and verifies the same operand at native start.
 The [HTTP evidence](../evidence/uri-variables.md) scopes supported placement and
 compatibility; existing owners retain native effects and retirement. No universal

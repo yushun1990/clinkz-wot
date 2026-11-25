@@ -3,7 +3,8 @@
 This tree has one architecture target: **a semantic Engine with separate
 execution capabilities over Binding-owned protocol runtimes**. The source map
 is [authority.toml](spec/authority.toml); [ADR-0025](ADRs/0025-semantic-engine-and-binding-runtimes.org)
-records the decision and the dispositions of earlier decisions.
+records the decision, including the amendment selecting owner-enforced admission.
+[Foundation](spec/foundation.md) defines backing, shared limits and bounded progress.
 
 `AUTH-REV-001`: The registered v6.0 sources are the sole target authority in this
 tree. The complete migration becomes mainline authority in one atomic merge of

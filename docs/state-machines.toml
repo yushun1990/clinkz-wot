@@ -43,11 +43,11 @@ states = ["Draft", "InstallingClosed", "Finalizing", "Qualified", "Serving", "Dr
 initial = "Draft"
 terminal = ["Closed", "FailedClosed"]
 required_events = []
-invariant = "No dispatch before Serving. Closed setup may be externally visible. Qualified includes final TD coordinates, actual providers, behavior and required readiness; local publication performs no new fallible native preparation. Closed describes local ownership, not remote rollback."
+invariant = "A closed candidate backs rollback of each acquisition. Once the final selection is known, it takes the exact members or uses its promised slots. Shortage unwinds its own partial claims. Final coverage, expected incumbent, current dependencies and ready gates commit together. Terminal refusal cannot later publish. Rollback returns protected inputs and preserves remote residue."
 
 [[machine.transition]]
 from = "Draft"
-event = "fund-and-capture-known-dependencies"
+event = "capture-known-dependencies-and-secure-endpoint-rollback"
 to = "InstallingClosed"
 
 [[machine.transition]]
@@ -57,12 +57,12 @@ to = "FailedClosed"
 
 [[machine.transition]]
 from = "InstallingClosed"
-event = "actual-participation-ready"
+event = "closed-base-or-trusted-final-definition-available"
 to = "Finalizing"
 
 [[machine.transition]]
 from = "Finalizing"
-event = "final-td-endpoints-support-and-behavior-qualified"
+event = "final-td-support-behavior-and-exact-members-ready"
 to = "Qualified"
 
 [[machine.transition]]
@@ -116,7 +116,7 @@ invariant = "Unsupported is allowed for deferred Consumer candidates; for a full
 
 [[machine.transition]]
 from = "OwnedInput"
-event = "fund-pure-construction"
+event = "claim-bounded-construction-storage"
 to = "Constructing"
 
 [[machine.transition]]
@@ -161,7 +161,7 @@ states = ["Reserved", "Running", "ResultRetained", "Cancelling", "Settled", "Cle
 initial = "Reserved"
 terminal = ["Released"]
 required_events = []
-invariant = "Local terminal and release differ; original identity/program/principal/reply survives. Remote effect uncertainty and physical owner status remain separate. Persistent finite associations require no vacant slot; explicit work owners supply admission capacity independently and retain original instance/work quota debits through settlement disposal. Finite and continuing Action Consumer admission/progress retains occupied original slots while linked callbacks run outside registry borrows; passive first-cause/cancel/abandonment controls survive checkout; final removal linearizes handoff. Managed finite instance/facet removal and standalone authority release passively fence acceptance and require application-scheduled progress, without automatic driver notification; actual aggregate controller loss locally disposes abandoned original work, including after checked-out restoration, without disposing surviving handles or settlements. Finite Consumer normal/rejected/native output views lend slices without exposing original allocation owners; retained settlement owners keep original response/native/definition funding until final disposal. Optional finite Producer capacity separates persistent native participation, active execution credit and retained outcomes: native settlement releases active credit, acknowledgement transfers the original funded outcome, and final disposal alone refunds retained quota/backing. Dedicated single-opportunity policy remains available; native exclusive-exchange policy and complete publication/retirement remain unchanged."
+invariant = "Before an effect, secure the original authority, right, input, result with its promised handoff, and retirement. Refusal returns the complete offer with its deadline. Passive cancellation survives checkout. Linked callbacks run outside registry borrows. Native retirement releases active capacity. Unread and caller-held results keep their own backing and any counted quota until its promised release. Loss of the root requires bounded local disposal or acknowledged transfer. A replacement cannot redirect late evidence or release an old loan."
 
 [[machine.transition]]
 from = "Reserved"
@@ -210,11 +210,11 @@ states = ["Admitted", "Running", "Terminal", "CleanupPending", "Released"]
 initial = "Admitted"
 terminal = ["Released"]
 required_events = []
-invariant = "Consumer Action definitions, instance/access associations, admitted invocations and separately funded capacity have independent lifetimes; association view loss is passive, capacity close fences only its admitted work, and original prepared declarations are never refreshed. Complete new-work qualification remains separate from live invalidation: original Invoke native/authority dependencies and the control owning a current exchange/unread result govern admitted Consumer work; data dependencies follow the owned representation. Shared Action schemas do not impose Invoke media or resource limits on Query output. Normal/late completed values use the returning operation's captured data service and body/scratch/work policy; retired input codecs and unused or fully retired nonterminal controls cannot revoke unrelated work. Pre-effect control refusal cannot revoke unrelated accepted work or grant control permission. Action lifetime is not initiating exchange lifetime; per-invocation querying/cancellation requires supported described operations and pinned native continuation. A root aggregate query observes original authorized invocation owners without changing their states or creating control authority; native inventory and correlation remain Binding-owned. Servient owns dispatch, continuation, terminal retention and settlement; native references confer no local ownership outside the original invoke participation, while described controls retain original instance/route/principal checks across participants. Native failure facts require Servient reconciliation for logical revocation, independently of native close. Local abandonment does not assert remote terminal. Producer acknowledgement transfers the original result slot and per-result backing/cleanup leases until settlement disposal; retained Producer results cannot replenish admission capacity. Consumer settlement frees the execution slot while transferring its outstanding-work quota and backing to the result owner; only disposal refunds that quota/backing. Query/settlement views lend slices without exposing the original payload Arc. The common Consumer Action transition kernel owns only per-invocation semantic state; Host and caller-owned drivers retain independent native work, input/result, continuation, authority and funding representations. The caller-owned slot requires no reference counts, atomics or Host registry; original reservation disposal follows native/input/result disposal. Owned caller Action settlement transfer grants original recipient permission but does not seal future native views. Each application result loan pays adapter and original data work and validates the exact view it returns; invalid loans preserve first cause and native evidence without native progress or new authority. Input inspection lends the retained owner's current view rather than a dispatched byte receipt. Native-evidence and input inspection prepay adapter work for each present value; absent/native-error observations remain passive, and short credit preserves original causes and owners without callbacks."
+invariant = "Before handler entry Servient claims the original invocation and the Binding holds its reply. An advertised wire identity, later control or root inventory also requires exclusive correlation through ID installation. An acknowledgement-only mapping can keep its continuation local. Failure of the first reply preserves the original invocation and any promised lookup under fresh authority. Root inventory observes those owners without acquiring control rights. Original Invoke dependencies and the current exchange govern admitted work. Unused or retired controls cannot fence a sibling. Physical retirement and raw-evidence disposal need no codec. A validated handoff checks the returning operation's exact value and schema under current permission. A raw native view or a retained input view is separate evidence. Local abandonment, cleanup failure, late output and remote effect remain distinct. Acknowledgement transfers the result owner through disposal."
 
 [[machine.transition]]
 from = "Admitted"
-event = "invoke-under-current-grant"
+event = "invoke-with-original-grant-and-continuation-secured"
 to = "Running"
 
 [[machine.transition]]
@@ -254,7 +254,7 @@ states = ["Reserved", "Establishing", "Active", "Stopping", "CleanupPending", "C
 initial = "Reserved"
 terminal = ["Closed"]
 required_events = ["Reserved:cancel-or-fail-before-native-start"]
-invariant = "Each Engine logical subscription captures its notification kind and scope and has independent cursor/permission/stop. Persistent associations require no vacant conversation slot; independent work capacity retains the original context per entry. Prepared declarations cannot be refreshed by capacity construction. Original occurrence coordinates reach fresh acceptance/delivery/response policy without implying authenticated source provenance. Subscription Maintain checks carry no occurrence; Deliver/Respond always carry an original item. Explicit item refusal leaves the conversation Active and retains payload/reply until bounded retirement, while authority/dependency or native retirement failure fences the conversation. Observed validation dependency loss irreversibly fences even after declaration restoration; ordinary caller-input/short-work refusal remains recoverable only while current. Refused items cannot resurrect or acquire application delivery/response rights. Retained report target backing keeps its original owner until disposal. A Property collection has one root identity and complete named schema; an Event collection retains each occurrence target and its original member data/response roles separately from root scope. Neither creates member cursors. Attribution backing is bounded with data before handoff. Public delivery views lend payload/media and occurrence-name slices under the exclusive original root borrow; advance/cleanup cannot release their original allocation owners while the loan is used. Native distribution may share backing; response-bearing topology is qualified. Event loss is not state coalescing. Before native start, cancellation or funding failure retains the first cause and releases prepaid reservation/control/cleanup capacity without claiming a remote effect. Once native setup begins, failure or cancellation retains its actual setup owner through cleanup."
+invariant = "The original conversation owns its controls, occurrence identity, data roles, queue, loss policy and response opportunities. Maintain checks the subscription. Deliver and Respond check a specific original occurrence. A refused item retains its payload and reply for retirement. A refused occurrence cannot revive after a policy change. An observed dependency failure fences the original conversation even if the dependency is restored. Before native establishment, a refusal returns protected input. Once accepted, the continuing identity survives retirement of each exchange and delivery. Root collections preserve original membership and member data roles. An isolated item or delivery failure retires its work. A lost required participation fences its dependents. Bounded loss reports and local cleanup remain possible with the ordinary queue full."
 
 [[machine.transition]]
 from = "Reserved"
@@ -382,7 +382,7 @@ states = ["Retained", "Offered", "SuccessorOwned", "Complete", "Released"]
 initial = "Retained"
 terminal = ["Released"]
 required_events = []
-invariant = "Residual external state is recorded separately; it never authorizes freeing surviving local state. Source transfer is not acknowledgement of final physical cleanup."
+invariant = "Retire the exact owner in place or offer it to an available destination. Carry subject, generation, first cause, supplied-clock drain deadline and the complete live right. Rejection restores it to its source. Acknowledgement transfers the release obligation once. Remote residue never releases surviving local work."
 
 [[machine.transition]]
 from = "Retained"
@@ -478,32 +478,32 @@ id = "native-candidate-acceptance"
 requirements = ["SPI-INGRESS-001", "SAFE-AUTH-001", "EXEC-ID-001"]
 participants = ["logical-instance", "native-infrastructure", "accepted-work"]
 preconditions = ["native-candidate-retains-original-token-and-captures", "current-logical-generation-serving-policy-data-and-capacity", "reply-cardinality-qualified", "captured-behavior-and-physical-backing-retained"]
-ownership = "Native progress is independently owned; each recipient acceptance is separately linearized. No Engine message copy or universal matcher is required."
+ownership = "The Binding retains an intact offer for redelivery or returns it to the designated retry owner. Each recipient must secure actual outcome and retirement storage before it accepts. A capacity wait preserves its original deadline and authority."
 
 [[composition]]
 id = "producer-qualified-publication"
 requirements = ["PREP-COVER-001", "SAFE-PUBLISH-001"]
 participants = ["producer-publication", "prepared-entry", "native-infrastructure"]
 preconditions = ["every-final-retained-form-operation-fully-qualified", "actual-behavior-services-bound-endpoints-and-readiness", "deferred-pure-materialization-funded-with-established-support", "final-cancellation-dependency-check-and-nonfallible-local-commit"]
-ownership = "One Servient-local transition publishes final description, logical registry and current authority; native setup/control is not application dispatch."
+ownership = "One callback-free local commit opens the exact ready members and publishes their final TD. Ordinary staged acquisition and advance reservations enter the same commit, admission and retirement operations."
 
 [[composition]]
 id = "independent-settlement-and-retirement"
 requirements = ["SAFE-CLEANUP-001", "SPI-RETIRE-001"]
 participants = ["accepted-work", "cleanup-owner", "native-infrastructure"]
 preconditions = ["local-terminal-keeps-original-release-owner", "whole-owner-transfer-is-acknowledged", "physical-release-waits-for-final-use"]
-ownership = "Logical release never closes sibling service or certifies remote rollback; infrastructure shutdown has its own authority. Expiry of an accepted finite reply retains its first cause on the settlement. The Binding can release that exchange while the original participation continues under current authority. Independent ingress loss fences the affected dependents."
+ownership = "Infrastructure shutdown has its own authority. A timed-out reply keeps its first cause and any retryable cleanup error. While retirement is isolated the original reply remains backed for retry and other exchanges on that member can finish. Loss of isolation or required ingress fences affected acceptance and drains the original work. Local retirement preserves remote effect uncertainty."
 
 [[composition]]
 id = "consumer-capacity-turn"
 requirements = ["SAFE-AUTH-001", "SAFE-CONCUR-001", "SAFE-CLEANUP-001", "RES-WORK-001"]
 participants = ["logical-instance", "accepted-work", "action-invocation", "notification-conversation", "cleanup-owner", "native-infrastructure"]
-preconditions = ["original-managed-reference-and-independent-family-permission", "separate-per-capacity-credit-and-original-work-owners", "deployment-native-wakes-and-maintenance-turns", "application-result-observation-in-driving-task"]
-ownership = "A borrowed turn creates no owner or scheduler. Existing family transitions retain normal/late results and pending/failed retirement. Live notification cursors retain unread reports; aggregate driving disposes abandoned reports only after complete original local retirement and paid cleanup. Explicit manual cleanup may instead collect reports after cursor loss. Passive logical replacement or owner loss cannot retarget work or manufacture a wake; native physical resources remain Binding-owned."
+preconditions = ["original-managed-reference-and-independent-family-permission", "inclusive-bounded-turn-and-original-work-owners", "deployment-native-wakes-and-maintenance-turns", "application-result-observation-in-driving-task"]
+ownership = "A bounded turn includes sibling reentry and callbacks. Nested drives may defer while passive cancellation and revocation take effect immediately. Yield retains the cursor. A capacity wait registers and rechecks, or has independent retry turns. Ready siblings and original drains receive progress. A retained result releases its own slot on final disposal."
 
 [[composition]]
 id = "producer-participation-turn"
 requirements = ["SAFE-AUTH-001", "SAFE-CLEANUP-001", "SPI-RETIRE-001", "RES-WORK-001"]
 participants = ["producer-publication", "accepted-work", "action-invocation", "cleanup-owner", "native-infrastructure"]
-preconditions = ["original-native-membership-issuer-instance-and-typed-servient-operation", "independent-member-and-native-action-work-credit", "deployment-native-and-maintenance-turns", "explicit-application-outcome-observation-and-acknowledgement"]
-ownership = "The existing composed owner retains execution with native erasure. A short/error member cannot skip siblings; native callbacks receive no semantic dispatcher. Action selection and opt-in revoked-work marking share one prepaid scan and retain the selected original index through progress; manual progress keeps normal late-completion policy. Revoked original Actions enter funded local close without handle enumeration or remote CancelAction. Pending/error cleanup and unread or caller-held outcomes retain original funding. Publication, emission and exact complete-set retirement remain explicit; a progress return does not prove physical release."
+preconditions = ["original-native-membership-issuer-instance-and-typed-servient-operation", "bounded-member-native-and-accepted-action-operations", "deployment-native-and-maintenance-turns", "explicit-application-outcome-observation-and-acknowledgement"]
+ownership = "Servient drives the exact installed member and original accepted work. A bounded visit includes callbacks and synchronous reentry. Ready siblings and draining work progress despite a stalled member. Local close needs no codec or access callback. Publication, emission, outcome handoff and physical retirement retain separate owners."

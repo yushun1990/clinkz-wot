@@ -34,25 +34,26 @@ An explicit selector narrows admitted meaning and cannot weaken security or
 invent a different operation. Pair the actual compiler/executor/configuration,
 codec, validator and security implementations: format/type/hash/operation/scheme
 indexes alone are insufficient. Refuse ambiguity rather than select by accidental
-registration order. Preserve native collection semantics. Candidate fallback
-shares its work budget and MUST NOT silently retry uncertain effects.
+registration order. Preserve native collection semantics. Fallback shares the
+owning search's remaining allowance wherever repeated probes require a lifetime
+bound. An uncertain effect MUST NOT trigger automatic retry.
 
 For finite responses, selected support includes every primary/additional
 alternative of that Form/operation: its exact media parameters, default or
 response-specific data role/schema, declared success, actual validator and
 unambiguous executable native identification. A Consumer may select supported
 interactions from a larger TD, but cannot select only the convenient response
-branches of an interaction. Producer qualification covers every alternative of
-every advertised retained Form/operation, both before native setup and against
-the final TD before publication. Unsupported branches cannot disappear from the
-published description. Native status/header/content discrimination belongs to
+branches of an interaction. A Producer checks known draft requirements before
+native setup and qualifies every advertised alternative on the exact final TD
+before publication. Unsupported branches cannot disappear from the published
+description. Native status/header/content discrimination belongs to
 the actual Binding, not common Planning. Scheme/type/media indexes do not prove
 that complete pairing.
 
 Common response preparation preserves additional-response order, applies TD
 media/success defaults and resolves named schemas inside the selected semantic
-closure. It prepays bounded schema construction/rollback before retaining the
-owned response set; current preparation bounds additional constraints together
+closure. Its builder bounds schema construction and rollback while retaining the
+owned response set. Current preparation bounds additional constraints together
 to 64 nodes and 4096 name bytes, at most 32 additional entries. Checked content
 reuse compares the complete response set without reconstructing replacement
 schema owners. Request media remains a distinct mapping operand; an unused
@@ -130,16 +131,16 @@ unsupported meaning already present at publication is a qualification defect.
 It completes before dependent native effects, dispatch or validated delivery.
 An execution-only Producer materializes required data before installation.
 
-Closed native setup can determine actual endpoints before final qualification.
-Qualification MUST apply to the exact published TD, actual bound endpoints,
-native collisions and ready members. An immutable staged TD can carry complete
-coverage through closed installation if all changes affecting that coverage
-are ordered against commit. A change to the final TD requires qualification
-of the new meaning. A change affecting a provider answer invalidates coverage
-even if it restores an earlier value. This supersedes freeze-before-all-effects,
-always-eager Producer lowering and equality-only endpoint ownership as general
-contracts. Native collision/multiplicity checks belong to the Binding; Engine
-selection still requires an unambiguous actual owner of each selected mapping.
+When a Binding learns an address during closed setup, resolve the final base
+and qualify the resulting Forms against all eligible registrations, including
+previously losing competitors. The final selection can split or combine draft
+members. Acquire storage for the actual final members. A shortage refuses the
+candidate and returns its protected owners through rollback. It cannot remove a
+competitor, alter Form preference or manufacture coverage. Native collisions
+and readiness belong to the actual Binding. An immutable final TD can reuse
+coverage only while every relevant dependency remains current through commit.
+For a source-free Producer, require current coverage for the supplied final
+meaning or refuse until the caller supplies a freshly qualified definition.
 
 URI preparation validates base/templates. Dynamic variables use shared bounded
 prepared expansion, followed by Binding-native address checks. Destination policy
@@ -199,15 +200,15 @@ inside that funded bound; no allocation-free compiler representation is imposed.
 ## Open finite Consumer implementation
 
 `open_consumer::ConsumerRegistry` captures actual startup compiler/executor and
-codec/validation/access service owners. `ConsumerCompiler` declares cooperative
-inspection, start, per-step, lifetime, abort and artifact-destruction bounds;
-`Copy` and atomic output are not eligibility rules. General typed/static pairing
+codec/validation/access service owners. Each compiler bounds its actual
+construction, scratch and disposal. Incremental and owned output are eligible.
+General typed/static pairing
 uses the same actual configuration contract without compiler-name tests. The
 restricted `InlineConsumerCompilerSupport` is neither consulted nor issued by
 open admission. Its old general public names and conversion methods are removed.
 
 Basic admission and the existing common whole-description Form walk are reused
-without Producer publication qualification. One paid semantic arena per Form
+without Producer publication qualification. One bounded semantic arena per Form
 lends resolved `FormOwner`/operation facts to the actual candidates. The general
 compiler input has no logical Property Read record or mandatory TD id. The
 Consumer reports each Form/effective operation, including unsupported alternatives;
@@ -240,14 +241,12 @@ cannot weaken them. Complete Producer qualification still requires every retaine
 effective operation, actual behavior and mapping. It cannot keep a Read while
 silently dropping an unsupported advertised Write.
 
-Eager `prepare` lends each `ConsumerCompilation` to a caller driver. Native
-`step` is resumable under small caller credits while that single common semantic
-loan lives. The entire native lifetime allowance is prepaid from the transaction
-budget shared by alternatives; per-step credit cannot renew it. Early driver
-return, cancellation, failure or invalid output aborts under prepaid rollback.
-Cursor/output slots, declared indirect backing, callback scratch, original parent
-leases and aggregate retained destructor work are acquired/qualified before
-start. There is no partial installation or native I/O during preparation.
+Eager preparation lends the actual compiler a bounded semantic view. For a
+resumable compilation retain that view, its cursor, output and scratch while
+they overlap. A repeated search shares its job-local allowance with compiler
+probes and alternatives. Yield keeps the cursor. Early return, cancellation,
+failure or invalid output unwinds its provisional owners without publishing
+a partial mapping or performing I/O.
 
 `ConsumerExecutionContent` captures immutable affordance, operation, selected security requirement and data-role
 meaning without endpoint, service, authority, policy or account fields.
@@ -298,7 +297,7 @@ their own actual dependencies and specialization rules.
 
 `type_schema::prepare_schema` captures the bounded structured subset defined in
 [Core](interaction-core.md). A bounded borrowed census checks supported assertions,
-nodes/names/depth and prepays recursive construction/rollback before allocation.
+nodes, names and depth. The builder bounds actual allocation and rollback.
 Scalar input/output roles now own their dynamic constraint storage; their actual
 bytes and disposal work are no longer zero. Reuse uses `matches_schema` or the
 named-member comparison against borrowed TD facts, without compiling another
@@ -348,52 +347,23 @@ is counted only where response/schema instructions are constructed. Ordinary
 fresh support probes may still lower temporary definitions; the supplied HTTP
 definition path and selected final checks bypass that work.
 
-Definition byte declarations count each returned mapping's additional backing.
-Shared content excluded from that amount must retain its own complete original
-physical reservation through every reference, including native configuration
-snapshots. Instance admission separately pays for descriptions, coordinates,
-operands, behavior, publication, participants, results/cleanup and final-check
-scratch. The [runtime owner](runtime-safety.md#reusable-producer-definition-ownership)
-keeps these lifetimes independent. There is no automatic cache or new gate.
+Shared instruction, schema and response backing stays with its original owner
+through every mapping and native configuration snapshot. Each instance supplies
+space for its references, operands, behavior and publication. Temporary checking
+space ends with the check. [Runtime ownership](runtime-safety.md#reusable-producer-definition-ownership)
 
-`ConsumerDefinition::bind` attaches a retained actual access policy and independent
-instance bank without recompilation or source callbacks. `ConsumerBinding` is the
-association handoff; Servient attaches its independently current
-`ConsumerInstanceRef` without allocating call slots. Work capacity and its account
-are chosen separately at finite admission, as specified by
-[Runtime Safety](runtime-safety.md) and [Foundation](foundation.md).
-Bindings may share content or an unchanged qualified mapping while preserving
-separate permission, records, call/result/cleanup accounts and native limits.
-Changed captured service bounds cannot be refreshed by binding another instance.
-Refusal returns the original mapping/policy owners. The convenience `prepare`
-result supplies bindings at the preparation bank; callers can retain definitions,
-discard those initial bindings, and bind independently after source retirement.
+Binding an existing Consumer definition attaches its actual access policy
+without recompilation or source callbacks. Servient supplies independent
+current authority and admits work separately. A changed service cannot become
+a new baseline by binding another instance. Refusal returns the original
+mapping/policy owners. A definition can be bound after the source is retired.
 
-`ConsumerRegistry::try_new` adopts raw data/access services at its explicit bank,
-matching raw aliases only within those inputs. It is a startup convenience for
-services not independently adopted elsewhere. Cross-registry/Servient service
-composition uses `ConsumerRegistry::try_from_retained` with
-`RetainedConsumerRegistrationInput`: actual preparation plus separately retained
-data and access owners. The composition root adopts each physical service once
-with `ConsumerServiceOwner::retain_data` / `retain_access` and propagates that
-owner. Adoption refusal returns the complete raw input. Import retains its
-original bank without recharging/transferring backing, including when the data,
-access, registry and instance banks differ. Changed backing declarations refuse
-import rather than refresh the original owner. Complete actual qualification and
-fresh per-instance access/security checks remain mandatory.
-
-Both constructors separately reserve registry-only records/references and each
-actual native registration. Partial refusal rolls back new local reservations
-and returns all protected inputs without refunding pre-existing service owners.
-Registry records retire when their registry does; prepared users keep the original
-service/native owners through normal and late result disposal, in either root
-retirement order. Mapping/content backing and instance records have separate funding.
-See [Foundation](foundation.md) for physical retention and accounting. This is a
-Host representation of the boundary, not an Arc field or executor requirement on
-semantic content or a new all-profile execution claim. Host startup reference construction uses
-the existing trusted Host allocation policy; fallible native compiler-slot and
-owned-cursor allocations are exercised independently. This is not an allocator
-interceptor or a claim of recoverable process-wide OOM.
+A composition root adopts each actual service once and imports its retained
+owner across registries and Servients. Raw alias matching within one startup
+construction cannot discover independent adoption elsewhere. Each registry
+supplies its own records and native registrations. Refusal unwinds those claims
+and returns protected inputs. Retained users keep the original service and
+native owners through their final normal or late result.
 
 ## URI-variable preparation
 
@@ -409,7 +379,7 @@ meaning under separately qualified mappings.
 
 An unresolved template is not a concrete destination or credential audience.
 Definition/instance preparation checks actual services and native eligibility;
-it defers actual-destination permission to paid pure native resolution and fresh
+it defers actual-destination permission to bounded pure native resolution and fresh
 instance authorization for each interaction. This grants no permission to make
 I/O during preparation/resolution. Static mappings retain their preparation
 destination check. Unsupported selected assertions or missing native resolution
@@ -461,11 +431,11 @@ The Host registry indexes the selected Action's Form coordinates and resolved
 addresses during one Basic admission and URI walk. When the search needs an
 operation on a Form, it reserves candidate storage for that operation. All
 registrations allowed by its selector share one loan of the Form's resolved
-semantics. If another operation on that Form is needed, it obtains a new paid
-loan from the admitted input. A Form with all three roles takes at most three loans.
+semantics. If another operation on that Form is needed, it obtains a fresh
+loan using the same admission's lifetime balance. A Form with all three roles takes at most three loans.
 The search reuses each completed Form/operation result, including an empty
 provider set, while it can still serve a candidate combination. An empty result
-releases its candidate buffer and temporary charge before the next probe. The
+releases its candidate buffer and temporary storage before the next probe. The
 Form index keeps the result so later Invokes can skip that qualification. If
 every eligible Form for a required control has returned an empty set, every
 Invoke is ruled out.
@@ -476,20 +446,14 @@ remain available to later Invoke providers. A hard compiler or continuation
 compatibility error on a required probe propagates before I/O, as does exhausted
 capacity or work.
 
-One caller work budget pays for the index, qualification, comparison and
-disposal of provisional mappings. The Host search reuses space for one partial
-assignment per registered provider across all Form combinations. That storage,
-the Form index, TD walk, semantic arena and declared native compiler scratch
-draw on temporary capacity for their overlapping lifetimes. Both the per-admission
-and shared admission peaks also include the schemas and every still-live
-provisional mapping. Before compiler entry, its declared retained backing and
-scratch must fit together beside those owners in the original Engine bank.
-A refusal identifies the limiting resource. Discard releases each candidate's
-charge. The selected mappings and schemas keep their admission peak charges
-through the closing configuration observation. A refusal disposes of the
-provisional definition under those charges. A successful observation releases
-the admission charges at handoff and the definition keeps its Engine funding.
-Independent service backing stays with its original owner.
+The search bounds its Form index and partial assignments. Account for actual
+overlap of the TD walk, semantic arena, candidate mappings, schemas and compiler
+scratch. Acquire usable storage at the builder that needs it. Dispose rejected
+mappings, retaining any rollback scratch until disposal. Reuse available
+scratch on the next probe. The chosen mapping survives the closing configuration
+observation. A job with repeated scans debits the same remaining allowance
+before each delegated visit or probe. Report exhaustion separately from lack
+of support.
 
 The composition owner chooses how the search observes one effective configuration.
 Use `try_new_fixed` when the inputs are immutable or all changes are serialized
@@ -505,9 +469,8 @@ searches. Each instance independently authorizes use of its selected operations.
 The actual `ConsumerActionPreparation` compiles pure bounded native mappings,
 while Planning prepares the same bounded structured data meaning as finite
 execution and checks the current endpoint NoSec subset. Input and output are
-independent `ValueSchemas` roles. A borrowed census prepays construction and
-rollback work, checks aggregate destruction against the cleanup-step allowance,
-and reserves variable backing before constructing the constraints. One original
+independent `ValueSchemas` roles. Bound their construction and destruction by
+the supported shape, and retain the actual variable backing. One original
 owned pair serves Invoke, Query and Cancel. Each Form checks its borrowed
 assertions against that pair once when schema qualification succeeds. Each selected
 data service qualifies the complete schemas for its application-value roles.
@@ -522,16 +485,13 @@ stay in the Binding; variable scope and DataSchema interpretation are shared.
 The reusable definition owns every selected mapping, both Action data roles,
 actual data-service owners and original definition funding after all TD/compiler
 owners disappear. `ConsumerActionRegistration` imports `RetainedConsumerServices`
-from startup composition: service backing is adopted once at its original bank,
-then referenced across selected operations, definitions, registries and families.
-Mapping/schema/reference costs remain separately funded. Selection never adds
-physical data/access backing to each operation's reservation. Each owned media
-snapshot is a distinct copy: its actual length is reserved at the definition
-bank before acquisition, separately from the service's original string.
+from startup composition. Each service has one backing owner referenced across
+operations, definitions, registries and families. Each distinct owned media
+snapshot, mapping and schema needs storage at its actual builder.
 
 Preparation captures the complete data policy/media/support, native identity,
-operation and exchange/continuation/result/scratch/work bounds. It checks original
-service backing and rechecks admission declarations around access/compilation
+operation and applicable exchange, continuation, result and scratch bounds.
+It checks actual services and their relevant configuration around access/compilation
 callbacks. `ConsumerActionDefinition::check_dependencies` preserves those facts
 through complete association and new-work admission; construction cannot
 capture a replacement baseline. Already admitted execution follows the
@@ -541,7 +501,7 @@ declaration, even a smaller bound, requires explicit new qualification and
 applicable funding. The preparation access service is a
 qualification dependency, not a retained Consumer permission. Execution binds
 explicit per-operation access owners independently, checks their actual backing,
-qualifies destination/NoSec support, and retains their work/revision snapshots.
+qualifies destination/NoSec support and retains the original service revisions.
 
 An already qualified, endpoint-specialized definition may be bound to independent
 Consumers without repeating TD admission, schema construction or native
@@ -549,11 +509,9 @@ compilation. This is reuse of the same actual definition, not checked bind-many
 of new TDs or cross-endpoint partial lowering. Bindings keep continuation
 compatibility and native capacity; shared definitions imply no shared logical
 authority or extra physical exchange capacity.
-`ConsumerPreparationBounds` replaces the notification-specific bounds name for
-these two pure typed preparation facets. Declared work must fit the caller's
-configured compilation allowance; short/unfunded preparation invokes no native
-effects and releases partial owners. The supported HTTP callback requires an
-explicit 4096-unit preparation allowance, as does the existing MQTT facet.
+A typed preparation facet must bound each callback, including any delegated
+work. Split a large compilation into bounded steps or refuse its supported
+input size. Exhausting capacity returns provisional owners without effects.
 
 ## Open Consumer notification preparation
 
@@ -602,22 +560,17 @@ reply the program can offer, even when the caller may decline a reply. Each
 executable scalar role uses `supports_media` for the Form representation.
 Collection facets also require the service's exact primary media. The source-free
 definition repeats both checks against the retained program and service.
-Selection spends native compilation work and cleanup capacity on authorized
-candidates. If every alternative fails and a destination was denied, the search
-revisits the range of Forms containing denials on the same TD admission, work
-budget and configuration decision. A native mapping that
+Selection tries authorized candidates first. If every alternative fails and a
+destination was denied, revisit the relevant Forms under the same TD admission,
+job-local lifetime bound and configuration decision. A native mapping that
 qualifies with its destination denied establishes `AuthorizationDenied`.
 
-The TD walk, semantic arena and compiler scratch share one temporary allowance.
-The schema and both the selected and competing native mappings count toward the
-per-admission and shared live-byte peaks while they coexist. The first
-qualifying definition owns the role schemas and lends them to subsequent
-probes. Its live-byte reservations and native rollback scratch survive the
-closing observation and disposal on refusal. Sequential competing probes can
-reuse the idle rollback allowance. A successful decision releases rollback
-scratch before calling the deployment's output constructor. The original Engine
-and cleanup funding accompany the native definition. Metadata, support, clone
-and disposal callbacks are bounded.
+The TD walk, semantic arena and compiler scratch can coexist with selected and
+competing native mappings. Bound that actual peak. The first qualifying definition
+owns its schemas and lends them to later probes. Refusal disposes provisional
+mappings with their rollback path. The selected immutable definition retains
+its backing through handoff. Metadata, support, clone and disposal callbacks fit
+within the job's inclusive operation bounds.
 
 The selected `ConsumerNotificationDefinition` owns the actual Binding/program,
 configuration, family-qualified target, endpoint/Form, the actual retained data
@@ -647,8 +600,8 @@ of HTTP's compile-input extraction or cross-endpoint native-work reuse.
 The shared role selector
 `prepare_notification_schemas` uses the same structured normalizer for a readable
 Property, each of the four Event roles and each named collection member. Its
-borrowed census prepays variable construction, rollback and destruction; exact
-retained field/name backing moves to the definition. Runtime capture retains
+borrowed census bounds construction, rollback and destruction. Actual field/name
+backing moves to the definition. Runtime capture retains
 that original funded definition instead of cloning constraint trees. Selected
 MQTT Producer final checks use `matches_notification_schemas` against borrowed
 final TD facts; native compatibility and whole-TD coverage remain independent.
@@ -674,9 +627,9 @@ Root notification preparation selects the actual Thing Form and authorizes
 `ObserveAllProperties`; runtime establishment/delivery and mapped stop use the
 corresponding root operations. It derives every non-writeOnly member schema
 from the shared TD loan, independently of leaf Forms and observability hints.
-Its bounded member census, construction/disposal work and temporary schema
-backing are paid before construction; selected definition funding retains the
-schema until final disposal. Collection data services must explicitly support
+The bounded member census limits construction and disposal. Secure temporary
+storage at construction and keep the actual schema with the selected definition
+until final disposal. Collection data services must explicitly support
 the full named map; scalar Object support cannot qualify them. The current
 MQTT mapping requires both operations on the same root Form. Other root control
 topologies require an actually implemented Binding/preparation facet.
@@ -685,9 +638,9 @@ topologies require an actually implemented Binding/preparation facet.
 Event-root selection instead captures every Event's exact name and all four
 independent schema roles in `EventCollectionSchema`. The shared semantic loan
 contains Event declarations and local contexts, without their individual Forms.
-An unrelated root operation acquires no Event schema closure. Construction and
-disposal walks and variable name/table backing are funded before construction;
-selected definitions and captured validation share the original backing. Every
+An unrelated root operation acquires no Event schema closure. The census
+bounds construction and disposal walks. Secure actual table and name storage
+as it grows. The selected definition and its validator share that backing. Every
 member's declared occurrence data requires scalar codec support. When the native
 program can offer replies, that check also covers every declared member
 `dataResponse`.
@@ -730,19 +683,11 @@ encoding. Each invocation validates its own bounded set against that immutable
 schema, funds the complete encoded input before acquisition, and retains an inline
 selection independently of native ownership of the request. URI-variable
 expansion and native encoding are not universal Engine query conventions; the
-current native slice declines URI templates/variables. Preparation funds retained member/name backing and bounded destruction
-as well as artifacts/services; temporary construction remains inside the existing
-common admission allowance. Native preparation performs no reads or aggregation.
-The borrowed member census prepays `CleanupItems` before schema vector/member
-acquisition. Finite Consumer preparation moves that schema into its funded
-content owner; native mappings and instance bindings retain references rather
-than cloning the table. Reuse compares borrowed assertions and acquires no new
-schema destruction obligation. Every actual constructed owner has its original
-member-count-plus-vector disposal allowance; partial construction, cancellation
-and late refusal use that paid credit. Rollback bounds include retained and
-provisional owners conservatively. Producer paths that construct additional
-owners still fund each actual construction. A short payment reports capacity
-refusal rather than an unsupported alternative.
+current native slice declines URI templates/variables. Bound the member census
+and the overlap of construction and existing owners. Share the original schema
+by reference. A builder that copies it supplies the copy's backing and a bounded
+path to dispose a partial or complete table. A capacity refusal remains distinct
+from an unsupported alternative.
 Final Producer qualification compares the original complete member meaning,
 root coordinate and selected registration. Closed installation binds those facts
 to the actual native mappings.
@@ -756,8 +701,8 @@ cannot qualify it. The runtime invokes that complete map validator under the
 captured work policy, then rechecks group authorization and all dependencies
 before native admission. It does not invoke an additional generic Object
 validator, selection encoder or individual Property operation. The same member
-census, temporary construction allowance, retained funding and cleanup prepayment apply to the
-writable role. Native preparation performs no writes.
+census, construction bounds, retained backing and rollback apply to the writable
+role. Native preparation performs no writes.
 
 `ConsumerFiniteSchemas::WriteMultipleProperties` retains that same complete
 writable eligibility independently of a per-call subset. It requires the actual
@@ -790,7 +735,7 @@ QueryAllActions selects an actual root Form and finite exchange; it MUST NOT
 select N Action controls or require Consumer invocation handles. The root TD loan
 lends Action definitions and their distinct schemas without individual Forms.
 Planning captures each exact name and supported output role in
-`ActionCollectionSchema`, under prepaid name/backing and rollback bounds. Input
+`ActionCollectionSchema` with bounded name storage and rollback. Input
 schemas do not become query inputs. A concrete status validator must establish
 complete representation support; a scalar Object validator cannot qualify it.
 Duplicate expanded output assertions, unsupported required output constraints,
@@ -829,9 +774,8 @@ than concealing its standard semantics as unavailable extension data.
 The current projection admits at most 64 visited nodes, depth 8, 16 complete
 alternatives and 4 non-NoSec components per conjunction; its 1024-unit text/operand
 envelope also charges reference/scheme names and 32 units per parameter. These
-are processing limits, not authentication protocol support. Temporary construction,
-expansion and rollback are prepaid; selected variable backing/destruction belong
-to the original prepared content owner.
+are processing limits. Bound the actual temporary expansion and keep rollback
+available. The original prepared content owns its variable backing through disposal.
 
 Consumer preparation tries complete conjunctions in declaration order. For each
 it requires the actual access service and native compiler to support that same
@@ -853,8 +797,8 @@ setup still rechecks the complete advertised expression, original services,
 configuration, endpoints and readiness. It never prunes unsupported alternatives.
 
 Live credentials and mutable revisions belong to instance services. Per-call
-capabilities follow fresh audience/instance permission with separate complete
-work prepayments. Rotation invalidates old bindings and unread results; checked
+capabilities follow fresh audience/instance permission at each effect.
+Rotation invalidates old bindings and unread results. Checked
 rebinding may reuse the immutable selected content. Wrappers must preserve every
 actual dependency's non-reused invalidation, including callback-time changes.
 Fresh rebinding never revalidates prior work. No compiler or source callback

@@ -1,270 +1,110 @@
-# Foundation: ownership, capacity and progress — v6.0
+# Foundation — ownership, capacity and bounded progress
 
-Foundation owns protocol-neutral work, capacity/reservation, generation and time
-primitives. It knows no TD, protocol, handler registry or universal scheduler.
-Logical time remains exactly owned by the [time amendment](../amendments/WP-100-time-domain-v1.md)
-and ADR-0016. ADR-0015's borrowed immutable policy and linear budget principles
-remain; a full flat policy snapshot is no longer a universal configuration ABI.
+Foundation supplies generation and monotonic time primitives. Resource limits belong
+to the owner that can enforce them. Host and caller-owned deployments use the same
+rules for acceptance, effects, handoff and retirement. They can supply different
+storage, clocks and drivers. [Time domain](../amendments/WP-100-time-domain-v1.md) ·
+[Architecture decision](../ADRs/0025-semantic-engine-and-binding-runtimes.org)
 
-`RES-OWNER-001`: Limits MUST apply at the actual enforcing owner. Engine admission
-bounds its controlled retained backing and promised handoffs. Bindings bound native
-ingress/growth, concurrent operations, queues, pools/caches and retry policy.
-Deployment composes process/firmware/OS/SDK containment. Every retained allocation
-or caller-provided exclusive capacity has one funded physical owner; shared views
-retain that owner/original account until final destruction. Actual recipient,
-reference, operand and record costs are charged separately. Logical allowances
-or overlapping reservations MUST NOT be presented as additive physical RAM,
-contiguous allocation backing or transitive SDK maxima.
+`RES-OWNER-001`: Each owner MUST bound growth where it occurs. Servient bounds
+candidates, instances, calls, continuations, queued deliveries, draining work and
+held results. Bound both item count and backing bytes where either can exhaust the
+owner. A fixed number of slots of bounded shape can establish both. TD, Planning,
+codecs, access services and Discovery bound the input, expansion, intermediate
+storage and populations they control. Bindings own native buffers, ingress, retry
+and last-user release. An idle mapping need not occupy a call slot.
 
-The Host finite Consumer represents these owners separately: common prepared
-content retains its first backing reservations; actual data/access services and
-native registration backing retain their original startup bank; each specialized
-mapping retains its own compilation leases; each binding/association/call owner
-funds its own reference, policy association, records, result and cleanup capacity. Reusing
-content or a qualified mapping never copies, refunds or transfers those physical
-leases. Retirement follows the last actual mapping/call/settlement reference.
-Heap allocation measurements and reservation counters describe different facts;
-temporary allowances and overlapping reservations are reported separately from
-requested retained allocator bytes.
+A loan of usable storage excludes competing use for its lifetime. A shared
+immutable allocation has one backing owner through its last reference. Each
+association, recipient and queued record still needs space. Dynamic growth checks
+its bound before allocation and releases provisional claims if construction fails.
+A byte debit alone cannot supply the promised storage. Measured heap, overlapping
+logical allowances and native or kernel memory describe different quantities.
 
-Persistent logical associations MUST NOT require prepaid idle call capacity.
-In the Host finite representation, association records and selected binding
-wrappers retain their explicit instance bank; `ConsumerCalls` funds its slot
-storage from a separately chosen work bank. Each admitted call acquires its
-native lifetime, operand/result backing, callback scratch and cleanup capacity
-from that work bank before effects. Sharing content, a mapping or work storage
-does not share authorization or promise native availability.
+**Shared ceilings.** A deployment offering an aggregate limit MUST identify its
+participants, the unit they compete for, its sharing policy and release point.
+A shared pool or a move-only permit from the quota owner conserves the last unit
+across concurrent and reentrant admissions. A permit can enforce a tenant limit
+in addition to an exclusive native slot. Fixed partitions are valid only if their
+sum respects the ceiling and the policy permits unused capacity to stay in one
+partition. Independent pools imply only their local limits.
 
-`PendingHandlerCallsGlobalMax` constrains outstanding obligations in each chosen
-work domain, including retained settlements. When the association uses a distinct
-instance bank, admission also acquires one outstanding-obligation quota debit
-there. Both survive through final call/settlement disposal; a common bank is
-charged once. The instance debit is a logical quota, not a second physical RAM
-owner. A shared instance bank supplies a shared allowance, not per-Thing hard
-isolation. Separate work banks compose only the limits actually shared between
-them; no process-wide aggregate quota is inferred. Other per-instance byte or
-rate isolation is not provided by this outstanding-call debit.
-These counters follow the expressly selected banks; they do not discover or
-aggregate every association sharing one `ConsumerInstance` identity.
+During migration, every counted holder, including an old result taken but still
+held by its caller, keeps its unit through the promised release point. Coexisting
+paths draw on the same remainder or account for each live claim in exactly one
+permitted partition. To replace the pool outright, fence all old admissions and
+drain every counted holder or transfer the outstanding claims and release duties
+exactly once before opening the new capacity. A deployment can retire an obsolete
+ceiling with its configuration and checks. Accepted work still owns its backing.
 
-Slot removal transfers the complete funded call to its settlement and may reuse
-storage without refunding retained operands/results/cleanup. Physical input
-bodies may be shared by native and Engine snapshots under the original call
-reservation; copied metadata and variable records have separate allowances.
-Capacity-owner loss cannot migrate these reservations to the association or a
-successor bank. Captured native limits remain additional independent constraints.
+`RES-HANDOFF-001`: Before acquiring a reversible resource, its owner MUST
+secure the means to undo that acquisition and return the protected inputs.
+Acquire later resources when needed, including scratch that must coexist with
+durable output. Before consuming an exclusive offer or entering code that can
+cause an effect, secure the input or its loan, any owed reply or continuing
+conversation, the promised outcome and its handoff, a bounded failure record,
+and local retirement.
+Backing can be inline, lent, previously reserved or acquired at this boundary.
+After acceptance these obligations must remain serviceable when ordinary pools
+fill. A status cell suffices only for an outcome that owes no value. Each owner
+releases its storage or permit at its own last use.
 
-Optional Host `ProducerFiniteCapacity` funds finite incoming work independently
-of publication/participant count. Its own bounded accounting state retains an
-explicit work bank. Before receive, each opportunity reserves an original result
-owner, candidate/input allowance, maximum output backing, cleanup bytes/items,
-`PendingHandlerCallsGlobalMax`, `InFlightResponsesGlobalMax` and
-`BindingIngressItemsGlobalMax`. All reservations precede native receive; partial
-refusal releases only that attempt's leases. Pending native parsing retains no
-Engine permit or result backing; its actual buffers and connection remain covered
-by Binding policy. Publication banks retain their own description, behavior,
-prepared/native configuration and membership backing, without another idle
-input/result opportunity when explicit capacity is selected.
+A deployment promising *advance availability* names the supplying owner, covered
+capacity and range of selections, the point the promise starts and its release.
+Set aside usable backing at every owner needed for that promise, including
+temporary overlap. If final members are unknown, reserve interchangeable slots
+from their common pool or hold the needed capacity at every possible private
+owner. A Servient record cannot guarantee an opaque SDK or an independent
+route. Move the reserved capacity to its ordinary owner at each stage and
+return surplus. Refuse an unbackable promise before native acquisition. Choosing
+ordinary admission is explicit. [Publication](runtime-safety.md#producer-publication)
+and [result handoff](interaction-core.md#finite-execution-and-ownership-representations)
+define the corresponding lifecycle boundaries.
 
-At terminal native settlement, active credit and the ingress-item debit return.
-The retained-work limit, outstanding-handler/response quotas, conservative byte
-allowance and cleanup leases last through final outcome disposal, including after
-acknowledgement, capacity-handle loss or publication retirement. Accepted outcomes
-retain original instance/publication funding as well. These limits compose only
-the selected work bank: no per-Thing quota isolation, transitive native/process
-RAM bound or automatic aggregation across independent capacities is inferred.
-The [runtime contract](runtime-safety.md#finite-producer-participation-and-work-capacity)
-owns ordering and default dedicated-policy scope.
+`RES-WORK-001`: A public drive MUST bound the work until it returns. Use a
+bounded native or handler poll, a byte slice, or a cursor over a bounded number
+of records or nodes. Count synchronous callbacks and reentry into siblings in
+that bound. Split, restrict or decline callbacks whose inclusive cost exceeds
+the supported turn. A passive observation or zero-sized batch invokes no linked
+code. On yield keep the cursor and the original owners. Distinguish advancement
+or a runnable yield, waiting for an identified event, exhausted job limits and
+terminal outcomes. Host and manual entry points take the operation they can
+drive without a general `WorkBudget` or per-member credit factory.
 
-### Host Producer notification mapping capacity
+Input size, fan-out and a forward-only algorithm may already bound a whole
+job. Where repeated probes, fallback, nested scans or rewind could exceed its
+promised total, the owning job enforces a nonrenewable allowance. Debit before
+the visit or callback. Delegates draw from the same remaining balance across
+resumption, rewind and alternatives. Exhaustion ends that job. A long-lived
+conversation bounds each new delivery under its queue and overflow policy.
+Closing existing work has its own bounded path under admission pressure.
 
-Managed publication reserves one `BindingRoutesGlobalMax` item for each
-captured notification start mapping and one `RouteReadinessTokensGlobalMax`
-item for each required native member with its own ingress gate. Admission
-checks the corresponding per-Thing limits and acquires both global debits
-at the publication's original bank. A short reservation reports its resource,
-ceiling and requested count, and rolls back the candidate's acquisitions.
+`RES-SCHEMA-001`: Each enforcing owner MUST define the units, finite defaults,
+zero/omission behavior and failure of its applicable limits. An omitted setting
+cannot silently admit unbounded growth. A prepared mapping binds its actual
+relevant configuration, semantics and provider identity. Rebuild or refuse it
+when a change invalidates that interpretation. A deployment can compose its
+resource settings. A name or digest alone proves neither compatibility nor
+current permission. Report the enforcing scope, phase,
+limit and safely known amount, retry disposition and effect certainty. Provide a
+bounded fallback when diagnostic storage is full.
 
-These are logical allowances. The publication also funds the actual capacity
-of its route, member and gate vectors, the Binding's declared native backing,
-and metadata for the Binding's promised concurrent emissions. Its instance and
-native owners retain the original funding through outstanding work and unread
-results. Each finite receive uses its own work capacity.
+The [numeric profiles](../resource-limits.csv) and [schema-2 Read format](consumer-resource-ownership.md)
+describe callers still using their original interpretation. Migrate the source
+and prepared-only Read entries, then delete the overlay, generator, frozen
+digests and schema-wide checks with their last consumers. Keep benchmark inputs
+with their workload. The target has no exhaustive public limit schema, generic
+admission receipt or registration-wide footprint declaration.
 
-The logical instance takes a caller-funded lifetime cleanup item for each
-notification source it adopts. This allowance follows the instance through
-retirement, replacement and the last unread settlement. Each instance tracks
-its own retained Action entries and notification work through acknowledgement.
+## Host allocation and environment failure scope
 
-The publication also takes one lifetime cleanup work item per captured Action
-or notification route when it first adopts the table. Commit transfers the
-funded rows to the registry. They can be disposed if the Servient drops while
-the exposure or native work is still live. Rechecking the same captured routes
-uses their existing lifetime allowance. Explicit retirement and atomic cutover
-still fund the work performed in their own turns.
-
-Managed admission checks the configured cleanup quantum before native setup.
-Lost-owner reclamation must be able to search the bounded registry, inspect the
-original members and withdraw their gates. A serving replacement must also be
-able to dispose of the displaced route rows and any handlers for which the
-registry could become the last owner in one cutover turn. An insufficient
-quantum returns `CleanupWorkItemsPerStepMax` with the required work and the
-original closed candidate. A short individual turn on an admitted replacement
-keeps the incumbent serving. An incumbent may also close and drain rows at its
-original owner before a smaller-quantum replacement retries.
-
-Explicit retirement verifies the original members, spends remaining credit on
-captured rows, and pays one item to remove the fenced registry entry. A partially
-drained entry stays at its original Servient if the publication guard drops.
-
-The Host notification representation imports the same original data/access
-service owners. A shared prepared mapping pays its actual program/schema/reference
-records, without charging service backing again. Independent associations fund
-only their retained records at their selected instance banks. Explicit notification
-capacity reserves its Engine envelope, cleanup slots and `SubscriptionsGlobalMax`
-at its work bank. Each admitted conversation additionally reserves the original
-`SubscriptionsPerThingMax` quota at its instance bank and data-validation scratch
-at its work bank. These subscription counters are logical capacity limits, not
-additional physical RAM. A shared instance bank is a shared allowance, not inferred
-per-Thing isolation or aggregation across arbitrary banks.
-
-Conversation acknowledgement releases scratch/quota after complete local retirement;
-retained report target references keep their original prepared/association funding
-until final report disposal. The capacity envelope remains reserved until the
-capacity owner is disposed, independently of persistent association count. Native
-MQTT buffers/interests/sockets retain their Binding-owned policy; Engine reservations
-are not a transitive process-memory measurement.
-
-The managed finite Consumer owner allocates no population-sized startup backing.
-Each AVL node reserves `size_of::<Node<V>>()` at the owner bank before Box
-allocation; this includes its inline value, child links, height and reservation.
-ID/configuration strings and identity headers have their separate original
-reservations. There are no node-array capacity shifts or opaque map allocations.
-Removing a node detaches its children before returning it for destruction outside
-registry borrows. Original node backing lasts through payload disposal. Retained
-passive snapshots keep their own funded tombstones, not other registry nodes.
-Selected definitions and original call/result reservations survive independently.
-
-For stored tree height h and query byte length L, lookup prepays
-`h*(L+1)+1` QueueOperations. Structural mutation prepays
-`2*(h+1)*(L+65)`: at most two height-bounded spines (search and successor
-extraction), each frame's key comparison and a 64-operation envelope for link
-rewiring, cached-height maintenance and at most two rotations. Actual AVL height
-is logarithmic in node count; no configured maximum or population-wide movement
-allowance is charged. Each actual lookup/commit pass is prepaid before effects.
-Per-entry cleanup and qualified mapping/service disposal are prepaid on adoption.
-This is a deterministic per-operation bound, not amortized resizing work.
-
-Owner-assigned slot tickets cost one fixed, funded Box per allocated coordinate.
-An active instance or the free list exclusively owns that ticket. Reuse and release
-are constant-time moves without allocation; free backing follows actual high-water
-use and remains charged until reuse or owner disposal. A staged new ticket is not
-consumed and the allocation counter is not advanced if registration fails. Checked
-generation exhaustion retires a ticket outside borrows. A removed instance's
-original Core authority remains independently funded through its final passive
-reference via `ConsumerInstance::try_new_funded`; recycling a ticket cannot refund
-or mutate accepted work. Low-level standalone `new` remains caller-funded startup
-construction, separate from managed allocation.
-
-Removing a Thing also disposes its own configuration subtree under those entries'
-original prepaid allowances; shutdown disposes the owner's whole population and
-iteratively drains its ticket free list. Those scope-sized final disposals are
-not hidden global work in an ordinary single-ID registry mutation. Owner metadata
-accounts add no idle call slots or pending-call quota. Original association/work
-banks retain those quotas through settlement disposal, and separate banks do not
-imply an automatic per-Thing/process aggregate. No authority-change observer or
-native indication allowance is introduced.
-
-Independently composed Host finite Consumer registries/Servients share service
-backing by propagating an explicit `ConsumerServiceOwner`, adopted once at the
-composition root. Imports retain the original reservations; they neither move
-them to the importing bank nor acquire another backing reservation there. Data
-and access owners can originate at different banks. Each registry separately
-funds its records/references and actual native registrations; each instance and
-accepted interaction retains its own existing accounts. Registry-only records
-retire with the registry, while retained services/native owners survive through
-their final mapping or normal/late settlement disposal. Owner retention grants
-no permission, credential, policy revision or logical authority.
-
-Raw-service startup adoption matches aliases only within one construction.
-Independently adopting a raw alias again is outside the supported shared-owner
-composition contract: neither equivalent configuration nor an independent
-reservation proves another physical allocation. Composition roots must carry
-the original retained owner. Concrete services still declare and enforce their
-own backing, including any internally shared dependencies; this mechanism does
-not discover shared suballocations or manage Binding-native infrastructure.
-
-Prepared structured constraints add bounded owned field vectors and names to
-scalar data roles as well as collection members. A source census prepays their
-variable construction/destruction; retained content charges actual backing, not
-just a fixed enum size. Reused views keep the first owner and do not clone the
-tree during calls. HTTP configuration snapshots and accepted native programs
-retain their immutable scalar schema through an Arc in the concrete Host
-participant; this is not an Arc requirement in Core's semantic model. Codec
-scratch/work and instance/call/result allowances remain distinct obligations.
-The external owned-compiler fixture declares artifact bounds using the new
-actual schema/member layout rather than preserving its former 512-byte group
-artifact assumption.
-
-Continuing Action preparation also prepays the shared borrowed schema census
-and construction/destruction bounds. One original Consumer definition owns its
-input/output constraint backing across native operation selection and accepted
-invocations. Concrete HTTP Producer definition clones and captured validators
-retain immutable schema owners; their variable backing and support-probe scratch
-are included in the participant declarations. These data owners neither fund nor
-replace independent native exchanges, continuing work, result or cleanup owners.
-
-`RES-HANDOFF-001`: Capacity MUST precede each acquisition/acceptance and fund its
-result/status/cleanup path. New growth may fail after acceptance only under a
-declared policy preserving existing owners; admission MUST NOT promise simultaneous
-worst-case success without backing. Rejection returns complete protected owners.
-No truncation of required Forms, schemas, security branches, recipients or reply
-rights may conceal capacity failure. Limits compose across actual local/aggregate
-accounts without double-charging shared backing. Zero disables unless an explicit
-bounded rendezvous policy says otherwise; omission never implies unbounded.
-Diagnostics retain resource, owner/scope, limit, safely known amount and phase,
-with bounded fallback. Release follows actual disposal, child before retained
-parent, exactly once. Cancellation/cleanup retain capacity under saturation.
-
-`RES-WORK-001`: Bounded jobs MUST consume linear nonduplicable step/lifetime
-allowances before their work, with declared atomic envelopes or resumable
-continuations. Zero budget makes no hidden progress. Required variable work,
-rollback and destruction have bounded owners/cursors; phase scratch ends at the
-earliest safe boundary. Borrow immutable policy instead of copying large snapshots
-per hot call. User/native code is trusted cooperative code: budgets are no proof
-of preemption or hard-real-time execution. Profiles prove their actual layout,
-allocation overlap, largest request, retained backing and release behavior.
-
-`RES-SCHEMA-001`: Policy identities MUST include their interpretation/schema
-revision and actual complete relevant configuration; names/default ids/digests
-alone confer no enforcement or permission. Renaming/reinterpreting/splitting
-existing numeric fields requires explicit disposition, not silent reuse.
-The unchanged [resource-limits.csv](../resource-limits.csv) is the **legacy
-numeric schema for retained Property Read/Foundation profile adapters**, not
-an exhaustive v6 resource architecture. Its original StrictV1 meanings/defaults
-and the scoped [Consumer schema-2 overlay](../resource-contracts/consumer-ownership-v2.toml)
-remain unchanged at those adapters. SDK bytes cannot be silently removed from
-an old strict footprint. New capabilities use owner-scoped contracts with exact
-reservation/growth/cleanup/diagnostic boundaries and compatible shared backing;
-they MUST NOT inherit 196 mandatory global fields or add an operation-specific
-policy framework without a concrete enforcement need. Strict profiles remain
-optional stronger supported policies, requiring their own evidence.
-
-`RES-ENV-001`: Admission capacity is not committed OS memory or guaranteed SDK
-allocator recovery. Host process OOM/abort/kill/runtime loss is an environment
-failure and MUST NOT become successful cleanup or release of surviving local
-state. Bindings declare actual SDK/input/growth limits and lifetime assumptions;
-deployment provides containment/recovery. While required owners/runtime remain
-live, ordinary supported errors, cancellation and saturation follow retained
-first-cause/release contracts. Stronger allocator/static-storage/hardware claims
-need their own qualification. A process cap does not replace bounded ingress,
-owner retention or cleanup. A Servient is not a memory-protection boundary.
-
-## Historical adapter policy
-
-[Consumer resource ownership](consumer-resource-ownership.md) and its encoding
-vectors still define the retained Consumer adapter, with original-account and
-complete-backing checks. They neither establish general native resource quotas
-nor constrain future facet representations. Performance manifests retain their
-historical recipes as non-gating characterization inputs. New measurements must
-name owners, configuration/profile, workload, semantic obligations and revision.
+`RES-ENV-001`: Ordinary saturation, cancellation and supported allocation failure
+MUST preserve first cause, protected owners and release. Before acceptance return
+original inputs, as soon as any rollback loan ends. After acceptance preserve late
+evidence and retire in place or transfer to an available, acknowledging owner.
+Process abort, a stopped driver and an opaque SDK have their own failure domains.
+Allocator recovery, hard RAM, latency and hardware claims require evidence for the
+actual target, including stack, allocator, callbacks, interrupts and native
+infrastructure where applicable. A deadline on the supplied monotonic clock
+fences an expired obligation when observed. Cooperative callbacks run until
+they return.

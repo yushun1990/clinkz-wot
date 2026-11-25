@@ -31,11 +31,8 @@ owner. The Host finite association/work split and its original operand retention
 are defined in [Runtime Safety](runtime-safety.md); the common finite transition
 kernel remains independent of that storage representation.
 
-The raw finite Producer settlement is an original outcome carrier, not a mandate
-to keep native execution occupied until observation. Host finite participation
-may use [independent work capacity](runtime-safety.md#finite-producer-participation-and-work-capacity),
-returning active credit at native settlement and retaining bounded result owners.
-This adds no Core scheduler, native routing or common Consumer/Producer lifecycle.
+The finite Producer can reuse an active slot after native retirement. Retained
+results keep their original storage until disposal. [Finite Producer capacity](runtime-safety.md#finite-producer-participation-and-work-capacity)
 
 Managed finite registration constructs the unique `ConsumerInstance` in the
 actual Servient owner. Internal slot assignment/reuse is not an ordinary public
@@ -111,14 +108,20 @@ plan identity and the original admitted finite response shape through
 Payload/output views and metadata require no reference counting. A representation
 must separately bound retained backing and validate actual media/DataSchema.
 
-`execution::FiniteCallState` owns common finite progress: paid current permission,
-one isolated native progress/cancellation quantum, accepted cancellation state,
-retained native settlement, validation credit/yield, first cause and fresh final
-handoff. A terminal unread result still requires a fresh paid current check.
-`FiniteCallDriver` supplies bounded representation-specific edges and retains the
-complete native/output owners. It cannot report settlement for an unacknowledged
-cleanup transfer. Host and borrowed Read use this same transition implementation;
-the driver is not an executor, scheduler or universal interaction runtime.
+The finite transition kernel checks current permission before an effect, retains
+the first cause and keeps native settlement distinct from successful delivery.
+It can poll local close without calling a codec or an access service. A racing
+result keeps its original storage or loan through disposal. A bounded driver
+supplies the actual native/output owners and acknowledges any cleanup transfer.
+
+At acceptance, a promised validated handoff MUST have space for the retained
+result **and** the overlapping workspace to decode, validate and deliver it
+while ordinary pools are full. Inline validation, dedicated scratch, or shared
+settlement-only scratch can supply this guarantee. With shared scratch each
+driven handoff must get a turn and release scratch independently of how long
+other applications hold their results. Deliver only the exact value and schema
+checked under the recipient's current permission. Raw evidence alone suffices
+only where the interaction permits it and its access policy authorizes it.
 
 Core's `execution::read` facet supplies one source-free caller-owned Read contract.
 It uses the same `ValueSchemas`, `PreparedSchema` evaluator, operation and result
@@ -278,10 +281,9 @@ The JSON participant retains its 4096-byte envelope, bounds encoded nesting to
 32, lends raw subvalues and temporarily decodes requested keys/strings under its
 funded scratch policy. Duplicate described names, including escaped aliases,
 refuse. Unknown unconstrained members do not acquire new validation assertions.
-Callbacks remain bounded atomic cooperative work: prepay their declared complete
-work and scratch; check permission/currentness before and after; preserve late
-results and original funding. No mid-callback preemption or recoverable process
-OOM is claimed.
+Qualify the inclusive cost of each cooperative callback on its maximum supported
+input, including rescans. Keep scratch available during validation. Recheck
+currentness after the callback and preserve any late result.
 
 Actual scalar validators explicitly qualify the complete borrowed schema;
 `ConsumerDataService::supports_schema` defaults to primitive type-only support.
@@ -355,9 +357,9 @@ verified principals, application policy and transport trust remain separate live
 owners. Rotation and revocation do not mutate prepared meaning or refresh old
 work. Scheme support does not certify an operation, codec, transport trust or
 credential placement. Authentication evidence stays with the original reply;
-only a bounded verified Principal enters behavior input. Actual services pay
-complete work, including all required verifiers, and preserve original funding
-through failure, cancellation, late results and final disposal. Concrete scope
+only a bounded verified Principal enters behavior input. The operation bounds
+the full verifier sequence, including callbacks, and retains the original
+services through failure, cancellation and late-result disposal. Concrete scope
 and identity composition limits belong to the Binding's declared subset.
 
 Finite application authorization and credential verification remain separate
@@ -380,8 +382,15 @@ exchange. Completion may yield output/error or, where the mapping supports it,
 a continuing invocation reference retaining its exact mapping, opaque continuation,
 identity, policy and cleanup. Query/cancel use that association, their described
 operations and fresh permission; no fabricated generic URL or session is required.
-Producer application invocation state is distinct from Binding wire correlation.
-Producer native candidates never carry logical handles or a dispatch callback.
+Before an Invoke handler can create continuing work, Servient claims the original
+invocation and the Binding holds the initiating reply. When the mapping
+promises an addressable ID, later controls or a root status inventory, secure
+the necessary wire correlation against reentry before the handler runs. Install
+it without further acquisition. A missing required claim refuses before behavior.
+An invoke-only acknowledgement can leave the continuation entirely local.
+If the first reply fails, the original invocation retains its cleanup owner
+and any advertised lookup stays valid for its promised lifetime. Native
+candidates carry neither dispatch authority nor handler access.
 Servient retains the exact participation association with original invocation
 state, validates control attribution and original route/principal even across distinct
 participants, and supplies borrowed semantic observations
@@ -411,18 +420,10 @@ incarnation as behavior and currentness. Native requests cannot omit or
 replace invoke validation or invent control routes: input is checked before
 behavior and immediate/late output before successful terminal exposure,
 retaining the original service through settlement.
-`ActionValidator::additional_validation_work` declares complete extra work per
-input or output callback beyond the owner's maximum body/media traversals.
-Publication captures that passive bound with the actual invoke service. Invoke
-prepays it twice before validation/behavior, covering input and a possible
-immediate output. Each continuing poll prepays it once before work that may
-return an output. Short credit enters no corresponding callback and retains
-accepted work. The original allowance is rechecked around validation, after
-authorization and before immediate/continuing output validation; a changed
-declaration cannot refresh it or authorize an
-unpaid validator. Explicit close has no output callback and keeps its independent
-cleanup lane. Raw unvalidated registrations and scalar services retain the base
-policy when the extra bound is zero.
+Bound the cost of input validation and of validating an immediate or continuing
+output against the actual service. The admitted invocation keeps sufficient
+result and handoff backing. Captured service loss refuses dependent delivery.
+Local close can advance in place even after the validator becomes unusable.
 The composed HTTP Producer supplies source-independent structured JSON validation and
 separately described query/cancel routes. Its 202 means locally admitted work,
 not remote terminal success or rollback. Other qualified Bindings must provide
@@ -439,7 +440,7 @@ Native poll error remains independent of a later output and failed cleanup.
 Pending/error close cannot remove an exchange; acknowledged close may retain its
 original late observation. Output moves into original result storage before
 validation. Cancel acknowledgement means requested cancellation, never rollback.
-An unread validated completion still requires fresh paid authority at handoff.
+An unread validated completion still requires fresh permission at handoff.
 
 `ValueExecution` lends the shared Action input/output schemas; Query validates
 completed application values against that same output meaning using its own
@@ -451,15 +452,11 @@ representations, not conversions or substitutes for one another's qualification.
 The [caller-owned runtime contract](runtime-safety.md#caller-owned-continuing-action)
 owns the implemented subset and physical ownership obligations.
 
-The caller-owned `ActionOutput` facet lends arbitrary untrusted views; ownership
-does not establish equality between successive selections. Its movable settlement
-therefore validates each exact application loan at `result(budget)` using the
-returning operation's captured data service and shape/primary-response checks.
-Outcome-owner transfer and a validated payload loan are separate edges. Native
-progress/late validation still applies, while the result loan requires its own
-paid work and retains the original owner. This adds no universal frozen-output
-container or payload copy. The [runtime contract](runtime-safety.md#caller-owned-continuing-action)
-owns exact work, failure, permission and input-view semantics.
+A caller-owned `ActionOutput` may lend a different view on each inspection.
+Capture one view, validate it using the returning operation's data service,
+shape and response checks, and lend those exact bytes. A prior check applies
+only while the value and schema remain identical. Raw evidence and a validated
+application loan have their respective access rules. [Caller-owned handoff](runtime-safety.md#caller-owned-continuing-action)
 
 The Host continuing Consumer Action separates four owners. A reusable
 `ConsumerActionDefinition` retains source-free native mappings, Action data roles
@@ -483,9 +480,9 @@ cleanup. The Binding's token never becomes logical authority. Invoke acceptance
 exposes Pending, not a completed result. Explicit query/cancel can use different
 actual mappings and independently bound access services. One immutable Action
 input/output schema pair defines value meaning across those mappings. Invoke's
-captured data service validates its input and any immediate completed output;
-Query's captured data service validates completed output returned by Query,
-including late output during its retirement. Each uses its own original media,
+captured data service validates its input. For validated delivery, use the
+service of the operation that returned the value, including Query when its
+output arrived during retirement. Each uses its own original media,
 body/scratch/work policy and native result bound. The value need not fit Invoke's
 representation or resource allowance when it arrives through Query. No common
 codec, conversion to Invoke bytes or codec selection from untrusted media is
@@ -505,20 +502,21 @@ nonterminal control no longer governs the invocation; its original continuation
 and cancellation evidence remain. Exact checks and sticky failure ownership
 belong to [Runtime Safety](runtime-safety.md#continuing-action-associations-and-invocation-capacity).
 
-Native completion does not seal unread application success. `Completed` remains
-revocable until `take_settlement(now, budget)` performs paid, fresh checks of
-time, original instance/root authority and captured services/access. Progress and
-local cancellation continue to fence unread completions. Short handoff credit
-retains the complete original result and slot; an earlier progress check cannot
-serve as cached authorization. Fencing preserves native output as evidence in a
-failed settlement. Successful handoff is the local application acceptance edge;
-subsequent revocation does not retract a value already handed to the caller.
+A completed native exchange retains its original evidence. Each successful
+handoff checks the supplied monotonic clock, original instance, current
+permission and captured services. A deferred handoff keeps its result backing.
+Failure fences successful delivery while preserving evidence. An application
+retains the value already handed to it.
 
 A native poll error is retained immediately as `native_error()` and the first
-local cause when none exists. Retirement still owns its original response
-opportunity. Any late output returned by `poll_close` is retained in
-`native_result()` and checked by that exchange's captured output validator; it cannot erase
-the earlier error, skip validation or establish application success.
+local cause when none exists. The original owner retains any late `poll_close`
+output as raw native evidence with its original bytes and media. Physical
+retirement, release of the native slot and disposal of the raw evidence can
+all finish with the codec and access service unavailable. Raw inspection follows
+its access policy. To hand off a validated value, check current permission and
+use the returning operation's captured validator or its prior validation of
+the exact same value and schema. An earlier poll error or timeout still fences
+application success.
 
 Cancellation request acknowledgement and already-terminal acknowledgement grant
 no terminal application result. A subsequent query must obtain and validate it.
@@ -576,12 +574,10 @@ to a cloneable Payload would not establish this ownership guarantee.
 Each admitted invocation owns a non-cloneable result lease that moves into its
 acknowledged settlement. `RawActionLimits::invocations` bounds live invocations
 plus acknowledged results still retained by callers. Acknowledgement removes
-logical/native records but does not free this result capacity. Managed publication
-captures the actual original account bank; admission reserves each result's
-maximum output/settlement backing and cleanup before behavior entry. Refusal
-returns provisional reservations without consuming a slot or entering behavior.
-Only actual disposal returns the result slot and byte/cleanup leases. Raw callers
-supply their own bounded backing and receive the same retained-slot guarantee.
+logical/native records while the caller's result still occupies its slot.
+Both roles secure the promised outcome, handoff and local retirement before
+the effect that creates the obligation. Refusal returns provisional claims.
+Only actual disposal frees the retained result backing.
 
 `EXEC-NOTIFY-001`: A logical notification conversation MUST own establishment,
 control inputs, delivery, optional reciprocal responses, stop and cleanup. Property
@@ -600,9 +596,11 @@ progresses mapped removal/release; it remains possible when remote cancellation
 is unsupported. Shared native subscriptions/backing retain compatible owners;
 one stop cannot release a sibling. Sources may have zero subscribers; publish
 success alone proves neither subscription lifetime nor recipient delivery.
-Cancellation or funding failure before native establishment releases the retained
-reservation and reports its first local cause without claiming remote effects;
-after native setup starts, its owner remains responsible for bounded cleanup.
+Before accepting a subscription, secure the original conversation, any promised
+control operand/correlation, per-delivery backing and local retirement. A refusal
+returns protected inputs. After native setup starts, its owner retires that
+setup even if establishment fails. Separate permission governs each new control,
+occurrence and reciprocal response.
 
 The raw Host Consumer facet implements these roles in `core::notification` and
 `servient-finite::notification`. One source-free capability registration may serve many
@@ -629,7 +627,7 @@ cursor advance. Required and already submitted responses cannot be declined.
 No initial Property value, replay, wire backpressure, TD qualification or schema
 validation is inferred. The same owner also admits Thing-root Property collection
 observations; constrained execution remains unimplemented by this Host slice.
-Fixed loss status and one prepaid overflow/late handoff preserve cleanup when
+Fixed loss status and storage for an overflow or late handoff preserve cleanup when
 the item/byte queue is full. Explicit owner cleanup works after every cursor is
 lost; terminal acknowledgement releases the logical reservation. Native physical
 retirement and remote cancellation/response outcomes remain separate.
@@ -647,7 +645,7 @@ supplies none of these additional capabilities.
 
 The composed `ConsumerNotificationAssociation` binds a shared selected
 source-free Property, Property collection, Event or Event collection definition
-to one original Consumer reference, retained access owner and instance bank.
+to the original Consumer and its retained access owner.
 Cloneable views are non-revoking. `ConsumerNotifications` supplies independently
 funded conversation capacity around the same raw lifecycle. Accepted work retains
 its original association after public view loss; neither an idle association nor
@@ -684,21 +682,19 @@ nor arbitrary physical-source identities. Authenticated source provenance needs
 an actual evidence-bearing mapping/verifier and bounded original proof/dependency
 ownership; this increment does not provide that capability.
 
-`ConsumerNotifications` exposes the same paid `decline_response` operation for admitted optional
-opportunities, retaining native retirement before advance without sending or
-stopping; required and submitted responses remain non-declinable.
-Its immutable validation hook distinguishes a Property's value schema from
-Event subscription/data/dataResponse/cancellation roles, prepays data validation
-before native handoff, and validates each
+`ConsumerNotifications` can decline an optional reply, retire its native
+opportunity and then advance. Required and submitted responses retain their
+owners. The validator distinguishes Property value from Event subscription,
+data, dataResponse and cancellation. It validates each
 candidate before logical queue acceptance. Invalid or late data remains owned
 through cleanup and is never exposed. `NotificationValidationError` preserves
-whether validation refused caller input/work credit (`Rejected`) or observed a
+whether validation refused the input (`Rejected`) or observed a
 violation of the original prepared-service dependencies (`Dependency`). The latter
 MUST irreversibly fence an admitted conversation, even if payload validation also
 failed or a declaration is restored before retry. It cannot be inferred from a
 `CoreError` category or replaced by a later successful dependency read. With original
-dependencies/currentness intact, malformed response input and insufficient codec
-credit return the original input without closing the conversation. Native data
+dependencies/currentness intact, a refusal before response acceptance returns
+the original input without closing the conversation. Native data
 validation failure remains fatal; cancellation already fences local semantic use
 before validating its control input. Currentness is rechecked after validation
 callbacks on both success and refusal, as well as after native/policy callbacks.
@@ -812,8 +808,8 @@ on any eligible member refuse preparation, even if a caller might omit it.
 `ConsumerAccessService::authorize_property_write` receives the original immutable
 schema and validated selection before native admission and at each subsequent
 permission edge, including unread handoff. Its default delegates to group
-permission covering all members; a member-restricting policy checks the entire
-set within its captured `work()` allowance. Producer authorization receives the
+permission covering all members. A member-restricting policy checks the entire
+set in a bounded operation. Producer authorization receives the
 complete validated input before any member effect; discovering a denied member
 cannot justify applying an earlier allowed member first.
 
@@ -904,7 +900,7 @@ a complete map when any included Property changes; publishing a leaf value does
 not fabricate a collection sample or trigger hidden Reads. Both roles retain
 empty establishment/cancellation data, no response right, and future-only
 delivery for the [declared MQTT mapping](../../protocol-bindings/protocols/mqtt/README.md#thing-root-property-observation).
-Validation work and variable schema backing are funded before handoff; overflow
+Check the complete map in bounded validation storage before handoff. Overflow
 reports whole-sample loss or terminates, without coalescing or losing cleanup.
 Replacement and late publication retain original authority, mapping and funding
 through retirement and acknowledgement. No initial value, replay, atomicity,
@@ -968,9 +964,11 @@ cross-family dispatch, cancellation, subscription or result ownership.
 `EXEC-OUTCOME-001`: Outcomes MUST distinguish invalid description, unsupported
 combination, denied authority, exhausted capacity, failed communication, payload
 validation, cancellation/timeout, stale identity, cleanup and internal defects.
-External malformed input is not an internal invariant. Preserve bounded first
-cause, selected identity and effect certainty. Pre-effect candidate fallback
-and post-effect retry are different decisions. Unknown or possibly committed
+Report the enforcing owner, phase and known amount on capacity refusal. Distinguish
+temporary contention with a retry owner from a permanently unsupported input or
+guarantee. A bounded fallback preserves first cause, identity and effect certainty.
+Classify malformed external input separately from an internal invariant failure.
+Pre-effect candidate fallback and post-effect retry are different decisions. Unknown or possibly committed
 write/Action/publication effects require an explicit new policy decision;
 transient failure and TD safe/idempotent flags alone do not prove safe replay.
 
@@ -979,7 +977,7 @@ first local cause, original native outcome and validated application result.
 Native progress conservatively marks remote execution uncertain; cancellation
 or a communication/validation failure does not establish remote rollback.
 `result()` and `rejected_output()` lend Core `InteractionOutputView`/`PayloadView`
-slices under that settlement's original backing and cleanup reservations.
+slices under that settlement's original backing and retirement owner.
 `native_outcome()` returns a `ConsumerNativeOutcome`: normal/late output uses the
 same slice view, while cancellation lends the exact retry/cleanup disposition.
 Neither path exposes an owning output, Payload, or the original body's Arc.

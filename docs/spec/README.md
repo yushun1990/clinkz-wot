@@ -9,14 +9,17 @@
 | [Interaction Core](interaction-core.md) | Identity, behavior, payload/security, Actions, notifications, collections and outcomes |
 | [Binding SPI](binding-spi.md) | Open composition, native progress/matching, delivery and physical retirement |
 | [Runtime safety](runtime-safety.md) | Permission, publication, cancellation, cleanup, concurrency and profiles |
-| [Foundation](foundation.md) | Owner-scoped resources, linear work and environment limits |
+| [Foundation](foundation.md) | Backing and quotas, bounded operations, cumulative work and environment limits |
 | [Time amendment](../amendments/WP-100-time-domain-v1.md) | Retained exact clock/source-time semantics |
 
 The [old authority map](v5-authority-reset.toml) is a historical tombstone.
 [Consumer resource schema 2](consumer-resource-ownership.md), remaining amendments,
 Property Read admission/gate/evidence records and numeric resource profiles have
 only the explicit historical/restricted scope registered in the successor map.
-They cannot override the general contracts above. No inactive v4.9 clause is
+In the [requirements matrix](../requirements.csv), `all` applies a requirement
+to every deployment supporting the capability. The named numeric profiles
+still identify particular legacy fixtures. The domain specifications own the
+current guarantees. No inactive v4.9 clause is
 reactivated by a reference. Old physical API inventories are superseded, not
 second active specifications.
 

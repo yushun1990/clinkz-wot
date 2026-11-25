@@ -76,8 +76,9 @@ device implements every operation, security scheme or deployment combination.
 ADR-0025 selects a semantic Engine with separate execution capabilities over
 Binding-owned native runtimes. Owned prepared data, independent instance
 permission, truthful publication and retained cancellation/cleanup are the
-means selected now. Eager plan sets, a plan-set epoch per Thing and route-scoped
-native progress are no longer universal architecture requirements.
+means selected now. Each owner bounds what it can acquire and secures the owed
+result and local retirement before an effect. Host and caller-owned deployments
+can supply different storage and scheduling for the same capability lifecycle.
 
 Likewise, executable evidence before tranche admission is an implementation
 policy owned by [project governance](../../PROJECT_GOVERNANCE.md), not an

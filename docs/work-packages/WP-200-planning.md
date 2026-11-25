@@ -23,6 +23,18 @@ independent review are determined from the current repository for each material
 slice, not from a saved next-action list. New interaction families and Bindings
 are outside this architecture migration.
 
+## Final membership and preparation work
+
+Use the actual base from closed setup and qualify all final mappings against
+current eligible providers, including earlier losers. Cover split membership,
+new ambiguity, loss of an incumbent dependency and checking a trusted final
+definition without a source parser. Shortage returns through candidate rollback.
+Selection never drops a competitor to fit capacity. Bound the simultaneous
+TD/arena, temporary mappings, output and rollback storage at their owners.
+Cap repeated scans at the search, sharing its remaining allowance with delegates.
+Exercise exact and one-short exhaustion after fallback. Remove the old compiler
+cost declarations as the builders and their callers move. [Planning](../spec/planning.md)
+
 ## Type-only schema prerequisite
 
 The Host-only `type_schema::prepare_type_schema` prepares the optional type
@@ -126,10 +138,10 @@ Acceptance requires executable evidence through the public composed path:
   repeated warm calls use retained preparation without source callbacks or
   lowering. A source-free runtime composition has no normal TD/Planning/compiler
   dependency; optional consume/build owners stay above that boundary.
-- Prepay callback work and actual cursor/artifact/temporary/indirect backing
-  before acquisition. Exercise zero/short credit, capacity/allocation refusal,
-  cancelled/failed construction and bounded rollback/destruction. No failed pure
-  preparation causes native I/O, partial installation or leaked funding.
+- Bound callbacks and the actual overlap of cursor, artifact and temporary
+  backing. Exercise yield, allocation refusal, cancellation and bounded rollback.
+  Failed pure preparation releases its provisional owners without native I/O
+  or partial installation.
 - Real calls cover validation failure, saturation, cancellation/late or unread
   results, replacement and final socket/backing/account release. Preserve HTTP
   method/header/context/framing behavior with `real_peer`, `semantic_compilation`
@@ -284,19 +296,18 @@ The first scope is one Property, one Form, exactly effective `readproperty`, one
 actual behavior, at most 16 KiB retained JSON and 256-byte property names.
 Unsupported root Forms, siblings, operations, mapping, schema, security and
 lifecycle declarations refuse the entire input. An explicit final reduced
-description would have to run the same complete process. Work is charged before
-JSON decoding, TD steps and lowering; an unpaid step returns Backpressure without
-busy retry. Finalization may retry bounded pure qualification on work exhaustion,
-but warm Serving never reinterprets the TD. No general schema, incremental JSON
-decoder, reuse/cache, delayed materialization or constrained-profile claim is
-added. The Servient owner in WP-400 reserves finalization capacity before setup.
+description would have to run the same complete process. This implementation
+charged work before JSON decoding, TD steps and lowering, and could retry pure
+qualification on fresh credit. Warm Serving never reinterprets the TD. In the
+successor a runnable yield preserves the job and exhaustion ends it. Acquire
+qualification scratch when the final TD is known or use actual slots already
+held under an advance promise.
 
 The whole-Thing selector's owned definitions can also be handed to the managed
 composition owner in [WP-400](WP-400-servient.md#owned-composed-host-producer).
-Pure caller construction/compilation stays separate from funded runtime
-ownership handoff. That owner reserves final qualification scratch and checks
-the exact staged TD, actual registration set and complete behavior/mapping set
-before native effects. Planning returns the observations establishing unique
+Pure caller construction/compilation stays separate from runtime ownership
+handoff. Check the exact staged TD, actual registration set and complete
+behavior/mapping set after closed native setup and before publication. Planning returns the observations establishing unique
 coverage. Closed installation uses them at the Servient publication decision.
 
 `check_final_thing` shares the bounded common TD walk with construction but
@@ -307,14 +318,12 @@ ambiguity under the same matching/error contract as `prepare`. Original operatio
 coordinates, selected registration identity, complete final operation count and
 behavior coverage remain checked. The HTTP participant compares borrowed input with original instructions; the
 test-only UDP participant reuses its pure mapping logic without boxing another definition.
-Work exhaustion remains Backpressure and does not silently certify support.
+An incomplete walk cannot certify support.
 
-Actual capabilities declare `final_check_temporary_bytes` for the complete peak
-of one support/comparison callback, including indirect or temporary materialized
-data. Managed WP-400 admission reserves the largest sequential callback peak
-alongside common TD scratch before executing any such callback. Unknown bounds
-refuse that managed handoff; the pure caller-provisioned construction boundary
-does not implicitly fund requalification allocations.
+The earlier managed path estimated the largest sequential callback using
+`final_check_temporary_bytes`. Replace that declaration with usable scratch for
+the TD walk and the callback that actually runs. A failed acquisition rolls
+back the closed candidate. A promised advance reserve supplies the overlap.
 
 The notification registry also selects an observable Property's Form and
 captures its own value schema, actual Binding/configuration and data/access
@@ -464,9 +473,10 @@ the normal common/schema/security/service qualification remains mandatory.
 
 Affected source is HTTP's definition/preparation and native artifact resolution,
 its compiler/input representation, and shared response extraction/packing.
-New owned physical backing reserves its original global live,
-artifact-byte/item and cleanup capacity before construction. Each mapping keeps
-its generic cursor/output/temporary/rollback/reference funding. Existing inline
+In that increment each mapping reserved global live, artifact and cleanup
+capacity for its cursor, output, temporary storage, rollback and references.
+The successor bounds those acquisitions at their owners and retains any
+shared deployment quota through its specified release point. Existing inline
 output and closed aggregate layouts are unchanged. The owned callback's temporary
 bound includes the published security-extraction envelope and bounded normalized
 vectors; this is separate from retained input capacity. Validate the HTTP definition

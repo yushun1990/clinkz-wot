@@ -10,7 +10,7 @@ id = "WP-000"
 status = "in-progress"
 prior_design_revision = "5.1"
 prior_status = "complete"
-v6_disposition = "Retain prior primitive evidence; new owner-scoped policy/schema target is not completed by the old package status."
+v6_disposition = "Retain time/generation evidence. Move limits and job allowances to their owners and retire the flat profiles with their last reader."
 document = "docs/work-packages/WP-000-foundation.md"
 owner_crates = ["foundation"]
 depends_on = []
@@ -47,10 +47,10 @@ owner_crates = ["servient", "servient/finite", "core"]
 # capacity have independent cardinality. Borrowed Host Consumer turns and explicit
 # HTTP Read instruction reuse across independent qualified Producer publications
 # retain those owners; broader families/profiles remain independently scoped.
-# Optional Producer finite capacity separates persistent native participants,
-# active work and retained outcomes; WP-400 owns the scoped real-HTTP evidence.
-# Host Producer turns retain typed Servient execution with existing erased native
-# members and compose alongside Consumer capacities; no new dependency or gate.
+# WP-400 composes the finite public Host and caller-owned entries from the
+# same WP-100/300 contracts. Source-enabled qualification also uses WP-200.
+# WP-600 exercises both entries over real I/O. A deployment-specific advance
+# reservation is optional and does not gate ordinary admission.
 depends_on = ["WP-100", "WP-300"]
 
 [[package]]

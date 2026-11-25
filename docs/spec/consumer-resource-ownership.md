@@ -1,15 +1,13 @@
 # Consumer resource ownership migration
 
-Status: **restricted Consumer Property Read schema-2 adapter contract** under
-v6.0 RES-SCHEMA-001. Its exact numeric/encoding/original-account meaning remains;
-its eligibility, closed compiler and operation-specific policy shapes do not
-constrain the general architecture. New capability admission and qualification
-are not transferred. The predecessor 65/31/121 classification is historical.
+This record describes the schema-2 Property Read adapter still in the tree.
+Its numeric and encoding rules apply to its remaining readers. Migrate the
+source-enabled and prepared-only Read paths, rebuild incompatible artifacts
+and delete the format with its last reader. [Target resource contract](foundation.md)
 
-This file owns the retained adapter's detailed contract and API delta. The
-[schema overlay](../resource-contracts/consumer-ownership-v2.toml) owns its exact
-row dispositions. The [readmission record](../work-packages/WP-400-consumer-resource-ownership-admission.md)
-owns implementation scope, evidence obligations and impact disposition.
+The [schema overlay](../resource-contracts/consumer-ownership-v2.toml) and
+[original admission](../work-packages/WP-400-consumer-resource-ownership-admission.md)
+record the implemented interpretation and its revision-scoped evidence.
 
 ## v6 TD 1.1 field correction
 

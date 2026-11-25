@@ -1,6 +1,8 @@
 # Resource ownership and admission in the WoT Engine
 
-**Status** DISCUSSING
+**Status** MIGRATED to the architecture contracts. The investigation and measurements
+below describe the assessed revisions. [Decision](../docs/ADRs/0025-semantic-engine-and-binding-runtimes.org) ·
+[Owner-enforced limits](../docs/spec/foundation.md) · [Migration sequence](../PLAN.md#engineering-priorities-and-dependencies)
 
 **Recommendation.** Use one publication and execution lifecycle per capability on Host and
 caller-owned deployments. Before accepting an obligation, secure its actual result and
@@ -20,7 +22,7 @@ after contract review. The comparison uses master
 `fadb3aa6714c5faa20ba74e533f7a0aa8386e339` and #308
 `733e4d708b51c3db1b8357899eb93b5485a11bf4`.
 [PR #308](https://github.com/yushun1990/clinkz-wot/pull/308) ·
-[Current publication contract](../docs/spec/runtime-safety.md#L513-L526)
+[Current publication contract](https://github.com/yushun1990/clinkz-wot/blob/fadb3aa6714c5faa20ba74e533f7a0aa8386e339/docs/spec/runtime-safety.md#L513-L526)
 
 ## Guarantees visible to the application
 
@@ -55,7 +57,7 @@ drive may run** when its next step has a known maximum cost. A job can also cap 
 work across drives**. The owner refunds a quota debit at last use. Spent work stays spent.
 Kernel buffers, an opaque application's heap and elapsed CPU time have separate owners and
 require separate evidence. [Foundation](../docs/spec/foundation.md) ·
-[Binding delivery and retirement](../docs/spec/binding-spi.md#L62-L97)
+[Binding delivery and retirement](https://github.com/yushun1990/clinkz-wot/blob/fadb3aa6714c5faa20ba74e533f7a0aa8386e339/docs/spec/binding-spi.md#L62-L97)
 
 ## What master and #308 actually enforce
 
@@ -88,7 +90,7 @@ remaining coupling lies in the specific handoff and work rules imposed on those 
   continuing Action driver prepays access, native, cleanup and validation together before a
   close can run. The incremental TD admission walk shows where metering earns its cost. It
   charges variable input inspection and can resume a cursor.
-  [Consumer ownership](../docs/spec/foundation.md#L30-L55) ·
+  [Consumer ownership](https://github.com/yushun1990/clinkz-wot/blob/fadb3aa6714c5faa20ba74e533f7a0aa8386e339/docs/spec/foundation.md#L30-L55) ·
   [Borrowed Read](../servient/finite/src/borrowed_consumer.rs) ·
   [Finite driver](../core/src/execution.rs) ·
   [Action driver](../core/src/execution/action.rs) · [TD cursor](../td/src/validated.rs)
@@ -216,7 +218,7 @@ The bounded local commit publishes the TD and opens the original gates. Short pr
 the candidate and its endpoint. Cancellation, permanent refusal or observed expiry fences
 it and starts rollback. An exclusive route may require a service gap. A visible native
 effect requires a truthful residual outcome or refusal of the mapping.
-[Publication coverage](../docs/spec/planning.md#L107-L152) · [Replacement policy](../PLAN.md)
+[Publication coverage](https://github.com/yushun1990/clinkz-wot/blob/fadb3aa6714c5faa20ba74e533f7a0aa8386e339/docs/spec/planning.md#L107-L152) · [Replacement policy](../PLAN.md)
 
 The same rule applies to Consumer results. An ordinary pool can supply the result cell when
 a call is admitted. Firmware can dedicate that cell at construction. The exchange owns the
@@ -291,8 +293,8 @@ disposal. Release only the retired exchange. Fence dependent participations if t
 service itself is lost. On root loss use finite local disposal or acknowledged transfer to a
 longer-lived owner. Explicit close reports local drain and any unresolved remote effect.
 Process abort or a stopped driver cannot promise eventual completion.
-[Runtime cleanup and Drop](../docs/spec/runtime-safety.md#L535-L574) ·
-[Native delivery/retirement](../docs/spec/binding-spi.md#L62-L97)
+[Runtime cleanup and Drop](https://github.com/yushun1990/clinkz-wot/blob/fadb3aa6714c5faa20ba74e533f7a0aa8386e339/docs/spec/runtime-safety.md#L535-L574) ·
+[Native delivery/retirement](https://github.com/yushun1990/clinkz-wot/blob/fadb3aa6714c5faa20ba74e533f7a0aa8386e339/docs/spec/binding-spi.md#L62-L97)
 
 ### Which work needs a meter
 
@@ -330,7 +332,7 @@ fresh turn, trying another registration or reentering a handler cannot mint more
 Exhaustion ends that search. Previously accepted results and native cleanup stay with
 their owners and keep their own progress path.
 Long-lived subscriptions renew work per bounded delivery under their queue and overflow
-policy. A wall clock fences expired obligations. It cannot preempt a synchronous callback.
+policy. The supplied monotonic clock fences expired obligations when observed. It cannot preempt a synchronous callback.
 A deployment must restrict, break up or decline a callback whose worst supported input
 would exceed its promised turn bound.
 
@@ -418,7 +420,7 @@ Servient authorizes dispatch. A Host may erase these types or multiplex a shared
 An ordinary third-party Binding can implement the facet without a footprint catalogue,
 reservation provider or executor. A deployment offering a stronger guarantee must control
 the relevant backing, including anything a callback transfers into it.
-[Binding delivery and retirement](../docs/spec/binding-spi.md#L62-L97)
+[Binding delivery and retirement](https://github.com/yushun1990/clinkz-wot/blob/fadb3aa6714c5faa20ba74e533f7a0aa8386e339/docs/spec/binding-spi.md#L62-L97)
 
 A source-free caller supplies prepared meaning, typed slots, slices, a clock and manual
 progress. If an assigned base changes compiled meaning, the caller must supply a qualified
@@ -433,7 +435,7 @@ callbacks, target stack, allocator/SDK and interrupt evidence. A Host can report
 failure only when its allocator permits recovery.
 [Caller-owned Read](../docs/evidence/constrained-finite-execution.md) ·
 [Caller-owned Action](../docs/evidence/continuing-action-runtime-independence.md) ·
-[Environment contract](../docs/spec/foundation.md#L238-L261)
+[Environment contract](https://github.com/yushun1990/clinkz-wot/blob/fadb3aa6714c5faa20ba74e533f7a0aa8386e339/docs/spec/foundation.md#L238-L261)
 
 ## Disposition of existing resource abstractions
 

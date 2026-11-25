@@ -2,6 +2,10 @@
 
 Status: DECIDED
 
+The subsequent [resource admission decision](../docs/ADRs/0025-semantic-engine-and-binding-runtimes.org)
+replaces this investigation's setup prepayment and per-phase credit proposals.
+[Foundation](../docs/spec/foundation.md) owns the amended resource contracts.
+
 A Servient should be able to expose two Things on one listener, let a request to
 the first expire after its handler runs, and serve the next request to **either**
 Thing while the application still holds the first outcome. It should also be
@@ -246,7 +250,7 @@ qualify and bind them. Reserve participant slots for the native participations
 the publication requires. An exhausted resource justifies a capacity refusal
 only when the publication or interaction needs more of that resource, including
 shared backing or work credit. The selected Host accounting is specified in
-the [Producer resource contract](../docs/spec/foundation.md#host-producer-notification-mapping-capacity).
+the [Producer resource contract](https://github.com/yushun1990/clinkz-wot/blob/fadb3aa6714c5faa20ba74e533f7a0aa8386e339/docs/spec/foundation.md#host-producer-notification-mapping-capacity).
 
 Before acceptance, the Binding owns an offered packet, stream or SDK slot,
 its bounded buffering and its native refusal path. It can wait for capacity,

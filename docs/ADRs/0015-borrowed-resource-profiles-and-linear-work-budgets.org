@@ -1,14 +1,17 @@
 #+title: ADR-0015: Borrowed Resource Profiles and Linear Work Budgets
 #+date: 2026-07-22
-#+status: Accepted
+#+status: Superseded
 
-* v6.0 scope amendment
+* Disposition
 
-Borrow immutable policy and never duplicate a remaining work allowance. The exact ResourceLimits/StaticResourceProfile schema is a retained adapter API, not mandatory v6 configuration for every capability. RES-OWNER-001, RES-SCHEMA-001 and RES-WORK-001 own the general obligations. Original 195/196-field tranche instructions are historical sequencing.
+[[file:0025-semantic-engine-and-binding-runtimes.org][ADR-0025]] supersedes the shared profile and general work budget, including
+manual driving. The owner of a repeatable job keeps its remaining allowance
+across fallback, delegation and rewind. Owners can borrow immutable settings
+directly. [[file:../spec/foundation.md][Foundation]] owns the replacement contracts.
 
-* Preserved rationale and scoped contract
+* Historical rationale and original contract
 
-* Context
+** Context
 
 The exhaustive v4.9 resource schema grows from 118 fields in the currently
 generated implementation to 195 fields. With the existing
@@ -28,7 +31,7 @@ resource concepts normal applications must see. The design requires explicit
 bounded configuration without making reservation machinery part of every
 ordinary interaction call.
 
-* Decision
+** Decision
 
 =ResourceLimits= is an immutable configuration snapshot. It MAY implement
 =Clone= for explicit startup-time duplication, but it MUST NOT implement
@@ -84,7 +87,7 @@ No stable Rust dynamic-library ABI is promised. All v1 crates are rebuilt
 together through Cargo, and adding enum variants remains visible to exhaustive
 downstream matches.
 
-* Consequences
+** Consequences
 
 - An application that customizes a named profile clones it explicitly before
   applying =with_limit= or =set=; the potentially large copy is visible at the
@@ -97,7 +100,7 @@ downstream matches.
   that retained profile size is material, provided public semantics and
   exhaustive schema validation remain intact.
 
-* Rejected alternatives
+** Rejected alternatives
 
 - Relying on compiler copy elision was rejected because it is not a portable
   correctness or small-stack guarantee.

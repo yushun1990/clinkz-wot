@@ -25,14 +25,14 @@ Contracts crate, universal runtime backend or Host/Static crate split is require
 
 | Component | Owns |
 | --- | --- |
-| Foundation | Linear capacity/work, time and identity primitives |
+| Foundation | Monotonic time and generation primitives |
 | TD | Documents/extensions and shared WoT interpretation |
 | Planning | Bounded selection/support and pure construction coordination |
 | Core | Semantic interaction/data/security/ownership contracts and outcomes |
 | Servient | Logical instances, current permission, publication, behavior dispatch, accepted work and cleanup |
 | Binding | Native mapping, matching/captures, correlation, I/O, distribution, infrastructure and its limits |
 | Discovery | Explicit introduction/exploration/retrieval client workflows |
-| Application/platform | Linked composition, behavior/services, deployment and environment recovery |
+| Application/platform | Linked composition, behavior/services, storage, shared quotas, driving and environment recovery |
 
 Runtime registrations need no compiler. Execution-only compositions MUST NOT
 acquire an upward preparation dependency. An optional preparation coordinator
@@ -54,8 +54,8 @@ and Foundation. `RawProducerServient` owns the logical registry, unique authorit
 and actual behavior set. Independently typed `RawFiniteRuntime<B>` values own
 their captured Binding/configuration and one bounded exchange/settlement each;
 none owns a copy of current logical permission. Servient progress borrows the
-one logical owner and checks current recipients/behavior under a fixed paid
-count/name-byte lookup envelope. Native progress/close needs no logical owner.
+one logical owner and checks current recipients and behavior using bounded
+count and name lookup. Native progress/close needs no logical owner.
 Accepted work retains its original instance through settlement acknowledgement;
 replacement cannot retarget it. A Binding can retire the original reply and
 keep its installation serving. Loss of a required installation fences the
@@ -69,9 +69,9 @@ until settlement acknowledgement. The target shares registered backing; output
 is application-backed until return and the Engine accepts only the declared
 complete output representation. Raw data still obeys Property result-shape rules.
 Required output-validation mode additionally uses the captured native provider's
-actual prepared service, after prepaid bounded result traversal. Caller-clock
-deadlines fence unfinished ingress, dispatch and pending delivery; local fencing
-does not require credits, while native/cleanup polls do.
+actual prepared service during bounded result traversal. Deadlines on the
+supplied monotonic clock fence unfinished ingress, dispatch and pending delivery.
+Bounded native polls advance local retirement.
 The direct HTTP finite facet supplies its prepared JSON/type service without the
 older installation/permit ABI or a Binding-to-Servient dependency. Neither mode
 qualifies/publishes a TD or replaces the funded preparation-dependent Producer
@@ -127,7 +127,7 @@ Automatic progress is not claimed by these manual facets. Optional Host Consumer
 turn composition borrows existing family capacities under the
 [runtime progress contract](../spec/runtime-safety.md#host-consumer-execution-turns).
 It depends only on Core/Foundation and adds no owner, scheduler or protocol case.
-The deployment supplies wake/maintenance turns, time and independent credit;
+The deployment supplies readiness, maintenance turns and a monotonic clock.
 Servient retains logical authority/work and Bindings retain native resources.
 The composed Host Producer stores its typed Servient turn with each original
 native member under the [Producer turn contract](../spec/runtime-safety.md#host-producer-execution-turns).
