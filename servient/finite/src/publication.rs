@@ -93,6 +93,14 @@ impl PublicationPermission {
         self.active.get()
     }
 
+    pub(super) fn accepts_finite(&self, id: &ProducerParticipationId, raw: bool) -> bool {
+        if self.members.is_empty() {
+            raw
+        } else {
+            self.members.iter().any(|member| id.matches(member))
+        }
+    }
+
     pub(super) fn check_work(&self) -> usize {
         // Validate the original identities/gates and allow for withdrawal.
         1 + self.members.len() + 2 * self.gates.len()
@@ -131,8 +139,7 @@ impl ProducerPublication {
         Self::staging_backing_for(MAX_PRODUCER_PARTICIPANTS)
     }
 
-    /// Controlled staging layout for a known membership. A raw publication
-    /// with deferred membership provisions the full manual Host envelope.
+    /// Controlled staging layout for the selected native membership.
     pub fn staging_backing_for(members: usize) -> usize {
         let members = members.min(MAX_PRODUCER_PARTICIPANTS);
         size_of::<Self>()
@@ -260,7 +267,7 @@ impl ProducerPublication {
     }
     /// Bind the complete original native set before setup. Rebinding to a
     /// different/duplicate set is refused, including after partial setup fails.
-    /// Storage was prepaid at publication staging, not at the local commit.
+    /// Record the selected membership before the local commit.
     pub fn bind_participants(
         &mut self,
         participants: &[&dyn ClosedProducerParticipation],
@@ -366,8 +373,17 @@ impl ProducerPublication {
         {
             return Err(CoreError::Validation(context()));
         }
-        Rc::get_mut(&mut self.permission)
-            .expect("unpublished permission")
+        let permission = Rc::get_mut(&mut self.permission).expect("unpublished permission");
+        let short = |_| CoreError::Backpressure(context());
+        permission
+            .members
+            .try_reserve_exact(ids.len())
+            .map_err(short)?;
+        permission
+            .gates
+            .try_reserve_exact(ids.len())
+            .map_err(short)?;
+        permission
             .members
             .extend(ids.map(ProducerParticipationId::downgrade));
         Ok(())
@@ -379,6 +395,25 @@ impl ProducerPublication {
     pub fn revoke(&self) {
         self.cancelled.set(true);
         self.permission.revoke();
+    }
+    /// Only an unpublished candidate owns its instance exclusively. A failed
+    /// installation can return that exact behavior owner after native disposal.
+    pub fn take_unpublished_instance(&mut self) -> Option<RawProducerInstance> {
+        if self.committed {
+            return None;
+        }
+        self.revoke();
+        self.instance.take().and_then(Rc::into_inner)
+    }
+    pub fn set_final_description(&mut self, description: Arc<str>) -> CoreResult<()> {
+        let instance = self
+            .instance
+            .as_mut()
+            .and_then(Rc::get_mut)
+            .filter(|_| !self.committed && !self.cancelled.get())
+            .ok_or_else(|| CoreError::Validation(context()))?;
+        instance.description = Some(description);
+        Ok(())
     }
     pub fn staged_description(&self) -> Option<&str> {
         self.instance.as_ref()?.description.as_deref()
@@ -697,23 +732,24 @@ impl RawProducerServient {
         Ok(())
     }
 
-    /// Pure staging, with all allocations and behavior validation before native
-    /// setup. Refusal returns the original authority/behavior/description owner.
+    /// Stage the original behavior and description. Bind exact member and gate
+    /// storage when the selected installation is known.
     pub fn prepare_publication(
         &self,
         instance: RawProducerInstance,
         expected: Option<ProducerInstanceKey>,
     ) -> Result<ProducerPublication, BindingInputRejection<RawProducerInstance>> {
-        self.stage_publication(instance, expected, MAX_PRODUCER_PARTICIPANTS)
+        self.stage_publication(instance, expected, None)
     }
 
     fn stage_publication(
         &self,
         instance: RawProducerInstance,
         expected: Option<ProducerInstanceKey>,
-        members: usize,
+        members: Option<usize>,
     ) -> Result<ProducerPublication, BindingInputRejection<RawProducerInstance>> {
-        if let Err(error) = check_member_count(members)
+        if let Err(error) = members
+            .map_or(Ok(()), check_member_count)
             .and_then(|()| self.check_publication_input(&instance, expected))
         {
             return Err(BindingInputRejection::new(
@@ -724,7 +760,7 @@ impl RawProducerServient {
         let key = instance.key();
         Ok(ProducerPublication {
             instance: Some(Rc::new(instance)),
-            permission: Rc::new(PublicationPermission::staged(members)),
+            permission: Rc::new(PublicationPermission::staged(members.unwrap_or(0))),
             issuer: Rc::downgrade(&self.issuer),
             expected,
             retired: None,
@@ -748,7 +784,8 @@ impl RawProducerServient {
         routes: CapturedProducerRoutes,
         lifetime: &mut WorkBudget,
     ) -> Result<ProducerPublication, BindingInputRejection<RawProducerInstance>> {
-        let mut publication = self.stage_publication(instance, expected, participants.len())?;
+        let mut publication =
+            self.stage_publication(instance, expected, Some(participants.len()))?;
         if let Err(error) = publication
             .bind_participants(participants)
             .and_then(|()| publication.bind_routes(routes, Some(lifetime)))
@@ -875,11 +912,6 @@ impl RawProducerServient {
             .try_reserve_exact(participants.len())
             .map_err(|_| CoreError::Backpressure(context()))?;
         gates.extend(participants.iter().map(|p| Rc::clone(p.ingress_gate())));
-        if gates.iter().enumerate().any(|(i, gate)| {
-            !gate.is_staged() || gates[..i].iter().any(|prior| Rc::ptr_eq(prior, gate))
-        }) {
-            return Err(CoreError::Validation(context()));
-        }
         let _current = PublicationFacts::lock_current(&[coverage, &installation])?;
         if publication.cancelled.get() {
             return Err(CoreError::Cancelled(context()));
@@ -902,35 +934,33 @@ impl RawProducerServient {
                 .consume(WorkClass::CleanupItems, records as u64)
                 .map_err(|_| CoreError::Backpressure(context()))?;
         }
-        Rc::get_mut(&mut publication.permission)
-            .expect("unpublished permission")
-            .gates
-            .extend(gates.iter().map(Rc::downgrade));
-        let entry = InstanceEntry {
-            instance: Rc::clone(publication.instance.as_ref().expect("uncommitted owner")),
-            permission: Rc::clone(&publication.permission),
-            action_routes: publication.action_routes.take(),
-            notification_routes: publication.notification_routes.take(),
-        };
-        // COMMIT: exclusive &mut access orders description, behavior, current
-        // logical permission and native participation opening. Capacity was preallocated.
-        if index == self.instances.len() {
-            self.instances.push(entry);
-        } else {
-            self.instances[index].permission.revoke();
-            publication.retired = Some(core::mem::replace(&mut self.instances[index], entry));
-            // Fixed-size bounded Action scan, no application callback. The
-            // original invocation still owns its work and late settlement.
-            if let Some(actions) = action_store {
-                actions.revoke(publication.expected.expect("replacement checked"));
+        crate::commit_producer_gates(gates.iter().map(Rc::as_ref), || {
+            Rc::get_mut(&mut publication.permission)
+                .expect("unpublished permission")
+                .gates
+                .extend(gates.iter().map(Rc::downgrade));
+            let entry = InstanceEntry {
+                instance: Rc::clone(publication.instance.as_ref().expect("uncommitted owner")),
+                permission: Rc::clone(&publication.permission),
+                action_routes: publication.action_routes.take(),
+                notification_routes: publication.notification_routes.take(),
+            };
+            // COMMIT: exclusive &mut access orders description, behavior, current
+            // logical permission and native participation opening. Capacity was preallocated.
+            if index == self.instances.len() {
+                self.instances.push(entry);
+            } else {
+                self.instances[index].permission.revoke();
+                publication.retired = Some(core::mem::replace(&mut self.instances[index], entry));
+                // Fixed-size bounded Action scan, no application callback. The
+                // original invocation still owns its work and late settlement.
+                if let Some(actions) = action_store {
+                    actions.revoke(publication.expected.expect("replacement checked"));
+                }
             }
-        }
-        publication.permission.active.set(true);
-        publication.committed = true;
-        for gate in gates {
-            gate.open();
-        }
-        Ok(())
+            publication.permission.active.set(true);
+            publication.committed = true;
+        })
     }
 
     /// Explicit acknowledged local retirement, after native cleanup and result
@@ -1045,7 +1075,16 @@ impl RawProducerServient {
         key: ProducerInstanceKey,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
-        let mut budget = Some(budget);
+        self.reclaim_revoked_with(key, Some(budget))
+    }
+    pub fn reclaim_revoked(&mut self, key: ProducerInstanceKey) -> CoreResult<()> {
+        self.reclaim_revoked_with(key, None)
+    }
+    fn reclaim_revoked_with(
+        &mut self,
+        key: ProducerInstanceKey,
+        mut budget: Option<&mut WorkBudget>,
+    ) -> CoreResult<()> {
         pay_cleanup(&mut budget, self.instances.len())?;
         let index = self
             .instances

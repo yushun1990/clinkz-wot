@@ -25,6 +25,11 @@ are outside this architecture migration.
 
 ## Public finite publication, acceptance and retirement
 
+The [finite deployment evidence](../evidence/finite-producer-publication.md)
+covers ordinary Host exposure and a trusted caller-owned Read, including
+original-result ownership across replacement. Continuing and mixed deployment
+drivers retain their separate migration below.
+
 Use one Servient lifecycle with linked Binding-owned assembly on Host and typed
 caller-owned storage for a trusted final TD. Secure rollback before each
 acquisition. Replace the six-charge `WorkLease` with active exchange storage,

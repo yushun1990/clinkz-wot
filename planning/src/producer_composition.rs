@@ -100,7 +100,9 @@ pub trait ProducerCapability {
     /// keeps its complete physical owner through every definition reference;
     /// each returned mapping still declares its own layout/operand cost.
     /// Native infrastructure/work and the logical Thing are separate owners.
-    fn definition_bytes(&self, definition: &dyn Any) -> Option<usize>;
+    fn definition_bytes(&self, _definition: &dyn Any) -> Option<usize> {
+        None
+    }
     fn prepare(
         &self,
         input: ProducerOperationInput<'_>,
@@ -136,6 +138,23 @@ pub trait ProducerCapability {
     ) -> CoreResult<bool>;
 }
 
+/// A linked Host finite service constructs its native configuration from only its
+/// selected mappings. Assembly is bounded and pure. Servient owns the driver,
+/// dispatch, work capacity and publication. Execution-only Bindings do not
+/// depend on this preparation facet.
+pub trait FiniteProducerService: ProducerCapability {
+    type Binding: clinkz_wot_core::finite::FiniteIngressBinding + 'static;
+
+    fn assemble<'a>(
+        &self,
+        instance: ProducerInstanceKey,
+        operations: impl Iterator<Item = &'a PreparedOperation>,
+    ) -> CoreResult<(
+        Self::Binding,
+        <Self::Binding as clinkz_wot_core::finite::FiniteIngressBinding>::Configuration,
+    )>;
+}
+
 pub struct PreparedOperation {
     pub site: FormSite,
     pub form: u32,
@@ -145,6 +164,10 @@ pub struct PreparedOperation {
     definition: Box<dyn Any>,
 }
 impl PreparedOperation {
+    /// Position in the exact eligible registration set used by this selection.
+    pub fn registration(&self) -> usize {
+        self.provider
+    }
     pub fn notification_start(&self) -> Option<NotificationKind> {
         NotificationKind::for_operation(self.operation)
             .filter(|kind| kind.start_operation() == self.operation)
@@ -163,14 +186,15 @@ impl PreparedOperation {
 /// A new Thing requalifies its complete description, services and behaviors.
 pub struct PreparedThing {
     operations: Vec<PreparedOperation>,
-    retained_bytes: usize,
+    retained_bytes: Option<usize>,
     notification_mappings: usize,
 }
 impl PreparedThing {
     pub fn operations(&self) -> &[PreparedOperation] {
         &self.operations
     }
-    pub fn retained_bytes(&self) -> usize {
+    /// Present for preparation under the legacy aggregate backing contract.
+    pub fn retained_bytes(&self) -> Option<usize> {
         self.retained_bytes
     }
     /// One publication route per selected start Form/operation, including
@@ -178,6 +202,44 @@ impl PreparedThing {
     pub fn notification_mapping_count(&self) -> usize {
         self.notification_mappings
     }
+}
+
+/// Replace only the document base. Original Form hrefs, extensions and JSON
+/// number lexemes survive. The normal TD walk resolves the resulting document.
+pub fn description_at_base(
+    description: &str,
+    base: &str,
+    budget: &mut WorkBudget,
+) -> CoreResult<String> {
+    use alloc::collections::BTreeMap;
+    use serde_json::value::RawValue;
+    if description.len() > PRODUCER_DESCRIPTION_BYTES || base.len() > PRODUCER_DESCRIPTION_BYTES {
+        return Err(unsupported());
+    }
+    budget
+        .consume(
+            WorkClass::CodecInputBytes,
+            (description.len() + base.len()) as u64,
+        )
+        .map_err(|_| busy())?;
+    clinkz_wot_td::core::data_type::BaseUri::parse(base).map_err(|_| unsupported())?;
+    let mut fields: BTreeMap<String, &RawValue> =
+        serde_json::from_str(description).map_err(|_| CoreError::Validation(context()))?;
+    let encoded = serde_json::value::to_raw_value(base).map_err(|_| unsupported())?;
+    // The source already bounds all original members. Include the new encoded
+    // base, key, colon and comma before emitting the final document.
+    budget
+        .consume(
+            WorkClass::CodecOutputBytes,
+            (description.len() + encoded.get().len() + 8) as u64,
+        )
+        .map_err(|_| busy())?;
+    fields.insert("base".into(), &encoded);
+    let result = serde_json::to_string(&fields).map_err(|_| unsupported())?;
+    if result.len() > PRODUCER_DESCRIPTION_BYTES {
+        return Err(unsupported());
+    }
+    Ok(result)
 }
 
 fn context() -> ErrorContext {
@@ -229,7 +291,11 @@ impl ProducerRegistrations {
 fn observe_providers(
     providers: &[&dyn ProducerCapability],
     facts: &mut PublicationFacts,
+    budget: &mut WorkBudget,
 ) -> CoreResult<()> {
+    budget
+        .consume(WorkClass::ProviderProbes, providers.len() as u64)
+        .map_err(|_| busy())?;
     for provider in providers {
         provider.observe_configuration(&mut facts.observer())?;
     }
@@ -250,10 +316,54 @@ pub fn prepare_thing(
     behavior: impl Fn(ValidatedProducerScope<'_>, Operation) -> bool,
 ) -> CoreResult<PreparedThing> {
     let mut facts = PublicationFacts::default();
-    observe_providers(providers, &mut facts)?;
+    select_thing(
+        description,
+        instance,
+        limits,
+        budget,
+        providers,
+        behavior,
+        &mut facts,
+        Some(core::mem::size_of::<PreparedThing>()),
+    )
+}
+
+/// Select every advertised operation and retain the observed deployment versions
+/// until the publication decision. Each selected provider owns its definition.
+pub fn select_finite_thing(
+    description: &str,
+    instance: ProducerInstanceKey,
+    limits: &ResourceLimits,
+    budget: &mut WorkBudget,
+    providers: &[&dyn ProducerCapability],
+    behavior: impl Fn(ValidatedProducerScope<'_>, Operation) -> bool,
+    facts: &mut PublicationFacts,
+) -> CoreResult<PreparedThing> {
+    select_thing(
+        description,
+        instance,
+        limits,
+        budget,
+        providers,
+        behavior,
+        facts,
+        None,
+    )
+}
+#[allow(clippy::too_many_arguments)]
+fn select_thing(
+    description: &str,
+    instance: ProducerInstanceKey,
+    limits: &ResourceLimits,
+    budget: &mut WorkBudget,
+    providers: &[&dyn ProducerCapability],
+    behavior: impl Fn(ValidatedProducerScope<'_>, Operation) -> bool,
+    facts: &mut PublicationFacts,
+    mut retained_bytes: Option<usize>,
+) -> CoreResult<PreparedThing> {
+    observe_providers(providers, facts, budget)?;
     let mut operations = Vec::new();
     let mut notification_mappings = 0;
-    let mut retained_bytes = core::mem::size_of::<PreparedThing>();
     visit_thing(
         description,
         instance,
@@ -274,27 +384,29 @@ pub fn prepare_thing(
                 }
             }
             let selected = chosen.ok_or_else(unsupported)?;
-            let binding_bytes = providers[selected.0]
-                .definition_bytes(selected.2.as_ref())
-                .ok_or_else(unsupported)?;
             let old_capacity = operations.capacity();
             operations.try_reserve(1).map_err(|_| busy())?;
-            let next = retained_bytes
-                .checked_add(
-                    (operations.capacity() - old_capacity)
-                        * core::mem::size_of::<PreparedOperation>(),
-                )
-                .and_then(|n| n.checked_add(input.site.name_bytes()))
-                .and_then(|n| n.checked_add(binding_bytes))
-                .ok_or_else(busy)?;
-            if u64::try_from(next).map_or(true, |n| {
-                n > limits
-                    .get(ResourceKind::EngineLiveBytesGlobalMax)
-                    .unwrap_or(0)
-            }) {
-                return Err(busy());
+            if let Some(total) = &mut retained_bytes {
+                let binding_bytes = providers[selected.0]
+                    .definition_bytes(selected.2.as_ref())
+                    .ok_or_else(unsupported)?;
+                let next = total
+                    .checked_add(
+                        (operations.capacity() - old_capacity)
+                            * core::mem::size_of::<PreparedOperation>(),
+                    )
+                    .and_then(|n| n.checked_add(input.site.name_bytes()))
+                    .and_then(|n| n.checked_add(binding_bytes))
+                    .ok_or_else(busy)?;
+                if u64::try_from(next).map_or(true, |n| {
+                    n > limits
+                        .get(ResourceKind::EngineLiveBytesGlobalMax)
+                        .unwrap_or(0)
+                }) {
+                    return Err(busy());
+                }
+                *total = next;
             }
-            retained_bytes = next;
             let operation = PreparedOperation {
                 site: input.site.clone(),
                 form: input.form,
@@ -308,7 +420,7 @@ pub fn prepare_thing(
             Ok(())
         },
     )?;
-    let _current = PublicationFacts::lock_current(&[&facts])?;
+    let _current = PublicationFacts::lock_current(&[facts])?;
     Ok(PreparedThing {
         operations,
         retained_bytes,
@@ -437,7 +549,7 @@ pub fn check_final_thing(
     prepared: &PreparedThing,
     behavior: impl Fn(ValidatedProducerScope<'_>, Operation) -> bool,
 ) -> CoreResult<()> {
-    ProducerQualification::begin(providers, PublicationFacts::default())?.check_final(
+    ProducerQualification::begin(providers, PublicationFacts::default(), budget)?.check_final(
         description,
         instance,
         limits,
@@ -458,8 +570,9 @@ impl<'a> ProducerQualification<'a> {
     pub fn begin(
         providers: &'a [&'a dyn ProducerCapability],
         mut facts: PublicationFacts,
+        budget: &mut WorkBudget,
     ) -> CoreResult<Self> {
-        observe_providers(providers, &mut facts)?;
+        observe_providers(providers, &mut facts, budget)?;
         Ok(Self { providers, facts })
     }
     pub fn backing_bytes(&self) -> Option<usize> {

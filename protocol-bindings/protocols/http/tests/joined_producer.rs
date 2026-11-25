@@ -1367,6 +1367,10 @@ fn delivery_failure_after_dispatch_preserves_original_value_and_funded_cleanup()
     until(&mut s, &mut e, RawFiniteState::Delivering);
     controls.fail_send.set(true);
     step(&mut s, &mut e);
+    assert_eq!(e.state(), RawFiniteState::RetiringReply);
+    assert!(s.description(e.key()).is_some());
+    // This wrapper requires whole-member close to retire its original reply.
+    step(&mut s, &mut e);
     assert!(s.description(e.key()).is_none());
     let first = e.first_cause().unwrap().clone();
     let retained = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();

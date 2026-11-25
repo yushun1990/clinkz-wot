@@ -1,5 +1,6 @@
 //! Optional preparation of the direct finite participant, without the legacy
 //! Producer executor/installation interface.
+use crate::finite_producer::{AssignedSocket, MAX_FINITE_MAPPINGS};
 use crate::*;
 use clinkz_wot_core::host_accounts::HostResourceAccounts;
 use clinkz_wot_core::{finite::FiniteIngressBinding, producer::ProducerInstanceKey};
@@ -7,7 +8,8 @@ use clinkz_wot_planning::{
     ResolvedProducerInput,
     finite_producer::FiniteProducerCompiler,
     producer_composition::{
-        FormSite, ProducerCapability, ProducerOperationInput, PublicationObserver,
+        FiniteProducerService, FormSite, PreparedOperation, ProducerCapability,
+        ProducerOperationInput, PublicationObserver,
     },
 };
 use std::{any::Any, cell::Cell};
@@ -18,14 +20,15 @@ enum Preparation {
     Bind(HttpProducerDefinition),
 }
 
-/// One immutable startup registration. Explicit loopback/nonzero endpoints
-/// remain fixed in this first slice; port-0 rewriting is deliberately unsupported.
+/// One immutable finite HTTP preparation and native assembly registration.
 pub struct HttpFiniteProducer {
     listen: HttpProducerConfig,
     id: BindingId,
     generation: BindingGeneration,
     timeout_ticks: u64,
     security: Option<HttpServerSecurity>,
+    assigned: Option<AssignedSocket>,
+    listener: Option<HttpFiniteListener>,
     preparation: Preparation,
     compilations: Cell<usize>,
     checks: Cell<usize>,
@@ -48,11 +51,68 @@ impl HttpFiniteProducer {
             generation,
             timeout_ticks,
             security: None,
+            assigned: None,
+            listener: None,
             preparation: Preparation::Specialized,
             compilations: Cell::new(0),
             checks: Cell::new(0),
             bindings: Cell::new(0),
         })
+    }
+
+    /// Use the deployment's fixed shared listener for this registration's routes.
+    /// Each exposed Thing acquires and releases its own route set at native start and close.
+    pub fn with_listener(mut self, listener: &HttpFiniteListener) -> CoreResult<Self> {
+        if self.assigned.is_some()
+            || self.listen.address.port() == 0
+            || !listener.compatible(self.listen, self.timeout_ticks)
+        {
+            return Err(crate::producer::producer_unsupported());
+        }
+        self.listener = Some(listener.clone());
+        Ok(self)
+    }
+
+    /// A draft registration for a TD using a loopback base with port zero.
+    /// Its mappings cannot start a native route until bound to the acquired endpoint.
+    pub fn for_assigned_port(
+        ip: IpAddr,
+        id: BindingId,
+        generation: BindingGeneration,
+        timeout_ticks: u64,
+    ) -> CoreResult<Self> {
+        if !ip.is_loopback() {
+            return Err(crate::producer::producer_unsupported());
+        }
+        Self::try_new(
+            HttpProducerConfig {
+                address: SocketAddr::new(ip, 0),
+                secure: false,
+            },
+            id,
+            generation,
+            timeout_ticks,
+        )
+    }
+
+    /// Use the already acquired listener for the final endpoint and every
+    /// selected route. Each registration keeps its original identity and policy.
+    pub fn at_endpoint(&self, endpoint: &HttpProducerEndpoint) -> CoreResult<Self> {
+        if self.listen.address.ip() != endpoint.listen.address.ip()
+            || self.listen.secure
+            || self.listener.is_some()
+            || !matches!(self.preparation, Preparation::Specialized)
+        {
+            return Err(crate::producer::producer_unsupported());
+        }
+        let mut actual = Self::try_new(
+            endpoint.listen,
+            self.id,
+            self.generation,
+            self.timeout_ticks,
+        )?;
+        actual.assigned = Some(endpoint.socket.clone());
+        Ok(actual)
     }
 
     /// Live verification/key service is paired with this startup registration;
@@ -73,6 +133,8 @@ impl HttpFiniteProducer {
             generation,
             timeout_ticks,
             security: Some(security),
+            assigned: None,
+            listener: None,
             preparation: Preparation::Specialized,
             compilations: Cell::new(0),
             checks: Cell::new(0),
@@ -118,6 +180,23 @@ impl HttpFiniteProducer {
     pub fn mapping_bindings(&self) -> usize {
         self.bindings.get()
     }
+    fn build_binding(
+        &self,
+        mut config: HttpFiniteConfig,
+    ) -> CoreResult<(HttpFiniteBinding, HttpFiniteConfig)> {
+        if let Some(security) = &self.security {
+            config = config.with_security(security.clone())?;
+        }
+        if let Some(listener) = &self.listener {
+            config = config.with_listener(listener)?;
+        }
+        let mut native = HttpFiniteBinding::new(config.clone(), self.id, self.generation);
+        if let Some(socket) = &self.assigned {
+            native.use_assigned(socket.clone());
+        }
+        Ok((native, config))
+    }
+
     fn compile_definition(
         &self,
         input: ProducerOperationInput<'_>,
@@ -137,8 +216,12 @@ impl HttpFiniteProducer {
             ) => "",
             _ => return Ok(None),
         };
-        if Target::parse_for(input.target, self.listen.secure)
-            .map_or(true, |target| target.address != self.listen.address)
+        if Target::parse_port(
+            input.target,
+            self.listen.secure,
+            self.listen.address.port() == 0,
+        )
+        .map_or(true, |target| target.address != self.listen.address)
         {
             return Ok(None);
         }
@@ -227,10 +310,7 @@ impl FiniteProducerCompiler for HttpFiniteProducer {
             self.timeout_ticks,
         )
         .map_err(|_| crate::producer::producer_unsupported())?;
-        Ok(Some((
-            HttpFiniteBinding::new(config.clone(), self.id, self.generation),
-            config,
-        )))
+        self.build_binding(config).map(Some)
     }
 
     fn check_final(
@@ -326,5 +406,77 @@ impl ProducerCapability for HttpFiniteProducer {
             .compile_definition(input, budget, Some(expected))?
             .as_ref()
             == Some(expected))
+    }
+}
+
+/// A candidate's closed socket. A selected participant takes the original
+/// listener at native start; rollback drops an unclaimed socket locally.
+pub struct HttpProducerEndpoint {
+    listen: HttpProducerConfig,
+    socket: AssignedSocket,
+    base: String,
+}
+impl HttpProducerEndpoint {
+    pub fn acquire(address: SocketAddr) -> CoreResult<Self> {
+        if !address.ip().is_loopback()
+            || matches!(address, SocketAddr::V6(v6) if v6.flowinfo() != 0 || v6.scope_id() != 0)
+        {
+            return Err(crate::producer::producer_unsupported());
+        }
+        let failed =
+            |_| CoreError::Binding(ErrorContext::new(ErrorPhase::Prepare, RetryClass::Never));
+        let socket = std::net::TcpListener::bind(address).map_err(failed)?;
+        socket.set_nonblocking(true).map_err(failed)?;
+        let actual = socket.local_addr().map_err(failed)?;
+        Ok(Self {
+            listen: HttpProducerConfig::for_loopback(actual)?,
+            socket: Arc::new(std::sync::Mutex::new(Some(socket))),
+            base: format!("http://{actual}/"),
+        })
+    }
+}
+impl AsRef<str> for HttpProducerEndpoint {
+    fn as_ref(&self) -> &str {
+        &self.base
+    }
+}
+impl Drop for HttpProducerEndpoint {
+    fn drop(&mut self) {
+        self.socket.lock().unwrap().take();
+    }
+}
+
+impl FiniteProducerService for HttpFiniteProducer {
+    type Binding = HttpFiniteBinding;
+    fn assemble<'a>(
+        &self,
+        instance: ProducerInstanceKey,
+        operations: impl Iterator<Item = &'a PreparedOperation>,
+    ) -> CoreResult<(HttpFiniteBinding, HttpFiniteConfig)> {
+        let mut mappings = Vec::new();
+        for op in operations {
+            if mappings.len() == MAX_FINITE_MAPPINGS {
+                return Err(crate::producer::producer_unsupported());
+            }
+            let target = match &op.site {
+                FormSite::Thing => AffordanceTarget::Thing,
+                FormSite::Property(name) if name.len() <= 256 => {
+                    AffordanceTarget::Property(Arc::from(name.as_str()))
+                }
+                _ => return Err(crate::producer::producer_unsupported()),
+            };
+            let program = op
+                .definition::<HttpProducerProgram>()
+                .ok_or_else(crate::producer::producer_unsupported)?;
+            mappings.push((target, program.clone()));
+        }
+        let config = HttpFiniteConfig::try_from_mappings(
+            self.listen,
+            mappings,
+            instance,
+            self.timeout_ticks,
+        )
+        .map_err(|r| r.into_parts().1.into_parts().1)?;
+        self.build_binding(config)
     }
 }

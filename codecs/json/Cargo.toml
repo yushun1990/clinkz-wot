@@ -8,6 +8,7 @@ edition.workspace = true
 result_large_err = "allow"
 
 [dependencies]
+justjson = { version = "0.3", default-features = false }
 clinkz-wot-core = { path = "../../core" }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["std", "raw_value"] }

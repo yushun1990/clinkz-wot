@@ -510,7 +510,7 @@ fn schema_backing_counts_toward_public_installation_artifact_quotas() {
 }
 
 #[test]
-fn structured_validation_scratch_is_funded_before_execution() {
+fn structured_validation_borrows_input_through_the_installed_program() {
     let _serial = SERIAL.lock().unwrap();
     use ResourceKind as K;
     let address = address();
@@ -535,8 +535,7 @@ fn structured_validation_scratch_is_funded_before_execution() {
             format!("\"{}\"", "a".repeat(4094)),
             true,
         ),
-        // A late escape can double a nearly full decoder scratch buffer. The
-        // observer includes old/new allocation overlap and the owned String.
+        // Exercise the last escape in an almost-full body and split surrogate pairs.
         (
             "late escape",
             string.clone(),
@@ -613,11 +612,6 @@ fn structured_validation_scratch_is_funded_before_execution() {
                 K::BindingPollTemporaryBytesGlobalMax,
                 Some(policy.temporary_bytes),
             )
-            .unwrap()
-            .try_with_limit(
-                K::LargestContiguousAllocationBytesMax,
-                Some(policy.largest_indirect_allocation),
-            )
             .unwrap();
         let b = Arc::new(producer_installation_accounts(&limits));
         let r = accepted(Runtime::try_new(
@@ -637,27 +631,10 @@ fn structured_validation_scratch_is_funded_before_execution() {
         let output =
             InteractionOutput::with_data(Payload::new(body.into_bytes(), "application/json"));
         let (result, trace) = observe_validation(r.entry().unwrap().program(), &output);
-        eprintln!(
-            "{label}: validation peak={}, largest={}, declared={}/{}",
-            trace.peak, trace.largest, policy.temporary_bytes, policy.largest_indirect_allocation
-        );
         assert_eq!(result.is_ok(), valid, "{label}: {result:?}");
-        assert!(
-            trace.peak > 1024,
-            "{label} must exercise allocating decoding"
-        );
         assert_eq!(
-            trace.live, 0,
-            "validation scratch must be released on return"
-        );
-        assert!(
-            trace.peak as u64 <= policy.temporary_bytes,
-            "{label}: validation peak {} exceeds declared {}",
-            trace.peak,
-            policy.temporary_bytes
-        );
-        assert!(
-            trace.largest as u64 <= policy.largest_indirect_allocation,
+            (trace.peak, trace.largest, trace.live),
+            (0, 0, 0),
             "{label}"
         );
         assert_eq!(b.snapshot(INSTALLATION_ACCOUNT_KINDS), before);
@@ -668,14 +645,14 @@ fn structured_validation_scratch_is_funded_before_execution() {
 }
 
 #[test]
-fn structured_validation_scratch_limits_refuse_before_native_effects() {
+fn installation_temporary_limits_refuse_before_native_effects() {
     let _serial = SERIAL.lock().unwrap();
     use ResourceKind as K;
     let address = address();
     let schema = json!({"type":"string","minLength":1});
     let (prepared, authority) = prepare_with_schema(address, Generation::INITIAL, schema.clone());
     let policy = prepared.install_policy();
-    assert!(policy.temporary_bytes > 1024);
+    assert_eq!(policy.temporary_bytes, 1024);
     drop((prepared, authority));
     for (kind, amount) in [
         (
@@ -686,12 +663,8 @@ fn structured_validation_scratch_limits_refuse_before_native_effects() {
             K::BindingPollTemporaryBytesGlobalMax,
             policy.temporary_bytes,
         ),
-        (
-            K::LargestContiguousAllocationBytesMax,
-            policy.largest_indirect_allocation,
-        ),
     ] {
-        for ceiling in [amount, amount - 1, 1024] {
+        for ceiling in [amount, amount - 1] {
             let limits = GatewayDefaultV1::LIMITS
                 .clone()
                 .try_with_limit(kind, Some(ceiling))
@@ -743,7 +716,7 @@ fn structured_validation_scratch_limits_refuse_before_native_effects() {
         Deadline::NONE,
     )
     .err()
-    .expect("the original parent must fund all validator scratch");
+    .expect("the original parent must fund the installation wrapper");
     assert!(matches!(
         refused.error().error(),
         CoreError::LimitExceeded {

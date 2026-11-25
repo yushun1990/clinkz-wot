@@ -1,7 +1,8 @@
 # Finite Producer capacity after shared native HTTP publication
 
-This is scoped Host/manual executable evidence, not independent acceptance,
-milestone/package closure, production qualification or a performance claim.
+This records the original shared HTTP work-bank increment. The
+[finite publication increment](finite-producer-publication.md) supersedes its
+six-account admission and release measurements.
 [Topic 0128](../../workspace/0128-producer-finite-capacity.md) records the
 counterexample and alternatives. Exact ordering and optional/default policy
 belong to [Runtime Safety](../spec/runtime-safety.md#finite-producer-participation-and-work-capacity);

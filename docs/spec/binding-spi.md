@@ -470,9 +470,9 @@ interrupted partial write.
 If the Binding requires member close to retire the reply, it reports that scope
 explicitly. Independent ingress loss remains observable through `check_ingress`
 during retirement. Servient fences the affected participation and publication,
-then drains the original outstanding rights. The existing `poll_retire_reply`
-maps every error to participation close. Its successor must expose both
-dispositions.
+then drains the original outstanding rights. `poll_retire_reply` returns
+`ReplyRetirementError::Isolated` or `ReplyRetirementError::Member`. Both
+outcomes leave the original reply with its owner until native disposal.
 
 The HTTP finite participant can share one listener across up to 32 independently
 prepared Property Read/Write and Thing-root finite collection mappings; native

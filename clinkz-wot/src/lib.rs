@@ -25,6 +25,10 @@ pub mod prelude {
         ReadPropertyHandler,
     };
     #[cfg(feature = "std")]
+    pub use crate::servient::host_producer::{
+        ExposurePolicy, FiniteProducerRegistration, HostProducer, HostProducerLimits,
+    };
+    #[cfg(feature = "std")]
     pub use crate::servient::{Servient, ServientBuilder};
     pub use crate::servient::{ServientError, ServientResult};
 }

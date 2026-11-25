@@ -426,7 +426,7 @@ fn native_schema_views_share_the_original_prepared_backing_and_refuse_equal_fore
         drop(refused);
         assert_empty(&accounts);
         assert!(!service.connected());
-        (prepared.retained_bytes(), native_bytes)
+        (prepared.retained_bytes().unwrap(), native_bytes)
     };
     let primitive = measure(false);
     let structured = measure(true);

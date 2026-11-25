@@ -13,7 +13,6 @@ use crate::{
 };
 use alloc::rc::{Rc, Weak};
 use clinkz_wot_foundation::WorkBudget;
-use core::cell::Cell;
 use core::task::{Context, Poll};
 
 /// Actual native mapping identity. Copying its reference grants no logical
@@ -198,40 +197,7 @@ impl Default for ProducerParticipationId {
     }
 }
 
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-enum IngressState {
-    #[default]
-    Staged,
-    Open,
-    Withdrawn,
-}
-
-/// One native participation's passive ingress and retirement signal. A fresh
-/// gate waits for local commit. Withdrawal survives registry replacement and
-/// is terminal for this native participation.
-#[derive(Default)]
-pub struct ProducerIngressGate(Cell<IngressState>);
-
-impl ProducerIngressGate {
-    pub fn is_staged(&self) -> bool {
-        self.0.get() == IngressState::Staged
-    }
-    pub fn is_open(&self) -> bool {
-        self.0.get() == IngressState::Open
-    }
-    pub fn is_withdrawn(&self) -> bool {
-        self.0.get() == IngressState::Withdrawn
-    }
-    /// Servient opens each prechecked staged gate at its callback-free commit.
-    pub fn open(&self) {
-        if self.is_staged() {
-            self.0.set(IngressState::Open);
-        }
-    }
-    pub fn withdraw(&self) {
-        self.0.set(IngressState::Withdrawn);
-    }
-}
+pub use crate::execution::producer::ProducerIngressGate;
 
 /// The intent passed to the original native owner on retirement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
