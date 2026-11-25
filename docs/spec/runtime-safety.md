@@ -53,29 +53,13 @@ a removed parent cannot be installed into a new registration with the same ID.
 finite operations can use transient `association` lookup; this does not migrate
 continuing Action or notification lifetimes into this finite owner.
 
-`ConsumerAssociation::bind_property_read` optionally retains one selected
-Property Read as a `ConsumerPropertyRead`. Binding resolves a fixed destination
-once using the actual captured Binding, with prepaid result backing and scratch.
-Variable templates retain per-interaction validation/resolution. Repeated reads
-perform no association/name lookup or invariant capability qualification. The
-handle retains only the selected funded mapping, original authority, instance
-bank and fixed destination; it has no call slots or revocation power. Drop is
-passive. Removal/replacement fences old handles without retargeting them; accepted
-calls/results retain their own original operands and backing after handle loss.
-The fixed destination's immutable bytes and reservation share one
-`OutboundDestination` owner across the handle, accepted work, native request and
-settlement. Engine execution clones ownership references without copying those
-bytes or recharging their backing to a work-capacity bank. The original instance
-bank's reservation lasts until the final destination reference is disposed,
-including a native request surviving the handle. Dynamic resolution creates one
-per-call destination under the call's existing lifetime funding; native request
-and settlement share it. Borrowed `&str` observations confer no ownership.
-`OutboundDestination::try_with_funding` checks that a supplied reservation is
-for `EngineLiveBytesGlobalMax` and covers `backing_bytes(value.len())` before
-allocating the shared owner. Refusal returns the identical boxed value and
-unchanged reservation for recovery; it does not debit, grow or replace funding.
-Success retains the whole supplied reservation, including any excess capacity,
-at its original bank until the last destination owner is disposed.
+A bound Property Read retains the selected mapping, original authority and fixed
+destination. The Binding resolves a fixed destination once. Variable templates
+retain per-interaction validation and resolution. Repeated Reads need no new
+name lookup. Dropping a handle is passive. Removal or replacement fences it.
+The destination owner supplies immutable bytes through the last handle,
+native request or settlement using them. A dynamic destination belongs to
+its admitted call. Refusal returns protected operands to their original owner.
 Fresh dependency, permission, credential, time, capacity and actual result checks
 continue at the existing callback and handoff boundaries.
 
@@ -92,9 +76,8 @@ promoted or retargeted to a managed authority. Dropping a standalone facet still
 never revokes its parent or siblings.
 
 Owner removal linearizes at the original authority fence before registry detach
-or linked destruction. Budgeted removal/replacement may refuse before mutation;
-successful removal fences immediately. Removing an association fences only that facet; removing
-or replacing a parent fences all its facets. Instance replacement requires the
+or linked destruction. Removing an association fences only that facet. Removing
+or replacing a parent fences all its facets. Instance replacement requires
 the owner's retained slot ticket and checked next generation, without accepting
 caller coordinates; registration membership also checks the original issuer, so
 equal coordinates across owners or fresh
@@ -112,10 +95,9 @@ credential and native callbacks before effects or successful local handoff.
 A recorded first cause survives later cancellation; already accepted remote
 effects remain uncertain. Preparation's destination check alone is insufficient.
 
-Finite association construction consumes `ConsumerBinding` records and refuses
-a bank different from those records' bank. Shared content, qualified mappings
-and retained services keep their original backing charges. Binding supplies no
-source/compiler callback or execution/configuration override. Actual native
+Finite associations retain their actual bindings, content and services through
+last use. Binding an association supplies no source/compiler callback or
+execution/configuration override. Actual native
 concurrency remains enforced by its original registration. Dropping preparation
 or removing a sibling cannot reclaim backing still needed by another mapping or
 normal/late settlement. `ConsumerCalls` supplies bounded work capacity separately:
@@ -123,16 +105,15 @@ one owner may serve many associations, and one association may use several work
 owners. Dedicated or on-demand capacity is valid; no pool, global registry,
 per-instance Runtime or executor is required.
 
-Admission reserves an original work slot before linked callbacks. Its call
-retains the original association authority, selected funded binding, resolved
-destination, lexical variables, input/selection, deadlines and reservations.
-Native retirement cannot erase those operands or retarget them to a successor.
-Settlement lends original input/result slices and destination/variables; no
-cloneable payload owner escapes. [Foundation](foundation.md) owns account scope.
+Admission claims the original work slot before linked callbacks can reuse it.
+Its call retains the original association authority, selected binding, resolved
+destination, lexical variables, input/selection and deadline. Native retirement
+cannot retarget those operands. Settlement lends its original input/result
+slices and destination/variables. [Capacity and handoff](foundation.md)
 
 Logical removal and actual logical-owner Drop are passive fences. They do not
 signal an OS descriptor, run a scheduler, call a Rust Waker or perform native
-cancellation. The application MUST arrange funded `ConsumerCall::poll` or
+cancellation. The deployment supplies bounded `ConsumerCall::poll` or
 `ConsumerCalls::step` turns after lifecycle changes and abandonment, independent
 of native I/O wakes. A lifecycle-command loop, cyclic executive or actual timer
 may supply those turns. A logical `Deadline` is only an instant/comparison;
@@ -141,8 +122,7 @@ Native completion does not cover a silent peer or indefinite subscription.
 Aggregate progress also requires the application to arrange result-consumer turns
 if native wake interest has moved to another task. The optional
 [Host turn composition](#host-consumer-execution-turns) observes application results
-in the same driving task. Zero/partial credit retains runnable/progress
-responsibility; no autonomous eventual cleanup is claimed.
+in the same driving task. Work that yields retains its progress owner.
 
 Explicit call cancellation and work-owner close wake registered progress outside
 borrows. Work-owner close fences only its admitted calls and preserves `step`
@@ -171,12 +151,12 @@ as full support of every final retained Form. Cancellation, replacement and loca
 close cannot transfer that interaction to individual Property behaviors or a
 successor Thing. Missing/invalid members confer no partial success; native and
 application aggregation provide no implicit atomic snapshot. Collection validation
-work is prepaid in full, with service-bound changes fencing further dispatch.
+bounds the full selected map. A change invalidating the service fences dependent dispatch.
 Selected reads retain the original per-call bitmap into the immutable schema;
 neither replacement nor another call can change it. The captured data policy
 (`encoded_selection_bytes`) separately declares complete encoded-selection
 payload backing, including media/Arc allocations; zero declines that facet. The request
-array is encoded only after lifetime, scratch and cleanup reservations and work prepayment. Refused
+array is encoded in bounded storage with space for the result and rollback. Refused
 encoded input is destroyed before its original funding releases, including native
 admission refusal. Service loss during encoding fences the next callback and
 native start. Authorization-time data-service changes are rechecked before
@@ -187,13 +167,13 @@ pre-callback observations cannot authorize the next boundary. The same check
 applies after result validation and when handing off an already validated unread
 result. Fencing retains the original result, authority, first cause and funding.
 Every public finite Consumer result path, including rejected and late native
-output, lends Core `InteractionOutputView`/`PayloadView` slices. No output, Payload
-or body Arc may escape the original reservation through these views. Native
+output, lends Core `InteractionOutputView`/`PayloadView` slices. The views keep
+the payload under its original backing owner. Native
 cancellation still exposes its original retry and borrowed cleanup disposition;
 it grants no transfer ownership. Retain the settlement (including a shared Rc
 owner) to share original bytes. Caller-owned explicit copies have distinct
-backing. Call/root disposal or a local error cannot refund the retained original
-response and cleanup reservations before final settlement disposal.
+backing. The retained response and its local disposal stay backed through final
+settlement disposal, including after a local error or root loss.
 Loss during validation fences successful application handoff. The
 Producer validates output against its original retained input, including late
 results across authority/service loss, using the same captured validator rules.
@@ -243,110 +223,56 @@ acceptance/delivery rechecks application and verifier revisions after all linked
 callbacks as well as original authority/publication and captured services.
 Policy callbacks cannot authorize a stale decision through a later verifier.
 Finite Producer dispatch borrows the logical owner shared and the selected
-runtime exclusively. A callback may progress a different runtime without a
-registry lock or exclusive owner loan; recursively borrowing the same native
-runtime remains unavailable. `ProducerRevocation` captures only one-way control
-of the original incarnation's permission and its funding. It withdraws that
-incarnation's recorded gates without a registry lookup or a linked callback.
-The capacity lease funds its weak reference through the last control handle.
+runtime exclusively. A callback can request progress for a sibling under the
+inclusive turn bound in SAFE-CONCUR-001. The selected driver has exclusive use
+of the original native work. `ProducerRevocation` captures one-way control of
+the original incarnation. It withdraws its gates without a registry lookup or
+a linked callback. A retained control cannot address a successor.
 The final acceptance and delivery checks observe revocation inside callbacks.
 
 ### Finite Producer participation and work capacity
 
-`RawFiniteRuntime` remains a persistent typed native participant, with at most
-one active exclusive exchange on that driver. Native configuration, closed
-readiness, complete final-TD qualification, publication membership and native
-retirement remain independent of execution capacity. A caller may select the
-existing dedicated single-opportunity policy or attach `ProducerFiniteCapacity`
-through `with_capacity` before native setup and managed admission. Attachment
-requires the same actual logical owner and sufficient bounds for every field
-of `RawFiniteLimits`; rejection returns the complete original participant.
-Publication/readiness MUST NOT require a vacant shared work opportunity.
+A publication owns its ready members. An accepted exchange owns its original
+reply and an independently backed settlement. A serial Binding may lend its only
+exchange slot, and a multiplexing Binding may support several on one member.
+Publication requires the ability to serve the mapping. Concurrent call storage
+may be supplied on demand, independently of the number of idle Things.
 
-If the native request deadline expires while a participant holds a
-prepared reply, the runtime stops sending and enters `RetiringReply`. Servient
-retains the original reply and accepted behavior through the Binding's funded
-retirement poll. While retirement is pending, a turn with `BindingPolls` or
-`CleanupItems` checks the installed pair and ingress even after logical
-withdrawal. A failed check starts whole-participation close with the same reply.
-Both retirement polls require `CleanupItems`. On success the settlement records
-the exchange's first local cause alongside the handler result, effect and delivery.
-A request timeout alone supplies no reason to withdraw the published Thing.
-Before returning to Serving, check the captured pair, ingress health, original
-owner and gate again.
-Every later request goes through ordinary admission and current authorization.
+Before semantic acceptance, verify the original issuer, generation, membership,
+current permission, behavior, deadline and capacity. A Binding may move the
+reply, lend an exclusive native slot or copy into admitted storage under its
+delivery contract. A refused offer remains complete with its original owner and
+deadline. Pending native parsing belongs to the Binding. Accepting an exchange
+requires actual storage for its input, promised result/handoff and local close.
+An active slot and a retained result slot can have different release points.
 
-When the Binding requires whole-participation close or the installation fails,
-withdraw its gate and retire with the original work. Report the participation's
-first failure independently of an earlier exchange timeout. A withdrawn
-publication cannot reopen through reply cleanup. Caller lifetime expiry, clock
-violations, expiry before a reply is prepared, and failed native sends retain
-their existing whole-participation close path. An accepted reply may finish on
-its own socket while an independently failed listener fences new ingress.
+On timeout, stop new effects and retain the first cause, original reply,
+behavior result, effect and delivery evidence. The Binding retires the specific
+exchange while its participant and siblings can keep serving. Check original
+membership, services and ingress health before the next acceptance. If the
+Binding cannot isolate the exchange or a required installed member is lost,
+fence the affected participation and its dependent publication. Preserve the
+member's failure independently of an earlier exchange timeout.
 
-The optional capacity has separately bounded active and retained obligations
-(1 through 32 active, active through 32 retained) at one explicit original work
-bank. Retained counts active work, unread outcomes and acknowledged outcomes
-still held by callers. Before each native receive callback it reserves both
-credits and complete Engine input, result and cleanup backing. Saturation or
-account refusal leaves publication current and runs no native receive/handler.
-It MUST NOT consume `BindingPolls`: that credit remains available to a sibling
-whose native progress can release the occupied capacity. Zero native credit
-MUST NOT acquire an opportunity. Each actual native callback is charged just
-before invocation, after its capacity and other work prerequisites succeed.
-Pending parsing remains bounded by the Binding's existing native owner/policy
-and returns the temporary Engine credits; it does not reset the original native
-deadline. A returned ingress keeps its permit through fresh logical admission,
-dispatch/refusal, Pending/error send and terminal native retirement. Zero work
-credit makes no acquisition or callback progress; passive fencing still applies.
-
-Native terminal settlement returns active credit, without granting another
-concurrent exchange on that same driver. A bounded participant-local FIFO retains
-the original outcome, accepted behavior, publication funding and work lease.
-`take_retained_settlement` transfers the oldest complete `ProducerFiniteSettlement`;
-it does not refund retained credit or its original bank. Output and target views
-lend slices/coordinates without exposing original allocation owners. Only final
-disposal refunds retained-work/result/cleanup backing. A capacity-local checked
-sequence distinguishes records, including requests with identical Binding,
-recipient and operation; it confers no authority or native correlation right.
-Acknowledgement cannot redirect an original reply or refund a successor's debit.
-Before a delivery/cleanup poll that may create such a record, the runtime checks
-that `QueueOperations` can cover its current participant-local unread count plus
-one: one visit per existing FIFO link and one insertion. The count is maintained
-without traversal and cannot change during the exclusive native poll. This cost
-is at most the configured retained limit, not an unconditional global maximum.
-Insufficient queue credit invokes no native callback and consumes no native or
-cleanup credit. Pending/error native polls add no queue charge; their normal
-poll and security work still applies. Terminal success charges the checked
-queue cost once, before FIFO mutation.
-Native terminal handoff therefore cannot strand an outcome for lack of queue
-credit, and repeated Pending polls do not repeatedly pay for an absent insertion.
-
-Closing one publication does not close the capacity or a sibling. Final logical
-retirement requires native close and acknowledgement of all its unread records;
-returned outcome owners may survive that retirement and retain original funding.
-Dropping a participant locally disposes its original native driver/configuration
-before releasing active work funding. Unread records are locally disposed within
-the retained bound. The capacity owns no work/result registry or scheduler; loss
-of a facade cannot strand work behind a separate capacity queue. Native socket
-occupancy and final physical listener release remain Binding obligations.
-
-The dedicated raw handoff and narrow `ProducerExposure` facade deliberately keep
-their prior one-opportunity policy. Continuing Producer Actions/notifications
-retain their own capacity and acknowledgement contracts. The shared finite
-increment adds no general Producer Host loop, automatic wakes, timer, fairness,
-native concurrency or all-profile claim. [Executable scope](../evidence/producer-finite-capacity.md)
-uses the existing real shared HTTP listener and qualified final descriptions.
+Release active capacity at native retirement. Transferring an unread outcome
+to the caller moves its original backing or exclusive loan. The application
+may hold it across publication retirement, replacement or root loss. Only
+disposal makes that backing reusable. Acknowledging an old result cannot release
+a reused coordinate. A full result pool may refuse *new* admissions. An
+already accepted exchange can still settle. [Earlier serial HTTP evidence](../evidence/producer-finite-capacity.md)
 
 ### Continuing Action admission and handoff
 
-Continuing Action admission reserves the maximum selected native exchange,
-opaque continuation, input, response and validation scratch plus cleanup before
-native acceptance. One invocation has at most one exchange; accepted continuation
-identity survives exchange retirement. Pending/error cleanup keeps the complete
-original owner and reservation, including through root loss and unread terminal
-settlement. Finite local abort disposes the native owner before funding refunds.
-An abandoned handle is retained for round-robin manual cleanup by its root; if
+Before an Invoke can start continuing work, Servient claims the original
+invocation and the Binding secures its wire correlation for later controls.
+Keep both exclusive against competing and reentrant calls through handler entry
+and ID installation. Installing the ID requires no further acquisition. If
+either claim fails, unwind before entering the handler. Failure of the initial
+reply leaves the continuation and its cleanup owned for the promised lifetime.
+Each later exchange retains its own reply and deadline.
+
+On the Consumer, the root retains an abandoned invocation handle for
+round-robin manual cleanup. If
 all local owners disappear, the captured native finite-abort contract applies.
 Neither path claims that independent remote Action work stopped. Callback-time
 authority/service checks fence late success; original native result, validation
@@ -356,11 +282,10 @@ move to a successor incarnation or address a reused slot.
 Native result readiness is separate from successful local handoff. Unread Action
 completions remain subject to cancellation, original authority/root revocation,
 deadline and captured service/policy loss. Settlement handoff takes current time
-and work credit, pays fresh destination/access checks and rechecks captured
-services after callbacks. Insufficient credit grants no success and keeps the
-original slot and funding. Native poll errors and late retirement output retain
-independent evidence; even after an error, captured validation applies to that
-late output before final settlement, without clearing the first cause.
+from the supplied monotonic clock. Check destination, current access and captured
+services after callbacks. A delayed handoff retains the original slot and result.
+Native errors and late output remain evidence. Validating the output after local
+retirement preserves the first cause.
 
 The [caller-owned Action representation](#caller-owned-continuing-action) also
 validates each application result loan. Moving its generic output owner does
@@ -368,21 +293,16 @@ not prove that a later `ActionOutput::view` selects the previously checked value
 
 ### Notification associations and conversation capacity
 
-`ConsumerNotificationAssociation` retains the original Consumer reference,
-qualified immutable definition, actual retained access owner and chosen instance
-bank. Its passive views MUST NOT revoke on Drop. Construction checks the prepared
-definition's original declarations, qualifies the supplied access owner and prepays
-its record before retention. It captures access work/security revision at this
-explicit binding boundary; a later capacity constructor cannot refresh them.
-It allocates no conversation queue, native interest or vacant work slot.
+A notification association retains the original Consumer, definition and access
+service. Passive views cannot revoke on Drop. Binding checks the prepared
+dependencies and captures the access configuration. A later capacity constructor
+cannot refresh it. An idle association needs no queue, interest or work slot.
 
-`ConsumerNotifications` supplies a bounded raw conversation slab at an independently
-chosen work bank. Subscribe acquires the original instance's outstanding-subscription
-quota and the prepared data service's validation scratch before native preparation.
-Each entry retains its exact Consumer, definition, policy, participant, queue,
-response rights and original funding. A closed unacknowledged entry still occupies
-its slot. Acknowledgement releases work scratch and subscription quota after local
-retirement; retained reports keep original prepared/association owners for any
+Subscribe claims a bounded conversation slot and usable storage for the selected
+validation, queue, reply and retirement. Include any quota the deployment
+advertises for that subscription. Each entry keeps its original participant
+and rights through local retirement. Acknowledgement releases the conversation
+slot. Retained reports keep original prepared/association owners for any
 shared target backing until report disposal. Capacity Drop performs qualified
 whole-owner finite local abort; it does not revoke persistent associations or
 other capacity domains. Original instance revocation fences only its work.
@@ -392,17 +312,16 @@ automatic authority-change wake mechanism.
 
 `RawNotificationServient::step` and `ConsumerNotifications::step` visit every
 original conversation at most once per turn, rotating the first visit across
-turns. A pending participant, retained error or short credit cannot skip sibling
-visits. Each visit uses the existing conversation's policy, validation, queue,
-response and retirement transitions. Zero credit can observe passive stop and
-authority fences but cannot enter native cleanup. The turn invents no application
+turns. A pending participant or retained error cannot starve sibling visits.
+Each bounded visit uses the original policy, validation, queue, response and
+retirement transitions. Passive observation can see a stop or authority fence.
+The turn invents no application
 response, cancellation input, remote control or permission.
 
 A live cursor retains queued values and its closed unread report. Cursor Drop
 records abandonment separately from stop intent. Aggregate progress disposes an
-abandoned cursor's report only after complete local retirement and a paid cleanup
-visit; pending/failed response or participation retirement retains its original
-owners and capacity. A surviving stop view or saved identity does not prevent
+abandoned cursor's report only after complete local retirement. A pending or failed retirement retains the original response or
+participation and its capacity. A surviving stop view or saved identity does not prevent
 this disposal or revive the cursor. Applications needing reports after cursor
 loss use the existing explicit `progress`/`step_cleanup`/`take_settlement` path
 instead of automatic abandoned-report disposal. This is an opt-in consequence
@@ -411,35 +330,32 @@ discard a live recipient's result or report. Neither acknowledgement nor idle
 capacity proves release of independently retained result/definition/native owners.
 
 Prepared data policy/media/native support MUST match at association binding,
-admission and applicable delayed handoffs. Fresh availability/schema support and
-access work/backing/revision checks surround policy/validation callbacks. Changed
-declarations refuse/fence the original obligation without entering an unfunded
-callback or accepting a new baseline. Cleanup retains its prepaid owners even
-when those declarations are no longer usable. Explicit new qualification is
-required to use changed dependencies.
+admission and applicable delayed handoffs. Availability, schema, access and configuration checks surround policy and validation callbacks. Changed
+dependencies refuse or fence the original obligation. Cleanup retains its
+original owner even when those dependencies are unusable. Changed services
+require explicit qualification.
 
 Validation MUST preserve an observed dependency violation separately from ordinary
-caller-input or short-work refusal. Both the scalar and collection validators
-recheck captured dependencies after the codec callback, including when the codec
-returns an error. Response admission and prepayment before native receive MUST
-fence the original conversation on a dependency result; restoring a declaration
-cannot revive it or permit a retry to send a response. An input/work refusal with
-valid dependencies remains recoverable, but still requires a passive currentness
+caller-input refusal or a yield. Both scalar and collection validators recheck
+captured dependencies after the codec callback, including on error. Observed
+dependency loss during response admission or receive fences the original
+conversation. Restoring the configuration cannot revive it or permit a response.
+A recoverable refusal still requires a passive currentness
 check before return so synchronous stop, instance revocation or pairing loss is
 not hidden by the error. Dependency origin cannot be inferred from `CoreError` or
 reconstructed by rereading declarations after the failure.
 
 Response refusal returns the exact caller input without adopting it or consuming
 the native reply opportunity. A fenced conversation retains its original occurrence,
-reply job, first cause and prepaid cleanup owners through zero-credit or pending
-retirement; cleanup requires neither codec credit nor renewed delivery permission.
+reply job, first cause and retirement storage even while close is pending.
+Local close uses the original right independently of validation or permission.
 Admission failure has no admitted conversation to fence. Cancellation has already
 fenced local semantic use before its validation callback. Validation failure of an
 owned native candidate remains fatal regardless of error origin. None of these
 paths changes subscription authority versus individual occurrence refusal.
 
 The validator borrows the original Property value/map or Event role trees,
-prepays validation before native handoff and checks data before queue acceptance.
+uses its bounded validation workspace and checks data before queue acceptance.
 For a composed conversation, each payload must match the selected Form's
 content type before the codec sees it. This applies to subscription input,
 occurrences, responses and mapped cancellation input, including collection data.
@@ -448,16 +364,16 @@ fresh Deliver/Respond policy at acceptance, `front`, response admission and dela
 native response send. These decisions always carry an owned item. Separate Maintain
 checks, without an occurrence, preserve the current subscription grant before
 polling or semantic use. Fresh Maintain checks after occurrence policy ensure that
-synchronous grant withdrawal overrides even a positive item refusal; both probes
-are prepaid before acquiring a native candidate or entering the item callback. Check original recipient, scope, backing and native
-response support before occurrence policy; the composed policy also checks
+synchronous grant withdrawal overrides even a positive item refusal. Both checks
+fit within the qualified turn. Check original recipient, scope, backing and native
+response support before occurrence policy. The composed policy also checks
 captured Event membership.
 
 An explicit RejectOccurrence marks only the original staged/queued item as refused.
 It cannot be exposed, advanced, responded to or resurrected by subsequent policy
 changes. `front()` returns None for that refused head; `respond()` returns the exact
-unaccepted caller input with AuthorizationDenied. Progress, or the existing paid
-round-robin cleanup visit, retires the refused item without closing the native
+unaccepted caller input with AuthorizationDenied. A bounded progress or
+round-robin cleanup visit retires the refused item without closing the native
 participation. Each turn performs at most one native retirement poll or one item
 disposal; it never scans a stream of refused items. Later queue entries remain
 behind the original refused head until its retirement completes. Callers continue
@@ -465,11 +381,11 @@ manual progress after an empty view or pending retirement.
 
 Refused payloads and submitted responses stay funded until their exact reply
 owner retires and their own disposal step completes. Required response opportunities
-can be retired on refusal without fabricating a send. Pending or short cleanup
-credit retains all original owners/capacity; cleanup does not need renewed delivery
-permission or codec credit. Native reply-retirement failure records its cleanup
-error and fences the conversation, retaining that reply for the ordinary cleanup
-path. Actual sent/uncertain response evidence remains distinct from refusal intent.
+can be retired on refusal without fabricating a send. Pending cleanup retains
+the original owner and needs no renewed delivery permission or codec callback.
+Failure to retire the reply fences its conversation and retains the error and
+reply for cleanup. Preserve sent or uncertain response evidence independently
+of the refusal.
 Authority/dependency errors, instance revocation, invalid native/schema contracts
 and native failures also fence as before; an occurrence refusal itself sets no
 subscription first cause, stop intent or native loss count. Invalid/late candidates
@@ -509,21 +425,34 @@ cannot move into a successor's queue. Group stop fences every occurrence without
 revoking sibling logical subscriptions. Final native interest disposal and mapped
 unsubscribe evidence remain separate from logical closure and unread settlement.
 
+### Producer publication
 
-`SAFE-PUBLISH-001`: Producer setup MUST validate the draft/known dependencies,
-capture actual providers/behavior and reserve setup/ingress/finalization/cleanup
-before acquiring native resources. Owned closed native participation may determine
-endpoints. Finalize the effective TD and revalidate affected common/Binding
-support, collision and ownership facts for that exact revision. All retained
-Forms/effective operations require complete qualified support and required
-readiness under PREP-COVER-001. Changes to membership, provider configuration
-or required installation facts MUST be ordered with the decision. After the
-last linked callback, Servient holds those facts current while installing the
-exact TD and behavior, granting current authority and opening every original
-gate. The local commit performs only bounded, infallible operations. Cancellation winning prevents publication; failure retains partial
-setup and rollback owners. No prepublication input dispatches behavior. A complete
-reduced TD can be deliberately requalified, never silently substituted. No global
-network/remote cached-TD atomicity is claimed.
+`SAFE-PUBLISH-001`: Host and caller-owned Producers MUST use one publication
+lifecycle. Before taking a closed endpoint, validate known draft requirements
+and behavior, secure a bounded candidate and the capacity to release that
+endpoint and return the inputs. Each Binding assembles its participants with
+ingress closed. Resolve Forms against the actual base and apply PREP-COVER-001
+to every final operation, alternative, eligible provider and behavior. A
+source-free caller supplies a trusted prepared final definition and verifies its
+coverage against the actual deployment. Changed meaning needs new preparation
+or refusal.
+
+Acquire the exact selected members and their rollback storage as they become
+known. On shortage unwind partial claims without waiting for another staged
+candidate to yield a member. An advance promise supplies its already-held slots
+to these same operations and releases surplus. Capacity cannot select a cheaper
+provider, hide ambiguity or shrink the TD. After the last linked callback,
+hold the expected incumbent, final TD, coverage, behavior, services, membership,
+collision checks and readiness current together. Publish that TD and open the
+original gates in one bounded, callback-free, infallible local commit.
+
+A yield retains the candidate and endpoint. Cancellation, expiry or terminal
+refusal fences the candidate, keeps ingress closed and returns the original
+inputs once rollback releases them. A terminal error stays terminal while the
+physical owner drains. A foreign driver cannot consume the candidate. A
+coexisting incumbent keeps serving. An exclusive route may require a service
+gap. Report any visible native residue. Publication commits local authority
+over this description. Remote caches have independent lifetimes.
 
 A later deterministic unsupported operation/codec/schema/security/behavior/config
 branch already present at publication is a qualification/implementation defect,
@@ -533,17 +462,22 @@ meaning/providers/support policy invalidates prior qualification; equivalent
 reconnection is availability recovery. Per-use authorization/credential rotation
 is not by itself new immutable definition content.
 
-`SAFE-CANCEL-001`: Cancellation/timeout MUST fix one first local cause, stop new
-local acceptance/delivery and request mapped protocol/application cancellation.
+`SAFE-CANCEL-001`: Cancellation/timeout MUST fix one first local cause and fence
+new interaction effects. Mapped remote cancellation requires its own fresh
+authorization.
 Already accepted work and late successes retain identity, result and release
 owners. Local terminal settlement does not imply remote rollback, exactly-once
 remote effect or physical shutdown. A constructor rejection proves no escaped
 obligation; an operational error after effects cannot make that assertion merely
 by its error type. Cancellation, request deadline and cleanup/drain deadline are
-distinct phase contexts. Synchronous linked code is cooperative, not preemptible.
+distinct phase contexts. All deadlines use the supplied monotonic clock. Recheck
+at effect and handoff boundaries after linked code returns. Local close proceeds
+with its original owner under saturation, independently of access checks, codec
+work and the success of a mapped remote Cancel.
 
-`SAFE-CLEANUP-001`: Every accepted/provisional obligation MUST have funded bounded
-cleanup even under saturation. Ownership transfer commits only when a successor
+`SAFE-CLEANUP-001`: Every accepted or provisional obligation MUST be able to
+retire in its original slot or transfer to a destination with available backing.
+Ownership transfers only when the destination
 acknowledges receipt of the complete live owner/backing; a request, status record,
 spawned task or numeric token is not transfer. Rejection returns the same owner
 to retained/manual cleanup. Capacity stays charged through quarantine/pending
@@ -553,22 +487,32 @@ acknowledged transfer to a longer-lived supervisor retaining all obligations;
 an executor that may disappear is insufficient. Physical retirement remains at
 the actual infrastructure owner. No callback/guard can silently orphan work.
 
-`SAFE-DROP-001`: Drop MAY revoke/request cancellation and move complete work into
-prepaid cleanup storage; it MUST NOT wait for a network/user callback or report
-completed drain. Explicit close/destroy reports drain/local release/remote residue.
-Caller-driven profiles retain and drive cleanup. If reserved transfer capacity
-is unavailable, fail closed before accepting new work; exhaustion cannot forget
-a live guard. Fixed trivial release may be prepaid; variable destruction needs
-bounded progress or a qualified owner.
+`SAFE-DROP-001`: Drop MAY fence or request cancellation, dispose of bounded
+local state, or move the whole owner to an acknowledging destination. Explicit
+close/destroy reports local drain and outstanding remote uncertainty. A driver
+retains an owner for variable destruction and can release it over bounded turns.
+A destructor cannot wait for a peer or user callback, or certify completed drain.
 
 `SAFE-CONCUR-001`: Acceptance, revocation, publication, completion and transfer
 MUST have explicit linearization points under one logical ownership authority.
 No handler, Binding/service callback, allocation or unbounded destruction occurs
-under registry-wide locks or constrained critical sections. Pending progress
-registers wake interest then rechecks state; terminal results survive until
-acknowledged. Fairness/work budgets prevent unrelated supported logical work
-from being indefinitely blocked by a stalled Binding. This mandates outcomes,
-not a global lock, fixed lane/shard algorithm or identical scheduling traces.
+under registry-wide locks or constrained critical sections. A public turn
+includes all synchronous callbacks and nested drives, even through independent
+siblings. The deployment may defer nested drives and schedule the target for a
+later turn. Cancellation and revocation still fence checked-out work immediately.
+A deployment allowing nesting must bound inclusive depth, fan-out and callback
+cost at every reachable drive entry. Ready siblings and draining owners get
+turns under admission pressure.
+
+Pending names the retry owner and enabling event. An event-driven capacity
+wait registers bounded interest, then rechecks before sleeping. Publish the
+released slot before signalling. A release racing registration must either be
+seen on recheck or wake the driver. A maintenance or caller-owned loop may
+instead guarantee independent retry turns. On retry, check the original
+deadline and current authority. Another contender may win. Before acceptance
+the caller may take explicit backpressure and the complete offer, or the
+Binding may retain it for redelivery. After acceptance the owner remains
+responsible for progress. Taking a result leaves its loan held until disposal.
 
 The Host finite Consumer registry is borrowed only to reserve, check out,
 restore or remove an original call slot. Admission/progress callbacks and linked
@@ -589,10 +533,9 @@ logical registry. Named configuration adoption moves its unique owner into that
 registry; only non-revoking views leave it. Lookup checks original issuer/authority rather
 than names or numeric coordinates alone. Configuration refusal returns complete
 unadopted input owners; failed identity construction publishes nothing, refunds
-its staged backing and consumes no slot ticket. Bounded lookup/mutation is paid
-before work; registered
-entry retirement is prepaid before adoption. Removing or replacing an entry
-fences it before dropping owners outside borrows. Accepted calls remain in their
+its staged backing and consumes no slot ticket. Lookup and mutation are bounded
+by key length and tree height. Removing or replacing an entry fences it before
+dropping owners outside borrows. Accepted calls remain in their
 original independent work stores, with no transfer inferred from registry detach.
 The same rule applies to low-level standalone close; passive view loss changes
 no logical permission. The common finite kernel has no observer registry or
@@ -621,8 +564,7 @@ ticket recycling cannot revive them. No numeric slot index or caller-slot search
 is required. Free-list destruction is iterative to bound shutdown stack use.
 
 Single-Thing management performs no work proportional to unrelated registered
-Things. Disposing that Thing's own configurations/services still requires their
-prepaid scope-local work; whole-owner shutdown necessarily visits every parent
+Things. Removal can drain that Thing's own configurations and services in bounded slices. Whole-owner shutdown necessarily visits every parent
 before disposal and releases all retained ticket backing. Neither operation
 claims native drain or automatic scheduling.
 
@@ -645,12 +587,11 @@ lease through its last handle/call reference. It cannot address a reused slot.
 
 ### Continuing Action associations and invocation capacity
 
-The Host `ConsumerActionAssociation` retains one original Consumer, shared
-prepared definition, separately qualified per-operation access owners and
-instance bank. Association construction allocates no vacant slot, exchange,
+The Host `ConsumerActionAssociation` retains the original Consumer, a shared
+prepared definition and separately qualified per-operation access owners. Association construction allocates no vacant slot, exchange,
 continuation or work quota. It rechecks prepared data/native declarations and
 original backing before/after policy qualification. Explicit new access binding
-captures its own work/revision; it never replaces prepared data/native facts.
+captures its actual configuration and revision and preserves the original prepared dependencies.
 Association construction and new invocation admission check the complete
 selected Invoke/Query/Cancel set against its original declarations. Retaining
 that set does not create a blanket invalidation domain for admitted work.
@@ -686,33 +627,20 @@ Invoke's codec. Invoke validates input and any immediate output with its own
 original data service; Query validates its completed output with Query's original
 service, media and body/scratch/work policy, through normal and late retirement
 paths. Native response backing is additionally bounded by that exchange's
-original response declaration. Media must match the captured representation;
-the current subset admits no content coding. Before any poll/close that may
-return an application value, prepay that operation's captured validation work
-once. Never add Invoke's allowance to Query's. Control start carries no
-application input; Cancel progress invokes no application codec. Admission
-reserves the maximum selected native scratch and used data-role scratch before
-effects; an unused Cancel application codec requires no scratch. Check the
-actual output service's original declaration and schema support before/after
-validation even if authority was already lost or the validator refuses. A changed
-declaration cannot authorize larger work or silently replace the original codec.
-The original payload/media, validation error and earlier native/local/cleanup
-failures remain separate evidence. Sharing semantic constraints transfers no
-permission and permits no transcoding, new service adoption or funding refund.
+original response bound. Media must match the captured representation. The
+current subset admits no content coding. Keep the selected value and its
+validation workspace available at handoff. A close poll can retain racing output
+without invoking an access service or validator. Validate using the returning
+operation's original data service before successful application delivery. Record
+original payload/media, validation error and earlier native/local/cleanup
+failures independently. Sharing a schema confers no new permission.
 
-`ConsumerActions` owns a bounded slot registry and its capacity bank independently
-of any Consumer. Vacant slots contain only registry/control references; each
-admitted invocation record is separately allocated and funded, then retains that
-allocation through checkout and settlement. Slot storage does not charge that
-record a second time. Admission reserves a slot, passive control, complete native/
-continuation/input/result/scratch backing and cleanup credit before effects.
-The capacity bank funds actual work backing. A distinct association bank debits
-one outstanding-work quota (`PendingHandlerCallsGlobalMax`), including retained
-settlements; an identical bank is debited once. This quota is not a second RAM
-reservation. Unread results retain their slot. Settlement transfers evidence,
-association, quota and backing to the result owner; the vacant slot alone cannot
-refund a result's funding. Refused admission returns exact original input and
-rolls back all newly reserved capacity without native effects.
+`ConsumerActions` supplies bounded invocation storage independently of the
+Consumer. Before effects, claim an invocation slot, passive control, native
+continuation, input and result/handoff backing and a path for retirement. Unread
+results retain their backing through transfer and final disposal. A distinct
+outstanding-work quota follows the lifetime promised by the deployment.
+Refusal returns the original input and provisional capacity without native effects.
 
 Capacity close/Drop fences its admitted work, without revoking associations or
 sibling capacities. Original Consumer revocation fences its own invocations in
@@ -780,19 +708,12 @@ Scoped executable support does not close the remaining profile/interaction gaps.
 
 ### Host Consumer execution turns
 
-`consumer_execution::ConsumerProgress` is an optional borrowed progress interface
-implemented by finite calls, continuing Actions and typed notification capacities.
-`step_consumers` visits the supplied capacities with independently supplied work
-budgets and one caller-qualified clock observation. It allocates no registry,
-stores no work, owns no Consumer and acquires no native resources. The slice may
-contain any subset or several capacities, including notifications from different
-Bindings. Progress remains bounded/cooperative under each capacity's existing
-contract. Per-capacity credit prevents one family from spending a sibling's
-allowance; each capacity retains its existing within-capacity fairness. Errors,
-short credit, normal/late results and cleanup remain with their original owners.
-The return value reports idle capacities after the turn, including unread reports;
-it is not a claim that external settlements or physical infrastructure are gone.
-Idle inspection is passive and must not invoke linked callbacks or mutate work.
+A Host can drive finite calls, continuing Actions and notification capacities
+in the same loop. Each turn uses the supplied monotonic clock and a bounded
+number of ready operations, including callbacks under SAFE-CONCUR-001. Rotate
+through ready and draining owners. A stalled family or full result pool cannot
+block an independent ready sibling. Idle inspection is passive. An idle driver
+can still have outstanding application-held results.
 
 Managed composition starts with `ConsumerOwner` registration and shares its
 original passive reference with independently authorized family associations.
@@ -803,18 +724,13 @@ owner fences every original facet without retargeting work. Closing a capacity
 still fences only that capacity. The progress helper accepts no new authority,
 definition, service or configuration override and changes no admission rules.
 
-A Host deployment MUST supply turns on native wakes and an independent maintenance
-source covering passive lifecycle/stop changes, deadlines, replenished credit and
-native Ready-to-next-phase transitions. An actual timer, command loop or cyclic
-main loop can provide this source; a logical Deadline and native wake interest
-alone cannot. In async integration, register that source before returning Pending
-and keep application result observation/decisions in the same driving task.
-Existing manual handles do not supply broadcast wake notification to independently
-awaiting result tasks. The helper neither self-wakes on exhausted credit nor
-claims progress after the deployment stops supplying turns. Explicit finite/Action
-cancellation retains its existing registered wake behavior; passive owner loss
-and notification stop remain passive. Native descriptors/timers/sessions stay in
-their actual Binding/deployment, not in this interface.
+The deployment supplies turns for native readiness, passive lifecycle changes,
+deadlines and transitions that are locally runnable. A timer, command loop or
+cyclic executive may supply maintenance. Parking for capacity uses the release
+or retry contract in SAFE-CONCUR-001. Native wake interest alone cannot service
+a silent deadline. Observe application results in the driving task or arrange
+notification for their actual observer. Explicit cancellation can signal a
+registered waiter. Passive owner loss remains a fence.
 
 Application QueryAction, CancelAction, response, advance and mapped stop remain
 explicit decisions under fresh policy. Shutdown fences managed acceptance, keeps
@@ -842,54 +758,14 @@ a Servient, handler or semantic dispatcher. Custom turns owe the same current
 authority, captured-service, funding, outcome and cleanup obligations as direct
 use; they cannot implicitly publish, emit, acknowledge, replay or discard work.
 
-`ComposedProducerExposure::step` visits the retained complete member set, checking
-the original participation identity, issuer and instance before any callback.
-Typed loans cannot substitute a new participant into that turn. Each member and
-`ProducerWork` lane receives independent deployment-supplied credit. Native Action
-polling and accepted continuation/cleanup progress use separate allowances; both
-are attempted even if native polling lacks credit or returns an error. A member's
-short turn/error cannot skip its siblings. The turn returns an operational error
-in preference to backpressure, retains each member's first returned non-backpressure
-error and exposes it through `progress_failure`; absent such an error the accessor
-lends that member's native failure evidence. The original native, application,
-delivery and cleanup owners remain authoritative for their detailed outcomes.
-Native evidence is reconciled by Servient against committed membership before
-revocation; uncommitted or foreign evidence cannot revoke another publication.
-
-Action turns use `progress_actions_closing_revoked`: one association check and
-one prepaid original-store scan both mark only this member's revoked invocations
-for local close and select its least-recently progressed entry. Manual
-`progress_actions` uses the identical selection/progress algorithm without the
-opt-in close marking; revocation still requests cooperative cancellation and
-permits normal late completion. Ordinary described CancelAction cannot force
-local close of current work. No current sibling is marked or progressed through
-another participant's turn, and no remote CancelAction is synthesized.
-
-For a configured Action-store bound `N`, either entry point consumes `N`
-CleanupItems before the scan, including when selection is empty. Below that
-allowance there is no marking, selection or application callback. The scan
-retains its original selected index under the exclusive store loan through
-progress and completion bookkeeping. It does not construct a handle and repeat
-a lookup scan. Direct handle-based `step_raw_action` still pays its own lookup.
-Work after selection pays the original callback envelope: normal work consumes
-HandlerSteps for output body/media, the captured validator and poll, plus one
-unit if cancellation must be requested; local close consumes one CleanupItems
-unit for its poll plus one if cancellation must be requested. Unread completed
-entries require no further callback allowance. Short callback credit may retain
-paid selection/close intent but invokes no application code; it never refunds a
-scan already performed. Least-recent selection remains participant-scoped,
-including after Pending/error and with unread results; its existing progress
-counter remains checked.
-
-The same Actions allowance funds selection, optional close marking and actual
-callbacks. There is no separate unconditional close scan. For example, with
-`N=4`, normal work needs four cleanup units, first cancel/close needs six, and
-later close polls need five, plus any normal HandlerSteps envelope. Pending/error
-close retains original work, result funding, cancellation failure and first close
-failure; no result is acknowledged by a turn. Native closed Action polling remains
-valid maintenance and yields no new ingress rather than an unsupported-operation
-error. Conservative global-store selection bounds, deployment scheduling and
-partitioning of credit between participants remain separate from this correction.
+A Producer turn verifies original participation identity, issuer and instance
+before entering a member. It can advance native receive, an accepted Action or
+a drain independently. Use bounded operations or a cursor, rotating among ready
+members. Retain the selected original invocation throughout its turn. Revoked
+work may progress local close. A described CancelAction is a separate effect.
+One stalled participant cannot starve another. Keep the member's first failure
+and its native, delivery and cleanup evidence separately. Servient reconciles
+observed loss of a required member against the committed publication.
 
 These Producer turns compose alongside [Consumer turns](#host-consumer-execution-turns)
 in a deployment-supplied Host loop with the same native/maintenance, clock and
@@ -923,32 +799,28 @@ availability and policy revision are checked around linked permission callbacks.
 Neither NoSec nor a schema marker grants permission. The representation currently
 refuses all other security requirements rather than bypassing their obligations.
 
-Caller-provided definition/service/scratch storage remains with its original
-owner through safe loans. Before native construction, the caller supplies a
-Foundation `ResourceReservation` for complete Engine work/output/backing, including
-retirement; owner identity, resource kind and capacity must match. The reservation
-moves with the accepted native work and unread settlement. Refusal returns it
-unchanged. `into_funding` disposes native work and output before returning the
-same complete lease for reuse; Drop refunds it after local disposal. This is no
-universal account/storage abstraction or claim about private native SDK memory.
+The caller supplies actual definition, service, work and result storage. An
+exclusive typed slot with sufficient backing and a retirement path suffices at
+admission. Any separately promised quota follows its own owner. Refusal returns
+the protected input or slot. A result loan can occupy the only available buffer
+until disposal. More concurrency requires independent backing.
 
 The shared kernel preserves the first cause independently of native errors,
 cleanup failures and normal/late output. Read's native facet permits local cleanup
 acknowledgement or a retained racing result; it grants no external cleanup transfer
 destination or remote cancellation guarantee. Pending/failed cleanup retains its
-original native owner and paid progress remains possible after revocation. Drop
+original native owner, which can still close after revocation. Drop
 must dispose local resources finitely without network waits and cannot claim an
 acknowledged drain. Losing a copyable token does not drive background cleanup;
 the slot owner can close/step or perform local disposal.
 
-The [downstream fixture](../evidence/constrained-finite-execution.md) exercises
-these rules with real datagrams and inline output, plus no-atomic compilation.
-Host finite execution shares the kernel but retains its original Rc registry,
-reentrant controls, Host account bank and boxed native calls. This finite Read
-evidence does not qualify continuing Actions. Notifications, Producer publication,
-TD preparation, general caller-provided
-structured-schema storage, concrete Embedded drivers and automatic scheduling
-are outside this constrained execution claim.
+The [existing downstream fixture](../evidence/constrained-finite-execution.md)
+exercises issuer identity, real datagrams and inline result retention, and
+compiles for a target without pointer atomics. Its Read entry still takes a
+reservation and work credits. The successor must exercise those cases with
+the typed slot as backing. Host execution currently shares the finite kernel
+and uses an Rc registry, reentrant controls, a Host account bank and boxed
+native calls.
 
 ### Caller-owned continuing Action
 
@@ -973,7 +845,7 @@ original-instance policy checks cover the same actual destination used by start.
 Invoke input and Invoke/Query output use their own captured media/body/work
 services over one shared schema pair. No codec is selected from untrusted media.
 
-After admission prepayment, capture one input payload view before fresh
+Capture one input payload view before fresh
 authorization. Validation and native start MUST use that same borrowed view,
 including its media/coding. Retaining the original input owner does not prove
 that repeated views select the same payload. No further input-view callback may
@@ -981,11 +853,10 @@ follow final authorization; input-view-time revocation MUST refuse before native
 start. This requires neither an input copy nor a different ownership format.
 
 Definition and service storage stay with the caller through safe loans. Before
-native construction a complete original Foundation reservation must match owner,
-resource kind and complete inline plus declared indirect work/input/result/token/
-retirement backing. Refusal returns the identical input and reservation.
-Accepted work owns them through every exchange and unread settlement. Complete
-new-work qualification is distinct from live dependency checking: original Invoke
+native construction claim usable storage for the input, token, output/handoff
+and retirement. Refusal returns the identical input and any provisional slot.
+Accepted work retains its owners across exchanges and unread settlement. At
+admission check the whole mapping. For already admitted work, original Invoke
 native/authority dependencies remain, while data dependencies follow the actual
 current exchange/unread output. Unused or retired controls and a retired input
 codec do not revoke independently represented Query work. A pre-effect control
@@ -1000,63 +871,26 @@ termination/rollback; native continuation is evidence, not logical authority.
 Close acknowledgement concerns local exchange retirement only. Drop performs
 finite local disposal without waiting or claiming an acknowledged drain.
 
-The slot retains an unread completion until `take_settlement` prepays cleanup
-and performs fresh time, original authority and paid service/access checks.
-Short credit retains the slot and original output. Failed handoff retains native
-output as evidence. Successful handoff transfers the complete outcome owner and
-its current recipient permission; subsequent revocation cannot retarget or
-retract that ownership. This transfer provides no new payload view and does not
-seal the bytes that a generic `ActionOutput::view` may select later.
+A slot retains an unread completion until successful handoff or local disposal.
+Handoff checks the supplied time, original authority, destination and services
+under current permission. Failure leaves the native evidence with its owner.
+Where a generic output can expose different values on successive views, capture
+one view and validate its identity, shape, media, coding, size and schema before
+lending that exact value. A previous check can be reused only for the exact
+value and schema covered. Permission loss refuses a new validated delivery.
+A loan already returned remains an ordinary borrow under its original owner.
 
-`ActionSettlement::result(&mut WorkBudget)` is a paid application-loan edge.
-Before obtaining a view it prepays one `HandlerSteps` bounded view-adapter
-operation plus the returning operation's originally captured `CodecInputBytes`
-validation allowance. It captures one view, checks its complete application
-shape (including primary response metadata), media/coding/body bounds and shared
-output schema with the original data service, and returns that exact loan.
-No second output view or authorization callback follows this validation.
-Progress/retirement validation remains mandatory, including late output after
-local failure; its result is no certificate for a subsequent arbitrary view.
-This contract guarantees each returned loan matches its own validation, rather
-than asserting that all historic views are identical. Host's immutable output
-carrier remains a different qualified representation.
-
-Short loan credit enters no view/codec callback, records no failure and retains
-all original owners for retry. A loan validation failure records a sticky first
-cause and validation error while retaining native evidence, input, continuation
-and funding; it cannot erase an earlier cause or assert remote rollback. An
-unavailable original codec is not re-entered. No native poll, cleanup, new account,
-allocation, copy or fresh authorization is performed by this loan. Permission
-already transferred with the owner. Already-returned loans remain ordinary
-immutable borrows even if a selector, service or logical authority later changes.
-Future loans require their own original-service validation and may refuse.
-
-`native_result(budget)` lends current unvalidated native evidence, including
-rejected and late output. A present successful native output requires one
-`HandlerSteps` unit before its view adapter is entered, even after local failure
-or codec/authority loss. It performs no codec validation, authorization or native
-progress. An absent disposition or a retained native error is a passive field
-observation and needs no adapter credit. The outer `CoreResult` reports short
-adapter credit; the nested native result preserves the original failure or
-output independently. Short credit retains all owners and records no new cause.
-
-`input(budget)` likewise prepays one `HandlerSteps` unit before calling `view()`
-on a present retained input; an absent input is passive. It lends the original
-input owner's current view; it is not the exact dispatched payload or a dispatch
-receipt. Admission's single input loan is used unchanged for validation/start
-but is not stored in the movable settlement. An input facet backed by a selector
-may therefore expose `99` here even though the actual wire request used validated
-`7`. Applications requiring a byte receipt can explicitly retain one or use an
-immutable input representation; no implicit copy is required.
-
-The settlement retains original input, output, continuation, dependencies and
-reservation; application and evidence loans cannot escape their owner or survive
-moving it into `into_funding`. That method disposes native/input/result owners before returning
-the exact lease. Drop refunds it only after local disposal.
+Raw evidence can expose rejected or late native output under its access policy.
+Inspection of a retained input can expose its current view. Only an immutable
+input or an explicit receipt establishes the bytes previously dispatched.
+A validation failure retains its first cause and native evidence. The
+settlement owns the original input, output, continuation and dependencies
+until disposal. Neither inspection nor validation drives another native effect.
 
 The [cross-representation evidence](../evidence/continuing-action-runtime-independence.md)
-joins real datagrams, common Host Action regressions and no-atomic compilation.
-No separate awaited-result wake contract or embedded transport is supplied.
+joins real datagrams, common Host Action regressions and no-atomic compilation
+under the earlier admission contract. The successor must also demonstrate
+authorized handoff of the exact value while general capacity is occupied.
 Constrained TD preparation, notifications, Producer publication, credentials,
 general schema arenas, hardware/allocator/time qualification and broader runtime
 independence remain open.
@@ -1068,11 +902,11 @@ exchange; it does not cancel any Action. Short validation or handoff work retain
 the original observation and slot. Recheck authority and service/policy after
 callbacks and before handoff, including an already validated unread result.
 
-Producer root status observation prepays the bounded inventory walk before root
-or member policy callbacks and rechecks original currentness after callbacks.
+Producer root status observation bounds the inventory walk, handle construction
+and lookups, and rechecks original currentness after policy callbacks.
 It borrows original invocation owners without polling, cancellation, re-binding
-or result acknowledgement. Native formatting/backing retains its own paid bound;
-capacity failure refuses the whole query without truncation. Publication's
+or result acknowledgement. The Binding bounds native formatting and backing.
+Capacity failure refuses the whole query without truncation. Publication's
 complete inventory check prevents a partial native owner advertising all Actions.
 Pending original replies retain their original identity across replacement and
 close, with native local-write evidence distinct from remote receipt.
@@ -1084,15 +918,10 @@ Retained settlements continue to count against the original store's invocation
 bound; repeated acknowledgement cannot accumulate unbounded results under one
 fixed reservation. Disposing one result permits exactly that slot to be reused.
 
-Managed publication binds its original Host account bank before Serving. Before
-behavior entry, each Action acquires separate EngineLiveBytesGlobalMax and
-CleanupBytesMax reservations for `output_retained_bytes + size_of::<RawActionSettlement>()`,
-plus one CleanupItemsMax reservation. Any failed acquisition releases the partial
-set and leaves application behavior and result-slot usage untouched. Successful
-admission transfers these exact leases through result disposal. These are
-controlled-backing/cleanup allowances, not additive physical RAM measurements;
-native I/O/formatting and application work have their existing separate owners.
-Raw execution remains caller-funded and enforces the same result-slot lifetime.
+Before behavior entry, both managed and caller-owned Producers secure an actual
+result slot and its handoff and retirement backing. The Binding protects the
+matching continuation record under EXEC-ACTION-001. Failure releases provisional
+claims and leaves behavior untouched. The result may outlive the publication.
 
 Original result/target/validator storage is disposed before its result leases and
 retained instance funding. Both completed-query and settlement APIs lend only
@@ -1114,12 +943,11 @@ guard stages. Current Property Read implementations keep their existing linear
 carriers, final checks, result seals and funding at their measured scopes. Their
 historic success is not acceptance of the successor runtime.
 
-The owned Host composed Producer path stages original native participation
-identities before setup and reserves its controlled backing and qualification
-scratch at a shared account bank before taking the caller's pure owners. The
-original instance and each participation retain the same lifetime reservation;
-replacement, lost exposure guards and unread results cannot refund it. Complete
-native retirement and acknowledgement of retained Actions/Events are separate checks.
+Each staged Producer owns its closed participants and current qualification
+workspace. Commit moves serving members into the publication and releases
+candidate-only storage. Each accepted work item and shared service keeps its
+own backing through last use. Logical retirement also checks outstanding
+Actions and Events.
 After a lost publication guard, logical reclamation requires actual disappearance
 of every original native owner and acknowledgement of all original Action/Event work.
 Neither guard Drop nor a diagnostic instance key proves completed native drain.
@@ -1134,28 +962,29 @@ Accepted Action work and physical retirement retain their independent owners.
 The optional [shared HTTP listener](binding-spi.md#independent-http-listener-participation)
 retains native infrastructure independently of these publication gates. Staged
 native buffering and route leases grant no application authority; every handed-off
-exchange retains its original participant, instance and result/cleanup reservation.
+exchange retains its original participant, instance, result backing and local
+retirement owner.
 Closing that participant releases its native lease even if its original unread
 settlement still prevents logical retirement. A sibling or replacement cannot
-acknowledge or fund the old work. Shared socket/parser/queue backing has the
-Binding's bounded native policy; each managed publication still pays its actual
-mapping, input/result, qualification and cleanup costs at its own original bank.
+acknowledge the old work. The Binding bounds shared socket, parser and queue
+storage. Each instance owns its mapping records and each call owns its settlement.
 
 Producer Property value/Event data publication owns an independent native publication and pins the
-original logical instance/reservation, including through replacement and loss of
+original instance and backing through replacement and loss of
 the exposure or Servient root. Data admission invokes the publication-captured
 policy/validator and checks the complete retained carrier backing. The native
-participant's declared bounded slot covers emission, frame, data, result and
-cleanup backing; refusal returns the original data. Cancellation records first
-local cause without work credit; funded progress retains any late native effect
-and completes retirement. An unread settlement occupies its original funded
+participant supplies bounded emission, frame, result and retirement storage.
+Refusal returns the original data. Cancellation records the first local cause
+immediately. Bounded progress retains late native effects and retires the
+original emission. An unread settlement occupies its original
 publication slot through disposal. The Binding controls the lifetime of each
 physical resource used to produce that outcome. Logical retirement additionally
 checks outstanding notification work, even if a participant incorrectly reports
-itself retired. Native publication errors fence affected logical currentness,
-and actual native service failure fences its
-dependent participations on progress. Drop performs bounded local disposal and
-never claims delivered Property values/Event data or completed remote cancellation.
+itself retired. An individual delivery or recoverable cleanup error stays with
+that work while a healthy Thing serves. Observed loss of a required installed
+member fences its original publication immediately, including when an emission
+observes it. Loss of a shared stream fences its dependents. An independent
+service continues. Drop reports only actual local disposal.
 
 Native retirement Pending/error retains the complete emission and prevents
 acknowledgement. The first cleanup error remains observable alongside the first
@@ -1163,31 +992,26 @@ local cause and native publication effect; later successful local disposal is
 required before terminal acknowledgement. Linked native callbacks are followed
 by fresh authority checks before successful local settlement.
 
-A managed Producer participant that excludes already funded prepared backing
-from its additional byte declaration must prove complete inventory pairing as
-well as exact shared-owner identity. The existing publication coverage check
-compares its declared operation count with the covered prepared associations at
-admission and before publication. Unpaired native definitions refuse handoff;
-selected-entry equality alone cannot fund an additional retained schema.
+Complete inventory pairing checks every prepared association against the actual
+participation and every installed operation against the final TD. Each distinct
+retained definition needs backing. A shared reference retains its original
+owner through last use.
 
 ## Reusable Producer definition ownership
 
 Complete Producer publication remains per instance. `ComposedProducerExposure`
 stages that instance's selected mappings, eligible registrations, whole-TD
-coverage and qualification allowance. Installation checks the actual native
+coverage and the actual workspace needed for qualification. Installation checks the actual native
 mapping/service identities and holds all observed configuration versions
 through commit. Completing or cancelling staging drops its preparation
 references. Independent native resources, logical authority and accepted work
 retain their own publication and retirement owners. A failed publication retires only its original membership. A sibling
 keeps its own current permission, behavior, native progress and settlement.
 
-Explicitly funded HTTP instructions retain their original physical definition
-bank through every program/definition/native snapshot, independently of all
-exposure banks. Instance admission pays its actual reference/operand and runtime
-cost rather than charging the shared physical allocation again. Source or sibling
-retirement cannot release that original charge early or move it to another bank.
-Even a detached immutable program reference keeps the original lease; the final
-physical instruction/schema/response owner releases it after disposal. This is
+Shared HTTP instructions retain their original backing through every program,
+definition and native snapshot. Each instance supplies space for its references,
+operands and runtime state. A detached immutable program reference keeps the
+instruction, schema and response storage alive until final disposal. This is
 separate from native socket retirement and original unread result ownership.
 
 The [preparation contract](planning.md#reusable-producer-preparation) and
@@ -1199,7 +1023,7 @@ is a bounded manual Host integration, not a per-Thing scheduler or runtime.
 ## Resolved Consumer destinations
 
 The finite Host owner validates variable inputs, reserves original operand,
-destination, native/result and cleanup backing, then pays for pure native
+destination, native/result and cleanup backing, then runs bounded native
 resolution. The returned destination is retained through the original call and
 settlement. Fresh access checks, credential issuance and every later permission
 check use that operand. Service/configuration/currentness checks fence callbacks
@@ -1218,7 +1042,7 @@ Host reserved allocation policy is not a recoverable process-wide OOM guarantee.
 ## Structured data validation
 
 The finite Consumer borrows its original PreparedSchema, with actual validator
-qualification and paid scratch/work at input, output and late-result boundaries.
+qualification and available scratch for bounded input, output and late-result checks.
 Source retirement, cancellation or revocation do not replace or refund the
 constraint owner. Invalid input returns its protected payload before native
 admission. A normal or late native value failing nested constraints remains
@@ -1240,16 +1064,11 @@ do not become application output. Native failure, validation failure, local
 cancellation/revocation and remote effect certainty remain separate evidence;
 replacement cannot retarget the original constraints, work or result.
 
-Producer Action validation also retains the original extra callback-work bound.
-The invoke path funds both input and possible immediate output before entering
-validation or behavior; a continuing poll funds output validation before it can
-materialize a result. Short credit refuses pre-effect invocation or keeps the
-continuation pending without polling it. Metadata is rechecked before/after
-validation, after authorization and before immediate/continuing output validation;
-a changed allowance produces a
-validation failure without calling an unfunded output validator. Restoring the
-declaration cannot reopen that terminal failure. Close continues on its separate
-cleanup budget without handler/codec credits, even if service metadata changed.
+The captured Action validator must handle the bounded input and possible
+immediate or continuing output. Observe service changes around authorization
+and validation. A change invalidating output support refuses delivery and
+retains the original evidence. Close uses the original native right even
+after validator or access loss.
 
 ## Declared finite failures
 
@@ -1282,12 +1101,11 @@ registry and accepted work share the original member identities and ingress
 gates. TD lookup and fresh dispatch observe their availability, including
 withdrawal of a native owner moved out through a typed loan. Servient checks
 this permission after linked callbacks and before granting behavior entry.
-Native poll credit funds a finite participant's check of its installed services
-and shared ingress independently of handler and result-queue credit. Terminal
-loss withdraws its gate. Registry revocation, a captured revocation handle and
-a terminal notification failure all withdraw the original publication's gates
-at the same permission owner. The accepting participant keeps its reply socket
-across funded delivery turns and retains its settlement for acknowledgement.
+A finite participant checks its installed services and ingress independently
+of new admission. Terminal member loss withdraws its gate. Servient fences
+the gates of the original dependent publication. A delivery-local failure
+retains its own settlement. An accepted reply keeps its original socket
+through bounded delivery or retirement.
 At replacement commit, Servient withdraws every displaced gate before opening
 the successor's gates. Old participants can then drain their own work and
 retire even if nobody looks up the old TD. A healthy staged gate waits for
@@ -1297,7 +1115,7 @@ cancel its accepted work.
 At a staged publication decision, a recorded native failure rolls back the
 candidate, releases qualification scratch and starts retirement of its original
 members. This also applies when the terminal cause is backpressure. A healthy
-candidate can retry a short work allowance or pending native setup. Native
+candidate can yield for a bounded turn or wait for identified native readiness. Native
 and application progress, acknowledgement and final result disposal remain
 independent and caller-driven.
 An encoded reply may finish after ingress closes; completed native delivery never

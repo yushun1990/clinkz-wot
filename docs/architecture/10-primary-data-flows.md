@@ -37,9 +37,9 @@ facts. Fallback before effects is distinct from retry after uncertain commitment
 
 ```text
 private description + behavior + actual providers
-  -> validate known dependencies and fund setup/cleanup
+  -> validate known dependencies and secure rollback for the closed endpoint
   -> closed native participation (when needed to learn endpoints)
-  -> bind actual endpoints; finalize TD; recheck complete support and readiness
+  -> resolve final TD, qualify all providers, acquire exact members and check readiness
   -> one local publication of final TD/registry/current authority
 
 native ingress/authentication/matching
@@ -111,7 +111,9 @@ Continuation exhaustion does not imply a trusted
 or immutable remote inventory beyond the peer's supplied collection state.
 
 The session bounds URL/header/wire/body bytes, JSON structure, TD size, work,
-results, pages and elapsed time. Each request's body reader enforces the smaller
+results, pages and elapsed time on its supplied monotonic clock. Resuming a
+page preserves the session totals and original deadline. The TD job reports
+progress and lifetime exhaustion directly. Each request's body reader enforces the smaller
 of the page cap and remaining session byte allowance, for both advertised length
 and streamed frames. An exhausted allowance refuses before socket acquisition;
 overflowing bodies release the request without waiting for EOF or deadline.

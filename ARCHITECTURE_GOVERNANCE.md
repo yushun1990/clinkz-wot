@@ -115,9 +115,10 @@ correction. Workspace topics remain investigation/provenance rather than authori
 ## Selected direction
 
 Shared TD semantics, independent live authority, truthful Producer advertisement,
-logical/physical ownership separation, funded bounded cancellation/cleanup and
-equivalent supported Host/constrained semantics remain binding. Separate execution
-capabilities sit over concrete Binding-owned native runtimes. Native matching,
+separate logical and physical ownership, owner-enforced capacity, bounded progress
+and backed retirement apply equally on Host and caller-owned deployments.
+Each may supply its own storage and scheduling. Separate execution capabilities
+sit over concrete Binding-owned native runtimes. Native matching,
 correlation, distribution and I/O stay out of the Engine. Eager plan sets, route
 stage inventories, one route/Thing resource ownership and universal session/RPC
 representations are not the general architecture. Exact detailed contracts have

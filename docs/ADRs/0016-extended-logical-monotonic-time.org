@@ -71,6 +71,10 @@ their =ClockId= and =ticks_per_second= match. Two =UnixMillis= values are
 comparable with each other. Unknown timestamps, mixed timestamp kinds,
 different clock ids, and conflicting scales are incomparable.
 
+Use the supplied monotonic clock for admission, interaction, retention and
+cleanup deadlines. Waiting and retry preserve the original instant and clock
+domain. Adjusting civil time cannot extend an admitted lifetime.
+
 =Deadline= retains the frozen optional-instant value shape. =Deadline::NONE=
 is never elapsed. A finite same-clock deadline is elapsed exactly when
 =now >= instant=. Different clock ids return =None= from
@@ -82,8 +86,8 @@ If an admitted operation later observes a different runtime clock id, that is
 =CoreError::InternalInvariant= with =RetryClass::Never= and the owning phase:
 =Handler= for interaction dispatch, =Binding= for binding progress, and
 =Cleanup= for cleanup progress. It is not reported as =TimedOut=. The owner
-begins cancellation or cleanup and discards any later value under the existing
-late-result rules.
+begins cancellation or cleanup. It retains a later native outcome as evidence
+with its original owner. The clock mismatch fences validated delivery.
 
 =CleanupRecord= timing values must use the runtime clock id. When both a retry
 instant and terminal deadline exist, their order is validated through

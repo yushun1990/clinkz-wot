@@ -16,7 +16,11 @@ Bindings own native protocol vocabulary interpretation, resource acquisition,
 ingress, addressing/matching, captured variables, authentication integration,
 correlation, flow control, distribution and physical retirement. Native receiving
 and matching progress independently of semantic acceptance. Servient independently
-checks each logical candidate and alone chooses application behavior.
+checks each logical candidate and alone chooses application behavior. The Binding
+may move a reply right, lend a native slot, or supply an admitted copy. It keeps
+the original offer and deadline until acceptance. An ordinary facet supplies its
+concrete bounds, storage and retirement operations. Any promised advance
+capacity comes from the owner able to exclude competitors.
 
 A logical role does not dictate network direction. A Producer can connect to a
 broker; a Consumer conversation can require a callback endpoint. A Thing is not

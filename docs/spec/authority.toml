@@ -132,7 +132,7 @@ prior_status = "active"
 prior_source = "docs/spec/foundation.md"
 disposition = "superseded"
 successors = ["RES-HANDOFF-001"]
-reason = "Retain capacity-before-acquisition and cleanup funding; no new capability must adopt 196 global fields."
+reason = "Require rollback for each acquisition and usable result and retirement backing before an effect."
 
 [[prior_requirement]]
 id = "API-SECURITY-001"
@@ -332,7 +332,7 @@ prior_status = "active"
 prior_source = "docs/spec/runtime-safety.md"
 disposition = "superseded"
 successors = ["RES-WORK-001"]
-reason = "Retain linear prepaid bounded work and static/manual feasibility, not one universal step ABI."
+reason = "Use bounded inclusive operations on both drivers and a nonrenewable job-local allowance for repeatable work."
 
 [[prior_requirement]]
 id = "CONSTRAINED-SCHED-001"
@@ -364,7 +364,7 @@ prior_status = "active"
 prior_source = "docs/spec/foundation.md"
 disposition = "superseded"
 successors = ["RES-WORK-001"]
-reason = "Retain linear prepaid bounded work and static/manual feasibility, not one universal step ABI."
+reason = "Use bounded inclusive operations on both drivers and a nonrenewable job-local allowance for repeatable work."
 
 [[prior_requirement]]
 id = "CRATE-DEPS-001"
@@ -876,7 +876,7 @@ prior_status = "active"
 prior_source = "docs/spec/foundation.md"
 disposition = "superseded"
 successors = ["RES-HANDOFF-001"]
-reason = "Retain capacity-before-acquisition and cleanup funding; no new capability must adopt 196 global fields."
+reason = "Require rollback for each acquisition and usable result and retirement backing before an effect."
 
 [[prior_requirement]]
 id = "RES-LIMIT-002"
@@ -884,7 +884,7 @@ prior_status = "active"
 prior_source = "docs/spec/foundation.md"
 disposition = "superseded"
 successors = ["RES-HANDOFF-001"]
-reason = "Retain capacity-before-acquisition and cleanup funding; no new capability must adopt 196 global fields."
+reason = "Require rollback for each acquisition and usable result and retirement backing before an effect."
 
 [[prior_requirement]]
 id = "RES-LIMIT-003"
@@ -892,7 +892,7 @@ prior_status = "active"
 prior_source = "docs/spec/foundation.md"
 disposition = "superseded"
 successors = ["RES-HANDOFF-001"]
-reason = "Retain capacity-before-acquisition and cleanup funding; no new capability must adopt 196 global fields."
+reason = "Require rollback for each acquisition and usable result and retirement backing before an effect."
 
 [[prior_requirement]]
 id = "RES-LIMIT-004"
@@ -900,7 +900,7 @@ prior_status = "inactive-domain-entry-review-required"
 prior_source = "docs/spec/v5-authority-reset.toml"
 disposition = "superseded"
 successors = ["RES-HANDOFF-001"]
-reason = "Retain capacity-before-acquisition and cleanup funding; no new capability must adopt 196 global fields."
+reason = "Require rollback for each acquisition and usable result and retirement backing before an effect."
 
 [[prior_requirement]]
 id = "RES-PROFILE-001"
@@ -908,7 +908,7 @@ prior_status = "inactive-domain-entry-review-required"
 prior_source = "docs/spec/v5-authority-reset.toml"
 disposition = "superseded"
 successors = ["RES-SCHEMA-001"]
-reason = "Keep explicit schema/meaning identity; flat V1 table is restricted implementation policy."
+reason = "Bind the owner's units and relevant configuration. Retire the flat V1 schema with its last caller."
 
 [[prior_requirement]]
 id = "SEC-PERF-001"
@@ -1028,15 +1028,15 @@ scope = "restricted-implementation-except-time"
 
 [[scoped_source]]
 path = "docs/spec/consumer-resource-ownership.md"
-scope = "restricted-consumer-property-read"
+scope = "existing-read-adapter-until-last-consumer"
 
 [[scoped_source]]
 path = "docs/resource-limits.csv"
-scope = "legacy-numeric-adapter-schema"
+scope = "existing-profile-readers-until-removal"
 
 [[scoped_source]]
 path = "docs/resource-contracts/consumer-ownership-v2.toml"
-scope = "restricted-consumer-property-read"
+scope = "existing-read-adapter-until-last-consumer"
 
 [[scoped_source]]
 path = "docs/evidence"

@@ -23,6 +23,22 @@ independent review are determined from the current repository for each material
 slice, not from a saved next-action list. New interaction families and Bindings
 are outside this architecture migration.
 
+## Bounded execution and TD admission
+
+Port finite Read and continuing Action through the shared Core step, both storage
+representations and the actual Binding/codec/access edges together. Exercise
+local close under saturation with zero new access or validation callbacks.
+Retain a racing value, deny ordinary allocations and retrieve a valid
+length-constrained result under fresh permission while other results remain
+held. Invalid data or revoked permission must still refuse successful handoff.
+Preserve a distinct raw-evidence outcome where the mapping permits it.
+
+Have the TD cursor report bounded advancement, yield, exhaustion and completion.
+At the exact cumulative limit finish a rewindable traversal. One unit short,
+refuse before the next visit, including across resumption or a delegated scan.
+Migrate diagnostics to the enforcing owner's limit, phase and known amount
+with a bounded fallback. [TD](../spec/td.md) · [Core handoff](../spec/interaction-core.md#finite-execution-and-ownership-representations)
+
 ## Consumer composition scope
 
 Core now carries operation-scoped finite definitions, distinct input/output
@@ -109,7 +125,7 @@ No broader Action/notification/Producer portability or package closure follows.
 
 Core now carries immutable security requirement operands and redacted opaque
 per-call capabilities without concrete scheme/transport cases. Access-service
-qualification/revisions and paid finite verification extend EXEC-SECURITY-001;
+qualification/revisions and bounded finite verification extend EXEC-SECURITY-001;
 TD remains the shared owner of defaulting and Form override. Scope and executable
 negative evidence are in [the security assessment](../evidence/td-security-https.md).
 

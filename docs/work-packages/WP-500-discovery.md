@@ -38,6 +38,16 @@ protocols, implicit ThingLink traversal, Directory-TD interpretation or arbitrar
 TD-described Directory actions. Unknown metadata remains available to the
 existing selected semantic and preparation layers.
 
+## Retrieval and TD progress
+
+Consume the bounded TD job's explicit result in the retrieval loop. Exercise
+advancement, resumable yield, lifetime exhaustion and a real I/O wait. Replace
+summing a work vector to infer progress. Keep independent page, per-TD, total
+byte, result and elapsed-time bounds across continuation. The session uses its
+supplied monotonic clock. Cancellation or exhaustion must release the request
+and preserve already delivered pages. This migration depends on the TD job,
+independently of public Producer exposure.
+
 ## Ownership and evidence
 
 The session owns immutable configuration, trust roots, credentials, navigation

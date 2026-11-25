@@ -23,8 +23,8 @@ It qualifies actual source-free program/configuration and continuation
 compatibility, then creates concrete owned `ActionExchange` values for explicit
 Invoke/Query/Cancel. `ActionInput`/`ActionOutput` lend original payload views;
 tokens and inline/indirect backing retain their actual owners. Metadata and
-support checks are pure bounded operations. The captured native allowance covers
-poll plus close and pure destination work; close errors/Pending retain original
+support checks, native poll, local close and pure destination resolution are
+bounded operations. A pending or failed close retains the original
 work, and acknowledged close may return one original late observation. Start
 refusal leaves no native effects or partially retained work. Local destruction
 is finite and nonblocking. No logical dispatcher or revocation owner enters the
@@ -37,7 +37,7 @@ Typed `ActionOutput::view` is a bounded local adapter without native progress;
 safe interior mutability can select different immutable bytes/metadata on later
 calls. It supplies an untrusted view, not an immutable-output certificate. The
 caller-owned [application loan](runtime-safety.md#caller-owned-continuing-action)
-validates and returns a single captured view under paid original data bounds.
+validates and returns a single captured view using the original data service.
 The original native owner/backing stays retained. Host's concrete immutable
 carrier can support different access mechanics without changing WoT meaning.
 
@@ -55,7 +55,7 @@ construction; code loading/hot unloading is not selected.
 captures, correlation, conversations, I/O, flow control, distribution and physical
 infrastructure. Core/Planning/Servient MUST NOT add protocol cases or a universal
 RPC/session/matcher. One logical Thing MUST NOT imply one native resource.
-Native progress has its own owner/budget and may receive/match traffic without
+Native progress has its own bounded polls and may receive/match traffic without
 any candidate Thing's serving authority. Concrete callbacks may enqueue bounded
 observations/wake progress but cannot select/call application behavior.
 
@@ -70,8 +70,11 @@ input cannot retarget a replacement generation. Prepublication/draining input
 uses a declared bounded reject/buffer/control policy, never early dispatch.
 A capability unable to enforce that local boundary is unsupported.
 
-`SPI-DELIVERY-001`: Before acceptance, rejection MUST return the complete input
-and reply/publication opportunity. After acceptance an explicit owner MUST retain
+`SPI-DELIVERY-001`: A Binding can move the exclusive reply right, lend an
+exclusive native slot, or copy the input into admitted storage under the
+mapping's delivery rules. Before acceptance, refusal returns the complete
+offer, including the original reply right and deadline. A Binding retaining
+the offer owns its redelivery. After acceptance an explicit owner MUST retain
 pending work, original recipient/mapping, result/late value, effect certainty and
 cleanup path. Byte views MUST retain actual physical backing across callbacks;
 no borrow may outlive a native stack/buffer. Immutable backing MAY be shared
@@ -107,9 +110,8 @@ RFC template expansion supplies no universal inverse matcher for Producer ingres
 
 The Host finite `ClientBinding::supports_uri_variables` is passive eligibility;
 its compiler must qualify the actual mapping. `resolve_target` is pure and
-bounded under the admitted native scratch/start declarations and one paid
-BindingPolls credit. The runtime reserves the configured destination capacity
-before entry. Resolution acquires no I/O, credentials or logical authority and
+bounded by the actual native resolver and available destination storage.
+Resolution acquires no I/O, credentials or logical authority and
 returns an opaque destination operand for fresh policy and credential checks.
 Default implementations decline variables and support only their static operand.
 Native invoke must verify/use the identical resolved destination before effects;
@@ -218,14 +220,10 @@ The implementation is process-local under one concrete compiler/validator/native
 policy; no persistence/version negotiation or cross-Binding compatibility is
 inferred. Live TLS/key/verifier services are not moved into the definition.
 
-The original bank reserves bounded provisional definition backing before
-lowering, then retains its actual instruction/schema/response bytes plus artifact
-and cleanup leases. Physical descendants drop before the original leases.
-Every definition and native program reference retains that owner. Prepared and
-native mapping declarations exclude only this already funded physical content;
-their own actual layouts/operands remain separately charged. A reference cannot
-transfer the original charge to a new instance bank. Scratch and work for fresh
-input checking remain real preparation costs.
+Each lowering owns its provisional scratch and output while they overlap.
+Every retained program reference keeps the original instruction, schema and
+response backing alive through final disposal. Per-mapping operands and records
+need their own space. Rechecking compatibility can still require scratch.
 
 `native_compilations`, `dependency_checks` and `mapping_bindings` observe the
 whole-Thing capability path: actual lowering attempts (including fresh support
@@ -268,7 +266,7 @@ Native receive wakes are advisory retry hints, including on an idle listener;
 they do not indicate socket readiness or notify a different recipient's driver.
 The native handoff completes and the listener mutex is released before invoking
 the supplied Waker. The caller still paces/coalesces turns and drives all relevant
-participants with explicit clock/work credit, including maintenance and cleanup.
+participants with bounded operations and the supplied monotonic clock, including maintenance and cleanup.
 There is no OS/timer registration or wake-only progress guarantee; a no-op Waker
 is valid for a manually paced loop. Active connection polling and disposal also
 occur outside the listener lock; queued drivers remain unpolled until handoff.
@@ -322,12 +320,20 @@ use typed/opaque capabilities; no protocol security enum belongs in Core.
 
 ## Resource and progress representations
 
-Engine-controlled state/promised handoffs follow Foundation. Bindings enforce
-native input/growth/concurrency/pool/retry limits at their real owners. Deployment
-owns OS/SDK failure containment. Cooperative bounded callbacks are contracts of
-trusted linked code, not preemption/sandboxing guarantees. Static associated
-state/caller-owned slots and Host erasure/owned calls may differ physically;
-both must meet supported semantic ownership/progress/cancellation outcomes.
+Each facet supplies its actual work, storage, native right and bounded poll or
+slice. A publication facet assembles a closed participation. An outbound exchange
+retains its native completion and retirement. The Binding bounds wire bytes,
+queues, retries and last-user release at their actual owners. Decline a callback
+whose inclusive cost exceeds the supported drive. An ordinary third-party
+registration needs no transitive footprint catalogue, generic funding receipt,
+budget factory or executor. A concrete typed slot proves its layout and
+exclusivity. Enforce indirect storage and any separately promised quota where
+they are controlled.
+
+An advance availability promise uses slots from the real supplying pool or
+partition. Move them into the same member, exchange and settlement operations.
+A Binding unable to supply the guarantee can still serve ordinary admissions.
+Refuse the requested promise before taking native resources.
 
 Optional [Host Consumer turns](runtime-safety.md#host-consumer-execution-turns)
 borrow existing Servient capacity owners. This adds no Binding callback, native
@@ -355,7 +361,7 @@ contracts/evidence remain available at the pinned predecessor.
 ### Producer Action candidates and native participation
 
 `ClosedProducerParticipation`, `ProducerOwnerToken` and
-`ProducerParticipationId` are Core contracts. Readiness, backing declarations
+`ProducerParticipationId` identify the original participation. Readiness
 and membership checks receive only passive issuer identity and instance keys.
 Neither those checks nor native progress may receive Servient, application
 handlers, or a trait forwarding logical dispatch/revocation. Issuer identity is
@@ -366,9 +372,12 @@ qualified original participation set.
 retaining the original native input/reply opportunity. Servient decides invoke,
 query and cancel admission using captured routes/services and fresh policy. It
 retains logical handles, continuation progress, terminal retention and settlement.
-The Binding retains native tokens/epochs, record attribution, matching, encoding,
-ordering, delivery evidence and physical disposal. Copyable invocation references
-in native records are correlation data, never dispatch authority. Local handle
+Before handler entry the Binding secures a generation-scoped wire ID or
+exclusive correlation record against competing callbacks. Installation needs
+no further capacity. It keeps the association usable for promised later
+controls even if encoding or sending the first reply fails. The Binding owns
+record attribution, matching, encoding, ordering, delivery evidence and physical
+disposal. A wire ID resolves the original invocation. Local handle
 recovery/progress/acknowledgement is confined to the original invoke participation;
 that association is installed before fallible acceptance encoding. Described
 query/cancel and a qualified root inventory may use different participants: they
@@ -376,7 +385,7 @@ still require the original instance, captured operation route, principal and fre
 policy. HTTP's same-native-owner inventory restriction is not an Engine rule.
 
 Borrowed `ProducerActionReply`/`RawActionView` observations confer no callback or
-result ownership. Reply/collection encoding does no I/O; only later paid native
+result ownership. Reply/collection encoding does no I/O. Only later bounded native
 progress may send the original response. Root observations are authorized at
 Servient and serialized/ordered at the Binding; partial encoding must be replaced
 by refusal after any semantic failure. Collection support is optional and defaults
@@ -394,8 +403,10 @@ no logical registry, dispatch callback or new universal progress SPI.
 
 Native failure is evidence, not a logical revocation decision. Servient's
 `reconcile_participation` validates issuer/instance association and requires the
-participant's exact identity in that incarnation's committed native set before
-propagating failure to logical revocation. A failed uncommitted participant may
+participant's exact identity in that incarnation's committed native set. Observed
+loss of a required installed member fences its dependent publication. A failed
+delivery with a healthy member retains its own retirement and result. A failed
+uncommitted participant may
 retire its own native work before or after another participant publishes the same
 key; passive origin/key association cannot revoke that publication or its Actions.
 `step_actions` and `step_notifications` apply that boundary for their distinct
@@ -403,10 +414,9 @@ facets. TD lookup and dispatch check the original ingress gates directly,
 including after a caller polls a native participant independently. Native cleanup
 still requires caller-driven progress.
 MQTT readiness/health/close therefore receives no logical owner. Logical
-notification publication metadata is funded by Servient; native participants
-declare native storage/alignment, data capacity and the number of publication
-slots. These manual Host seams do not establish a universal session/runtime or
-all-profile implementation.
+notification metadata belongs to Servient. A native participant supplies its
+bounded data storage and available publication slots. The manual Host evidence
+applies to those facets.
 
 The optional composed Host Producer handoff supplies a closed participation
 lease for each independently installed native contribution. It checks the exact
@@ -433,8 +443,8 @@ native connection or per-Thing Binding runtime: one Binding owner
 can retain many leases and Things, and closing one releases only that participation.
 Finite Bindings with independently fallible ingress implement
 `FiniteIngressBinding::check_ingress` as a bounded, passive read of their
-native owner. Native poll credit funds this check while a candidate waits for
-handler credit or a delivered result occupies the receive slot.
+native owner. A full result slot or waiting handler cannot prevent bounded
+maintenance of ingress or retirement of an independent reply.
 On withdrawal, Servient requests `ProducerRetirement::Drain`. A participant
 with an accepted reply continues its original funded writes until completion,
 delivery failure or deadline, subject to its delivery authorization. Explicit
@@ -490,9 +500,7 @@ Producer Action query/settlement output lends byte/media slices and fixed metada
 not a clonable InteractionOutput/Payload/body Arc. Native encoding stays under
 its existing Binding owner and envelope; retaining original semantic output
 requires retaining its result owner. Acknowledging a native record does not release
-the Servient result-slot or per-result original-bank reservations. Complete
-managed publication captures that actual bank before ingress. No per-Binding
-copy of the semantic result store or protocol-specific result policy is required.
+the Servient result slot while its original value is still held.
 
 Finite Consumer settlements use the same Core `InteractionOutputView`/`PayloadView`
 for normal, rejected and late native output. `ConsumerNativeOutcome` exposes
@@ -515,13 +523,12 @@ Each selected notification start Form contributes one captured route. Its stop
 operation still needs complete qualification. A native participation can
 supply many routes and declares its concurrent publication slots separately.
 The Host registry bounds application sources through its configured behavior
-count. Its finite and Action handler lookup envelope remains 16. The
-[Host resource contract](foundation.md#host-producer-notification-mapping-capacity)
-defines how managed publication funds the captured table and native membership.
+count. Its finite and Action handler lookup envelope remains 16. Servient bounds
+the captured table and the actual member records independently. [Capacity ownership](foundation.md)
 
 The bounded MQTT Host service lends its single TCP writer to one admitted QoS 0
 packet at a time. Writing the final byte returns the writer immediately, even
-when publication retirement still awaits cleanup credit. Cancellation before
+when the application still holds the outcome. Cancellation before
 the first byte also returns a healthy writer. Abandoning a partial frame or
 detecting an I/O failure fences that connection and its dependent participations.
 An interrupted prefix has uncertain effect. QoS 0 completion records only the
@@ -540,11 +547,10 @@ native participation owners. Publication and retirement reject duplicate,
 foreign, omitted or substituted participants. These identities retain no logical
 permission or native shutdown authority. An optional owned composition handoff
 retains the actual participants and their transferred capacity owner; typed native
-progress remains specific to each capability. A managed participation must
-declare its additional controlled backing before effects and retain the original
-reservation through native/result disposal, including when moved out of a typed
-loan. Its Drop owes the existing finite local-disposal contract. Shared native
-infrastructure keeps its Binding-owned policy and final-use lifetime.
+progress remains specific to each capability. Each adopted participant retains
+its actual backing through native and result disposal, including while lent
+to a caller. Drop owes its qualified bounded local disposal. Shared infrastructure
+keeps its Binding-owned policy and final-use lifetime.
 
 The retained Property Read `ProducerExecutor::install_policy` borrows the exact
 checked native program. Its declaration covers the program's complete indirect
@@ -560,8 +566,8 @@ with the immutable `HostConsumerBindingRegistration`; refusal returns both
 original owners. Typed/static pairing has the corresponding public generic path.
 Eligibility does not downcast to a built-in compiler, require private inline
 support, or require a Copy artifact. Generic compiler erasure keeps its original
-owned cursor/output/failure-return mechanisms. A compiler's inspected footprint
-includes variable backing and destruction, not merely its erased slot Layout.
+owned cursor, output and failure-return mechanisms. The builder bounds actual
+indirect backing and destruction as well as the storage for the cursor itself.
 The actual data and destination/access services remain captured through execution;
 a caller supplies no replacement executor, codec, validator or configuration to a
 finite operation. Supplying a separate finite work owner changes Engine
@@ -576,8 +582,9 @@ source-free instance binding supplies access policy/accounts over those owners.
 For finite prepared dispatch, `ClientBinding::qualification_revision` covers
 operation/URI support and the meaning of pure destination resolution. These
 answers MUST stay stable within a revision; a mutable implementation or wrapper
-MUST propagate a non-reused revision before changing them. Metadata and original
-resource declarations remain independently checked. `ConsumerDefinition` carries
+MUST propagate a non-reused revision before changing them. Check metadata,
+relevant configuration and actual capacity at their own boundaries.
+`ConsumerDefinition` carries
 the qualification into Core's sealed dispatch without another coarse eligibility
 probe; direct unprepared registration calls still check operation eligibility.
 Request identity/operation, original artifact pairing, actual native admission,
@@ -681,10 +688,9 @@ nor a protocol topic alone identifies the interaction family.
 Continuing Consumer Actions use `ConsumerActionMapping` and
 `ConsumerActionExchange`, separate from finite results and notification
 participation. Every selected operation owns its actual immutable native mapping,
-registration/configuration and full declared exchange/continuation/result/scratch
-bounds. Preparation retains the original declaration; association/capacity
-construction cannot refresh it. A shared actual mapping may serve independent
-Consumer associations, while fresh per-operation permission and admitted native
+registration/configuration, concrete exchange, continuation and result bounds.
+Admission preserves the original dependencies. A shared actual mapping may
+serve independent Consumer associations, while fresh permission and admitted native
 exchanges remain independent. This grants no cross-endpoint or cross-TD reuse
 without concrete dependency qualification. A control's `supports_continuation`
 is a bounded, passive comparison with the actual Invoke mapping. An incompatible
@@ -701,9 +707,8 @@ confers neither permission nor an invocation-wide revocation right. Tokens and
 native response envelopes stay opaque to the Engine.
 
 Shared Action schemas do not select a universal representation. Each mapping
-is paired with its own qualified data service/media and original resource
-declaration for the application-value roles it can return or consume. Invoke
-qualifies input and possible completed output; Query qualifies completed output;
+is paired with its own qualified data service, media and concrete bounds for
+the application-value roles it can return or consume. Invoke qualifies input and possible completed output; Query qualifies completed output;
 Cancel's native acknowledgement has no application-value role. A Binding lifts
 only an actual completed value into `ConsumerActionReply::Complete`, retaining
 that exchange's original payload/media. Native pending/status envelopes remain
@@ -747,16 +752,13 @@ and funding independently. Their later destruction cannot release a successor's
 occupancy. This concrete policy does not define Thing cardinality, increase
 concurrent exchanges or prescribe occupancy lifetimes for other Bindings.
 
-The captured `FiniteValidator::additional_validation_work` declares complete
-additional callback work beyond the finite owner's base maximum body/media
-traversals. Admission captures that passive bound; a changed bound fences the
-pair. Dispatch prepays the complete allowance before either validation or handler
-entry. HTTP declares its bounded named-member traversal; Consumer data policy
-likewise covers the complete collection callback. Short credit retains the
-original exchange and invokes no partially funded traversal.
+The captured validator must support the complete named-member traversal within
+its bounded operation or slice. Before accepting a result obligation, provide
+the backing needed for its validated handoff. On yield retain the original
+exchange. A caller-owned fixed buffer can supply the same guarantee.
 The handler can change interior service policy despite a retained validator loan.
 Immediately before output validation, the finite owner rechecks that exact
-validator's captured allowance. A change fences the exchange before
+validator's captured configuration and availability. A change fences the exchange before
 the callback, retaining its original reply, accepted behavior and uncertain effect
 through native retirement. Restoring metadata cannot reopen the fenced exchange.
 Loss of lookup availability with a stable captured bound still permits validation
@@ -766,15 +768,14 @@ fenced by the current-pair check.
 `FiniteValidator::validate_output` receives the original `InteractionInput`
 alongside the original candidate. Selected-member output validation must use that
 input, including during late-result handling, rather than current/global request
-state. The captured allowance covers repeated decoding of original selection as
-well as output traversal. No decoder or original-input-dependent validation runs
-with a newly increased allowance after the handler.
+state. Bound repeated decoding of the original selection and traversal of the
+output within the supported operation. Recheck dependencies after the handler.
 
 WriteAllProperties qualifies a separate writable input map and empty completion
 role. The captured validator checks the **entire** input before application
-authorization/entry; its bounded traversal shares the existing collection work
-allowance. A valid handler success certifies reported whole-group completion,
-not transactional atomicity or rollback. Handler failure after entry retains
+authorization and entry. The bounded traversal covers every selected member.
+Handler success certifies reported whole-group completion. Atomicity and
+rollback depend on the underlying operation. Handler failure after entry retains
 possible partial effects. Native reply delivery remains a separate fact.
 
 WriteMultipleProperties uses complete writable eligibility with a separately
@@ -811,7 +812,7 @@ rules. Scalar schema support and complete collection-map support are independent
 facets: qualification must ask the actual facet used at execution. The default
 scalar data-service support covers only primitive type assertions; structured
 support is explicit. HTTP's captured JSON services support the bounded Core
-subset, with larger prepaid validation bounds and schema backing retained by
+subset, with bounded validation scratch and schema backing retained by
 native program/configuration snapshots. A native compiler still checks actual
 endpoint/method/header/configuration facts. Non-JSON codecs can implement value
 access without JSON coercion; no non-JSON interoperability claim follows here.
@@ -826,16 +827,11 @@ scratch. Native status, continuation, cancellation and physical exchange owners
 retain their existing independent contracts. Root Action status and MQTT
 notification profiles are separately qualified; this Action support does not widen them.
 
-An Action participant's captured `ActionValidator::additional_validation_work`
-must cover its complete extra input or output callback cost. The logical owner
-captures it at publication, prepays both potential callbacks before invoke and
-the output callback before each normal continuing poll, and rechecks the
-original allowance around validation, including after application callbacks
-return an output. Changed
-metadata fences validation rather than requalifying accepted work. HTTP declares
-the same bounded structured JSON envelope used by its finite validator, since
-per-field lookup can rescan the complete payload. Its `HandlerSteps` charge is
-separate from Consumer codec credits and from Action close/retirement work.
+Qualify bounded structured JSON validation for the complete supported input,
+including repeated field scans. Split or refuse an excessively large callback.
+The Action's original validation service and schema govern returned output.
+A changed dependency fences successful validation. Close and native retirement
+can advance without invoking that service.
 
 MQTT's leaf Property/Event JSON services explicitly qualify the same bounded
 structured constraints. Producer definitions and captured validators share the
@@ -844,28 +840,20 @@ once. Managed native participation proves exact schema-owner identity when
 qualifying coverage, funds its references and JSON scratch envelope, and retains
 the transferred original funding through final work disposal. Equal values from
 an independently compiled schema do not establish this ownership compatibility.
-A participant making that deduction also supplies an exact
-`qualified_operation_count`: admission and prepublication coverage must pair its
-entire declared operation inventory, including every retained native definition,
-with the original prepared owners. Extra unpaired definitions refuse handoff;
-wrappers propagate this declaration. This count describes logical preparation
-associations, not physical connections, routes or subscriptions. Other profiles
-may decline the inventory declaration and must fund their complete additional
-backing without an unproved sharing deduction.
-Producer and Consumer
-prepay the same complete validation-work allowance before publication or native
-handoff. Actual MQTT protocol mapping, NoSec policy, topic attribution and
+Pair the complete native operation inventory, including each retained definition,
+with the final covered mappings. An unpaired definition refuses publication.
+Each accepted delivery has the storage needed for its validation. Actual MQTT
+protocol mapping, NoSec policy, topic attribution and
 control/response refusal remain independent checks. Collection mappings retain
 their explicitly narrower type-only subset; no Event response follows from a
 protocol ACK. See [the concrete mapping](../../protocol-bindings/protocols/mqtt/README.md).
 
 ## Finite security verification
 
-A finite Binding may declare nonzero `security_work` and implement
-`verify_ingress` against the evidence retained by the exact original reply.
-The captured work/configuration is checked before progress; verification is
-prepaid before semantic acceptance. It establishes a Principal independently of
-application permission, and is repeated after authorization. Dispatch MUST
+An authenticated finite Binding verifies evidence retained by the exact
+original reply within its bounded native facet. Qualify the verifier and its
+configuration before use and recheck after authorization. Verification
+establishes a principal independently of application permission. Dispatch MUST
 refuse an already closed publication gate before callbacks. After the last
 verification, validation or authorization callback and immediately before
 accepting behavior, dispatch MUST recheck the original instance, publication
@@ -883,14 +871,13 @@ application policy. Sample the former before verification and the latter before
 authorization and compare both after the last callback, before behavior/native
 entry. A changed revision refuses that attempt; there is no unbounded loop of
 mutually invalidating callbacks. The concrete verifier also checks its revision
-and declared work after verification before publishing a Principal. The revision
+and applicable limits after verification before publishing a Principal. The revision
 contract and acceptance linearization are defined by EXEC-SECURITY-001.
 Failure retains the original input/result and native retirement owner; partial
 delivery remains Unknown. Redacted protocol
-refusals require no permission to deliver application data. The default zero-work
-adapter preserves existing trusted native principal semantics; it establishes no
-new authentication guarantee. Wrappers claiming the authenticated facet must
-forward its verification/configuration/work/revision contract.
+refusals require no permission to deliver application data. The trusted native
+principal adapter establishes only its existing identity guarantee. Wrappers
+claiming authentication must forward the actual verifier and its revisions.
 
 
 The finite security collaboration also applies to composed requirements. The
@@ -899,10 +886,9 @@ selected Consumer conjunction. A Binding must independently qualify credential
 placements and simultaneous execution, including conflicts with static Form
 instructions and indistinguishable alternatives. Native evidence selects one
 complete qualified branch and remains with that original reply; it cannot trigger
-weaker fallback on authentication failure. Every required verifier participates
-in the declared complete work/readiness contract. Before each subsequent verifier
-callback, recheck the original declared work/readiness and dependency revisions;
-a prior callback cannot authorize another verifier's increased work. Snapshot all dependency revisions
+weaker fallback on authentication failure. Each required verifier must fit the
+inclusive callback bound. Recheck actual readiness and dependency revisions
+before each verifier. Snapshot all dependency revisions
 before verification and recheck the whole sequence after the last callback,
 including when one verifier invalidates another. Identity equality cannot replace
 this check. Core's EXEC-SECURITY-001 owns the shared composition/authority contract;
@@ -934,9 +920,8 @@ manager, codec family, success-code class or replacement for continuing lifetime
 
 `FiniteValidator::response_contract` lends the original accepted opportunity's
 common alternatives to HandlerContext; alternative-capable providers/wrappers
-must supply/forward that loan. Its bounded pure work belongs to the captured
-validation allowance. Target/operation equality cannot substitute a sibling
-Form's contract. Actual native attribution/correlation remains Binding-owned:
+must supply or forward that loan within the bounded validation operation.
+Target/operation equality cannot substitute a sibling Form's contract. Actual native attribution/correlation remains Binding-owned:
 HTTP's exclusive exchange retains its matched mapping index through validation
 and reply, and its validator uses that original index for both data roles and
 context lending. The index is checked against the original private reply's
@@ -949,6 +934,6 @@ The optional Host [finite work capacity](runtime-safety.md#finite-producer-parti
 can admit subsequent exchanges while earlier results remain unread. This changes
 no native facet: HTTP still has one queued-or-active connection per participation,
 the original accepted mapping/correlation through send/close, and independent
-listener leases. A Pending receive retains only Binding-owned native parsing;
-the next receive callback still requires a prepaid Engine opportunity. A shared
-work limit is not permission to multiplex or retarget one exclusive native reply.
+listener leases. Pending parsing retains the Binding's original native owner.
+Before accepting an exclusive offer, the Engine secures the owed outcome and
+retirement. A shared slot confers no right to redirect a reply.

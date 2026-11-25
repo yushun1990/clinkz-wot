@@ -36,7 +36,7 @@ layer, mandatory symmetric roles or one-native-resource-per-Thing rule is select
 
 Separate immutable description/definition content, logical instance authority,
 admitted work and physical infrastructure. Sharing has explicit compatible owners
-and leases with original-account retention; it never grants permission. Prepared
+and retained backing through last use. Sharing grants no permission. Prepared
 data is source-independent, not necessarily one universal program representation.
 Consumer native preparation may be first-use under a bounded coordinator above
 execution. Producer final advertisement needs complete actual mapping/behavior/
@@ -46,10 +46,34 @@ endpoints before final TD qualification; publication is one local non-fallible
 commit, not global network atomicity.
 
 Preserve first cause, owned late results, independent current authorization,
-visible loss, linear work, capacity-before-acquisition, funded acknowledged
-whole-owner cleanup and truthful local/remote outcomes. Native physical owners
+visible loss, bounded operations, backed settlement, acknowledged whole-owner
+cleanup and truthful local/remote outcomes. Native physical owners
 control retirement; idle retention, reconnect and explicit shutdown differ.
 Profiles share supported WoT guarantees, not layouts, costs or scheduling traces.
+
+* Resource admission at the enforcing owner
+
+Topic 0133 selects one lifecycle per capability on Host and caller-owned
+deployments. A closed endpoint can be released if the final members will not
+fit. Prepaying every possible final selection at that stage refuses feasible
+publications. A deployment selling advance availability can instead set aside
+specific usable slots and move them through the same publication path. An
+estimate cannot exclude a contender or guarantee a later allocation.
+
+A handler can cause an effect before it returns. Secure its actual outcome,
+handoff, continuation when promised, and local retirement before entry. Retain
+the Binding's original native right until release or acknowledged transfer.
+The slot itself can prove usable exclusive capacity. A shared right adds a
+guarantee where independent users compete for an advertised aggregate limit.
+
+Bound the operation that actually runs. A bounded poll or forward traversal
+can establish a turn bound directly. A rewindable traversal can reach the
+same cursor position with different amounts spent, so its job retains a
+nonrenewable allowance. A general work vector couples local close to unrelated
+provider and codec work. Retire it throughout each migrated call chain. Remove
+registration-wide footprint modes, generic funding bundles and the exhaustive
+public schema with their callers. [[file:../spec/foundation.md][Foundation]] owns the detailed limits.
+[[file:../../workspace/0133-resource-management-proposal.md][Investigation and alternatives]]
 
 * Independent reconciliation and alternatives
 
@@ -70,8 +94,9 @@ policy and a final-use destruction barrier instead.
 A finite request deadline can expire after behavior has run while the installed
 listener and its route are still usable. Closing that route would unnecessarily
 withdraw a published Thing. Clearing the timer alone would leave an outstanding
-reply or allow a late write. Servient keeps the original reply, result and work
-lease until its Binding confirms disposal of that exchange. The Binding decides
+reply or allow a late write. Servient retains the original reply and active
+exchange until its Binding confirms disposal. The result can outlive that
+exchange under its own backing. The Binding decides
 whether it can isolate the connection. Loss of ingress or inability to isolate
 the reply requires participation retirement. This works with the current serial
 HTTP driver and requires neither moving its listener nor copying a response.
@@ -113,8 +138,9 @@ inside the selected boundaries, not unresolved product decisions.
 * Prior decisions and evidence
 
 Every ADR-0001 through ADR-0024 has a local disposition/amendment, with exact
-replacement owners below. ADR-0013 retains proportional admission, ADR-0015
-borrowed policy/linear work, ADR-0016 exact time, and ADR-0020 scoped strict input.
+replacement owners below. ADR-0013 retains proportional admission,
+ADR-0016 exact time, and ADR-0020 scoped strict input. The resource admission
+amendment supersedes ADR-0015.
 The remaining physical/hierarchy/reset contracts are superseded; compatible
 invariants are restated in the registered v6 owners, not activated by precedence.
 =authority.toml= records each of the 121 inherited requirement identities and
@@ -123,7 +149,8 @@ identities; the previous 65-active set is not the successor design envelope.
 
 Old tranches/gates/evidence keep original statuses and exact revisions as
 historical records with individual impact dispositions and no inherited v6
-admission. Numeric StrictV1 and Consumer schema-2 retain their adapter meanings.
+admission. Numeric StrictV1 and Consumer schema-2 keep their original meaning only for
+remaining callers until those formats retire.
 Historical performance recipes are non-gating characterization; exact layout,
 zero-copy/allocation, native resource and profile measurements must be renewed
 when claimed. Design checks validate this projection, not architecture acceptance.

@@ -22,21 +22,21 @@ checked mappings without idle call storage; explicit finite work owners supply
 admission/progress capacity independently. The exact scopes and retention rules
 are owned by [Runtime Safety](../spec/runtime-safety.md).
 
-Producer setup validates the private draft and actual behavior/providers, reserves
-setup/ingress/finalization/cleanup, and may acquire closed native participation.
-Actual endpoints finalize the effective TD. Complete final coverage/readiness
-and cancellation/dependency checks precede one publication of description,
-logical registry and current serving authority. No fallible native call occurs
-inside that local commit. A deterministic support gap found later is a defect:
-close affected acceptance and requalify, rather than quietly returning Unsupported
-for a promise made at publication.
+Producer setup validates known requirements and actual behavior/providers.
+The bounded candidate secures rollback before the Binding takes a closed
+endpoint. Planning qualifies the exact final TD against current providers.
+Acquire the selected members with their rollback storage, using any concrete
+slots already set aside for this candidate. Publication commits final coverage,
+readiness, behavior, authority and gates together after the last callback.
+A failed candidate returns its inputs and releases its own participants.
+If a published operation later reveals a deterministic support gap present at
+commit, fence the affected acceptance and requalify it.
 
-Finite Producer participants may attach independently funded work capacity before
-setup. Publication needs no vacant work opportunity; native receive and accepted
-work acquire bounded capacity separately, and terminal native settlement releases
-execution credit while original result owners remain funded. The exact optional
-and dedicated policies belong to [Runtime Safety](../spec/runtime-safety.md#finite-producer-participation-and-work-capacity).
-Native concurrency and infrastructure ownership remain Binding decisions.
+Servient accepts exclusive work only with the original permission and usable
+backing for the owed outcome and retirement. Publication can share call capacity
+across idle instances. Native settlement can free an active exchange while its
+unread or caller-held result still owns its backing. The Binding determines
+native concurrency and final physical release. [Runtime Safety](../spec/runtime-safety.md#finite-producer-participation-and-work-capacity)
 
 Optional [Host Producer turns](../spec/runtime-safety.md#host-producer-execution-turns)
 retain typed Servient progress with the existing erased native members. They
@@ -52,8 +52,8 @@ looks up a replacement handler or maps an old packet into a successor slot.
 
 In the Host finite and continuing Action Consumer owners, mutable registry
 access ends before linked authorization, data, native progress or destruction. Reserved original slots and
-separately retained passive controls allow nested entry without duplicating work
-or hiding cancellation. [Runtime Safety](../spec/runtime-safety.md)
+separately retained passive controls keep cancellation visible during checkout.
+A public drive bounds synchronous reentry through siblings or defers nested progress. [Runtime Safety](../spec/runtime-safety.md)
 owns the callback, handoff, wake and funding guarantees; this is a correction to
 those distinct owners, not a shared scheduler or automatic execution model.
 
@@ -66,7 +66,7 @@ while original snapshots support conditional management. Named access profiles
 share one Thing identity and retain independent policy/mapping selections.
 Execution capacity remains independently supplied. Native I/O wakes alone do not
 schedule lifecycle cleanup: the application supplies lifecycle-command, cyclic
-or actual timer turns, fresh clock observations and work credit. A logical
+or actual timer turns and observations of the supplied monotonic clock. A logical
 deadline is no scheduled timer. Actual aggregate control loss locally disposes
 abandoned finite work rather than stranding it behind surviving handles;
 explicit close keeps incremental cleanup access. Runtime Safety owns these

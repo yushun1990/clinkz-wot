@@ -67,9 +67,9 @@ an entire prepared Thing a universal reusable program.
 
 Prepared security requirements are immutable content; credential services, verified
 principals and opaque per-call capabilities are live dependencies/work. Native key
-and trust owners remain in the Binding. Content sharing never shares permission. A physical content owner and its
-original account survive every borrowed reference. Each logical owner pays its
-actual reference/operand/record cost. Prepared-definition identity and logical
+and trust owners remain in the Binding. Content sharing never shares permission.
+A physical content owner survives every borrowed reference. Each logical owner
+supplies its own reference, operand and record storage. Prepared-definition identity and logical
 instance generation are independent; a plan-set epoch exists only if that object
 is independently retained/replaced.
 
@@ -86,8 +86,9 @@ association and funded bounded coordinator. If complete support checking cannot
 be separated reliably from lowering, construct before publication.
 
 Closed native setup may precede final endpoint binding and final TD qualification.
-It remains owned and cannot dispatch application work. This replaces the former
-freeze-before-all-native-effects rule. Final dependency/cancellation checks and
+The candidate owns the endpoint and its rollback. It acquires exact member
+slots once final selection is known, using any slots already promised by their
+owner. Until publication the candidate keeps ingress closed. Final dependency/cancellation checks and
 local installation are one non-fallible publication boundary.
 
 Optional caches require bounded entries, work/waiters, negative-result policy,

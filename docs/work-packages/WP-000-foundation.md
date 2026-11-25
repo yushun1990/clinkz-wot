@@ -2,7 +2,9 @@
 
 ## Target and dependency
 
-Keep time/generation, linear work and capacity primitives; implement owner-scoped policies without universal per-family schemas. Numeric V1 profiles remain restricted adapters.
+Maintain the time and generation primitives. Move concrete limits and any
+necessary cumulative work counters to their enforcing owners. Migrate the
+callers of the flat resource schema, generic receipts and work vector. [Resource contracts](../spec/foundation.md)
 
 Exact package dependencies belong to [index.toml](index.toml). Runtime and optional
 preparation are distinct: dynamic preparation integration needs WP-200, while
@@ -14,7 +16,20 @@ chosen slice under ADR-0013. No new runtime tranche is admitted by this migratio
 
 Applicable requirements: RES-OWNER-001, RES-HANDOFF-001, RES-WORK-001, RES-SCHEMA-001, RES-ENV-001, TIME-001, API-SOURCE-TIME-001.
 
-Required evidence follows actual claims: Boundary exhaustion, original-account retention, reservation rollback, clock reset/wrap/exhaustion and bounded release. Actual layouts/allocator behavior are profile-specific.
+A fixed slot supplies its own backing. Where a deployment retains an aggregate
+ceiling, exercise its actual participants and final release. Fill the last unit
+with an old result, take and hold it, and refuse a new caller with a free native
+slot. Dispose the result and race two contenders. Exactly one takes the unit
+when the policy promises a shared remainder. For an allowed partition check
+return to the original share. A fenced cutover drains or transfers every counted
+claim once. An explicitly retired ceiling needs no shadow counter. Preserve the
+clock reset, wrap and exhaustion oracles.
+
+Retire `ResourceKind`, `ResourceLimits`, `ResourceProfileId`, `StaticResourceProfile`,
+the named profiles and `AdmissionLedger` with their last consumers. Replace
+`ResourceAccount` and `ResourceReservation` handoffs with actual storage or the
+specific deployment permit required by a retained promise. Remove `WorkBudget`,
+`WorkClass` and `BudgetExceeded` after the public and internal drivers migrate.
 
 Retained Property Read code/tests and historical tranches remain useful within
 their recorded contracts. Their old status does not close this package under
