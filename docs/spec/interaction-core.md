@@ -383,11 +383,13 @@ a continuing invocation reference retaining its exact mapping, opaque continuati
 identity, policy and cleanup. Query/cancel use that association, their described
 operations and fresh permission; no fabricated generic URL or session is required.
 Before an Invoke handler can create continuing work, Servient claims the original
-invocation and the Binding secures its native correlation for all promised
-later controls. Exclude reentrant use of both claims through handler entry and
-ID installation, which must require no further allocation. Failure to claim either
-refuses before behavior. If the first reply fails, the continuation remains
-addressable for its advertised lifetime and retains its cleanup owner. Native
+invocation and the Binding holds the initiating reply. When the mapping
+promises an addressable ID, later controls or a root status inventory, secure
+the necessary wire correlation against reentry before the handler runs. Install
+it without further acquisition. A missing required claim refuses before behavior.
+An invoke-only acknowledgement can leave the continuation entirely local.
+If the first reply fails, the original invocation retains its cleanup owner
+and any advertised lookup stays valid for its promised lifetime. Native
 candidates carry neither dispatch authority nor handler access.
 Servient retains the exact participation association with original invocation
 state, validates control attribution and original route/principal even across distinct
@@ -478,9 +480,9 @@ cleanup. The Binding's token never becomes logical authority. Invoke acceptance
 exposes Pending, not a completed result. Explicit query/cancel can use different
 actual mappings and independently bound access services. One immutable Action
 input/output schema pair defines value meaning across those mappings. Invoke's
-captured data service validates its input and any immediate completed output;
-Query's captured data service validates completed output returned by Query,
-including late output during its retirement. Each uses its own original media,
+captured data service validates its input. For validated delivery, use the
+service of the operation that returned the value, including Query when its
+output arrived during retirement. Each uses its own original media,
 body/scratch/work policy and native result bound. The value need not fit Invoke's
 representation or resource allowance when it arrives through Query. No common
 codec, conversion to Invoke bytes or codec selection from untrusted media is
@@ -507,10 +509,14 @@ Failure fences successful delivery while preserving evidence. An application
 retains the value already handed to it.
 
 A native poll error is retained immediately as `native_error()` and the first
-local cause when none exists. Retirement still owns its original response
-opportunity. Any late output returned by `poll_close` is retained in
-`native_result()` and checked by that exchange's captured output validator; it cannot erase
-the earlier error, skip validation or establish application success.
+local cause when none exists. The original owner retains any late `poll_close`
+output as raw native evidence with its original bytes and media. Physical
+retirement, release of the native slot and disposal of the raw evidence can
+all finish with the codec and access service unavailable. Raw inspection follows
+its access policy. To hand off a validated value, check current permission and
+use the returning operation's captured validator or its prior validation of
+the exact same value and schema. An earlier poll error or timeout still fences
+application success.
 
 Cancellation request acknowledgement and already-terminal acknowledgement grant
 no terminal application result. A subsequent query must obtain and validate it.

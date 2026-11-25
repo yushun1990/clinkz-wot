@@ -247,12 +247,14 @@ requires actual storage for its input, promised result/handoff and local close.
 An active slot and a retained result slot can have different release points.
 
 On timeout, stop new effects and retain the first cause, original reply,
-behavior result, effect and delivery evidence. The Binding retires the specific
-exchange while its participant and siblings can keep serving. Check original
-membership, services and ingress health before the next acceptance. If the
-Binding cannot isolate the exchange or a required installed member is lost,
-fence the affected participation and its dependent publication. Preserve the
-member's failure independently of an earlier exchange timeout.
+behavior result, effect and delivery evidence. A retryable cleanup error on an
+isolated reply stays with that exchange, separately observable from its timeout.
+Keep the original reply and its active capacity for retry while another exchange
+on the same healthy member finishes. Check original membership, services and
+ingress health before the next acceptance. When the Binding reports loss of
+isolation or of required ingress, fence the affected participation and its
+dependent publication and drain their original work. Record the member failure
+separately. [Finite reply retirement](binding-spi.md#finite-reply-retirement)
 
 Release active capacity at native retirement. Transferring an unread outcome
 to the caller moves its original backing or exclusive loan. The application
@@ -263,13 +265,15 @@ already accepted exchange can still settle. [Earlier serial HTTP evidence](../ev
 
 ### Continuing Action admission and handoff
 
-Before an Invoke can start continuing work, Servient claims the original
-invocation and the Binding secures its wire correlation for later controls.
-Keep both exclusive against competing and reentrant calls through handler entry
-and ID installation. Installing the ID requires no further acquisition. If
-either claim fails, unwind before entering the handler. Failure of the initial
-reply leaves the continuation and its cleanup owned for the promised lifetime.
-Each later exchange retains its own reply and deadline.
+Before an Invoke handler can start continuing work, Servient claims the
+original invocation and the Binding secures the initiating reply. A mapping
+that promises an addressable wire identity or a later control or inventory
+lookup must also secure its correlation through handler entry and installation.
+Installing the ID needs no further acquisition. If a required claim fails,
+unwind before entering the handler. An acknowledgement-only mapping can start
+local work with its invocation and reply backed. Failure of the initial reply
+leaves the continuation, cleanup and any promised correlation owned for their
+advertised lifetimes. Each later exchange retains its own reply and deadline.
 
 On the Consumer, the root retains an abandoned invocation handle for
 round-robin manual cleanup. If
@@ -462,12 +466,15 @@ meaning/providers/support policy invalidates prior qualification; equivalent
 reconnection is availability recovery. Per-use authorization/credential rotation
 is not by itself new immutable definition content.
 
+### Cancellation and late results
+
 `SAFE-CANCEL-001`: Cancellation/timeout MUST fix one first local cause and fence
-new interaction effects. Mapped remote cancellation requires its own fresh
-authorization.
-Already accepted work and late successes retain identity, result and release
-owners. Local terminal settlement does not imply remote rollback, exactly-once
-remote effect or physical shutdown. A constructor rejection proves no escaped
+new interaction effects. Accepted work keeps its original identity, result
+backing and retirement owner. When timeout wins, the caller receives `TimedOut`.
+The original owner MUST retain a later native result as evidence through
+settlement or disposal. It cannot turn the timed-out operation into successful
+delivery. Mapped remote cancellation requires fresh authorization. Local
+settlement leaves remote rollback, effect count and physical shutdown uncertain. A constructor rejection proves no escaped
 obligation; an operational error after effects cannot make that assertion merely
 by its error type. Cancellation, request deadline and cleanup/drain deadline are
 distinct phase contexts. All deadlines use the supplied monotonic clock. Recheck
@@ -622,18 +629,17 @@ time and local cancellation continue to govern the entire invocation.
 Declaration restoration does not erase an already observed violation of relevant
 admitted work. Independent invocations keep their own first causes.
 
-The Action output schema is shared semantic meaning, not a mandate to reuse
-Invoke's codec. Invoke validates input and any immediate output with its own
-original data service; Query validates its completed output with Query's original
-service, media and body/scratch/work policy, through normal and late retirement
-paths. Native response backing is additionally bounded by that exchange's
-original response bound. Media must match the captured representation. The
-current subset admits no content coding. Keep the selected value and its
-validation workspace available at handoff. A close poll can retain racing output
-without invoking an access service or validator. Validate using the returning
-operation's original data service before successful application delivery. Record
-original payload/media, validation error and earlier native/local/cleanup
-failures independently. Sharing a schema confers no new permission.
+Invoke's captured data service validates its input. For validated output,
+the operation that returned the value supplies the original validator, media
+and limits for the shared Action schema. The exchange's native response bound
+still applies. The current subset admits no content coding. Keep the value and
+its validation workspace available for a promised handoff. A close poll retains
+racing output as raw evidence and releases the native slot when retirement
+completes. Both retirement and raw-evidence disposal must finish with zero
+access or codec callbacks, even if the validator is unavailable. Validated
+delivery requires current permission and validation covering that exact value
+and schema. Preserve the original bytes, first cause and any native, cleanup
+or validation errors independently.
 
 `ConsumerActions` supplies bounded invocation storage independently of the
 Consumer. Before effects, claim an invocation slot, passive control, native
@@ -675,8 +681,9 @@ logical authority violation. Short work or an unsupported control remains a
 refusal without inventing a remote effect. A successful native start returned
 after revocation is retained for local retirement, without polling it for further
 effects.
-Required cleanup and late validation continue under original funding; neither
-can erase a first cause or promote uncertain effects to success/rollback.
+The original owner backs cleanup and any requested validated handoff. Physical
+retirement can complete before validation. Neither changes the first cause or
+resolves an uncertain remote effect.
 Native completion evidence is stored before validator entry, including on
 unwind. A terminal invocation is removed only at the settlement handoff (the
 acceptance linearization point), or for abandoned local disposal outside the
@@ -1055,11 +1062,11 @@ bounded envelopes in [Core](interaction-core.md); callbacks remain cooperative.
 
 Continuing Action input/output borrow the same prepared constraints and retain
 their original funding through normal or late result disposal. The Consumer's
-Invoke data service checks input before native effects; the operation returning
-a completed value supplies its captured validator and resource policy, including
-Query output arriving during control-exchange retirement. A
-Producer's captured Action validator checks before behavior authorization and
-before successful result observation. Acceptance/pending/cancel acknowledgements
+Invoke data service checks input before native effects. A request for a
+validated Query value uses Query's captured validator and policy, including
+when the value arrived during retirement. A Producer's captured Action
+validator checks before behavior authorization and before successful result
+observation. Acceptance/pending/cancel acknowledgements
 do not become application output. Native failure, validation failure, local
 cancellation/revocation and remote effect certainty remain separate evidence;
 replacement cannot retarget the original constraints, work or result.

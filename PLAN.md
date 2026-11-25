@@ -116,17 +116,19 @@ callback supplies its destination. [Data and security contracts](docs/spec/inter
 
 ### Carry admitted work across exchanges
 
-- **Continuing Actions.** Preserve the invocation and its wire correlation
-  before handler entry. Query and Cancel use the original mapping and fresh
-  permission. Under saturation local close can retire the original exchange
-  and preserve a late value for authorized, validated handoff. Use the supplied
-  monotonic clock for Producer retention and bound the whole aggregate inventory
-  walk, including handle construction. [Core driver](core/src/execution/action.rs) · [Producer store](servient/finite/src/action.rs)
-- **Failure isolation for deliveries.** Establish the shared rule on existing
-  MQTT emission before callbacks depend on it. Preserve each delivery's first
-  cause, native effect, cleanup error and funding through physical retirement
-  and result disposal. A peer can receive the Event, cleanup can fail and then
-  recover, and the same healthy Thing must still emit. A failed subscription
+- **Continuing Actions.** Claim the invocation and initiating reply before
+  handler entry. Secure wire correlation when the mapping promises an
+  addressable identity, later control or root status lookup. Query and Cancel
+  use the original mapping and fresh permission. Under saturation local close
+  can retire the original exchange and preserve a late value for authorized,
+  validated handoff. Use the supplied monotonic clock for Producer retention
+  and bound the aggregate inventory walk, including handle construction. [Core driver](core/src/execution/action.rs) · [Producer store](servient/finite/src/action.rs)
+- **Failure isolation for deliveries.** Exercise isolated reply cleanup and
+  required-member loss in the finite Producer, then extend those cases to
+  MQTT emissions. Preserve each delivery's first cause, native effect, cleanup
+  error and backing through physical retirement and result disposal. A peer can
+  receive the Event, cleanup can fail and then recover, and the same healthy
+  Thing must still emit. A failed subscription
   can close its own conversation. Actual loss of a required installed member
   must fence its original publication as soon as the loss is observed, even
   by an emission. A damaged shared stream fences its dependents while an

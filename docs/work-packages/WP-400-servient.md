@@ -42,9 +42,12 @@ final release with ordinary admission for the same admitted inputs. A Binding
 unable to supply this promise can serve ordinarily and must refuse that guarantee
 before acquiring its endpoint. This trial is conditional on a deployment need.
 
-Drive ready siblings and local drains while admission is saturated. Hold the
-only result slot with a second request waiting. Taking the result still holds
-the slot. Its final disposal alone must enable exactly one dispatch via a pool
+Replace the credit factories on `step_consumers` and `ComposedProducerExposure::step`
+with bounded turns through their existing owners. Migrate `ConsumerProgress::step`
+and the custom `OwnedProducerParticipation::new` turn signature with them, and
+remove the `ProducerWork` credit selector. Drive ready siblings and local drains
+while admission is saturated. Hold the only result slot with a second request
+waiting. Taking the result still holds the slot. Its final disposal alone must enable exactly one dispatch via a pool
 wake or promised maintenance turn, including release during waiter registration.
 Exercise a three-owner callback chain. Deferring nested drives bounds a one-poll
 outer turn to one poll while a nested cancellation takes effect immediately.
@@ -352,10 +355,11 @@ Unread native completion remains revocable until a paid settlement handoff with
 fresh time, original authority and captured service/access checks. The HTTP
 Consumer regressions cover direct handoff and additional progress after
 revocation, denial, service/root loss, cancellation or expiry, plus insufficient
-handoff work and callback-time service loss. An actual HTTP query exchange also
-returns its original late output through retirement after a poll error; the
-original error, late output and captured validation failure remain independently
-retained and funded. These repairs do not change package acceptance status.
+handoff work and callback-time service loss. The earlier HTTP Query fixture
+validates a late output during retirement and records a validation failure
+separately from the poll error and bytes. WP-100's successor case releases
+the native slot with the codec unavailable and validates only on a requested
+handoff. [Bounded execution and TD admission](WP-100-core.md#bounded-execution-and-td-admission)
 
 The continuing owner now isolates linked execution from registry borrows under
 [SAFE-CONCUR-001](../spec/runtime-safety.md). Its

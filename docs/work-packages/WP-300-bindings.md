@@ -21,10 +21,13 @@ wire and ingress bounds. Retire numeric cleanup funding. A facet handing off
 surviving work must transfer the whole owner to an available destination,
 returning it intact on rejection.
 
-For continuing work, fill the native correlation table while a reply slot is
-free. Verify zero handler entries. Then contend reentrantly for the final
-correlation slot and resolve the admitted wire ID after the initial reply fails.
-Keep fresh authority on later controls. [Binding contracts](../spec/binding-spi.md)
+Fill the native correlation table with a reply and an invocation slot free.
+An Invoke promising a later lookup must refuse before handler entry. An
+acknowledgement-only Invoke promising no addressable identity, control or root
+inventory must enter once, reply and retire its local continuation without
+taking a correlation slot. For an addressable Invoke, contend reentrantly for
+the last correlation slot and resolve the original ID after the initial reply
+fails. Keep fresh authority on later controls. [Binding contracts](../spec/binding-spi.md)
 
 ## Continuing execution representations
 

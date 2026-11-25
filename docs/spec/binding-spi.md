@@ -372,14 +372,17 @@ qualified original participation set.
 retaining the original native input/reply opportunity. Servient decides invoke,
 query and cancel admission using captured routes/services and fresh policy. It
 retains logical handles, continuation progress, terminal retention and settlement.
-Before handler entry the Binding secures a generation-scoped wire ID or
-exclusive correlation record against competing callbacks. Installation needs
-no further capacity. It keeps the association usable for promised later
-controls even if encoding or sending the first reply fails. The Binding owns
-record attribution, matching, encoding, ordering, delivery evidence and physical
-disposal. A wire ID resolves the original invocation. Local handle
-recovery/progress/acknowledgement is confined to the original invoke participation;
-that association is installed before fallible acceptance encoding. Described
+If the mapping advertises an addressable invocation ID or promises a later
+Query, Cancel or root status lookup, the Binding must secure the means to
+resolve that invocation before handler entry. It can derive an ID from the
+pinned invocation or claim an exclusive record. Competing callbacks cannot consume that claim, and installing
+the association needs no further capacity. It remains usable for the advertised
+lifetime even if the first reply fails. An invoke-only mapping that promises
+only an acknowledgement can use its reply slot while the correlation table for
+later requests is full. The Binding owns record attribution, matching,
+encoding, ordering, delivery evidence and physical disposal. A wire ID resolves the original invocation. Local handle
+recovery/progress/acknowledgement is confined to the original invoke participation.
+Install any promised wire association before fallible acceptance encoding. Described
 query/cancel and a qualified root inventory may use different participants: they
 still require the original instance, captured operation route, principal and fresh
 policy. HTTP's same-native-owner inventory restriction is not an Engine rule.
@@ -441,6 +444,9 @@ new semantic ingress, including after an earlier exchange. Owned replies and
 native cleanup can still finish after the gate closes. A lease is not a
 native connection or per-Thing Binding runtime: one Binding owner
 can retain many leases and Things, and closing one releases only that participation.
+
+### Finite reply retirement
+
 Finite Bindings with independently fallible ingress implement
 `FiniteIngressBinding::check_ingress` as a bounded, passive read of their
 native owner. A full result slot or waiting handler cannot prevent bounded
@@ -451,15 +457,22 @@ delivery failure or deadline, subject to its delivery authorization. Explicit
 close or rollback requests `ProducerRetirement::Close` and preserves evidence
 of any partial write. Wrappers forward the retirement intent.
 
-For a finite reply whose request deadline has elapsed, `poll_retire_reply`
-borrows the complete original reply and its first local cause. Terminal success
-releases that exchange's native occupancy and reports delivery. The Binding
-must verify the original opportunity and preserve the installation. A partial
-write reports `Unknown`. Pending retains the same owner. An error requires
-whole-participation `poll_close` with the still-owned reply. The default takes
-that path for Bindings that require the installation to close. Independent
-ingress damage remains observable through `check_ingress`, including during
-retirement. Only Servient can grant a subsequent admission.
+On expiry the Binding retires the original finite reply. It must distinguish
+a retryable failure isolated to that reply from loss of isolation or installed
+ingress. For an isolated failure, return the cleanup error to Servient with the
+reply still owned. Servient records it against that exchange alongside its first
+local cause and retries retirement with the same reply on the next eligible
+turn. Pending also retains the reply. A healthy gate stays available and other
+exchanges on the member can complete. Only confirmed retirement releases the
+exchange's native slot. Report actual delivery, including `Unknown` for an
+interrupted partial write.
+
+If the Binding requires member close to retire the reply, it reports that scope
+explicitly. Independent ingress loss remains observable through `check_ingress`
+during retirement. Servient fences the affected participation and publication,
+then drains the original outstanding rights. The existing `poll_retire_reply`
+maps every error to participation close. Its successor must expose both
+dispositions.
 
 The HTTP finite participant can share one listener across up to 32 independently
 prepared Property Read/Write and Thing-root finite collection mappings; native
@@ -708,13 +721,14 @@ native response envelopes stay opaque to the Engine.
 
 Shared Action schemas do not select a universal representation. Each mapping
 is paired with its own qualified data service, media and concrete bounds for
-the application-value roles it can return or consume. Invoke qualifies input and possible completed output; Query qualifies completed output;
-Cancel's native acknowledgement has no application-value role. A Binding lifts
+the application-value roles it can return or consume. Invoke qualifies input
+and possible completed output. Query qualifies completed output. Cancel's
+native acknowledgement carries no application value. A Binding lifts
 only an actual completed value into `ConsumerActionReply::Complete`, retaining
 that exchange's original payload/media. Native pending/status envelopes remain
-Binding-owned. Normal and late completed output is checked by the returning
-operation's service against the shared output schema, without normalization to
-Invoke media or limits. Returning media cannot select a replacement codec.
+Binding-owned. For a validated handoff of normal or late output, the returning
+operation's service checks the exact value against the shared output schema
+using its own media and limits. Returning media cannot select a replacement codec.
 
 The exchange owner remains retained after response/error until successful local
 retirement, including late observations. Pending or failed retirement cannot
@@ -727,9 +741,10 @@ The HTTP mapping has one active finite exchange per actual registration, release
 after physical retirement; invocation capacity is independently Engine-owned.
 
 A normal poll error and an original late observation from retirement are separate
-outcomes. The Consumer retains the poll error immediately, then retains and
-validates any late completion returned by `poll_close`; an existing error cannot
-be used to discard that observation or promote it to successful handoff.
+outcomes. The Consumer retains the poll error immediately and keeps any late
+completion returned by `poll_close` as raw evidence. The Binding can finish
+physical retirement and release its slot with the codec unavailable. Core
+governs disposal and validated handoff. [Action outcomes](interaction-core.md#continuing-execution-across-representations)
 Consumer Action settlements lend original input and normal/late output slices;
 the native exchange may transfer owned output into the invocation, but application
 observation cannot detach its body owner from the retained funding.

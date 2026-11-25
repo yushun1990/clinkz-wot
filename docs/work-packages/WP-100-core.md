@@ -28,9 +28,15 @@ are outside this architecture migration.
 Port finite Read and continuing Action through the shared Core step, both storage
 representations and the actual Binding/codec/access edges together. Exercise
 local close under saturation with zero new access or validation callbacks.
-Retain a racing value, deny ordinary allocations and retrieve a valid
-length-constrained result under fresh permission while other results remain
-held. Invalid data or revoked permission must still refuse successful handoff.
+Have a failed Query return bytes from `poll_close` with its validator
+unavailable. Observe the native slot's release, dispose of the raw bytes and
+reuse the slot. Verify zero codec calls and one release of each original owner.
+In a separate timeout case, observe `TimedOut` and the retained original
+native bytes together, and verify that application success stays fenced.
+
+For validated handoff, require the returning operation's original validator
+and current permission. Retain a racing value, deny ordinary allocations and
+retrieve a valid length-constrained result while other results remain held. Invalid data or revoked permission must still refuse successful handoff.
 Preserve a distinct raw-evidence outcome where the mapping permits it.
 
 Have the TD cursor report bounded advancement, yield, exhaustion and completion.

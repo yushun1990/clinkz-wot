@@ -1004,7 +1004,7 @@ prior_status = "active"
 prior_source = "docs/amendments/WP-100-time-domain-v1.md"
 disposition = "reaffirmed"
 successors = ["TIME-001"]
-reason = "Exact clock/source-time meaning remains unchanged; historical tranche sequencing is not a new gate."
+reason = "Reaffirm clock comparability and timeout ordering, including TimedOut when timeout wins. SAFE-CANCEL-001 supersedes the predecessor's discard rule and assigns the late native value to its original owner through settlement or disposal."
 
 [[prior_requirement]]
 id = "VALIDATE-COMPILE-001"

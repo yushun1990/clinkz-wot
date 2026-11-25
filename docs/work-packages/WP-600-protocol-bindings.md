@@ -35,10 +35,17 @@ rebind its original socket and keep a coexisting incumbent serving. Exercise
 cancellation, foreign and stale owners, and a late result held through replacement.
 
 On caller-owned storage accept two exchanges on the same participation, finish
-them out of order and retire each original reply exactly once. Check the wire,
-handler effects, loan disposal and socket reuse. A refused offer keeps its
-reply and deadline. Preserve the four regressions from the
-[prototype review](https://github.com/yushun1990/clinkz-wot/pull/308#pullrequestreview-6040164603). A
+them out of order and retire each original reply exactly once. Time out the
+first exchange and inject an isolated retryable error on its reply retirement.
+Observe its timeout and separate cleanup error, keep its reply and slot, and
+complete the second exchange on the wire while the gate stays open. Retry
+the first retirement, check delivery evidence and reuse the released slot.
+Repeat with loss of reply isolation or required ingress. Verify that the
+affected publication stops accepting, its outstanding replies drain exactly
+once, and an independent publication still serves. Check handler effects,
+loan disposal and socket reuse. A refused offer keeps its reply and deadline.
+
+Preserve the four regressions from the [prototype review](https://github.com/yushun1990/clinkz-wot/pull/308#pullrequestreview-6040164603). A
 terminal owning-driver error stays terminal. Two Reads on one final member
 fit that member's actual cleanup slots. Passive zero-work observation invokes
 no configuration callback. HTTP's execution-only feature build compiles and

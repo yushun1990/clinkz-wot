@@ -113,15 +113,18 @@ records.
 
 ## Deadline
 
-`TIME-001`: Timeout races use the operation's existing linearization point. If
-terminal success is published before timeout cancellation, success wins;
-otherwise `TimedOut` remains the local cause. A later native success is retained
-as evidence by the original owner and cannot become successful delivery.
+`TIME-001`: Timeout races use the operation's existing linearization point.
+Terminal success published before timeout cancellation wins. If timeout wins,
+the caller receives `TimedOut` even if native success arrives later.
 Every interaction, admission, retention and cleanup deadline uses the supplied
 monotonic clock and its original clock domain. Retrying or waiting for capacity
 preserves the original deadline. Changes to civil time cannot extend it.
 Clock-domain incomparability follows the separate fail-closed disposition and
 is never reported as `TimedOut`.
+
+`SAFE-CANCEL-001` owns the disposition of the late native value. It supersedes
+the predecessor's discard rule and requires the original owner to retain that
+evidence through settlement or disposal. [Cancellation and late results](../spec/runtime-safety.md#cancellation-and-late-results)
 
 The Core-owned public value is frozen as:
 
@@ -164,9 +167,9 @@ The value API reports incomparability as `None`. Boundaries map it as follows:
 | Binding call/driver deadline after admission | `InternalInvariant` | `Binding` | `Never` | Begin binding cancellation/cleanup |
 | Cleanup timing after admission | `InternalInvariant` | `Cleanup` | `Never` | Retain or transfer cleanup ownership |
 
-A clock mismatch fences successful delivery. The original owner retains any
-later native outcome through settlement or disposal. Only a comparable clock
-can establish whether the deadline elapsed.
+A clock mismatch fences successful delivery. Only a comparable clock can
+establish whether the deadline elapsed. Late native evidence follows
+`SAFE-CANCEL-001` as above.
 
 ## Cleanup timing
 

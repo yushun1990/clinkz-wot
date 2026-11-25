@@ -210,7 +210,7 @@ states = ["Admitted", "Running", "Terminal", "CleanupPending", "Released"]
 initial = "Admitted"
 terminal = ["Released"]
 required_events = []
-invariant = "Before handler entry Servient claims the original invocation and the Binding secures correlation through ID installation. The first reply can fail while later authorized Query and Cancel still resolve the same invocation under the original instance, route and principal. Root inventory observes those owners without acquiring control rights. Original Invoke dependencies and the current exchange govern admitted work. Unused or retired controls cannot fence a sibling. Each returning operation validates its own exact output and schema under current permission. A raw native view or a retained input view is separate evidence. Local abandonment, cleanup failure, late output and remote effect remain distinct. Acknowledgement transfers the result owner through disposal."
+invariant = "Before handler entry Servient claims the original invocation and the Binding holds its reply. An advertised wire identity, later control or root inventory also requires exclusive correlation through ID installation. An acknowledgement-only mapping can keep its continuation local. Failure of the first reply preserves the original invocation and any promised lookup under fresh authority. Root inventory observes those owners without acquiring control rights. Original Invoke dependencies and the current exchange govern admitted work. Unused or retired controls cannot fence a sibling. Physical retirement and raw-evidence disposal need no codec. A validated handoff checks the returning operation's exact value and schema under current permission. A raw native view or a retained input view is separate evidence. Local abandonment, cleanup failure, late output and remote effect remain distinct. Acknowledgement transfers the result owner through disposal."
 
 [[machine.transition]]
 from = "Admitted"
@@ -492,7 +492,7 @@ id = "independent-settlement-and-retirement"
 requirements = ["SAFE-CLEANUP-001", "SPI-RETIRE-001"]
 participants = ["accepted-work", "cleanup-owner", "native-infrastructure"]
 preconditions = ["local-terminal-keeps-original-release-owner", "whole-owner-transfer-is-acknowledged", "physical-release-waits-for-final-use"]
-ownership = "Logical release never closes sibling service or certifies remote rollback; infrastructure shutdown has its own authority. Expiry of an accepted finite reply retains its first cause on the settlement. The Binding can release that exchange while the original participation continues under current authority. Independent ingress loss fences the affected dependents."
+ownership = "Infrastructure shutdown has its own authority. A timed-out reply keeps its first cause and any retryable cleanup error. While retirement is isolated the original reply remains backed for retry and other exchanges on that member can finish. Loss of isolation or required ingress fences affected acceptance and drains the original work. Local retirement preserves remote effect uncertainty."
 
 [[composition]]
 id = "consumer-capacity-turn"

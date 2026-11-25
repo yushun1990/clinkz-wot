@@ -86,8 +86,8 @@ If an admitted operation later observes a different runtime clock id, that is
 =CoreError::InternalInvariant= with =RetryClass::Never= and the owning phase:
 =Handler= for interaction dispatch, =Binding= for binding progress, and
 =Cleanup= for cleanup progress. It is not reported as =TimedOut=. The owner
-begins cancellation or cleanup. It retains a later native outcome as evidence
-with its original owner. The clock mismatch fences validated delivery.
+begins cancellation or cleanup. The clock mismatch fences validated delivery.
+[[file:../spec/runtime-safety.md#cancellation-and-late-results][SAFE-CANCEL-001]] governs ownership of any later native outcome.
 
 =CleanupRecord= timing values must use the runtime clock id. When both a retry
 instant and terminal deadline exist, their order is validated through
