@@ -217,6 +217,7 @@ fn preparation_budget() -> WorkBudget {
         UriBytes,
         SecurityBranches,
         DocumentNodes,
+        CleanupItems, // TD admission reserves local rollback for its allocated nodes.
         PlanningItems,
         BindingPolls,
     ]
