@@ -163,7 +163,7 @@ fn withdrawn_support(dependency: &str) {
         let calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
         if unread {
             let mut call = read.read(&calls, Deadline::NONE, now()).unwrap();
-            calls.step(&mut cx(), now());
+            calls.step(&mut cx(), now()).unwrap();
             revision.fetch_add(1, Ordering::AcqRel);
             let result = settle(&mut call);
             assert!(

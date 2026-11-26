@@ -142,7 +142,7 @@ impl Server {
     async fn exchange(&mut self,call:&mut ConsumerCall)->(ConsumerSettlement,HttpActionDelivery) {
         let end=Instant::now()+Duration::from_secs(5);let mut delivered=None;
         loop {
-            if let Poll::Ready(result)=call.poll(&mut cx(),now()) { return(result,delivered.unwrap()); }
+            if let Poll::Ready(Ok(result))=call.poll(&mut cx(),now()) { return(result,delivered.unwrap()); }
             let native=self.exposure.participant_mut::<HttpActionRuntime>(0).unwrap();let _ = self.owner.step_actions(native, &mut work()).unwrap();
             if let Some(d)=native.take_delivery(){assert!(delivered.replace(d).is_none());}
             assert!(Instant::now()<end);tokio::time::sleep(Duration::from_millis(1)).await;

@@ -246,7 +246,7 @@ fn bind_dynamic(
 async fn finish(call: &mut ConsumerCall) -> ConsumerSettlement {
     let stop = Instant::now() + Duration::from_secs(5);
     loop {
-        if let Poll::Ready(result) = call.poll(&mut cx(), now(0)) {
+        if let Poll::Ready(Ok(result)) = call.poll(&mut cx(), now(0)) {
             return result;
         }
         assert!(Instant::now() < stop, "dynamic call stalled");

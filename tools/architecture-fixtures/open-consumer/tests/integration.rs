@@ -94,7 +94,9 @@ fn runtime(prepared: PreparedConsumer, bank: Arc<HostResourceAccounts>) -> Runti
 fn poll(call: &mut ConsumerCall) -> ConsumerSettlement {
     let start = Instant::now();
     loop {
-        if let Poll::Ready(settlement) = call.poll(&mut Context::from_waker(Waker::noop()), now()) {
+        if let Poll::Ready(Ok(settlement)) =
+            call.poll(&mut Context::from_waker(Waker::noop()), now())
+        {
             return settlement;
         }
         assert!(start.elapsed() < Duration::from_secs(5), "call stalled");
@@ -211,7 +213,9 @@ fn downstream_owned_incremental_and_http_use_one_public_selection_path_after_sou
             let mut call = read.read(&rt.1, Deadline::NONE, now()).unwrap();
             let start = Instant::now();
             let settlement = loop {
-                if let Poll::Ready(s) = call.poll(&mut Context::from_waker(Waker::noop()), now()) {
+                if let Poll::Ready(Ok(s)) =
+                    call.poll(&mut Context::from_waker(Waker::noop()), now())
+                {
                     break s;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -620,14 +624,17 @@ fn lost_handles_failed_and_pending_cleanup_stay_funded_until_final_release() {
     );
     p.fail_close.store(true, Ordering::Relaxed);
     drop(call);
-    rt.1.step(&mut Context::from_waker(Waker::noop()), now());
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+        .unwrap();
     assert!(!rt.1.is_idle());
     assert_eq!(p.calls.load(Ordering::Relaxed), 0);
     p.fail_close.store(false, Ordering::Relaxed);
     p.pending_close.store(1, Ordering::Relaxed);
-    rt.1.step(&mut Context::from_waker(Waker::noop()), now());
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+        .unwrap();
     assert!(!rt.1.is_idle());
-    rt.1.step(&mut Context::from_waker(Waker::noop()), now());
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+        .unwrap();
     assert!(rt.1.is_idle());
     assert_eq!(p.calls.load(Ordering::Relaxed), 1);
     drop(rt);
@@ -767,7 +774,7 @@ fn selected_service_loss_deadline_clock_errors_and_root_loss_fence_real_calls() 
     );
     let later = MonotonicInstant::new(ClockId::new(100), 2);
     let settlement = loop {
-        if let Poll::Ready(s) = call.poll(&mut Context::from_waker(Waker::noop()), later) {
+        if let Poll::Ready(Ok(s)) = call.poll(&mut Context::from_waker(Waker::noop()), later) {
             break s;
         }
     };
@@ -826,7 +833,9 @@ fn replacement_and_unread_results_never_gain_the_new_incarnations_authority() {
     );
     exchange(&peer, b"9");
     // Drive to an unread terminal slot, then revoke before handoff.
-    new.1.step(&mut Context::from_waker(Waker::noop()), now());
+    new.1
+        .step(&mut Context::from_waker(Waker::noop()), now())
+        .unwrap();
     new.1.begin_close();
     let new_result = poll(&mut new_call);
     assert_eq!(new_result.binding().binding_id(), BindingId::new(2));
@@ -967,7 +976,8 @@ fn unread_native_failure_wins_over_later_cancel_and_fabricated_transfer_stays_ow
             .is_pending()
     );
     exchange(&peer, &[b'x'; 1025]);
-    rt.1.step(&mut Context::from_waker(Waker::noop()), now());
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+        .unwrap();
     call.cancel();
     let outcome = poll(&mut call);
     assert!(
@@ -1128,14 +1138,14 @@ fn one_slot_per_turn_retires_a_sibling_while_original_cleanup_fails() {
     drop(a);
     drop(b);
     let mut cx = Context::from_waker(Waker::noop());
-    rt.1.step(&mut cx, now());
+    rt.1.step(&mut cx, now()).unwrap();
     assert_eq!(first.calls.load(Ordering::Relaxed), 0);
     assert_eq!(second.calls.load(Ordering::Relaxed), 0);
-    rt.1.step(&mut cx, now());
+    rt.1.step(&mut cx, now()).unwrap();
     assert_eq!(second.calls.load(Ordering::Relaxed), 1);
     assert!(!rt.1.is_idle());
     first.fail_close.store(false, Ordering::Relaxed);
-    rt.1.step(&mut cx, now());
+    rt.1.step(&mut cx, now()).unwrap();
     assert!(rt.1.is_idle());
     drop(rt);
     drop(reg_a);
@@ -1397,7 +1407,8 @@ fn pending_native_read_cannot_starve_an_independent_ready_result() {
     );
     exchange(&peer_b, b"9");
     for _ in 0..2 {
-        rt.1.step(&mut Context::from_waker(Waker::noop()), now());
+        rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+            .unwrap();
     }
     assert_eq!(
         second.validates.load(Ordering::Relaxed),
@@ -1405,7 +1416,7 @@ fn pending_native_read_cannot_starve_an_independent_ready_result() {
         "ready result starved behind the pending read"
     );
     assert!(b.is_settled());
-    let Poll::Ready(result) = b.poll(&mut Context::from_waker(Waker::noop()), now()) else {
+    let Poll::Ready(Ok(result)) = b.poll(&mut Context::from_waker(Waker::noop()), now()) else {
         panic!("background progress did not retain the ready result");
     };
     assert!(result.result().is_ok());
@@ -1413,7 +1424,8 @@ fn pending_native_read_cannot_starve_an_independent_ready_result() {
     drop(result);
     drop(b);
     drop(a);
-    rt.1.step(&mut Context::from_waker(Waker::noop()), now());
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+        .unwrap();
     assert!(rt.1.is_idle());
     drop(rt);
     clean(&bank);
@@ -1442,12 +1454,13 @@ fn unread_success_cannot_bypass_changed_access() {
     exchange(&peer, b"7");
     let start = Instant::now();
     while p.validates.load(Ordering::Relaxed) == 0 {
-        rt.1.step(&mut Context::from_waker(Waker::noop()), now());
+        rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+            .unwrap();
         assert!(start.elapsed() < Duration::from_secs(5));
     }
     p.denied.store(true, Ordering::Relaxed);
     assert!(call.is_settled());
-    let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), now()) else {
+    let Poll::Ready(Ok(result)) = call.poll(&mut Context::from_waker(Waker::noop()), now()) else {
         panic!("unread value must be collectible");
     };
     assert!(matches!(result.result(), Err(CoreError::Validation(_))));
@@ -1631,7 +1644,8 @@ fn unread_result_retains_its_owner_through_fresh_permission_at_handoff() {
         exchange(&peer, b"7");
         let start = Instant::now();
         while p.validates.load(Ordering::Relaxed) == 0 {
-            rt.1.step(&mut Context::from_waker(Waker::noop()), now());
+            rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+                .unwrap();
             assert!(start.elapsed() < Duration::from_secs(5));
         }
         match change {
@@ -1646,7 +1660,7 @@ fn unread_result_retains_its_owner_through_fresh_permission_at_handoff() {
             .map(|&kind| bank.account(kind).used())
             .collect();
         assert!(!rt.1.is_idle());
-        let Poll::Ready(settlement) = call.poll(&mut Context::from_waker(Waker::noop()), now())
+        let Poll::Ready(Ok(settlement)) = call.poll(&mut Context::from_waker(Waker::noop()), now())
         else {
             panic!("{change}: terminal handoff must check current permission");
         };

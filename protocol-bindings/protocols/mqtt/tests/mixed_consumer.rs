@@ -329,9 +329,9 @@ impl Engine {
     fn turn(&mut self, cx: &mut Context<'_>, drive_finite: bool) -> bool {
         let now = self.now();
         if drive_finite {
-            self.calls.step(cx, now);
+            self.calls.step(cx, now).unwrap();
         }
-        self.actions.step(cx, now, &mut budget());
+        self.actions.step(cx, now, &mut budget()).unwrap();
         self.notifications.step(cx, &mut budget());
         self.calls.is_idle()
             && self.actions.is_idle()
@@ -474,6 +474,7 @@ fn finite_and_continuing_handles_defer_each_others_authorization_callbacks() {
         assert_eq!(
             poll_fn(|cx| read.poll(cx, e.now()))
                 .await
+                .unwrap()
                 .result()
                 .unwrap()
                 .data()
@@ -506,7 +507,7 @@ fn finite_and_continuing_results_contend_for_one_outstanding_unit_through_dispos
         let original = e.register("urn:mixed:quota");
         let mut read = e.read(&original).unwrap();
         e.until(true, |_, _| read.is_settled()).await;
-        let finite = poll_fn(|cx| read.poll(cx, e.now())).await;
+        let finite = poll_fn(|cx| read.poll(cx, e.now())).await.unwrap();
         assert_eq!(finite.result().unwrap().data().unwrap().body, b"7");
         drop(read);
         assert!(e.calls.is_idle());
@@ -550,6 +551,7 @@ fn finite_and_continuing_results_contend_for_one_outstanding_unit_through_dispos
         assert_eq!(
             poll_fn(|cx| next.poll(cx, e.now()))
                 .await
+                .unwrap()
                 .result()
                 .unwrap()
                 .data()
@@ -625,7 +627,7 @@ fn managed_mixed_turns_keep_authorization_progress_and_reports_independent() {
         e.until(true, |e, cx| {
             // Result observation cannot do native I/O: only the composed turn can.
             if read.is_settled()
-                && let Poll::Ready(result) = read.poll(cx, e.now())
+                && let Poll::Ready(Ok(result)) = read.poll(cx, e.now())
             {
                 finite_result = Some(result);
                 true
@@ -785,7 +787,9 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
             a.notification.definition(),
             successor.notification.definition()
         ));
-        e.actions.step(&mut cx(), e.now(), &mut WorkBudget::new());
+        e.actions
+            .step(&mut cx(), e.now(), &mut WorkBudget::new())
+            .unwrap();
         e.notifications.step(&mut cx(), &mut WorkBudget::new());
         assert_eq!(action.state().unwrap(), ConsumerActionState::Closed);
         assert!(matches!(
@@ -813,7 +817,7 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
         e.until(true, |e, cx| {
             if finite_result.is_none()
                 && read.is_settled()
-                && let Poll::Ready(result) = read.poll(cx, e.now())
+                && let Poll::Ready(Ok(result)) = read.poll(cx, e.now())
             {
                 finite_result = Some(result);
             }
@@ -1039,7 +1043,7 @@ fn deployment_timer_observes_finite_and_action_deadlines_while_mqtt_stays_usable
         e.until(true, |e, cx| {
             if result.is_none()
                 && read.is_settled()
-                && let Poll::Ready(settlement) = read.poll(cx, e.now())
+                && let Poll::Ready(Ok(settlement)) = read.poll(cx, e.now())
             {
                 result = Some(settlement);
             }

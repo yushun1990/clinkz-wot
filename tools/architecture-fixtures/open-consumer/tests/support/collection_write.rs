@@ -394,7 +394,7 @@ fn real_datagram_group_preserves_member_status_atomicity_and_late_evidence_in_bo
             if let Some(s) = native.take_settlement() {
                 remote = Some(s);
             }
-            if let Poll::Ready(s) = call.poll(&mut Context::from_waker(Waker::noop()), now()) {
+            if let Poll::Ready(Ok(s)) = call.poll(&mut Context::from_waker(Waker::noop()), now()) {
                 break s;
             }
             assert!(start.elapsed() < Duration::from_secs(3));

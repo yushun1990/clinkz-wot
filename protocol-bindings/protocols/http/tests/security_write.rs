@@ -508,7 +508,7 @@ fn effects_and_original_identity_survive_lost_delivery_and_callback_revocation()
             assert_eq!(remote.delivery, FiniteDelivery::NotDelivered);
             assert!(remote.result.is_ok());
             for _ in 0..5 {
-                client.1.step(&mut cx(), now(0));
+                client.1.step(&mut cx(), now(0)).unwrap();
             }
             assert_eq!(server.app.writes.get(), 1, "never replay uncertain writes");
             drop((result, remote, call, client, content, instance));
@@ -652,12 +652,12 @@ fn reentrant_policy_cancellation_fences_native_start_and_preserves_completed_unr
                     || server.server().state() != RawFiniteState::Serving
                 {
                     server.step();
-                    client.1.step(&mut cx(), now(0));
+                    client.1.step(&mut cx(), now(0)).unwrap();
                     assert!(start.elapsed() < Duration::from_secs(5));
                     tokio::time::sleep(Duration::from_millis(1)).await;
                 }
                 for _ in 0..10 {
-                    client.1.step(&mut cx(), now(0));
+                    client.1.step(&mut cx(), now(0)).unwrap();
                     tokio::time::sleep(Duration::from_millis(1)).await;
                 }
             }
@@ -673,11 +673,11 @@ fn reentrant_policy_cancellation_fences_native_start_and_preserves_completed_unr
                     }
                     // The checked-out original slot remains occupied. No RefCell
                     // registry borrow surrounds the access callback.
-                    nested_client.1.step(&mut cx(), now(0));
+                    nested_client.1.step(&mut cx(), now(0)).unwrap();
                     assert!(!nested_client.1.is_idle());
                 }))
             });
-            client.1.step(&mut cx(), now(0));
+            client.1.step(&mut cx(), now(0)).unwrap();
             let mut call = Rc::try_unwrap(call).ok().unwrap().into_inner();
             let result = server.exchange(&mut call).await;
             assert!(result.result().is_err());
@@ -772,7 +772,7 @@ fn independent_tls_server_requires_complete_write_evidence_and_never_receives_a_
             let mut call = write(&client, VALUE);
             let start = Instant::now();
             let result = loop {
-                if let Poll::Ready(result) = call.poll(&mut cx(), now(0)) {
+                if let Poll::Ready(Ok(result)) = call.poll(&mut cx(), now(0)) {
                     break result;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -789,7 +789,7 @@ fn independent_tls_server_requires_complete_write_evidence_and_never_receives_a_
                 }
             );
             for _ in 0..10 {
-                client.1.step(&mut cx(), now(0));
+                client.1.step(&mut cx(), now(0)).unwrap();
             }
             let listener = peer.join().unwrap();
             listener.set_nonblocking(true).unwrap();

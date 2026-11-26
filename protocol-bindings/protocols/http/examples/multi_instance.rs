@@ -511,7 +511,9 @@ impl Handle {
     }
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<ResultOwner> {
         match self {
-            Self::Engine(c) => c.poll(cx, now()).map(ResultOwner::Engine),
+            Self::Engine(c) => c
+                .poll(cx, now())
+                .map(|result| ResultOwner::Engine(result.unwrap())),
             Self::Binding(c) => c
                 .as_pin_mut()
                 .poll_result(cx)
@@ -526,7 +528,7 @@ struct Flight {
 }
 async fn one(instance: &Instance) -> ConsumerSettlement {
     let mut call = instance.start().unwrap();
-    poll_fn(|cx| call.poll(cx, now())).await
+    poll_fn(|cx| call.poll(cx, now())).await.unwrap()
 }
 fn summary(values: &mut [u64]) -> Value {
     values.sort_unstable();
@@ -644,7 +646,7 @@ async fn lifecycle(
     let attempt = sibling.start();
     let held_result_blocks_sibling = attempt.is_err();
     if let Ok(mut c) = attempt {
-        let result = poll_fn(|cx| c.poll(cx, now())).await;
+        let result = poll_fn(|cx| c.poll(cx, now())).await.unwrap();
         result.result().unwrap();
         drop(result);
         drop(c);
@@ -662,7 +664,7 @@ async fn lifecycle(
     }
     let start = Instant::now();
     cancelled.cancel();
-    let result = poll_fn(|cx| cancelled.poll(cx, now())).await;
+    let result = poll_fn(|cx| cancelled.poll(cx, now())).await.unwrap();
     let cancellation_ns = start.elapsed().as_nanos();
     assert!(matches!(
         result.first_cause(),
@@ -677,14 +679,14 @@ async fn lifecycle(
 
     // Keep a settled reply unread across replacement of its original instance.
     let mut late = instances[0].start().unwrap();
-    poll_fn(|cx| late.progress(cx, now())).await;
+    poll_fn(|cx| late.progress(cx, now())).await.unwrap();
     let original = instances[0].owner.as_ref().unwrap().reference();
     drop(instances[0].owner.take());
     drop(instances[0].runtime.take());
     let start = Instant::now();
     instances[0] = Instance::new(&definitions[0], account, o.slots, 0, &mut costs);
     assert_ne!(original, instances[0].owner.as_ref().unwrap().reference());
-    let result = poll_fn(|cx| late.poll(cx, now())).await;
+    let result = poll_fn(|cx| late.poll(cx, now())).await.unwrap();
     assert_eq!(result.consumer(), &original);
     assert!(result.result().is_err());
     assert!(matches!(
@@ -874,7 +876,7 @@ async fn run(o: Options) {
         report(phase.finish("admitted_calls"), &banks, &physical);
         let phase = meter::Phase::begin();
         for (i, call) in calls.iter_mut().enumerate() {
-            let result = poll_fn(|cx| call.poll(cx, now())).await;
+            let result = poll_fn(|cx| call.poll(cx, now())).await.unwrap();
             assert_eq!(
                 result.result().unwrap().data().unwrap().body,
                 &expected[o.mapping(i)]

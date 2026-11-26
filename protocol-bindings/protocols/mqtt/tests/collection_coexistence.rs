@@ -549,7 +549,7 @@ mod live {
                 .query_all_actions(&finite.1, Deadline::NONE, now())
                 .unwrap();
             let result = loop {
-                if let Poll::Ready(result) = query.poll(&mut cx(), now()) {
+                if let Poll::Ready(Ok(result)) = query.poll(&mut cx(), now()) {
                     break result;
                 }
                 let http = exposure.participant_mut::<HttpActionRuntime>(1).unwrap();

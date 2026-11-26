@@ -88,7 +88,7 @@ fn consumer_late_native_views_retain_original_funding_after_cancellation_or_revo
             } else {
                 call.cancel();
             }
-            let Poll::Ready(result) = call.poll(&mut cx(), now()) else {
+            let Poll::Ready(Ok(result)) = call.poll(&mut cx(), now()) else {
                 panic!("the validated native result requires only the final current check");
             };
             if revoke {
@@ -406,7 +406,7 @@ fn consumer_rejects_malformed_or_misattributed_status_evidence_and_keeps_native_
             let bank=accounts();let instance=ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(2),Generation::INITIAL));
             let policy=Arc::new(ConsumerPolicy::default());
             let client=consumer(&description(addr),bank.clone(),&instance,policy.clone());let mut call=query(&client);let end=Instant::now()+Duration::from_secs(5);
-            let result=loop{if let Poll::Ready(r)=call.poll(&mut cx(),now()){break r;}assert!(Instant::now()<end);tokio::time::sleep(Duration::from_millis(1)).await;};
+            let result=loop{if let Poll::Ready(Ok(r))=call.poll(&mut cx(),now()){break r;}assert!(Instant::now()<end);tokio::time::sleep(Duration::from_millis(1)).await;};
             assert_eq!(result.result().is_ok(),valid,"{body}");
             if !valid && status == 200 {
                 let original = policy.last_body.lock().unwrap().take().unwrap();
@@ -479,7 +479,7 @@ fn source_free_validation_service_and_fresh_authority_remain_required_through_ha
             }
             assert!(!client.1.is_idle());
             let result = loop {
-                if let Poll::Ready(r) = call.poll(&mut cx(), now()) {
+                if let Poll::Ready(Ok(r)) = call.poll(&mut cx(), now()) {
                     break r;
                 }
                 assert!(Instant::now() < end);
@@ -527,7 +527,7 @@ fn pre_effect_consumer_cancellation_and_policy_refusal_create_no_root_or_member_
         call.cancel();
         let end = Instant::now() + Duration::from_secs(5);
         let result = loop {
-            if let Poll::Ready(r) = call.poll(&mut cx(), now()) {
+            if let Poll::Ready(Ok(r)) = call.poll(&mut cx(), now()) {
                 break r;
             }
             assert!(Instant::now() < end);
@@ -1201,7 +1201,7 @@ fn native_response_loss_reports_failure_and_disposes_the_original_connection_wit
             socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 99\r\nConnection: close\r\n\r\n{\"run\":[").unwrap();drop(socket);
             listener.set_nonblocking(true).unwrap();listener});
         let bank=accounts();let instance=ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(2),Generation::INITIAL));let client=consumer(&description(addr),bank.clone(),&instance,Arc::new(ConsumerPolicy::default()));let mut call=query(&client);let end=Instant::now()+Duration::from_secs(5);
-        let result=loop{if let Poll::Ready(r)=call.poll(&mut cx(),now()){break r;}assert!(Instant::now()<end);tokio::time::sleep(Duration::from_millis(1)).await;};
+        let result=loop{if let Poll::Ready(Ok(r))=call.poll(&mut cx(),now()){break r;}assert!(Instant::now()<end);tokio::time::sleep(Duration::from_millis(1)).await;};
         assert!(result.result().is_err());assert_eq!(result.operation(),Operation::QueryAllActions);drop(result);drop(call);drop(client);clean(&bank);
         let listener=peer.join().unwrap();assert!(matches!(listener.accept(),Err(e) if e.kind()==std::io::ErrorKind::WouldBlock));
     });

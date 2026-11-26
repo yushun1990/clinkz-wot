@@ -1,6 +1,6 @@
 //! Manually driven finite Consumer calls. This module depends only on Core and
 //! Foundation. Notification establishment/data/stop has a separate owner/API.
-use super::{ConsumerObserver, ConsumerTurn};
+use super::{ConsumerObserver, ConsumerOwned, ConsumerTurn};
 use alloc::{rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::execution::{FiniteCallDriver, FiniteCallState, NativeProgress};
 use clinkz_wot_core::thing::AffordanceSite;
@@ -20,13 +20,13 @@ enum CallInput<'a> {
 }
 
 struct Definition {
-    input: ConsumerBindingInput,
+    input: ConsumerOwned<ConsumerBindingInput>,
     _funding: HostCapacityReservation,
 }
 impl Definition {
     fn from_prepared(definition: ConsumerBinding, funding: HostCapacityReservation) -> Self {
         Self {
-            input: definition.into_input(),
+            input: ConsumerOwned::new(definition.into_input()),
             _funding: funding,
         }
     }
@@ -515,7 +515,7 @@ impl State {
         index: usize,
         sequence: Option<u64>,
         waker: &core::task::Waker,
-    ) -> Option<SlotLease<'_>> {
+    ) -> CoreResult<Option<SlotLease<'_>>> {
         let (lease, control) = {
             let mut registry = self.registry.borrow_mut();
             let slot = &mut registry.slots[index];
@@ -540,16 +540,16 @@ impl State {
                         control,
                     )
                 }
-                _ => return None,
+                _ => return Ok(None),
             }
         };
         // Retain driver interest even when another stack frame owns this call.
         // Waker clone/drop may reenter; the slot is already reserved and a live
         // lease restores its original owner even if registration unwinds.
-        control.observer.register(waker);
-        Some(lease)
+        control.observer.register(waker)?;
+        Ok(Some(lease))
     }
-    fn defer(&self, original: Option<(usize, u64)>, waker: &core::task::Waker) {
+    fn defer(&self, original: Option<(usize, u64)>, waker: &core::task::Waker) -> CoreResult<()> {
         let control = {
             let registry = self.registry.borrow();
             let slots = original.map_or(&registry.slots[..], |(i, _)| &registry.slots[i..=i]);
@@ -568,8 +568,9 @@ impl State {
             })
         };
         if let Some(control) = control {
-            control.observer.register(waker);
+            control.observer.register(waker)?;
         }
+        Ok(())
     }
     fn revoke(&self) {
         self.active.set(false);
@@ -1486,7 +1487,8 @@ impl ConsumerCalls {
     }
     /// Visit one slot in rotation. The application supplies independent turns
     /// for deadlines, runnable transitions, blocked retirement and lost handles.
-    pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant) {
+    /// Retry safe delivery backpressure on a later independent turn.
+    pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant) -> CoreResult<()> {
         let turn = ConsumerTurn::enter();
         let index = {
             let mut registry = self.state.registry.borrow_mut();
@@ -1497,20 +1499,20 @@ impl ConsumerCalls {
             }
             if turn.is_none() {
                 drop(registry);
-                self.state.defer(None, cx.waker());
-                return;
+                return self.state.defer(None, cx.waker());
             }
             let index = registry.next_slot;
             registry.next_slot = (index + 1) % registry.slots.len();
             index
         };
-        if let Some(mut lease) = self.state.checkout(index, None, cx.waker()) {
+        if let Some(mut lease) = self.state.checkout(index, None, cx.waker())? {
             let call = lease.call.as_mut().unwrap();
             let _ = call.step(&self.state, cx);
             if call.work.control.abandoned.get() && call.progress.is_terminal() {
                 drop(lease.take());
             }
         }
+        Ok(())
     }
     pub fn is_idle(&self) -> bool {
         self.state
@@ -1555,16 +1557,20 @@ impl ConsumerCall {
     /// Drive one bounded turn while retaining the result in its original slot.
     /// A ready observation grants no future permission to collect the value.
     /// Deferred progress retains the waker for this call's cancellation or close.
-    pub fn progress(&self, cx: &mut Context<'_>, now: MonotonicInstant) -> Poll<()> {
+    /// If recursive registration exhausts retry capacity, `Ready(Err(..))`
+    /// returns the retry to the caller. Drive the same call on an independent turn.
+    pub fn progress(&self, cx: &mut Context<'_>, now: MonotonicInstant) -> Poll<CoreResult<()>> {
         self.drive(cx, now, |_| ())
     }
     /// Drive and collect a settled call under current permission. The application
     /// supplies independent turns for deadlines, deferred drives and retirement.
+    /// Only `Ready(Ok(settlement))` takes the original call. A retryable
+    /// registration error leaves the handle and its original work available.
     pub fn poll(
         &mut self,
         cx: &mut Context<'_>,
         now: MonotonicInstant,
-    ) -> Poll<ConsumerSettlement> {
+    ) -> Poll<CoreResult<ConsumerSettlement>> {
         self.drive(cx, now, |lease| ConsumerSettlement {
             call: Some(lease.take()),
         })
@@ -1574,16 +1580,16 @@ impl ConsumerCall {
         cx: &mut Context<'_>,
         now: MonotonicInstant,
         ready: impl FnOnce(SlotLease<'_>) -> T,
-    ) -> Poll<T> {
+    ) -> Poll<CoreResult<T>> {
         self.control.observe_time(now);
         let Some(_turn) = ConsumerTurn::enter() else {
             self.state
-                .defer(Some((self.slot, self.sequence)), cx.waker());
+                .defer(Some((self.slot, self.sequence)), cx.waker())?;
             return Poll::Pending;
         };
         let Some(mut lease) = self
             .state
-            .checkout(self.slot, Some(self.sequence), cx.waker())
+            .checkout(self.slot, Some(self.sequence), cx.waker())?
         else {
             return Poll::Pending;
         };
@@ -1596,7 +1602,7 @@ impl ConsumerCall {
         {
             return Poll::Pending;
         }
-        Poll::Ready(ready(lease))
+        Poll::Ready(Ok(ready(lease)))
     }
 }
 impl Drop for ConsumerCall {

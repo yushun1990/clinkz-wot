@@ -76,7 +76,9 @@ fn main() {
             .write_all_properties(&calls, input, Deadline::NONE, now())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let result = loop {
-            if let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), now()) {
+            if let Poll::Ready(Ok(result)) =
+                call.poll(&mut Context::from_waker(Waker::noop()), now())
+            {
                 break result;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;

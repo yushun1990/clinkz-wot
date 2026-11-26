@@ -71,7 +71,7 @@ fn shared_failure_before_during_and_after_application_never_implies_rollback_or_
             );
             for _ in 0..10 {
                 server.step();
-                client.1.step(&mut cx(), now(0));
+                client.1.step(&mut cx(), now(0)).unwrap();
             }
             assert_eq!(server.controls.requests.get(), 1);
             assert_eq!(server.app.roots.get(), 1);
@@ -135,7 +135,7 @@ fn shared_ambiguous_or_partial_native_completion_never_confirms_or_replays_the_g
             let mut call = start_write(&client);
             let start = Instant::now();
             let result = loop {
-                if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) {
+                if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) {
                     break s;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -152,7 +152,7 @@ fn shared_ambiguous_or_partial_native_completion_never_confirms_or_replays_the_g
                 }
             );
             for _ in 0..10 {
-                client.1.step(&mut cx(), now(0));
+                client.1.step(&mut cx(), now(0)).unwrap();
             }
             drop(result);
             drop(call);
@@ -321,7 +321,7 @@ fn shared_valid_head_without_eof_is_not_completion_and_retains_funding_until_set
             let instant = now(if fault == "timeout" { 10 } else { 0 });
             assert!(!client.1.is_idle());
             let result = loop {
-                if let Poll::Ready(s) = call.poll(&mut cx(), instant) {
+                if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), instant) {
                     break s;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -380,7 +380,7 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
             let mut remote = None;
             while !call.is_settled() || remote.is_none() {
                 server.step();
-                client.1.step(&mut cx(), now(0));
+                client.1.step(&mut cx(), now(0)).unwrap();
                 if let Some(settlement) = server.server().take_settlement() {
                     remote = Some(settlement);
                 }
@@ -392,7 +392,7 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
             match fault { "cancel" => call.cancel(), "replace" => owner.revoke(), _ => denied.store(true, Ordering::Relaxed) }
             let retained = ResourceKind::ALL.map(|k| accounts.account(k).used());
             assert!(!client.1.is_idle());
-            let Poll::Ready(local) = call.poll(&mut cx(), now(0)) else { panic!("original completed result retained") };
+            let Poll::Ready(Ok(local)) = call.poll(&mut cx(), now(0)) else { panic!("original completed result retained") };
             assert!(local.result().is_err());
             assert_eq!(local.effect(), ConsumerEffect::Completed);
             assert!(matches!(local.native_outcome(), ConsumerNativeOutcome::Returned(Ok(o)) if o.data().is_none()));

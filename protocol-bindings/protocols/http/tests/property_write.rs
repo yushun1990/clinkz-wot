@@ -464,7 +464,7 @@ impl Fixture {
         let result = loop {
             assert!(start.elapsed() < Duration::from_secs(5), "exchange stalled");
             self.step();
-            if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) {
+            if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) {
                 break s;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;
@@ -903,12 +903,12 @@ fn consumer_requires_the_prepared_native_write_completion_and_never_replays_unce
         io().block_on(async {
             let mut call=start_write(&client,b"7");let start=Instant::now();
             let result=loop {
-                if let Poll::Ready(s)=call.poll(&mut cx(),now(0)) {break s;}
+                if let Poll::Ready(Ok(s))=call.poll(&mut cx(),now(0)) {break s;}
                 assert!(start.elapsed()<Duration::from_secs(5));tokio::time::sleep(Duration::from_millis(1)).await;
             };
             assert_eq!(result.result().is_ok(),reply==b"HTTP/1.1 204 No Content\r\n\r\n","{:?}",String::from_utf8_lossy(reply));
             assert_eq!(result.effect(), if reply==b"HTTP/1.1 204 No Content\r\n\r\n" { ConsumerEffect::Completed } else { ConsumerEffect::Unknown });
-            for _ in 0..10 { client.1.step(&mut cx(),now(0)); }
+            for _ in 0..10 { client.1.step(&mut cx(),now(0)).unwrap(); }
         });
         let listener=peer.join().unwrap(); listener.set_nonblocking(true).unwrap();
         assert!(matches!(listener.accept(),Err(e) if e.kind()==std::io::ErrorKind::WouldBlock),"uncertain write must not replay");
@@ -967,13 +967,13 @@ fn empty_write_reply_is_checked_through_eof_across_native_read_boundaries() {
                     let mut early_result = false;
                     if fragmented {
                         while head_ready.try_recv().is_err() {
-                            if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) { result = Some(s); break; }
+                            if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) { result = Some(s); break; }
                             assert!(start.elapsed() < Duration::from_secs(5));
                             tokio::time::sleep(Duration::from_millis(1)).await;
                         }
                         for _ in 0..20 {
                             if result.is_some() { break; }
-                            if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) { result = Some(s); break; }
+                            if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) { result = Some(s); break; }
                             tokio::time::sleep(Duration::from_millis(1)).await;
                         }
                         early_result = result.is_some();
@@ -981,7 +981,7 @@ fn empty_write_reply_is_checked_through_eof_across_native_read_boundaries() {
                     }
                     let result = loop {
                         if let Some(s) = result.take() { break s; }
-                        if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) { break s; }
+                        if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) { break s; }
                         assert!(start.elapsed() < Duration::from_secs(5));
                         tokio::time::sleep(Duration::from_millis(1)).await;
                     };
@@ -1090,7 +1090,7 @@ fn waiting_for_write_eof_keeps_original_funding_and_supports_cancellation_and_de
             );
             if let Some(call) = call.as_mut() {
                 let result = loop {
-                    if let Poll::Ready(s) = call.poll(&mut cx(), instant) {
+                    if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), instant) {
                         break s;
                     }
                     assert!(start.elapsed() < Duration::from_secs(5));
@@ -1117,7 +1117,7 @@ fn waiting_for_write_eof_keeps_original_funding_and_supports_cancellation_and_de
                 drop(result);
             } else {
                 while !client.as_ref().unwrap().1.is_idle() {
-                    client.as_ref().unwrap().1.step(&mut cx(), instant);
+                    client.as_ref().unwrap().1.step(&mut cx(), instant).unwrap();
                     assert!(start.elapsed() < Duration::from_secs(5));
                 }
             }
@@ -1173,7 +1173,7 @@ fn consumer_cancellation_replacement_timeout_and_policy_loss_preserve_original_r
             let successor = consumer_instance();
             assert_ne!(successor.reference(), owner.reference());
             let result = loop {
-                if let Poll::Ready(s) =
+                if let Poll::Ready(Ok(s)) =
                     call.poll(&mut cx(), now(if fault == "timeout" { 10 } else { 0 }))
                 {
                     break s;
@@ -1519,7 +1519,7 @@ fn unread_results_and_service_loss_keep_bounded_original_owners_until_acknowledg
         let start = Instant::now();
         let local = loop {
             server.step();
-            if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) {
+            if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) {
                 break s;
             }
             assert!(start.elapsed() < Duration::from_secs(5));
@@ -1577,7 +1577,7 @@ fn unread_results_and_service_loss_keep_bounded_original_owners_until_acknowledg
         assert_eq!(server.app.writes.get(), 1);
         drop(client);
         let result = loop {
-            if let Poll::Ready(s) = pending.poll(&mut cx(), now(0)) {
+            if let Poll::Ready(Ok(s)) = pending.poll(&mut cx(), now(0)) {
                 break s;
             }
         };

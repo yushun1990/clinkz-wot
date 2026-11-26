@@ -174,7 +174,7 @@ fn consumer_validates_independent_native_response_against_captured_member_schema
             let client = client(description(addr), Arc::new(AtomicBool::new(false)), accounts.clone(), &owner);
             let mut call = start_read(&client); let start = Instant::now();
             let result = loop {
-                if let Poll::Ready(result) = call.poll(&mut cx(), now(0)) { break result; }
+                if let Poll::Ready(Ok(result)) = call.poll(&mut cx(), now(0)) { break result; }
                 assert!(start.elapsed() < Duration::from_secs(5));
                 tokio::time::sleep(Duration::from_millis(1)).await;
             };

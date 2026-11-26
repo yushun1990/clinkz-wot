@@ -314,7 +314,7 @@ fn shared_admission_reentry_reserves_capacity_and_closes_only_the_original_assoc
         REENTER.with(|pending| {
             *pending.borrow_mut() = Some(Box::new(move || {
                 assert!(!nested.is_idle());
-                nested.step(&mut cx(), now(0));
+                nested.step(&mut cx(), now(0)).unwrap();
                 assert!(matches!(
                     start(&other, &nested, &destination),
                     Err(CoreError::Backpressure(_))
@@ -331,7 +331,7 @@ fn shared_admission_reentry_reserves_capacity_and_closes_only_the_original_assoc
         assert_eq!(peer.count(), 0);
         let call = start(&sibling_association, &calls, &peer).unwrap();
         drop(call); // Abandonment still leaves a complete owner for manual cleanup.
-        calls.step(&mut cx(), now(0));
+        calls.step(&mut cx(), now(0)).unwrap();
         assert!(calls.is_idle());
         let mut call = start(&sibling_association, &calls, &peer).unwrap();
         let result = finish(&mut call).await;
@@ -520,12 +520,12 @@ fn quiet_http_peer_needs_application_progress_after_passive_association_loss() {
                 drop(call);
                 assert!(!calls.is_idle());
                 assert_eq!(outstanding(&work_bank), 1);
-                calls.step(&mut driver, now(0));
+                calls.step(&mut driver, now(0)).unwrap();
             } else {
                 // The same cleanup owner can advance a retained handle. Native
                 // response activity is not needed to cancel the HTTP exchange.
-                calls.step(&mut driver, now(0));
-                let Poll::Ready(result) = call.poll(&mut driver, now(0)) else {
+                calls.step(&mut driver, now(0)).unwrap();
+                let Poll::Ready(Ok(result)) = call.poll(&mut driver, now(0)) else {
                     panic!("funded HTTP local cancellation did not settle");
                 };
                 assert!(matches!(result.result(), Err(CoreError::StaleHandle(_))));

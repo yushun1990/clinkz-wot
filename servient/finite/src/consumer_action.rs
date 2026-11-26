@@ -1,6 +1,6 @@
 //! Continuing invocation authority, independent of each finite native exchange.
 //! No TD, native token interpretation, URL synthesis, retry or protocol cases.
-use super::{ConsumerObserver, ConsumerTurn};
+use super::{ConsumerObserver, ConsumerOwned, ConsumerTurn};
 use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::{
     action::raw_action_output_shape, consumer::*, consumer_action::*, data_schema::PreparedSchema,
@@ -190,7 +190,7 @@ impl Association {
 /// Persistent checked association, independent of invocation capacity. Clones
 /// are passive non-revoking views; admitted work keeps the original association.
 pub struct ConsumerActionAssociation {
-    captured: Rc<Association>,
+    captured: Rc<ConsumerOwned<Association>>,
 }
 impl Clone for ConsumerActionAssociation {
     fn clone(&self) -> Self {
@@ -262,7 +262,7 @@ impl ConsumerActionAssociation {
                 &bank,
                 &[(
                     K::EngineLiveBytesGlobalMax,
-                    core::mem::size_of::<Association>() as u64 + 128,
+                    core::mem::size_of::<ConsumerOwned<Association>>() as u64 + 128,
                 )],
             )
         })();
@@ -271,13 +271,13 @@ impl ConsumerActionAssociation {
             Err(error) => return Err(reject((definition, access), error)),
         };
         Ok(Self {
-            captured: Rc::new(Association {
+            captured: Rc::new(ConsumerOwned::new(Association {
                 consumer,
                 definition,
                 access: captured,
                 bank,
                 _funding: funding,
-            }),
+            })),
         })
     }
     pub fn consumer(&self) -> &ConsumerInstanceRef {
@@ -306,7 +306,7 @@ struct Invocation {
     input: Option<Payload>,
     operation: usize,
     effect: ConsumerEffect,
-    association: Rc<Association>,
+    association: Rc<ConsumerOwned<Association>>,
     _funding: Vec<HostCapacityReservation>,
 }
 struct State {
@@ -480,11 +480,11 @@ impl State {
         // A waker's clone/drop/wake is also linked code. The lease already exists
         // so even unwinding registration restores the original occupied owner.
         if let Some(waker) = waker {
-            control.observer.register(waker);
+            control.observer.register(waker)?;
         }
         Ok(lease)
     }
-    fn defer(&self, original: Option<(usize, u64)>, waker: &Waker) {
+    fn defer(&self, original: Option<(usize, u64)>, waker: &Waker) -> CoreResult<()> {
         let control = {
             let registry = self.registry.borrow();
             let slots = original.map_or(&registry.slots[..], |(i, _)| &registry.slots[i..=i]);
@@ -505,8 +505,9 @@ impl State {
             })
         };
         if let Some(control) = control {
-            control.observer.register(waker);
+            control.observer.register(waker)?;
         }
+        Ok(())
     }
     fn revoke(&self) {
         self.active.set(false);
@@ -729,7 +730,14 @@ impl ConsumerActions {
     pub fn begin_close(&self) {
         self.state.close();
     }
-    pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant, budget: &mut WorkBudget) {
+    /// Drive the invocation capacity. Retry safe delivery backpressure from
+    /// recursive wake registration on an independent turn.
+    pub fn step(
+        &self,
+        cx: &mut Context<'_>,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<()> {
         let turn = ConsumerTurn::enter();
         let (start, count) = {
             let mut r = self.state.registry.borrow_mut();
@@ -738,8 +746,7 @@ impl ConsumerActions {
             }
             if turn.is_none() {
                 drop(r);
-                self.state.defer(None, cx.waker());
-                return;
+                return self.state.defer(None, cx.waker());
             }
             let count = r.slots.len();
             let start = r.next;
@@ -747,17 +754,21 @@ impl ConsumerActions {
             (start, count)
         };
         for i in 0..count {
-            if let Ok(mut lease) = self
+            let mut lease = match self
                 .state
                 .checkout((start + i) % count, None, Some(cx.waker()))
             {
-                let v = lease.invocation.as_mut().unwrap();
-                v.step(&self.state, cx, budget);
-                if v.control.abandoned.get() && v.progress.state.settlement_ready() {
-                    drop(lease.take());
-                }
+                Ok(lease) => lease,
+                Err(CoreError::StaleHandle(_)) => continue,
+                Err(error) => return Err(error),
+            };
+            let v = lease.invocation.as_mut().unwrap();
+            v.step(&self.state, cx, budget);
+            if v.control.abandoned.get() && v.progress.state.settlement_ready() {
+                drop(lease.take());
             }
         }
+        Ok(())
     }
     pub fn is_idle(&self) -> bool {
         self.state
@@ -916,6 +927,8 @@ impl ConsumerActionHandle {
     /// Reentrant progress records time and the observer on this original
     /// invocation, then returns Backpressure. A checked-out invocation signals
     /// a retry on restoration. A ready sibling can signal cancellation or close.
+    /// Safe delivery backpressure returns an unregistered retry to the caller.
+    /// The accepted invocation stays available for its next independent turn.
     pub fn progress(
         &self,
         cx: &mut Context<'_>,
@@ -926,7 +939,7 @@ impl ConsumerActionHandle {
         self.control.observe_time(now);
         let Some(_turn) = ConsumerTurn::enter() else {
             self.state
-                .defer(Some((self.slot, self.sequence)), cx.waker());
+                .defer(Some((self.slot, self.sequence)), cx.waker())?;
             return Err(busy());
         };
         let mut lease = self

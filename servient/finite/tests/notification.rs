@@ -2652,6 +2652,14 @@ struct ValidationProbe {
     prepay: Cell<ValidationMode>,
     response: Cell<ValidationMode>,
     on_response: PolicyHook,
+    on_drop: Option<Box<dyn FnOnce()>>,
+}
+impl Drop for ValidationProbe {
+    fn drop(&mut self) {
+        if let Some(callback) = self.on_drop.take() {
+            callback();
+        }
+    }
 }
 impl NotificationValidation for ValidationProbe {
     fn subscription(
@@ -2693,6 +2701,71 @@ impl NotificationValidation for ValidationProbe {
 }
 
 #[test]
+fn raw_validator_final_release_defers_sibling_receive_for_idle_context_and_report() {
+    for admit in [false, true] {
+        let bus = Bus::new();
+        let (mut sibling, _, _) = root(&bus, limits());
+        let cursor = subscribe(
+            &mut sibling,
+            property(NotificationOverflow::Terminate),
+            Program::property(),
+        );
+        let id = cursor.identity().clone();
+        assert_eq!(step(&mut sibling, &id), NotificationState::Active);
+        let sibling = Rc::new(RefCell::new(sibling));
+        let hook = sibling.clone();
+        let nested = id.clone();
+        let fired = Rc::new(Cell::new(false));
+        let flag = fired.clone();
+        let validation = ValidationProbe {
+            prepay: Cell::new(ValidationMode::Ready),
+            response: Cell::new(ValidationMode::Ready),
+            on_response: Rc::new(RefCell::new(None)),
+            on_drop: Some(Box::new(move || {
+                flag.set(true);
+                let result = hook.borrow_mut().progress(
+                    &nested,
+                    &mut Context::from_waker(Waker::noop()),
+                    &mut budget(),
+                );
+                assert!(matches!(result, Err(CoreError::Backpressure(_))));
+            })),
+        };
+        let (mut original, _, _) = root(&Bus::new(), limits());
+        let context = RawNotificationContext::try_new(
+            original.binding.clone(),
+            original.configuration.clone(),
+            original.policy.clone(),
+            original._instance.reference(),
+            Some(Rc::new(validation)),
+        )
+        .unwrap_or_else(|_| panic!("raw context rejected"));
+        if admit {
+            let sub = original
+                .inner
+                .subscribe(
+                    property(NotificationOverflow::Terminate),
+                    Program::property(),
+                    context,
+                    &mut budget(),
+                )
+                .unwrap_or_else(|_| panic!("raw subscription rejected"));
+            original.begin_close();
+            let report = settle(&mut original, sub.identity());
+            drop(original);
+            assert!(!fired.get());
+            drop(report);
+        } else {
+            drop(context);
+        }
+        assert!(fired.get());
+        assert_eq!(bus.borrow().receive_polls, 0);
+        step(&mut sibling.borrow_mut(), &id);
+        assert_eq!(bus.borrow().receive_polls, 1);
+    }
+}
+
+#[test]
 fn observed_validation_dependency_loss_before_native_handoff_cannot_be_restored() {
     let bus = Bus::new();
     let (mut root, _, _) = root(&bus, limits());
@@ -2700,6 +2773,7 @@ fn observed_validation_dependency_loss_before_native_handoff_cannot_be_restored(
         prepay: Cell::new(ValidationMode::Rejected),
         response: Cell::new(ValidationMode::Ready),
         on_response: Rc::new(RefCell::new(None)),
+        on_drop: None,
     });
     let context = RawNotificationContext::try_new(
         root.binding.clone(),
@@ -2753,6 +2827,7 @@ fn rejected_response_validation_still_observes_callback_revocation_and_pairing_l
             prepay: Cell::new(ValidationMode::Ready),
             response: Cell::new(ValidationMode::Rejected),
             on_response: Rc::new(RefCell::new(None)),
+            on_drop: None,
         });
         let context = RawNotificationContext::try_new(
             root.binding.clone(),

@@ -515,7 +515,7 @@ fn unread_invalid_wire_value_retains_its_first_validation_error_across_cancel_or
                 _ => {}
             }
             let settlement = loop {
-                if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) {
+                if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) {
                     break s;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));

@@ -239,7 +239,8 @@ async fn until_request(runtime: &(StandaloneConsumerAssociation, ConsumerCalls),
         loop {
             runtime
                 .1
-                .step(&mut Context::from_waker(Waker::noop()), now());
+                .step(&mut Context::from_waker(Waker::noop()), now())
+                .unwrap();
             if !peer.requests.lock().unwrap().is_empty() {
                 break;
             }
@@ -645,7 +646,8 @@ async fn validated_unread_success_is_fenced_by_changed_policy_or_original_instan
             while validations.load(Ordering::Acquire) == 0 {
                 runtime
                     .1
-                    .step(&mut Context::from_waker(Waker::noop()), now());
+                    .step(&mut Context::from_waker(Waker::noop()), now())
+                    .unwrap();
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
         })

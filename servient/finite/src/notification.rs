@@ -1,7 +1,7 @@
 //! Caller-driven raw Host notification capacity. Each admitted conversation
 //! retains its original logical association. Native infrastructure, persistent
 //! association count and execution capacity have independent lifetimes.
-use super::ConsumerTurn;
+use super::{ConsumerOwned, ConsumerTurn};
 use alloc::{collections::VecDeque, rc::Rc, vec::Vec};
 use clinkz_wot_core::consumer::ConsumerInstanceRef;
 use clinkz_wot_core::thing::AffordanceSite;
@@ -187,7 +187,7 @@ pub struct NotificationSettlement {
     pub responses_uncertain: u64,
     // Composed reports can retain original coordinate backing. Keep its
     // original prepared/association owners until this report is disposed.
-    _validation: Option<Rc<dyn NotificationValidation>>,
+    _validation: Option<ConsumerOwned<Rc<dyn NotificationValidation>>>,
 }
 
 struct Buffered<R> {
@@ -330,6 +330,16 @@ pub struct RawNotificationContext<B: ConsumerNotificationBinding, A: Notificatio
     authorizer: A,
     validation: Option<Rc<dyn NotificationValidation>>,
     consumer: ConsumerInstanceRef,
+    // Last so all caller-supplied fields are released inside the turn, even
+    // for a context returned unused from admission or during unwinding.
+    drop_turn: Option<ConsumerTurn>,
+}
+impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Drop
+    for RawNotificationContext<B, A>
+{
+    fn drop(&mut self) {
+        self.drop_turn = ConsumerTurn::enter();
+    }
 }
 impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationContext<B, A> {
     #[allow(clippy::type_complexity)]
@@ -362,6 +372,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationC
             authorizer,
             consumer,
             validation,
+            drop_turn: None,
         })
     }
     fn paired(&self) -> bool {
@@ -1664,7 +1675,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             delivered_items: e.delivered,
             responses_delivered: e.responses_delivered,
             responses_uncertain: e.responses_uncertain,
-            _validation: e.context.validation.take(),
+            _validation: e.context.validation.take().map(ConsumerOwned::new),
         })
     }
 }

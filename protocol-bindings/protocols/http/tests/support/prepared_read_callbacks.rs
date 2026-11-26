@@ -156,7 +156,7 @@ fn unread_bound_result_rechecks_original_qualification_after_policy_callback() {
         let h = harness(1, None);
         let read = bound(&h);
         let mut call = read.read(&h.rt.1, Deadline::NONE, now()).unwrap();
-        h.rt.1.step(&mut cx(), now());
+        h.rt.1.step(&mut cx(), now()).unwrap();
         assert_eq!(h.probe.validations.load(Ordering::Relaxed), 1);
         let probe = h.probe.clone();
         hook(Edge::Access, move || {

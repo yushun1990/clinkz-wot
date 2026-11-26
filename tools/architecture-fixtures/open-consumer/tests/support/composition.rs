@@ -261,7 +261,7 @@ fn action_absent_data_roles_allow_empty_success_but_reject_unexpected_output() {
                 peer.send_to(reply, from).unwrap();
                 let mut result = None;
                 for _ in 0..100 {
-                    if let Poll::Ready(settlement) = call.poll(&mut cx, now()) {
+                    if let Poll::Ready(Ok(settlement)) = call.poll(&mut cx, now()) {
                         result = Some(settlement);
                         break;
                     }
@@ -381,7 +381,7 @@ fn unread_validated_result_rechecks_permission_without_repeating_decoding() {
             .collect();
         assert!(!rt.1.is_idle());
         // Collection checks current permission for the retained original value.
-        let Poll::Ready(result) = call.poll(&mut cx, now()) else {
+        let Poll::Ready(Ok(result)) = call.poll(&mut cx, now()) else {
             panic!("{change}: unread result must settle");
         };
         assert_eq!(result.consumer(), &original);
@@ -1080,6 +1080,16 @@ fn closing_finite_facet_keeps_same_consumers_notification_live_and_callback_revo
 }
 
 struct ObserveAccess;
+thread_local! {
+    static ON_ACCESS_DROP: RefCell<Option<Box<dyn FnOnce()>>> = const { RefCell::new(None) };
+}
+impl Drop for ObserveAccess {
+    fn drop(&mut self) {
+        if let Some(callback) = ON_ACCESS_DROP.take() {
+            callback();
+        }
+    }
+}
 impl ConsumerAccessService for ObserveAccess {
     fn qualification_revision(&self) -> u64 {
         0
@@ -1201,6 +1211,98 @@ fn prepared_observations(
 }
 
 #[test]
+fn notification_report_and_last_idle_view_guard_service_disposal_against_udp_read() {
+    for collect_report in [true, false] {
+        let notify_peer = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let hub = hub(notify_peer.local_addr().unwrap());
+        let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+        let owner = instance();
+        let mut root = prepared_observations(&owner, &hub, &bank);
+        let view = root.association.clone();
+        let mut cx = Context::from_waker(Waker::noop());
+        let report = collect_report.then(|| {
+            let cursor = root
+                .subscribe(
+                    SubscriptionInput(None),
+                    ResponseRequirement::None,
+                    NotificationOverflow::Terminate,
+                    &mut work(),
+                )
+                .unwrap_or_else(|e| panic!("{:?}", e.error()));
+            root.progress(cursor.identity(), &mut cx, &mut work())
+                .unwrap();
+            root.stop(&cursor, None, &mut work())
+                .unwrap_or_else(|_| panic!());
+            for _ in 0..8 {
+                if root
+                    .progress(cursor.identity(), &mut cx, &mut work())
+                    .unwrap()
+                    == NotificationState::Closed
+                {
+                    return root.take_settlement(cursor.identity()).unwrap();
+                }
+            }
+            panic!("observation did not close");
+        });
+        let (peer, target) = udp();
+        let registrations = registry(vec![registration(1, Arc::new(Probe::default()))]);
+        let (association, calls) = finite(
+            &owner,
+            prepare(
+                &registrations,
+                &source(json!([{"href":target}])),
+                bank.clone(),
+            ),
+            bank.clone(),
+        );
+        let call = Rc::new(
+            association
+                .read_property(&calls, "a", Deadline::NONE, now())
+                .unwrap(),
+        );
+        let nested = call.clone();
+        let fired = Rc::new(Cell::new(false));
+        let flag = fired.clone();
+        ON_ACCESS_DROP.set(Some(Box::new(move || {
+            flag.set(true);
+            assert!(
+                nested
+                    .progress(&mut Context::from_waker(Waker::noop()), now())
+                    .is_pending()
+            );
+        })));
+        drop(root.association);
+        assert!(!fired.get());
+        if let Some(report) = report {
+            drop(view);
+            drop(root.work);
+            assert!(!fired.get());
+            // Public fields can outlive the private validation owner.
+            let target = report.target;
+            drop(report.identity);
+            assert!(matches!(target, AffordanceTarget::Property(_)));
+        } else {
+            drop(view);
+            assert_eq!(root.work.retained_subscriptions(), 0);
+            drop(root.work);
+        }
+        assert!(fired.get());
+        peer.set_nonblocking(true).unwrap();
+        assert_eq!(
+            peer.peek_from(&mut [0; 64]).unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        peer.set_nonblocking(false).unwrap();
+        let mut call = Rc::try_unwrap(call).ok().unwrap();
+        assert!(call.progress(&mut cx, now()).is_pending());
+        exchange(&peer, b"7");
+        assert_eq!(poll(&mut call).result().unwrap().data().unwrap().body, b"7");
+        drop((call, calls, association, registrations));
+        clean(&bank);
+    }
+}
+
+#[test]
 fn notification_callbacks_defer_finite_handle_and_capacity_io_until_an_independent_turn() {
     let notify_peer = UdpSocket::bind("127.0.0.1:0").unwrap();
     let hub = hub(notify_peer.local_addr().unwrap());
@@ -1242,7 +1344,7 @@ fn notification_callbacks_defer_finite_handle_and_capacity_io_until_an_independe
         *hub.hook.borrow_mut() = Some(Box::new(move || {
             let mut cx = Context::from_waker(Waker::noop());
             assert!(nested.progress(&mut cx, now()).is_pending());
-            nested_calls.step(&mut cx, now());
+            nested_calls.step(&mut cx, now()).unwrap();
         }));
         if capacity_turn {
             root.step(&mut cx, &mut work());

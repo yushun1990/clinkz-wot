@@ -1,6 +1,6 @@
 //! TD-prepared notification services over the existing raw conversation owner.
 //! No TD, compiler, protocol matching or native distribution lives here.
-use super::ConsumerTurn;
+use super::{ConsumerOwned, ConsumerTurn};
 use crate::notification::*;
 use alloc::{rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::host_accounts::{HostCapacityReservation, HostResourceAccounts};
@@ -18,7 +18,7 @@ struct CapturedServices<B: ConsumerNotificationBinding> {
     _funding: Vec<HostCapacityReservation>,
 }
 struct CapturedAuthorizer<B: ConsumerNotificationBinding> {
-    association: Rc<CapturedServices<B>>,
+    association: Rc<ConsumerOwned<CapturedServices<B>>>,
     // Original admitted work and instance quotas survive public view loss.
     _quota: HostCapacityReservation,
     _scratch: HostCapacityReservation,
@@ -131,7 +131,7 @@ impl<B: ConsumerNotificationBinding> CapturedServices<B> {
         Ok(())
     }
 }
-impl<B: ConsumerNotificationBinding> NotificationValidation for CapturedServices<B> {
+impl<B: ConsumerNotificationBinding> NotificationValidation for ConsumerOwned<CapturedServices<B>> {
     fn subscription(
         &self,
         input: &SubscriptionInput,
@@ -236,7 +236,7 @@ impl<B: ConsumerNotificationBinding> NotificationValidation for CapturedServices
 /// views. It owns no vacant slot, queue or native subscription. Accepted work
 /// retains this original association even after all application views disappear.
 pub struct ConsumerNotificationAssociation<B: ConsumerNotificationBinding> {
-    captured: Rc<CapturedServices<B>>,
+    captured: Rc<ConsumerOwned<CapturedServices<B>>>,
 }
 impl<B: ConsumerNotificationBinding> Clone for ConsumerNotificationAssociation<B> {
     fn clone(&self) -> Self {
@@ -298,7 +298,7 @@ impl<B: ConsumerNotificationBinding> ConsumerNotificationAssociation<B> {
                 &bank,
                 &[(
                     K::EngineLiveBytesGlobalMax,
-                    core::mem::size_of::<CapturedServices<B>>() as u64 + 128,
+                    core::mem::size_of::<ConsumerOwned<CapturedServices<B>>>() as u64 + 128,
                 )],
             )
         })();
@@ -312,7 +312,7 @@ impl<B: ConsumerNotificationBinding> ConsumerNotificationAssociation<B> {
             }
         };
         Ok(Self {
-            captured: Rc::new(CapturedServices {
+            captured: Rc::new(ConsumerOwned::new(CapturedServices {
                 consumer,
                 definition,
                 access,
@@ -320,7 +320,7 @@ impl<B: ConsumerNotificationBinding> ConsumerNotificationAssociation<B> {
                 security_revision,
                 bank,
                 _funding: funding,
-            }),
+            })),
         })
     }
     pub fn definition(&self) -> &Rc<ConsumerNotificationDefinition<B>> {

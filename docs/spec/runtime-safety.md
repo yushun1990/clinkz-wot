@@ -57,6 +57,8 @@ A bound Property Read retains the selected mapping, original authority and fixed
 destination. The Binding resolves a fixed destination once. Variable templates
 retain per-interaction validation and resolution. Repeated Reads need no new
 name lookup. Dropping a handle is passive. Removal or replacement fences it.
+Releasing the last selected service from that handle holds the shared Consumer
+turn, including after its original association closes.
 The destination owner supplies immutable bytes through the last handle,
 native request or settlement using them. A dynamic destination belongs to
 its admitted call. Refusal returns protected operands to their original owner.
@@ -313,6 +315,10 @@ other capacity domains. Original instance revocation fences only its work.
 Applications schedule progress/cleanup after passive revocation and cursor loss,
 either individually or with the aggregate turn below. There is no scheduler or
 automatic authority-change wake mechanism.
+
+The Host holds the shared Consumer turn through the final release of a raw
+context, a report's retained validator and an idle association's captured
+services. Public notification report fields can move out independently.
 
 `RawNotificationServient::step` and `ConsumerNotifications::step` visit every
 original conversation at most once per turn, rotating the first visit across
@@ -587,8 +593,20 @@ slot is checked out. Restoration signals one retry to the latest registered
 observer. A direct poll deferred on a ready sibling also registers its waker
 for explicit cancellation or close on that original slot generation. Waker
 registration and notification occur outside registry borrows. A waker's clone
-or destructor can replace an observer. Further recursive copying requests an
-independent retry and coalesces inline reentry into that signal.
+or destructor can replace an observer. The Host permits two nested installations
+and can retain one additional task waker for a retry. It delivers that retry
+after both installations unwind, while the shared Consumer turn still defers
+native progress. A different task polled by the wake can register its own
+observer for its original call. Equivalent queued retries share one signal.
+
+If the retry slot is being copied or delivered, or already belongs to another
+task, a drive that also exhausts the two installation frames returns
+`Backpressure` in the delivery phase with `RetryClass::Safe`. Its caller
+must schedule an independent drive of the same accepted work. Finite
+`progress` and `poll` return this as `Poll::Ready(Err(..))`. Collection
+transfers the call on `Poll::Ready(Ok(settlement))`. The finite and continuing
+Action capacity drivers return the error directly. The original slot, first
+cause, and any previously registered observer survive this refusal.
 
 Slot restoration on unwind retains the original owner; it grants no guarantee
 that arbitrary panicking linked code can resume execution. The independent
@@ -658,6 +676,8 @@ capacity/control ownership for progress; settlements retain their original
 association and work leases through final native/data/service disposal. Input,
 normal and late output access lends slices tied to that settlement; it cannot
 detach the original payload Arc from its funding.
+The last idle Action view holds the shared Consumer turn through destruction
+of its retained services.
 Cleanup still uses the bounded Host local-abort contract; this adds no scheduler,
 background task, native pool or general async cleanup transfer.
 

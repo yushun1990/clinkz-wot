@@ -565,7 +565,7 @@ impl Fixture {
         let result = loop {
             assert!(start.elapsed() < Duration::from_secs(5), "exchange stalled");
             self.step();
-            if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) {
+            if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) {
                 break s;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;
@@ -788,7 +788,7 @@ fn verify_collection_lifecycle(operation: Operation) {
             );
             if let Some(c) = &mut call {
                 let result = loop {
-                    if let Poll::Ready(s) = c.poll(&mut cx(), instant) {
+                    if let Poll::Ready(Ok(s)) = c.poll(&mut cx(), instant) {
                         break s;
                     }
                     assert!(start.elapsed() < Duration::from_secs(5));
@@ -804,7 +804,7 @@ fn verify_collection_lifecycle(operation: Operation) {
                 drop(result);
             } else {
                 while !client.1.is_idle() {
-                    client.1.step(&mut cx(), instant);
+                    client.1.step(&mut cx(), instant).unwrap();
                     assert!(start.elapsed() < Duration::from_secs(5));
                 }
             }
@@ -1038,7 +1038,7 @@ fn verify_collection_publication(operation: Operation) {
         assert!(remote.result.is_err());
         assert_eq!(remote.effect, FiniteEffect::NotInvoked);
         let result = loop {
-            if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) {
+            if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) {
                 break s;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;

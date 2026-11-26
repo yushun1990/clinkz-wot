@@ -1157,7 +1157,7 @@ fn capacity_replacement_policy_deadline_and_abandonment_retire_original_work() {
             .unwrap();
         producer.drive(&h, ConsumerActionState::Pending).await;
         drop(h);
-        runtime.calls.step(&mut cx(), now(), &mut budget());
+        runtime.calls.step(&mut cx(), now(), &mut budget()).unwrap();
         assert!(runtime.calls.is_idle());
         drop(runtime);
         drop(owner);
@@ -2010,7 +2010,7 @@ fn actual_http_action_callbacks_reenter_original_owner_and_retain_fenced_complet
                 } else {
                     nested.cancel_local();
                 }
-                rt.calls.step(&mut cx(), now(), &mut budget());
+                rt.calls.step(&mut cx(), now(), &mut budget()).unwrap();
             });
             if edge != CallbackEdge::Access {
                 producer.drive(&h, ConsumerActionState::Closed).await;

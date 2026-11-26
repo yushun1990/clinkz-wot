@@ -368,7 +368,7 @@ fn independent_peer_cannot_return_unrequested_missing_duplicate_invalid_or_parti
             let mut call = start_selected(&client, &["on"]);
             let start = Instant::now();
             let settled = loop {
-                if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) {
+                if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) {
                     break s;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -732,7 +732,7 @@ fn pending_output_keeps_original_selection_and_funding_across_failed_sibling_adm
         );
         assert_eq!(held, ResourceKind::ALL.map(|k| accounts.account(k).used()));
         let local = loop {
-            if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) {
+            if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) {
                 break s;
             }
             assert!(start.elapsed() < Duration::from_secs(5));
@@ -1062,7 +1062,7 @@ fn review_authorization_changes_fence_immediate_and_unread_validated_result_hand
                     // final permission callback, retaining an unread result.
                     while validated.load(Ordering::Relaxed) == 0 {
                         server.step();
-                        client.1.step(&mut cx(), now(0));
+                        client.1.step(&mut cx(), now(0)).unwrap();
                         assert!(start.elapsed() < Duration::from_secs(5));
                         tokio::time::sleep(Duration::from_millis(1)).await;
                     }
@@ -1078,7 +1078,7 @@ fn review_authorization_changes_fence_immediate_and_unread_validated_result_hand
                         retained,
                         ResourceKind::ALL.map(|k| accounts.account(k).used())
                     );
-                    let Poll::Ready(local) = call.poll(&mut cx(), now(0)) else {
+                    let Poll::Ready(Ok(local)) = call.poll(&mut cx(), now(0)) else {
                         panic!("validated result requires only the paid current check");
                     };
                     assert_eq!(

@@ -505,7 +505,7 @@ fn changed_path_and_headers_are_compiled_for_the_actual_endpoint() {
         let client = bind(actual, &owner, &account, Arc::new(AtomicBool::new(false)));
         let mut call = start_read(&client); let started = Instant::now();
         let result = loop {
-            if let Poll::Ready(result) = call.poll(&mut cx(), now(0)) { break result; }
+            if let Poll::Ready(Ok(result)) = call.poll(&mut cx(), now(0)) { break result; }
             assert!(started.elapsed() < Duration::from_secs(5));
             tokio::time::sleep(Duration::from_millis(1)).await;
         };

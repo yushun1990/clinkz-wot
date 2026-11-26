@@ -161,7 +161,8 @@ pub(crate) async fn settle(call: &mut ConsumerCall) -> ConsumerSettlement {
         loop {
             let instant =
                 MonotonicInstant::new(ClockId::new(771), start.elapsed().as_millis() as u64);
-            if let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), instant)
+            if let Poll::Ready(Ok(result)) =
+                call.poll(&mut Context::from_waker(Waker::noop()), instant)
             {
                 return result;
             }

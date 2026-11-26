@@ -736,7 +736,7 @@ fn checked_binding_reuses_method_headers_and_response_discrimination_on_the_wire
                 .unwrap();
             let started = Instant::now();
             let result = loop {
-                if let Poll::Ready(result) = call.poll(&mut cx(), now(0)) {
+                if let Poll::Ready(Ok(result)) = call.poll(&mut cx(), now(0)) {
                     break result;
                 }
                 assert!(started.elapsed() < Duration::from_secs(5));

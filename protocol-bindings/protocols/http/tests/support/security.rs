@@ -389,7 +389,7 @@ impl SecureFixture {
                 self.server().first_cause()
             );
             self.step();
-            if let Poll::Ready(result) = call.poll(&mut cx(), now(0)) {
+            if let Poll::Ready(Ok(result)) = call.poll(&mut cx(), now(0)) {
                 return result;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;

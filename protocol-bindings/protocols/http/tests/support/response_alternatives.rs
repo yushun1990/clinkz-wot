@@ -405,7 +405,7 @@ fn consumer_checks_wire_selected_response_schema_and_rejects_undeclared_native_o
             let mut call = client.0.read_property(&client.1, "level", Deadline::NONE, now(0)).unwrap();
             let start = Instant::now();
             let result = loop {
-                if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) { break s; }
+                if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) { break s; }
                 assert!(start.elapsed() < Duration::from_secs(5));
                 tokio::time::sleep(Duration::from_millis(1)).await;
             };
@@ -498,7 +498,7 @@ fn cancelled_write_keeps_original_declared_failure_and_unknown_effect_through_na
         }
         call.cancel();
         let local = loop {
-            if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) {
+            if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) {
                 break s;
             }
             assert!(start.elapsed() < Duration::from_secs(5));

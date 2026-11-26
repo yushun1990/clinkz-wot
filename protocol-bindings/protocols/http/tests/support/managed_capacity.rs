@@ -319,8 +319,8 @@ fn silent_peer_removal_fences_without_a_wake_and_keeps_funded_cleanup_reachable(
             "removal is not drain"
         );
         // The application supplies this lifecycle turn; no peer response occurs.
-        calls.step(&mut driver, now(0));
-        let Poll::Ready(result) = call.poll(&mut driver, now(0)) else {
+        calls.step(&mut driver, now(0)).unwrap();
+        let Poll::Ready(Ok(result)) = call.poll(&mut driver, now(0)) else {
             panic!("funded original cleanup was not reachable");
         };
         assert!(matches!(result.result(), Err(CoreError::StaleHandle(_))));

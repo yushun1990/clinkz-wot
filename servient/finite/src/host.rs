@@ -70,11 +70,77 @@ impl Drop for ConsumerTurn {
     }
 }
 
+/// A Host-held owner whose final release can call linked code. Field drop
+/// order inside the value (including funding) is preserved under the turn.
+struct ConsumerOwned<T>(Option<T>);
+impl<T> ConsumerOwned<T> {
+    fn new(value: T) -> Self {
+        Self(Some(value))
+    }
+}
+impl<T> core::ops::Deref for ConsumerOwned<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        self.0.as_ref().expect("live Consumer owner")
+    }
+}
+impl<T> Drop for ConsumerOwned<T> {
+    fn drop(&mut self) {
+        let _turn = ConsumerTurn::enter();
+        drop(self.0.take());
+    }
+}
+
 // A waker's clone or drop can register another observer, on this call or a
 // sibling. Allow the original installation and that callback's replacement.
 std::thread_local! {
-    static INSTALLING_WAKER: [RefCell<()>; 2] = const { [RefCell::new(()), RefCell::new(())] };
-    static SIGNALLING_RETRY: RefCell<()> = const { RefCell::new(()) };
+    static WAKER_INSTALL_DEPTH: Cell<u8> = const { Cell::new(0) };
+    static RETRY_WAKER: RefCell<Option<Waker>> = const { RefCell::new(None) };
+}
+
+struct WakerInstallation(u8);
+impl WakerInstallation {
+    fn enter() -> Option<Self> {
+        let depth = WAKER_INSTALL_DEPTH.get();
+        if depth == 2 {
+            return None;
+        }
+        WAKER_INSTALL_DEPTH.set(depth + 1);
+        Some(Self(depth))
+    }
+    fn request_retry(waker: &Waker) -> CoreResult<()> {
+        let busy =
+            || CoreError::Backpressure(ErrorContext::new(ErrorPhase::Delivery, RetryClass::Safe));
+        // Copying or delivering the retry can itself reenter. When its slot
+        // is unavailable, return the retry to the caller without a vtable call.
+        RETRY_WAKER.with(|retry| {
+            let mut slot = retry.try_borrow_mut().map_err(|_| busy())?;
+            match slot.as_ref() {
+                Some(queued) if queued.will_wake(waker) => Ok(()),
+                Some(_) => Err(busy()),
+                None => {
+                    *slot = Some(waker.clone());
+                    Ok(())
+                }
+            }
+        })
+    }
+}
+impl Drop for WakerInstallation {
+    fn drop(&mut self) {
+        WAKER_INSTALL_DEPTH.set(self.0);
+        if self.0 == 0 {
+            // Both installations are free. The notified task can register a
+            // different observer while the Consumer turn still defers native I/O.
+            RETRY_WAKER.with(|retry| {
+                if let Ok(mut slot) = retry.try_borrow_mut()
+                    && let Some(waker) = slot.take()
+                {
+                    waker.wake();
+                }
+            });
+        }
+    }
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
@@ -98,7 +164,7 @@ struct ConsumerObserver {
     copy: Cell<WakerCopy>,
 }
 impl ConsumerObserver {
-    fn register(&self, waker: &Waker) {
+    fn register(&self, waker: &Waker) -> CoreResult<()> {
         if self
             .waker
             .borrow()
@@ -106,38 +172,30 @@ impl ConsumerObserver {
             .is_some_and(|old| old.will_wake(waker))
         {
             self.copy.set(WakerCopy::Idle);
-            return;
+            return Ok(());
         }
-        INSTALLING_WAKER.with(|slots| {
-            let Some(_installing) = slots.iter().find_map(|slot| slot.try_borrow_mut().ok()) else {
-                // Further vtable recursion requests an independent retry. Its
-                // own inline wake cannot recurse into another copy or signal.
-                SIGNALLING_RETRY.with(|signalling| {
-                    if let Ok(_signalling) = signalling.try_borrow_mut() {
-                        waker.wake_by_ref();
-                    }
-                });
-                return;
-            };
-            // Restore idle on unwind from an outer clone. A nested clone
-            // shares its pending signal and may publish the newer observer.
-            let _reset = (self.copy.get() == WakerCopy::Idle).then(|| {
-                self.copy.set(WakerCopy::Copying);
-                ResetWakerCopy(&self.copy)
-            });
-            let next = waker.clone();
-            let copied = self.copy.replace(WakerCopy::Idle);
-            if copied == WakerCopy::Idle {
-                // A newer registration completed inside clone.
-                return;
-            }
-            let old = self.waker.replace(Some(next));
-            // Close or cancellation may have signalled before clone returned.
-            if copied == WakerCopy::Signalled {
-                self.wake();
-            }
-            drop(old);
+        let Some(_installing) = WakerInstallation::enter() else {
+            return WakerInstallation::request_retry(waker);
+        };
+        // Restore idle on unwind from an outer clone. A nested clone
+        // shares its pending signal and may publish the newer observer.
+        let _reset = (self.copy.get() == WakerCopy::Idle).then(|| {
+            self.copy.set(WakerCopy::Copying);
+            ResetWakerCopy(&self.copy)
         });
+        let next = waker.clone();
+        let copied = self.copy.replace(WakerCopy::Idle);
+        if copied == WakerCopy::Idle {
+            // A newer registration completed inside clone.
+            return Ok(());
+        }
+        let old = self.waker.replace(Some(next));
+        // Close or cancellation may have signalled before clone returned.
+        if copied == WakerCopy::Signalled {
+            self.wake();
+        }
+        drop(old);
+        Ok(())
     }
     fn wake(&self) {
         if self.copy.get() == WakerCopy::Copying {

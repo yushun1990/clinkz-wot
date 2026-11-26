@@ -290,8 +290,8 @@ fn main() {
                 let _ = pulse.as_mut().poll(cx);
             }
             let instant = now();
-            calls.step(cx, instant);
-            actions.step(cx, instant, &mut work());
+            calls.step(cx, instant).unwrap();
+            actions.step(cx, instant, &mut work()).unwrap();
             notifications.step(cx, &mut work());
             let idle =
                 calls.is_idle() && actions.is_idle() && notifications.retained_subscriptions() == 0;
@@ -301,7 +301,7 @@ fn main() {
             // Application results/decisions share this Host task with progress.
             if let Some(call) = read.as_mut()
                 && call.is_settled()
-                && let Poll::Ready(result) = call.poll(cx, now())
+                && let Poll::Ready(Ok(result)) = call.poll(cx, now())
             {
                 eprintln!("Property: {:?}", result.result());
                 read = None;

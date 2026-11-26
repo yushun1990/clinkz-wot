@@ -469,7 +469,7 @@ fn missing_credentials_and_wrong_instance_refuse_before_network_and_rotation_fen
         let start = Instant::now();
         loop {
             server.step();
-            client.1.step(&mut cx(), now(0));
+            client.1.step(&mut cx(), now(0)).unwrap();
             if server.server().take_settlement().is_some() {
                 break;
             }
@@ -479,7 +479,7 @@ fn missing_credentials_and_wrong_instance_refuse_before_network_and_rotation_fen
         missing.replace_credentials(None).unwrap();
         let result = loop {
             server.step();
-            if let Poll::Ready(r) = call.poll(&mut cx(), now(0)) {
+            if let Poll::Ready(Ok(r)) = call.poll(&mut cx(), now(0)) {
                 break r;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;
@@ -915,7 +915,7 @@ fn delivery_permission_callback_cannot_revoke_authority_or_publication_and_still
                     &mut work(),
                     now(0),
                 );
-                if let Poll::Ready(result) = call.poll(&mut cx(), now(0)) {
+                if let Poll::Ready(Ok(result)) = call.poll(&mut cx(), now(0)) {
                     break result;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -1130,7 +1130,7 @@ fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fres
         let start = Instant::now();
         while validations.load(Ordering::Acquire) == 0 {
             server.step();
-            client.1.step(&mut cx(), now(0));
+            client.1.step(&mut cx(), now(0)).unwrap();
             assert!(start.elapsed() < Duration::from_secs(5));
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
