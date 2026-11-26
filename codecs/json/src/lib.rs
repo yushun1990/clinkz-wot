@@ -15,6 +15,45 @@ use justjson::{
     parser::{ParseConfig, Parser, Token, Tokenizer},
 };
 
+// The tokenizer has validated escapes and surrogate pairs. Compare escaped
+// names in UTF-16 units so each \uXXXX consumes exactly one unit. justjson
+// 0.3's decoded string comparison maps the short backspace escape to U+0007.
+fn name_matches(token: &JsonString<'_>, name: &str) -> bool {
+    if let Some(plain) = token.as_str() {
+        return plain == name;
+    }
+    let mut encoded = token.as_json_str().expect("escaped JSON token").as_str();
+    let mut expected = name.encode_utf16();
+    while let Some((literal, escape)) = encoded.split_once('\\') {
+        if !literal
+            .encode_utf16()
+            .all(|unit| expected.next() == Some(unit))
+        {
+            return false;
+        }
+        let (unit, tail) = match escape.split_at(1) {
+            ("u", tail) => {
+                let (digits, rest) = tail.split_at(4);
+                (
+                    u16::from_str_radix(digits, 16).expect("validated Unicode escape"),
+                    rest,
+                )
+            }
+            ("b", rest) => (0x08, rest),
+            ("f", rest) => (0x0c, rest),
+            ("n", rest) => (u16::from(b'\n'), rest),
+            ("r", rest) => (u16::from(b'\r'), rest),
+            ("t", rest) => (u16::from(b'\t'), rest),
+            (literal, rest) => (u16::from(literal.as_bytes()[0]), rest),
+        };
+        encoded = tail;
+        if expected.next() != Some(unit) {
+            return false;
+        }
+    }
+    expected.eq(encoded.encode_utf16())
+}
+
 fn member_bit(
     schema: &PropertyCollectionSchema,
     name: &JsonString<'_>,
@@ -23,7 +62,7 @@ fn member_bit(
     let index = schema
         .members()
         .iter()
-        .position(|member| *name == member.name.as_ref())
+        .position(|member| name_matches(name, &member.name))
         .ok_or_else(invalid)?;
     let bit = 1u32 << index;
     if seen & bit != 0 {
@@ -215,7 +254,7 @@ impl<'a> ValueAccess for JsonValues<'a> {
     ) -> Result<Option<Self::Node>, SchemaViolation> {
         let mut found = None;
         fields(node, |key, value| {
-            if key == name && found.replace(value).is_some() {
+            if name_matches(&key, name) && found.replace(value).is_some() {
                 return Err(invalid());
             }
             Ok(())
