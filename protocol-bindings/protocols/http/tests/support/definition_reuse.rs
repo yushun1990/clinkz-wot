@@ -284,7 +284,7 @@ fn compiled_instructions_survive_independent_authority_policy_results_and_retire
         assert!(
             a_client
                 .0
-                .read_all_properties(&a_client.1, Deadline::NONE, now(0), &mut work())
+                .read_all_properties(&a_client.1, Deadline::NONE, now(0))
                 .is_err()
         );
         assert_eq!(a_peer.controls.requests.get(), 0);
@@ -304,27 +304,13 @@ fn compiled_instructions_survive_independent_authority_policy_results_and_retire
         let started = Instant::now();
         while a_peer.app.roots.get() == 0 {
             a_peer.step();
-            assert!(
-                a.poll(
-                    &mut cx(),
-                    now(0),
-                    &mut work().with_remaining(WorkClass::CodecInputBytes, 0)
-                )
-                .is_pending()
-            );
+            let _ = a.progress(&mut cx(), now(0));
             assert!(started.elapsed() < Duration::from_secs(5));
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
         for _ in 0..20 {
             a_peer.step();
-            assert!(
-                a.poll(
-                    &mut cx(),
-                    now(0),
-                    &mut work().with_remaining(WorkClass::CodecInputBytes, 0)
-                )
-                .is_pending()
-            );
+            let _ = a.progress(&mut cx(), now(0));
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
         let a_identity = a_owner.reference();
@@ -746,11 +732,11 @@ fn checked_binding_reuses_method_headers_and_response_discrimination_on_the_wire
             );
             let mut call = client
                 .0
-                .read_property(&client.1, "level", Deadline::NONE, now(0), &mut work())
+                .read_property(&client.1, "level", Deadline::NONE, now(0))
                 .unwrap();
             let started = Instant::now();
             let result = loop {
-                if let Poll::Ready(result) = call.poll(&mut cx(), now(0), &mut work()) {
+                if let Poll::Ready(Ok(result)) = call.poll(&mut cx(), now(0)) {
                     break result;
                 }
                 assert!(started.elapsed() < Duration::from_secs(5));

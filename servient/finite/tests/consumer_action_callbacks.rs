@@ -19,6 +19,7 @@ use std::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Edge {
     Access,
+    AccessDrop,
     Validate,
     Destination,
     Start,
@@ -27,6 +28,7 @@ enum Edge {
     Dispose,
     TokenDrop,
     Wake,
+    WakerClone,
     WakerDrop,
 }
 type Hook = (Edge, Box<dyn FnOnce()>);
@@ -123,6 +125,11 @@ impl ConsumerDataService for Data {
     }
 }
 struct Access;
+impl Drop for Access {
+    fn drop(&mut self) {
+        fire(Edge::AccessDrop);
+    }
+}
 impl ConsumerAccessService for Access {
     fn qualification_revision(&self) -> u64 {
         0
@@ -397,6 +404,32 @@ fn dispose(h: Harness) {
 }
 
 #[test]
+fn last_idle_association_view_disposes_access_without_polling_a_sibling() {
+    let idle = harness(1);
+    let TestClient { association, calls } = Rc::try_unwrap(idle.rt).ok().unwrap();
+    let view = association.clone();
+    let sibling = harness(1);
+    let call = start(&sibling);
+    let rt = sibling.rt.clone();
+    hook(Edge::AccessDrop, move || {
+        assert!(matches!(
+            rt.calls.step(&mut cx(), at(1), &mut work()),
+            Err(CoreError::Lifecycle(_))
+        ))
+    });
+    drop(association);
+    assert!(view.consumer().is_current());
+    drop(view);
+    fired();
+    assert!(calls.is_idle());
+    assert_eq!(sibling.probe.polls.load(Ordering::Relaxed), 0);
+    assert_eq!(progress(&call), ConsumerActionState::Pending);
+    drop((call, calls, idle.owner));
+    clean(&idle.bank);
+    dispose(sibling);
+}
+
+#[test]
 fn admission_callbacks_reserve_capacity_and_observe_close_before_effects() {
     for edge in [Edge::Access, Edge::Validate, Edge::Destination, Edge::Start] {
         let h = harness(1);
@@ -405,9 +438,12 @@ fn admission_callbacks_reserve_capacity_and_observe_close_before_effects() {
             assert!(!rt.calls.is_idle());
             assert!(matches!(
                 invoke(&rt).err().unwrap().error().error(),
-                CoreError::Backpressure(_)
+                CoreError::Lifecycle(_)
             ));
-            rt.calls.step(&mut cx(), at(1), &mut work());
+            assert!(matches!(
+                rt.calls.step(&mut cx(), at(1), &mut work()),
+                Err(CoreError::Lifecycle(_))
+            ));
             rt.calls.begin_close();
         });
         let result = invoke(&h.rt);
@@ -471,11 +507,23 @@ fn progress_callback(edge: Edge) {
     hook(edge, move || {
         assert!(nested.identity().is_ok());
         assert!(!rt.calls.is_idle());
-        assert!(nested.query(at(1), &mut work()).is_err());
-        assert!(nested.take_settlement(at(1), &mut work()).is_err());
+        assert!(matches!(
+            nested.query(at(1), &mut work()),
+            Err(CoreError::Lifecycle(_))
+        ));
+        assert!(matches!(
+            nested.take_settlement(at(1), &mut work()),
+            Err(CoreError::Lifecycle(_))
+        ));
         nested.cancel_local();
-        let _ = nested.progress(&mut cx(), at(1), &mut work());
-        rt.calls.step(&mut cx(), at(1), &mut work());
+        assert!(matches!(
+            nested.progress(&mut cx(), at(1), &mut work()),
+            Err(CoreError::Lifecycle(_))
+        ));
+        assert!(matches!(
+            rt.calls.step(&mut cx(), at(1), &mut work()),
+            Err(CoreError::Lifecycle(_))
+        ));
     });
     progress(&call);
     fired();
@@ -547,24 +595,30 @@ fn abandoned_token_destruction_runs_outside_registry() {
         assert!(rt.calls.is_idle());
         rt.calls.begin_close();
     });
-    h.rt.calls.step(&mut cx(), at(1), &mut work());
+    h.rt.calls.step(&mut cx(), at(1), &mut work()).unwrap();
     fired();
     dispose(h);
 }
 
 #[test]
-fn nested_admission_owns_a_distinct_slot_and_cannot_overwrite_the_outer_invocation() {
+fn callback_admission_returns_its_input_and_the_next_turn_can_use_the_free_slot() {
     let h = harness(2);
     h.probe.complete_invoke.store(true, Ordering::Relaxed);
-    let sibling = Rc::new(RefCell::new(None));
-    let save = sibling.clone();
     let rt = h.rt.clone();
     hook(Edge::Start, move || {
-        *save.borrow_mut() = Some(invoke(&rt).ok().unwrap());
-        rt.calls.step(&mut cx(), at(1), &mut work());
+        let (input, error) = invoke(&rt).err().unwrap().into_parts();
+        assert!(matches!(error.error(), CoreError::Lifecycle(_)));
+        assert_eq!(input.unwrap().body.as_ref(), b"12");
+        assert!(matches!(
+            rt.calls.step(&mut cx(), at(1), &mut work()),
+            Err(CoreError::Lifecycle(_))
+        ));
     });
     let call = start(&h);
-    let sibling = sibling.borrow_mut().take().unwrap();
+    fired();
+    assert_eq!(h.probe.starts.load(Ordering::Relaxed), 1);
+    assert_eq!(h.probe.polls.load(Ordering::Relaxed), 0);
+    let sibling = start(&h);
     assert_ne!(call.identity().unwrap(), sibling.identity().unwrap());
     assert_ne!(
         call.identity().unwrap().sequence(),
@@ -572,6 +626,7 @@ fn nested_admission_owns_a_distinct_slot_and_cannot_overwrite_the_outer_invocati
     );
     assert!(invoke(&h.rt).is_err());
     assert_eq!(progress(&call), ConsumerActionState::Completed);
+    assert_eq!(progress(&sibling), ConsumerActionState::Completed);
     let s = call.take_settlement(at(1), &mut work()).unwrap();
     let other = sibling.take_settlement(at(1), &mut work()).unwrap();
     assert!(s.result().is_ok());
@@ -713,48 +768,108 @@ fn wake_counter() -> (Waker, Arc<AtomicUsize>) {
     (Waker::from(Arc::new(InlineWake(count.clone()))), count)
 }
 
+// The safe Wake adapter clones an Arc internally. A stateless raw waker also
+// lets the fixture exercise a callback from clone itself.
+fn linked_waker() -> Waker {
+    use std::task::{RawWaker, RawWakerVTable};
+    fn raw() -> RawWaker {
+        RawWaker::new(std::ptr::null(), &VTABLE)
+    }
+    static VTABLE: RawWakerVTable = RawWakerVTable::new(
+        |_| {
+            fire(Edge::WakerClone);
+            raw()
+        },
+        |_| fire(Edge::Wake),
+        |_| fire(Edge::Wake),
+        |_| {},
+    );
+    // SAFETY: the vtable is static, ignores its data pointer and uses only
+    // thread-local hooks. Every clone is independently valid on any thread.
+    unsafe { Waker::from_raw(raw()) }
+}
+
 #[test]
-fn synchronous_cancellation_wake_registers_busy_progress_and_retries_after_restoration() {
-    for driver in [false, true] {
+fn close_and_cancellation_during_waker_replacement_reach_the_new_waiter() {
+    for close in [false, true] {
         let h = harness(1);
         h.probe.pending.store(true, Ordering::Relaxed);
         let call = start(&h);
-        let (waker, count) = wake_counter();
-        let nested = call.clone();
-        let rt = h.rt.clone();
-        let retry_waker = waker.clone();
-        hook(Edge::Poll, move || {
-            let on_wake = nested.clone();
-            hook(Edge::Wake, move || {
-                let mut cx = Context::from_waker(&retry_waker);
-                if driver {
-                    rt.calls.step(&mut cx, at(1), &mut work());
-                } else {
-                    assert!(matches!(
-                        on_wake.progress(&mut cx, at(1), &mut work()),
-                        Err(CoreError::Backpressure(_))
-                    ));
-                }
-            });
-            nested.cancel_local();
-        });
-        call.progress(&mut Context::from_waker(&waker), at(1), &mut work())
-            .unwrap();
-        fired();
+        let (old, wakes) = wake_counter();
         assert_eq!(
-            count.load(Ordering::Relaxed),
-            2,
-            "cancellation and restoration retry"
+            call.progress(&mut Context::from_waker(&old), at(1), &mut work())
+                .unwrap(),
+            ConsumerActionState::Invoking
         );
+
+        let cancel = call.clone();
+        let runtime = h.rt.clone();
+        let notified = Rc::new(Cell::new(false));
+        let seen = notified.clone();
+        hook(Edge::WakerClone, move || {
+            if close {
+                runtime.calls.begin_close();
+            } else {
+                cancel.cancel_local();
+            }
+            hook(Edge::Wake, move || seen.set(true));
+        });
+        assert_eq!(
+            call.progress(
+                &mut Context::from_waker(&linked_waker()),
+                at(1),
+                &mut work()
+            )
+            .unwrap(),
+            ConsumerActionState::Closed
+        );
+        fired();
+        assert_eq!(wakes.load(Ordering::Relaxed), 1);
+        assert!(notified.get());
         assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
-        assert_eq!(h.probe.closes.load(Ordering::Relaxed), 1);
-        let s = call.take_settlement(at(1), &mut work()).unwrap();
-        assert!(matches!(s.result(), Err(CoreError::Cancelled(_))));
-        drop(waker);
-        drop(s);
-        drop(call);
+        let result = call.take_settlement(at(1), &mut work()).unwrap();
+        if close {
+            assert!(matches!(
+                result.first_cause(),
+                Some(CoreError::StaleHandle(_))
+            ));
+        } else {
+            assert!(matches!(
+                result.first_cause(),
+                Some(CoreError::Cancelled(_))
+            ));
+        }
+        drop((result, call));
         dispose(h);
     }
+}
+
+#[test]
+fn collected_action_guards_its_continuation_destructor() {
+    let original = harness(1);
+    let call = start(&original);
+    assert_eq!(progress(&call), ConsumerActionState::Pending);
+    call.query(at(1), &mut work()).unwrap();
+    assert_eq!(progress(&call), ConsumerActionState::Completed);
+    let result = call.take_settlement(at(1), &mut work()).unwrap();
+    drop((call, original.rt, original.owner));
+
+    let sibling = harness(1);
+    let next = start(&sibling);
+    let rt = sibling.rt.clone();
+    hook(Edge::TokenDrop, move || {
+        assert!(matches!(
+            rt.calls.step(&mut cx(), at(1), &mut work()),
+            Err(CoreError::Lifecycle(_))
+        ))
+    });
+    drop(result);
+    fired();
+    assert_eq!(sibling.probe.polls.load(Ordering::Relaxed), 0);
+    clean(&original.bank);
+    assert_eq!(progress(&next), ConsumerActionState::Pending);
+    drop(next);
+    dispose(sibling);
 }
 
 #[test]
@@ -765,7 +880,8 @@ fn close_fences_all_siblings_before_inline_wake_and_drop_never_wakes() {
     let b = start(&h);
     let (waker, count) = wake_counter();
     h.rt.calls
-        .step(&mut Context::from_waker(&waker), at(1), &mut work());
+        .step(&mut Context::from_waker(&waker), at(1), &mut work())
+        .unwrap();
     let sibling = b.clone();
     hook(Edge::Wake, move || {
         sibling.cancel_local();
@@ -783,7 +899,7 @@ fn close_fences_all_siblings_before_inline_wake_and_drop_never_wakes() {
     assert_eq!(count.load(Ordering::Relaxed), 2);
     drop(a);
     drop(b);
-    h.rt.calls.step(&mut cx(), at(1), &mut work());
+    h.rt.calls.step(&mut cx(), at(1), &mut work()).unwrap();
     drop(waker);
     dispose(h);
 
@@ -821,7 +937,10 @@ fn replacing_a_registered_waker_may_reenter_and_close_the_checked_out_invocation
     let rt = h.rt.clone();
     hook(Edge::WakerDrop, move || {
         rt.calls.begin_close();
-        rt.calls.step(&mut cx(), at(1), &mut work());
+        assert!(matches!(
+            rt.calls.step(&mut cx(), at(1), &mut work()),
+            Err(CoreError::Lifecycle(_))
+        ));
     });
     assert_eq!(progress(&call), ConsumerActionState::Closed);
     fired();
@@ -857,7 +976,7 @@ fn callback_can_drop_the_original_handle_or_runtime_without_losing_native_owners
             clean(&bank);
         } else {
             hook(Edge::Poll, move || drop(call));
-            h.rt.calls.step(&mut cx(), at(1), &mut work());
+            h.rt.calls.step(&mut cx(), at(1), &mut work()).unwrap();
             assert!(h.rt.calls.is_idle());
             assert_eq!(h.probe.drops.load(Ordering::Relaxed), 1);
             dispose(h);
@@ -867,56 +986,13 @@ fn callback_can_drop_the_original_handle_or_runtime_without_losing_native_owners
 }
 
 #[test]
-fn nested_progress_time_fences_admission_and_unread_handoff_without_false_regression() {
-    for admission in [false, true] {
-        let h = harness(1);
-        h.probe.complete_invoke.store(true, Ordering::Relaxed);
-        if admission {
-            let rt = h.rt.clone();
-            hook(Edge::Access, move || {
-                rt.calls.step(&mut cx(), at(5), &mut work())
-            });
-        }
-        let result = h.rt.calls.invoke_action(
-            &h.rt.association,
-            Some(Payload::new(b"12".as_slice(), "application/json")),
-            Deadline::at(at(5)),
-            at(1),
-            &mut work(),
-        );
-        if admission {
-            assert!(matches!(
-                result.err().unwrap().error().error(),
-                CoreError::TimedOut(_)
-            ));
-            assert_eq!(h.probe.starts.load(Ordering::Relaxed), 0);
-        } else {
-            let call = Rc::new(result.ok().unwrap());
-            let nested = call.clone();
-            hook(Edge::Validate, move || {
-                let _ = nested.progress(&mut cx(), at(5), &mut work());
-            });
-            h.rt.calls.step(&mut cx(), at(1), &mut work());
-            let s = call.take_settlement(at(5), &mut work()).unwrap();
-            assert!(matches!(s.first_cause(), Some(CoreError::TimedOut(_))));
-            assert!(s.native_result().unwrap().is_ok());
-            drop(s);
-            drop(call);
-        }
-        fired();
-        dispose(h);
-    }
+fn independent_action_turns_fence_clock_regressions_and_domain_changes() {
     let h = harness(2);
     let a = start(&h);
     let b = start(&h);
-    let rt = h.rt.clone();
-    hook(Edge::Access, move || {
-        rt.calls.step(&mut cx(), at(2), &mut work())
-    });
-    h.rt.calls.step(&mut cx(), at(1), &mut work());
+    h.rt.calls.step(&mut cx(), at(2), &mut work()).unwrap();
     assert!(a.first_cause().unwrap().is_none());
     assert!(b.first_cause().unwrap().is_none());
-    // A real regression, unlike resuming the outer sweep, is still a fault.
     a.progress(&mut cx(), at(1), &mut work()).unwrap();
     assert!(matches!(
         a.first_cause().unwrap(),
@@ -1117,32 +1193,41 @@ fn selected_query_codec_loss_refuses_before_effects_without_revoking_original_wo
 }
 
 #[test]
-fn native_inline_wake_cannot_repoll_and_preserves_driver_retry_interest() {
+fn native_inline_wake_cannot_repoll_or_advance_the_action_clock() {
     let h = harness(1);
     let call = start(&h);
     h.probe.pending.store(true, Ordering::Relaxed);
     h.probe.wake_in_poll.store(true, Ordering::Relaxed);
     let (waker, count) = wake_counter();
-    let nested_waker = waker.clone();
-    let rt = h.rt.clone();
     let nested = call.clone();
-    let restored = Rc::new(Cell::new(false));
-    let seen = restored.clone();
+    let cloned = Rc::new(Cell::new(false));
+    let seen = cloned.clone();
     hook(Edge::Wake, move || {
-        rt.calls
-            .step(&mut Context::from_waker(&nested_waker), at(1), &mut work());
-        hook(Edge::Wake, move || {
-            // The restoration wake can execute synchronously too. A second
-            // poll is legal only after the original owner has been restored.
-            assert_eq!(progress(&nested), ConsumerActionState::Invoking);
-            seen.set(true);
-        });
+        hook(Edge::WakerClone, move || seen.set(true));
+        let result = nested.progress(
+            &mut Context::from_waker(&linked_waker()),
+            at(9),
+            &mut work(),
+        );
+        assert!(matches!(result, Err(CoreError::Lifecycle(error))
+            if error.phase() == ErrorPhase::Readiness && error.retry_class() == RetryClass::Never));
     });
     call.progress(&mut Context::from_waker(&waker), at(1), &mut work())
         .unwrap();
+    assert!(!cloned.get());
+    assert_eq!(count.load(Ordering::Relaxed), 1);
+    assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
+    assert_eq!(
+        call.progress(
+            &mut Context::from_waker(&linked_waker()),
+            at(1),
+            &mut work()
+        )
+        .unwrap(),
+        ConsumerActionState::Invoking
+    );
+    assert!(cloned.get());
     fired();
-    assert!(restored.get());
-    assert_eq!(count.load(Ordering::Relaxed), 2);
     assert_eq!(h.probe.polls.load(Ordering::Relaxed), 2);
     call.cancel_local();
     progress(&call);
@@ -1354,4 +1439,30 @@ fn selected_control_revision_fences_owned_exchange_and_retains_late_cleanup() {
         drop((call, association, services, settlement));
         dispose(h);
     }
+}
+
+#[path = "support/worker_exit.rs"]
+mod worker_exit;
+
+#[test]
+fn worker_exit_retires_a_parked_action() {
+    worker_exit::check(
+        || {
+            let h = harness(1);
+            h.probe.pending.store(true, Ordering::Relaxed);
+            let call = start(&h);
+            (h, call)
+        },
+        |(_, call)| assert_eq!(progress(call), ConsumerActionState::Invoking),
+        |(h, call)| {
+            call.cancel_local();
+            assert_eq!(progress(&call), ConsumerActionState::Closed);
+            let report = call.take_settlement(at(1), &mut work()).unwrap();
+            assert!(matches!(report.result(), Err(CoreError::Cancelled(_))));
+            assert_eq!(h.probe.closes.load(Ordering::Relaxed), 1);
+            assert_eq!(h.probe.drops.load(Ordering::Relaxed), 1);
+            drop((report, call));
+            dispose(h);
+        },
+    );
 }

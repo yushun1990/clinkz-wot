@@ -285,7 +285,6 @@ fn cleanup_phase() -> CleanupPhaseContext {
             CleanupSlotId::new(SlotIndex::new(59), Generation::INITIAL),
             BindingLifetimeFootprint::new(1, 64),
             1,
-            binding_budget(2),
         ),
         CleanupOperation::CancelRequest,
         CoreError::TimedOut(ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)),
@@ -299,7 +298,6 @@ fn cleanup_phase_with_transfer_owner() -> CleanupPhaseContext {
             CleanupSlotId::new(SlotIndex::new(59), Generation::INITIAL),
             BindingLifetimeFootprint::new(8, 2_048),
             1,
-            binding_budget(2),
         ),
         CleanupSlotId::new(SlotIndex::new(60), Generation::INITIAL),
         CleanupOperation::CancelRequest,
@@ -773,7 +771,6 @@ impl PollClientBinding for StaticClient {
                     CleanupSlotId::new(SlotIndex::new(80), Generation::INITIAL),
                     BindingLifetimeFootprint::new(1, 64),
                     1,
-                    binding_budget(1),
                 ),
                 CleanupSlotId::new(SlotIndex::new(81), Generation::INITIAL),
                 CleanupOperation::CancelRequest,
@@ -843,11 +840,7 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for HostCall {
     fn poll_result(
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
         self.side_effects.fetch_add(1, Ordering::SeqCst);
         Poll::Ready(self.result.take().unwrap())
     }
@@ -856,11 +849,7 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for HostCall {
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
         cleanup: CleanupPhaseContext,
-        budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Ok(StartStatus::Pending);
-        }
         self.side_effects.fetch_add(1, Ordering::SeqCst);
         if matches!(self.mode, HostMode::LateOnCancel) {
             return Ok(StartStatus::Ready(BindingCallSettlement::Returned(
@@ -882,11 +871,7 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for HostCall {
     fn poll_cancel(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
         Poll::Ready(Ok(BindingCallSettlement::Cancelled {
             retry_class: RetryClass::Never,
             disposition: BindingCancellationDisposition::Complete {
@@ -1499,8 +1484,7 @@ fn host_external_authoring_preserves_constructor_and_call_ownership() {
     );
     let mut cx = context();
     assert!(matches!(
-        call.as_pin_mut()
-            .poll_result(&mut cx, &mut binding_budget(1)),
+        call.as_pin_mut().poll_result(&mut cx),
         Poll::Ready(Ok(_))
     ));
     assert_eq!(side_effects.load(Ordering::SeqCst), 1);
@@ -1531,7 +1515,7 @@ fn host_cancellation_has_only_late_return_or_explicit_cleanup_settlement() {
     let mut cx = context();
     assert!(matches!(
         call.as_pin_mut()
-            .start_cancel(&mut cx, cleanup_phase(), &mut binding_budget(1))
+            .start_cancel(&mut cx, cleanup_phase())
             .unwrap(),
         StartStatus::Ready(BindingCallSettlement::Returned(Ok(_)))
     ));
@@ -1546,13 +1530,12 @@ fn host_cancellation_has_only_late_return_or_explicit_cleanup_settlement() {
     let mut call = cancelled.invoke(request(71), &artifact).unwrap();
     assert_eq!(
         call.as_pin_mut()
-            .start_cancel(&mut cx, cleanup_phase(), &mut binding_budget(1))
+            .start_cancel(&mut cx, cleanup_phase())
             .unwrap(),
         StartStatus::Pending
     );
     assert!(matches!(
-        call.as_pin_mut()
-            .poll_cancel(&mut cx, &mut binding_budget(1)),
+        call.as_pin_mut().poll_cancel(&mut cx),
         Poll::Ready(Ok(BindingCallSettlement::Cancelled {
             disposition: BindingCancellationDisposition::Complete { .. },
             ..
@@ -1582,8 +1565,7 @@ fn installed_host_path_seals_normal_failure_and_late_results() {
     assert!(footprint.fits_within(registration.resources().admitted()));
     assert_eq!(side_effects.load(Ordering::SeqCst), 0);
     assert!(matches!(
-        call.as_pin_mut()
-            .poll_result(&mut context(), &mut binding_budget(1)),
+        call.as_pin_mut().poll_result(&mut context()),
         Poll::Ready(Ok(_))
     ));
     assert_eq!(side_effects.load(Ordering::SeqCst), 1);
@@ -1599,8 +1581,7 @@ fn installed_host_path_seals_normal_failure_and_late_results() {
         .start_consumer_property_read(request(72), &artifact)
         .unwrap();
     assert!(matches!(
-        call.as_pin_mut()
-            .poll_result(&mut context(), &mut binding_budget(1)),
+        call.as_pin_mut().poll_result(&mut context()),
         Poll::Ready(Err(CoreError::Binding(_)))
     ));
 
@@ -1616,7 +1597,7 @@ fn installed_host_path_seals_normal_failure_and_late_results() {
         .unwrap();
     assert!(matches!(
         call.as_pin_mut()
-            .start_cancel(&mut context(), cleanup_phase(), &mut binding_budget(1)),
+            .start_cancel(&mut context(), cleanup_phase()),
         Ok(StartStatus::Ready(BindingCallSettlement::Returned(Ok(_))))
     ));
 
@@ -1634,7 +1615,7 @@ fn installed_host_path_seals_normal_failure_and_late_results() {
         .unwrap();
     assert!(matches!(
         call.as_pin_mut()
-            .start_cancel(&mut context(), cleanup_phase(), &mut binding_budget(1),),
+            .start_cancel(&mut context(), cleanup_phase()),
         Ok(StartStatus::Ready(BindingCallSettlement::Returned(Err(
             CoreError::Validation(_)
         ))))
@@ -1670,8 +1651,7 @@ fn installed_host_path_rejects_every_untrusted_output_after_transfer() {
             .start_consumer_property_read(request(74), &artifact)
             .unwrap();
         assert!(matches!(
-            call.as_pin_mut()
-                .poll_result(&mut context(), &mut binding_budget(1)),
+            call.as_pin_mut().poll_result(&mut context()),
             Poll::Ready(Err(CoreError::Validation(_)))
         ));
     }
@@ -1717,9 +1697,7 @@ fn installed_host_rejects_before_acceptance_and_reports_accepted_resource_overru
     assert_eq!(accepted.load(Ordering::SeqCst), 1);
     assert_eq!(side_effects.load(Ordering::SeqCst), 0);
     assert!(matches!(
-        accepted_error
-            .as_pin_mut()
-            .poll_result(&mut context(), &mut binding_budget(1)),
+        accepted_error.as_pin_mut().poll_result(&mut context()),
         Poll::Ready(Err(CoreError::Validation(_)))
     ));
     assert_eq!(side_effects.load(Ordering::SeqCst), 0);
@@ -1745,11 +1723,7 @@ fn host_cleanup_transfer_moves_or_returns_the_complete_sealed_call() {
         ..
     }) = call
         .as_pin_mut()
-        .start_cancel(
-            &mut context(),
-            cleanup_phase_with_transfer_owner(),
-            &mut binding_budget(1),
-        )
+        .start_cancel(&mut context(), cleanup_phase_with_transfer_owner())
         .unwrap()
     else {
         panic!("Host transfer mode returns one provisional transfer request")
@@ -1763,9 +1737,7 @@ fn host_cleanup_transfer_moves_or_returns_the_complete_sealed_call() {
     let (_, mut returned_call) = envelope.into_parts();
     assert_eq!(returned_call.as_pin_mut().lifetime_footprint(), footprint);
     assert!(matches!(
-        returned_call
-            .as_pin_mut()
-            .poll_cancel(&mut context(), &mut binding_budget(1)),
+        returned_call.as_pin_mut().poll_cancel(&mut context()),
         Poll::Ready(Ok(BindingCallSettlement::Cancelled {
             disposition: BindingCancellationDisposition::Complete { .. },
             ..
@@ -1787,11 +1759,7 @@ fn host_cleanup_transfer_moves_or_returns_the_complete_sealed_call() {
         ..
     }) = call
         .as_pin_mut()
-        .start_cancel(
-            &mut context(),
-            cleanup_phase_with_transfer_owner(),
-            &mut binding_budget(1),
-        )
+        .start_cancel(&mut context(), cleanup_phase_with_transfer_owner())
         .unwrap()
     else {
         panic!("Host transfer mode returns one provisional transfer request")
@@ -2492,22 +2460,14 @@ mod consumer_only {
                 let result = if matches!(mode, HostMode::LateOnCancel) {
                     match call
                         .as_pin_mut()
-                        .start_cancel(&mut context(), cleanup_phase(), &mut binding_budget(1))
+                        .start_cancel(&mut context(), cleanup_phase())
                         .unwrap()
                     {
                         StartStatus::Ready(BindingCallSettlement::Returned(r)) => r,
                         _ => panic!("late result stays Returned"),
                     }
                 } else {
-                    assert!(matches!(
-                        call.as_pin_mut()
-                            .poll_result(&mut context(), &mut binding_budget(0)),
-                        Poll::Pending
-                    ));
-                    match call
-                        .as_pin_mut()
-                        .poll_result(&mut context(), &mut binding_budget(1))
-                    {
+                    match call.as_pin_mut().poll_result(&mut context()) {
                         Poll::Ready(r) => r,
                         _ => panic!(),
                     }
@@ -2526,8 +2486,7 @@ mod consumer_only {
         assert_eq!(accepted.load(Ordering::SeqCst), 1);
         assert!(call.as_pin_mut().lifetime_footprint().retained_bytes() > 1);
         assert!(matches!(
-            call.as_pin_mut()
-                .poll_result(&mut context(), &mut binding_budget(1)),
+            call.as_pin_mut().poll_result(&mut context()),
             Poll::Ready(Err(CoreError::Validation(_)))
         ));
         assert_eq!(effects.load(Ordering::SeqCst), 0);
@@ -2539,8 +2498,7 @@ mod consumer_only {
         let (owner, _, _) = host_registration_with(HostMode::Failure, OutputKind::Valid, 2048);
         let mut call = owner.start_finite(request(72), &artifact).unwrap();
         assert!(matches!(
-            call.as_pin_mut()
-                .poll_result(&mut context(), &mut binding_budget(1)),
+            call.as_pin_mut().poll_result(&mut context()),
             Poll::Ready(Err(CoreError::Binding(_)))
         ));
         let (owner, _, _) = host_registration_with(HostMode::Transfer, OutputKind::Valid, 2048);
@@ -2551,11 +2509,7 @@ mod consumer_only {
             ..
         }) = call
             .as_pin_mut()
-            .start_cancel(
-                &mut context(),
-                cleanup_phase_with_transfer_owner(),
-                &mut binding_budget(1),
-            )
+            .start_cancel(&mut context(), cleanup_phase_with_transfer_owner())
             .unwrap()
         else {
             panic!("transfer")
@@ -2568,9 +2522,7 @@ mod consumer_only {
         let mut retained = target.accepted.take().unwrap().into_parts().1;
         assert_eq!(retained.as_pin_mut().lifetime_footprint(), footprint);
         assert!(matches!(
-            retained
-                .as_pin_mut()
-                .poll_cancel(&mut context(), &mut binding_budget(1)),
+            retained.as_pin_mut().poll_cancel(&mut context()),
             Poll::Ready(Ok(BindingCallSettlement::Cancelled { .. }))
         ));
     }
@@ -2580,8 +2532,7 @@ mod consumer_only {
         let (owner, _, _) = host_registration_with(HostMode::Result, OutputKind::Valid, 2048);
         let mut call = owner.start_finite(request(72), &host_artifact(72)).unwrap();
         assert!(matches!(
-            call.as_pin_mut()
-                .poll_result(&mut context(), &mut binding_budget(1)),
+            call.as_pin_mut().poll_result(&mut context()),
             Poll::Ready(Ok(_))
         ));
     }
@@ -2732,13 +2683,7 @@ fn execution_outlives_compiler_with_owned_native_program_and_keeps_result_seal()
     assert_eq!(accepted.load(Ordering::SeqCst), 0);
     let mut call = runtime.start_finite(request(73), &artifact).unwrap();
     assert!(matches!(
-        call.as_pin_mut()
-            .poll_result(&mut context(), &mut binding_budget(0)),
-        Poll::Pending
-    ));
-    assert!(matches!(
-        call.as_pin_mut()
-            .poll_result(&mut context(), &mut binding_budget(1)),
+        call.as_pin_mut().poll_result(&mut context()),
         Poll::Ready(Ok(_))
     ));
     assert_eq!(accepted.load(Ordering::SeqCst), 1);

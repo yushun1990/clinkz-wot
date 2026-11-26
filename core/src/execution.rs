@@ -12,7 +12,6 @@ use crate::{
     data_schema::{PreparedSchema, ValueSchemas},
     security::SecurityRequirement,
 };
-use clinkz_wot_foundation::{WorkBudget, WorkClass as W};
 use core::task::Context;
 use core::task::Poll;
 
@@ -177,126 +176,69 @@ pub trait FiniteCallDriver {
     fn fence(&mut self) -> Option<CoreError>;
     /// Preserve first-cause order, including causes recorded during callbacks.
     fn record(&mut self, error: CoreError);
-    /// Captured complete permission/dependency-check allowance.
-    fn access_work(&self) -> u64;
-    /// Fresh original-instance permission, with dependency/currentness checks
-    /// before and after the linked callback. The kernel prepays access_work.
+    /// Check the original dependencies and live permission for an effect or handoff.
     fn check_current(&mut self) -> CoreResult<()>;
-    /// Exactly one native progress edge. Only isolated BindingPolls credit is
-    /// provided. Some(cause, started) selects cancellation of original work.
-    /// Errors/late outputs must remain owned; cleanup errors do not replace cause.
+    /// One bounded poll on the original exchange or its local cancellation.
+    /// The native owner retains errors and late evidence through physical release.
     fn poll_native(
         &mut self,
         cx: &mut Context<'_>,
         cancel: Option<(&CoreError, bool)>,
-        budget: &mut WorkBudget,
     ) -> NativeProgress;
-    fn has_success(&self) -> bool;
-    /// Validate complete shape/backing and captured media/schema meaning. Short
-    /// credit retains the output. Refusal retains the original rejected output.
-    /// The driver prepays its captured validation allowance before callbacks.
-    fn validate_output(&mut self, budget: &mut WorkBudget) -> Poll<CoreResult<()>>;
 }
 
-/// One common transition kernel for Host and caller-owned finite calls. This
-/// owns semantic progress only; it imposes no owner/layout/dispatch strategy.
+/// Common native and authority transitions. Result backing stays with the
+/// storage owner, which validates the exact value at application handoff.
 #[derive(Default)]
 pub struct FiniteCallState {
     first_cause: Option<CoreError>,
     cancel_started: bool,
-    native_settled: bool,
-    terminal: bool,
-    output_validated: bool,
+    settled: bool,
 }
 impl FiniteCallState {
     pub fn first_cause(&self) -> Option<&CoreError> {
         self.first_cause.as_ref()
     }
+    /// The original native exchange acknowledged a terminal disposition.
     pub fn is_terminal(&self) -> bool {
-        self.terminal
+        self.settled
     }
-    fn fence(&mut self, driver: &mut impl FiniteCallDriver) {
+    pub fn fence(&mut self, driver: &mut impl FiniteCallDriver) {
         if let Some(error) = driver.fence() {
             self.first_cause.get_or_insert(error);
         }
     }
-    /// Ready requires native settlement plus fresh paid policy observations.
-    /// Cancellation, revocation or validation failure cannot erase late output.
-    /// No zero-credit native/codec/permission callback is entered.
-    pub fn step(
-        &mut self,
-        driver: &mut impl FiniteCallDriver,
-        cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
-    ) -> Poll<()> {
+    /// An observed refusal survives later recovery, including while unread.
+    pub fn check_current(&mut self, driver: &mut impl FiniteCallDriver) {
         self.fence(driver);
-        if budget
-            .consume(W::ProviderProbes, driver.access_work())
-            .is_err()
-        {
-            return Poll::Pending;
-        }
-        if let Err(error) = driver.check_current() {
-            driver.record(error);
-        }
-        self.fence(driver);
-        if self.terminal || self.output_validated {
-            self.terminal = true;
-            return Poll::Ready(());
-        }
-        if !self.native_settled {
-            if budget.consume(W::HandlerSteps, 1).is_err() {
-                return Poll::Pending;
+        if self.first_cause.is_none() {
+            if let Err(error) = driver.check_current() {
+                driver.record(error);
             }
-            if self.first_cause.is_some() && budget.consume(W::CleanupItems, 1).is_err() {
-                return Poll::Pending;
-            }
-            if budget.consume(W::BindingPolls, 1).is_err() {
-                return Poll::Pending;
-            }
-            let mut native = WorkBudget::new().with_remaining(W::BindingPolls, 1);
+            self.fence(driver);
+        }
+    }
+    /// Manually driven. Retry on native readiness or an independent maintenance
+    /// turn (including cancellation, a cleanup failure or a deadline).
+    pub fn step(&mut self, driver: &mut impl FiniteCallDriver, cx: &mut Context<'_>) -> Poll<()> {
+        self.check_current(driver);
+        if !self.settled {
             let cancel = self
                 .first_cause
                 .as_ref()
                 .map(|cause| (cause, self.cancel_started));
-            match driver.poll_native(cx, cancel, &mut native) {
+            match driver.poll_native(cx, cancel) {
                 NativeProgress::Pending => {}
                 NativeProgress::Cancelling => self.cancel_started = true,
-                NativeProgress::Settled => self.native_settled = true,
+                NativeProgress::Settled => self.settled = true,
             }
-            budget.set_remaining(
-                W::BindingPolls,
-                budget.remaining(W::BindingPolls) + native.remaining(W::BindingPolls),
-            );
+            self.fence(driver);
         }
-        self.fence(driver);
-        if !self.native_settled {
-            return Poll::Pending;
+        if self.settled {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
         }
-        if driver.has_success() {
-            match driver.validate_output(budget) {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(Ok(())) => self.output_validated = true,
-                Poll::Ready(Err(error)) => driver.record(error),
-            }
-        }
-        self.fence(driver);
-        // Native and codec callbacks may have changed live policy. Short credit
-        // retains validation and the whole output for a later fresh handoff.
-        if self.first_cause.is_none() && driver.has_success() {
-            if budget
-                .consume(W::ProviderProbes, driver.access_work())
-                .is_err()
-            {
-                return Poll::Pending;
-            }
-            if let Err(error) = driver.check_current() {
-                driver.record(error);
-            }
-        }
-        self.fence(driver);
-        self.terminal = true;
-        Poll::Ready(())
     }
 }
 
@@ -313,6 +255,7 @@ pub trait ValueValidator {
     fn content_type(&self) -> &str;
     fn supports(&self, schema: &PreparedSchema) -> bool;
     fn body_bytes(&self) -> usize;
+    /// Consumed by the continuing Action driver during its credit-based migration.
     fn work(&self) -> u64;
     fn available(&self) -> bool {
         true

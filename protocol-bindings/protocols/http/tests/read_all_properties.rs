@@ -43,12 +43,12 @@ fn engine_read_all_uses_one_root_request_and_keeps_individual_operations_distinc
         // occupancy. An accepted Property exchange still excludes another root.
         let mut single = client
             .0
-            .read_property(&client.1, "level", Deadline::NONE, now(0), &mut work())
+            .read_property(&client.1, "level", Deadline::NONE, now(0))
             .unwrap();
         assert!(
             client
                 .0
-                .read_all_properties(&client.1, Deadline::NONE, now(0), &mut work())
+                .read_all_properties(&client.1, Deadline::NONE, now(0))
                 .is_err()
         );
         drop(result);
@@ -174,7 +174,7 @@ fn consumer_validates_independent_native_response_against_captured_member_schema
             let client = client(description(addr), Arc::new(AtomicBool::new(false)), accounts.clone(), &owner);
             let mut call = start_read(&client); let start = Instant::now();
             let result = loop {
-                if let Poll::Ready(result) = call.poll(&mut cx(), now(0), &mut work()) { break result; }
+                if let Poll::Ready(Ok(result)) = call.poll(&mut cx(), now(0)) { break result; }
                 assert!(start.elapsed() < Duration::from_secs(5));
                 tokio::time::sleep(Duration::from_millis(1)).await;
             };
@@ -246,7 +246,7 @@ fn consumer_root_selection_requires_actual_form_binding_services_and_complete_sc
             assert!(
                 client
                     .0
-                    .read_all_properties(&client.1, Deadline::NONE, now(0), &mut work())
+                    .read_all_properties(&client.1, Deadline::NONE, now(0))
                     .is_err()
             );
             drop(client);
@@ -733,7 +733,7 @@ fn captured_collection_service_is_required_and_freshly_checked_after_validation(
         assert!(
             client
                 .0
-                .read_all_properties(&client.1, Deadline::NONE, now(0), &mut work())
+                .read_all_properties(&client.1, Deadline::NONE, now(0))
                 .is_err()
         );
         drop(local);
@@ -776,16 +776,6 @@ fn preparation_saturation_and_unpaid_member_traversal_preserve_all_owners_withou
             &owner,
         );
         let before = ResourceKind::ALL.map(|k| accounts.account(k).used());
-        assert!(
-            client
-                .0
-                .read_all_properties(&client.1, Deadline::NONE, now(0), &mut WorkBudget::new())
-                .is_err()
-        );
-        assert_eq!(
-            before,
-            ResourceKind::ALL.map(|k| accounts.account(k).used())
-        );
         let a = accounts.account(ResourceKind::EngineLiveBytesGlobalMax);
         let saturated = accounts
             .reserve(ResourceKind::EngineLiveBytesGlobalMax, a.limit() - a.used())
@@ -793,7 +783,7 @@ fn preparation_saturation_and_unpaid_member_traversal_preserve_all_owners_withou
         assert!(
             client
                 .0
-                .read_all_properties(&client.1, Deadline::NONE, now(0), &mut work())
+                .read_all_properties(&client.1, Deadline::NONE, now(0))
                 .is_err()
         );
         drop(saturated);
@@ -807,7 +797,7 @@ fn preparation_saturation_and_unpaid_member_traversal_preserve_all_owners_withou
         let start = Instant::now();
         while server.server().state() != RawFiniteState::Dispatching {
             server.step();
-            assert!(call.poll(&mut cx(), now(0), &mut work()).is_pending());
+            assert!(call.poll(&mut cx(), now(0)).is_pending());
             assert!(start.elapsed() < Duration::from_secs(5));
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
@@ -831,14 +821,7 @@ fn preparation_saturation_and_unpaid_member_traversal_preserve_all_owners_withou
         // captured validation allowance; small credits do not invoke it piecemeal.
         for _ in 0..20 {
             server.step();
-            assert!(
-                call.poll(
-                    &mut cx(),
-                    now(0),
-                    &mut work().with_remaining(WorkClass::CodecInputBytes, 0)
-                )
-                .is_pending()
-            );
+            let _ = call.progress(&mut cx(), now(0));
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
         assert_eq!(server.controls.requests.get(), 1);

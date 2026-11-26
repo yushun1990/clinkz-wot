@@ -29,6 +29,7 @@ pub fn reply(body: &str, media: &str, headers: &str) -> String {
 pub struct Step {
     pub path: String,
     pub response: String,
+    pub reply_after: Option<oneshot::Receiver<()>>,
     credentials: Option<(&'static str, &'static str)>,
 }
 impl Step {
@@ -36,6 +37,7 @@ impl Step {
         Self {
             path: path.into(),
             response,
+            reply_after: None,
             credentials: None,
         }
     }
@@ -130,6 +132,9 @@ async fn exchange<S: AsyncRead + AsyncWrite + Unpin>(
     });
     requests.lock().unwrap().push(request);
     received.add_permits(1);
+    if let Some(release) = step.reply_after {
+        release.await.unwrap();
+    }
     let response = if authenticated {
         step.response.as_bytes()
     } else {

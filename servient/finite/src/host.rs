@@ -7,8 +7,6 @@
 pub mod consumer;
 #[path = "consumer_action.rs"]
 pub mod consumer_action;
-#[path = "consumer_execution.rs"]
-pub mod consumer_execution;
 #[path = "consumer_notification.rs"]
 pub mod consumer_notification;
 #[path = "notification.rs"]
@@ -47,10 +45,105 @@ use clinkz_wot_core::{
 };
 use clinkz_wot_foundation::{MonotonicInstant, WorkBudget, WorkClass};
 use core::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     mem::size_of,
-    task::{Context, Poll},
+    task::{Context, Poll, Waker},
 };
+
+mod consumer_turn {
+    use super::{Cell, CoreError, CoreResult, ErrorContext, ErrorPhase, Rc, RetryClass};
+    use core::marker::PhantomData;
+
+    std::thread_local! { static DRIVING: Cell<bool> = const { Cell::new(false) }; }
+
+    /// Exclusive execution across the Host Consumer owners reachable on this thread.
+    pub(super) struct ConsumerTurn(PhantomData<Rc<()>>);
+
+    impl ConsumerTurn {
+        pub(super) fn enter() -> CoreResult<Self> {
+            Self::scope().ok_or_else(|| {
+                CoreError::Lifecycle(ErrorContext::new(ErrorPhase::Readiness, RetryClass::Never))
+            })
+        }
+
+        /// Keep linked wake and disposal callbacks inside the current turn,
+        /// opening a scope when the application closes or drops an idle owner.
+        pub(super) fn scope() -> Option<Self> {
+            if DRIVING.replace(true) {
+                None
+            } else {
+                Some(Self(PhantomData))
+            }
+        }
+    }
+
+    impl Drop for ConsumerTurn {
+        fn drop(&mut self) {
+            DRIVING.set(false);
+        }
+    }
+}
+use consumer_turn::ConsumerTurn;
+
+/// A Host-held owner whose final release can call linked code. Field drop
+/// order inside the value (including funding) is preserved under the turn.
+struct ConsumerOwned<T>(Option<T>);
+impl<T> ConsumerOwned<T> {
+    fn new(value: T) -> Self {
+        Self(Some(value))
+    }
+}
+impl<T> core::ops::Deref for ConsumerOwned<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        self.0.as_ref().expect("live Consumer owner")
+    }
+}
+impl<T> Drop for ConsumerOwned<T> {
+    fn drop(&mut self) {
+        let _turn = ConsumerTurn::scope();
+        drop(self.0.take());
+    }
+}
+
+/// Only the executing owner installs a waiter. Close and cancellation can
+/// still signal the original call from the incoming waker's clone callback.
+#[derive(Default)]
+struct ConsumerObserver {
+    waker: RefCell<Option<Waker>>,
+    notified: Cell<bool>,
+}
+impl ConsumerObserver {
+    fn register(&self, waker: &Waker) {
+        if self
+            .waker
+            .borrow()
+            .as_ref()
+            .is_some_and(|old| old.will_wake(waker))
+        {
+            return;
+        }
+        self.notified.set(false);
+        let next = waker.clone();
+        let old = self.waker.replace(Some(next));
+        if self.notified.get() {
+            self.wake();
+        }
+        drop(old);
+    }
+    fn wake(&self) {
+        self.notified.set(true);
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+    }
+}
+impl Drop for ConsumerObserver {
+    fn drop(&mut self) {
+        let _turn = ConsumerTurn::scope();
+        drop(self.waker.get_mut().take());
+    }
+}
 
 // Bounded atomic lookup envelope for this manually driven Host facet. The
 // registry is externally built before native setup; larger applications need

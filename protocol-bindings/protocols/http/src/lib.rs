@@ -6,6 +6,7 @@
 //! continuing Action POST/GET/DELETE through distinct preparation and manually
 //! progressed Servient ownership. See README.md for exact mapping/profile limits.
 use clinkz_wot_core::*;
+#[cfg(any(feature = "prepare", test))]
 use clinkz_wot_foundation::*;
 use std::{
     future::Future,
@@ -241,8 +242,8 @@ struct Call {
     handle: tokio::runtime::Handle,
     future: Option<Exchange>,
     allowance: Arc<AtomicUsize>,
-    // Only this exchange's occupancy. Retained results keep the Call and its
-    // funding, but must neither occupy nor later unlock a successor exchange.
+    // Take the original occupancy once at settlement or local disposal. A
+    // later drop cannot unlock a successor using the same endpoint.
     busy: Option<Arc<AtomicBool>>,
 }
 impl Drop for Call {
@@ -494,11 +495,7 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
     fn poll_result(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
         if let Some(grant) = self
             .request
             .as_ref()
@@ -586,21 +583,13 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
         _: CleanupPhaseContext,
-        budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Ok(StartStatus::Pending);
-        }
         Ok(StartStatus::Ready(self.cancelled()))
     }
     fn poll_cancel(
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
         Poll::Ready(Ok(self.cancelled()))
     }
 }

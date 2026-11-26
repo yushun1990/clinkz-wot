@@ -18,22 +18,25 @@ supplies exact decimal numeric evidence to Core's existing schema evaluator.
 This is ownership and execution evidence, not a production Binding mapping or
 an Embedded socket implementation.
 
-The executable cases cover:
+The executable cases cover these ownership and execution boundaries.
 
-- paid native progress and codec/handoff yields, with no callback on short credit;
-- terminal unread success checked against fresh policy without decoding again;
+- one native poll per turn across sibling runtimes sharing a caller drive cell,
+  including explicit refusal to drive a UDP Read during destruction of an active call or taken output
+- fresh permission for unread results and validation of the exact view returned,
+  including a native value that changes between views
 - actual native identity/status/role/media/payload-bound and DataSchema refusals,
   retaining the original invalid output;
-- cancellation, failed/pending cleanup and a validated racing native value;
+- cancellation and failed or pending cleanup with a racing raw native value
 - same-slot replacement/foreign issuer and reused-call token rejection;
 - callback-time policy revision changes and authority revocation;
 - loss of the original validation service without invoking an unavailable codec;
 - monotonic deadline expiry, clock mismatch/regression and first-cause retention;
 - configuration, unsupported schema/security, capacity and permission refusal
   before native construction;
-- result views tied to settlement lifetime, original caller lease reuse/refund,
-  native socket retention through result ownership, acknowledged local cleanup
-  and finite local disposal without a false acknowledgement.
+- result views tied to settlement lifetime, exclusive typed storage through final
+  disposal, refused competing admission and reuse on release
+- socket reuse at acknowledgement while the result is held, and finite local
+  disposal of unacknowledged work.
 
 Reproduce from the repository root:
 

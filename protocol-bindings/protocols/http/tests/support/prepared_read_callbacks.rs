@@ -1,7 +1,7 @@
 use super::*;
 
 fn bound(h: &Harness) -> ConsumerPropertyRead {
-    h.rt.0.bind_property_read("level", &mut work()).unwrap()
+    h.rt.0.bind_property_read("level").unwrap()
 }
 
 #[test]
@@ -12,13 +12,7 @@ fn repeated_bound_reads_need_no_lookup_qualification_or_fixed_resolution() {
     assert_eq!(h.probe.resolutions.load(Ordering::Relaxed), 1);
     h.probe.qualifications.store(0, Ordering::Relaxed);
     for _ in 0..3 {
-        // One native construction credit, no mapping/name planning credit.
-        let mut budget = work()
-            .with_remaining(WorkClass::PlanningItems, 0)
-            .with_remaining(WorkClass::BindingPolls, 1);
-        let mut call = read
-            .read(&h.rt.1, Deadline::NONE, now(), &mut budget)
-            .unwrap();
+        let mut call = read.read(&h.rt.1, Deadline::NONE, now()).unwrap();
         let result = settle(&mut call);
         assert_eq!(result.result().unwrap().data().unwrap().body, b"7");
         let original = h.probe.resolved_destination.load(Ordering::Relaxed);
@@ -48,9 +42,7 @@ fn fixed_destination_keeps_its_original_bank_across_independent_call_capacity() 
         .used();
     let work_bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let calls = ConsumerCalls::try_new(work_bank.clone(), 1).unwrap();
-    let mut call = read
-        .read(&calls, Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call = read.read(&calls, Deadline::NONE, now()).unwrap();
     assert_eq!(
         original
             .account(ResourceKind::EngineLiveBytesGlobalMax)
@@ -80,19 +72,9 @@ fn fixed_destination_keeps_its_original_bank_across_independent_call_capacity() 
 }
 
 #[test]
-fn binding_refuses_short_credit_funding_and_reentrant_removal_without_leaks() {
+fn binding_refuses_exhausted_backing_and_reentrant_removal_without_leaks() {
     let h = harness(1, None);
     let baseline = usage(&h.bank);
-    assert!(
-        h.rt.0
-            .bind_property_read(
-                "level",
-                &mut work().with_remaining(WorkClass::BindingPolls, 0)
-            )
-            .is_err()
-    );
-    assert_eq!(h.probe.resolutions.load(Ordering::Relaxed), 0);
-    assert_eq!(usage(&h.bank), baseline);
     let account = h.bank.account(ResourceKind::EngineLiveBytesGlobalMax);
     let pressure = h
         .bank
@@ -101,7 +83,7 @@ fn binding_refuses_short_credit_funding_and_reentrant_removal_without_leaks() {
             account.limit() - account.used(),
         )
         .unwrap();
-    assert!(h.rt.0.bind_property_read("level", &mut work()).is_err());
+    assert!(h.rt.0.bind_property_read("level").is_err());
     assert_eq!(h.probe.resolutions.load(Ordering::Relaxed), 0);
     drop(pressure);
     assert_eq!(usage(&h.bank), baseline);
@@ -117,7 +99,7 @@ fn binding_refuses_short_credit_funding_and_reentrant_removal_without_leaks() {
         )
         .unwrap();
     let pressured = usage(&h.bank);
-    assert!(h.rt.0.bind_property_read("level", &mut work()).is_err());
+    assert!(h.rt.0.bind_property_read("level").is_err());
     assert_eq!(usage(&h.bank), pressured);
     assert_eq!(h.probe.resolutions.load(Ordering::Relaxed), 0);
     drop(pressure);
@@ -125,7 +107,7 @@ fn binding_refuses_short_credit_funding_and_reentrant_removal_without_leaks() {
     let association = h.rt.clone();
     hook(Edge::Resolve, move || association.0.begin_close());
     assert!(matches!(
-        h.rt.0.bind_property_read("level", &mut work()),
+        h.rt.0.bind_property_read("level"),
         Err(CoreError::StaleHandle(_))
     ));
     assert_eq!(h.probe.starts.load(Ordering::Relaxed), 0);
@@ -152,7 +134,7 @@ fn original_revisions_and_bounds_fence_admission_progress_and_unread_handoff() {
                 "bounds" => probe.changed_bounds.store(true, Ordering::Release),
                 _ => unreachable!(),
             });
-            match read.read(&h.rt.1, Deadline::NONE, now(), &mut work()) {
+            match read.read(&h.rt.1, Deadline::NONE, now()) {
                 Err(_) => assert_eq!(h.probe.starts.load(Ordering::Relaxed), 0),
                 Ok(mut call) => {
                     let result = settle(&mut call);
@@ -161,7 +143,7 @@ fn original_revisions_and_bounds_fence_admission_progress_and_unread_handoff() {
                 }
             }
             // A new handle cannot bless the old definition's changed baseline.
-            assert!(h.rt.0.bind_property_read("level", &mut work()).is_err());
+            assert!(h.rt.0.bind_property_read("level").is_err());
             drop(read);
             dispose(h);
         }
@@ -173,10 +155,8 @@ fn unread_bound_result_rechecks_original_qualification_after_policy_callback() {
     for dependency in ["data", "native", "access"] {
         let h = harness(1, None);
         let read = bound(&h);
-        let mut call = read
-            .read(&h.rt.1, Deadline::NONE, now(), &mut work())
-            .unwrap();
-        h.rt.1.step(&mut cx(), now(), &mut work());
+        let mut call = read.read(&h.rt.1, Deadline::NONE, now()).unwrap();
+        h.rt.1.step(&mut cx(), now()).unwrap();
         assert_eq!(h.probe.validations.load(Ordering::Relaxed), 1);
         let probe = h.probe.clone();
         hook(Edge::Access, move || {
@@ -207,28 +187,24 @@ fn configuration_replacement_cannot_retarget_an_old_bound_read() {
     let (original, original_probe) =
         association_harness(1, None, bank.clone(), instance.consumer());
     let (original, calls) = Rc::try_unwrap(original).ok().unwrap();
-    let read = original.bind_property_read("level", &mut work()).unwrap();
+    let read = original.bind_property_read("level").unwrap();
     drop(
         owner
             .set_configuration("urn:bound", "default", original, &mut work())
             .unwrap_or_else(|_| panic!()),
     );
-    let mut call = read
-        .read(&calls, Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call = read.read(&calls, Deadline::NONE, now()).unwrap();
     let (replacement, replacement_probe) =
         association_harness(1, None, bank.clone(), instance.consumer());
     let (replacement, other_calls) = Rc::try_unwrap(replacement).ok().unwrap();
-    let next = replacement
-        .bind_property_read("level", &mut work())
-        .unwrap();
+    let next = replacement.bind_property_read("level").unwrap();
     drop(
         owner
             .set_configuration("urn:bound", "default", replacement, &mut work())
             .unwrap_or_else(|_| panic!()),
     );
     assert!(matches!(
-        read.read(&calls, Deadline::NONE, now(), &mut work()),
+        read.read(&calls, Deadline::NONE, now()),
         Err(CoreError::StaleHandle(_))
     ));
     let result = settle(&mut call);
@@ -238,16 +214,11 @@ fn configuration_replacement_cannot_retarget_an_old_bound_read() {
         original_probe.resolved_destination.load(Ordering::Relaxed)
     );
     assert_eq!(original_probe.polls.load(Ordering::Relaxed), 0);
-    let mut next_call = next
-        .read(&other_calls, Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut next_call = next.read(&other_calls, Deadline::NONE, now()).unwrap();
     assert!(settle(&mut next_call).result().is_ok());
     assert_eq!(replacement_probe.polls.load(Ordering::Relaxed), 1);
     owner.remove_thing("urn:bound", &mut work()).unwrap();
-    assert!(
-        next.read(&other_calls, Deadline::NONE, now(), &mut work())
-            .is_err()
-    );
+    assert!(next.read(&other_calls, Deadline::NONE, now()).is_err());
     drop((
         result,
         call,
@@ -268,9 +239,7 @@ fn bound_handle_drop_is_passive_and_close_retains_original_late_result() {
     let read = bound(&h);
     drop(read);
     let read = bound(&h);
-    let mut call = read
-        .read(&h.rt.1, Deadline::NONE, now(), &mut work())
-        .unwrap();
+    let mut call = read.read(&h.rt.1, Deadline::NONE, now()).unwrap();
     drop(read);
     let association = h.rt.clone();
     hook(Edge::Validate, move || association.0.begin_close());

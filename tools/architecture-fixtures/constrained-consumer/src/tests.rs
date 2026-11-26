@@ -1,9 +1,9 @@
 use super::*;
 use clinkz_wot_core::{ThingSlotId, data_schema::ValueSchemas, security::SecurityRequirement};
-use clinkz_wot_foundation::{
-    ClockId, Generation, MonotonicInstant, ResourceAccount, ResourceKind, SlotIndex,
+use clinkz_wot_foundation::{ClockId, Generation, MonotonicInstant, SlotIndex};
+use clinkz_wot_servient_finite::borrowed_consumer::{
+    ReadDefinition, ReadResultSlot, ReadRuntime, ReadSettlement,
 };
-use clinkz_wot_servient_finite::borrowed_consumer::{ReadDefinition, ReadRuntime, ReadSettlement};
 use std::{
     cell::RefCell,
     net::{SocketAddr, UdpSocket},
@@ -26,23 +26,8 @@ static PROGRAM: Program<'static> = Program {
 fn now(t: u64) -> MonotonicInstant {
     MonotonicInstant::new(ClockId::new(1), t)
 }
-fn budget() -> WorkBudget {
-    let mut b = WorkBudget::new();
-    for class in WorkClass::ALL {
-        b.set_remaining(class, 1000);
-    }
-    b
-}
 fn authority() -> LocalConsumerInstance {
     LocalConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL))
-}
-fn account() -> ResourceAccount {
-    ResourceAccount::new(
-        SlotIndex::new(1),
-        Generation::INITIAL,
-        ResourceKind::EngineLiveBytesGlobalMax,
-        100_000,
-    )
 }
 fn meaning() -> ValueExecution<'static> {
     ValueExecution::try_new(
@@ -123,7 +108,7 @@ fn completed<'a, B: ReadBinding>(
 }
 
 #[test]
-fn native_read_short_work_unread_result_and_exact_final_release() {
+fn native_read_bounded_turn_unread_result_and_exact_final_release() {
     let peer = Peer::new();
     let open = || peer.open();
     let stats = Statistics::default();
@@ -136,47 +121,23 @@ fn native_read_short_work_unread_result_and_exact_final_release() {
     let d = definition(&b, &codec);
     let instance = authority();
     let access = Permission::default();
-    let mut bank = account();
-    let mut runtime = ReadRuntime::bind(instance.reference(), &d, &access, &mut budget()).unwrap();
-    let lease = bank.try_reserve(runtime.required_bytes().unwrap()).unwrap();
-    let handle = runtime
-        .read(lease, Deadline::NONE, now(0), &mut budget())
-        .unwrap();
+    let driving = RefCell::new(());
+    let result = ReadResultSlot::new();
+    let mut runtime = ReadRuntime::bind(&driving, instance.reference(), &d, &access).unwrap();
+    let handle = runtime.read(&result, Deadline::NONE, now(0)).unwrap();
     let mut cx = Context::from_waker(core::task::Waker::noop());
-    assert!(
-        runtime
-            .poll(handle, &mut cx, now(1), &mut WorkBudget::new())
-            .is_pending()
-    );
+    // A nested drive names the same manual loop and cannot enter a native callback.
+    let outer = driving.borrow_mut();
+    assert!(matches!(
+        runtime.poll(handle, &mut cx, now(9)),
+        Poll::Ready(Err(CoreError::Lifecycle(_)))
+    ));
     assert_eq!(stats.polls.get(), 0);
-    assert!(
-        runtime
-            .poll(handle, &mut cx, now(1), &mut budget())
-            .is_pending()
-    );
+    drop(outer);
+    assert!(runtime.poll(handle, &mut cx, now(1)).is_pending());
     peer.respond(0, b"42e0");
-    let mut short = budget();
-    short.set_remaining(WorkClass::CodecInputBytes, 31);
-    assert!(
-        runtime
-            .poll(handle, &mut cx, now(2), &mut short)
-            .is_pending()
-    );
+    let mut s = completed(runtime.poll(handle, &mut cx, now(3)));
     assert_eq!(codec.validations.get(), 0);
-    assert_eq!(stats.calls_dropped.get(), 0);
-    // Validation succeeds, but final authorization must wait for fresh credit.
-    let mut handoff = budget();
-    handoff.set_remaining(WorkClass::ProviderProbes, 1);
-    assert!(
-        runtime
-            .poll(handle, &mut cx, now(2), &mut handoff)
-            .is_pending()
-    );
-    assert_eq!(codec.validations.get(), 1);
-    peer.assert_open();
-    let mut resume = budget();
-    resume.set_remaining(WorkClass::CodecInputBytes, 0);
-    let s = completed(runtime.poll(handle, &mut cx, now(3), &mut resume));
     assert_eq!(s.result().unwrap().data().unwrap().body, b"42e0");
     assert_eq!(
         s.result()
@@ -196,17 +157,93 @@ fn native_read_short_work_unread_result_and_exact_final_release() {
         Err(CoreError::StaleHandle(_))
     ));
     drop(runtime);
-    peer.assert_open();
+    peer.assert_released();
     assert_eq!(stats.outputs_dropped.get(), 0);
     drop(s);
     peer.assert_released();
     assert_eq!(stats.calls_dropped.get(), 1);
     assert_eq!(stats.outputs_dropped.get(), 1);
-    assert_eq!(bank.used(), 0);
 }
 
 #[test]
-fn cancellation_keeps_failed_cleanup_and_validated_late_output_without_replay() {
+fn validation_lends_the_checked_view_and_refuses_a_sibling_native_drive() {
+    let driving = RefCell::new(());
+    let authority = authority();
+    let access = Permission::default();
+    let peer = Peer::new();
+    let sibling_peer = Peer::new();
+    let open = || peer.open();
+    let sibling_open = || sibling_peer.open();
+    let stats = Statistics::default();
+    let sibling_stats = Statistics::default();
+    let binding = TestBinding {
+        open: &open,
+        stats: &stats,
+        configuration: 7,
+    };
+    let sibling_binding = TestBinding {
+        open: &sibling_open,
+        stats: &sibling_stats,
+        configuration: 7,
+    };
+    let sibling_codec = NumberCodec::ready();
+    let sibling_definition = definition(&sibling_binding, &sibling_codec);
+    let sibling_slot = ReadResultSlot::new();
+    let sibling = RefCell::new(
+        ReadRuntime::bind(
+            &driving,
+            authority.reference(),
+            &sibling_definition,
+            &access,
+        )
+        .unwrap(),
+    );
+    let sibling_handle = sibling
+        .borrow_mut()
+        .read(&sibling_slot, Deadline::NONE, now(0))
+        .unwrap();
+    let nested = || {
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        assert!(matches!(
+            sibling.borrow_mut().step(&mut cx, now(9)),
+            Poll::Ready(Err(CoreError::Lifecycle(_)))
+        ));
+        assert_eq!(sibling_stats.polls.get(), 0);
+    };
+    let codec = NumberCodec {
+        callback: Some(&nested),
+        ..NumberCodec::ready()
+    };
+    let definition = definition(&binding, &codec);
+    let slot = ReadResultSlot::default();
+    let mut outer =
+        ReadRuntime::bind(&driving, authority.reference(), &definition, &access).unwrap();
+    let handle = outer.read(&slot, Deadline::NONE, now(0)).unwrap();
+    let mut cx = Context::from_waker(core::task::Waker::noop());
+    assert!(outer.step(&mut cx, now(1)).is_pending());
+    peer.respond(7, b"42");
+    let mut settlement = completed(outer.poll(handle, &mut cx, now(2)));
+    assert_eq!(settlement.result().unwrap().data().unwrap().body, b"42");
+    assert_eq!(
+        settlement
+            .native_output()
+            .unwrap()
+            .unwrap()
+            .data()
+            .unwrap()
+            .body,
+        b"999"
+    );
+    peer.assert_released();
+    assert!(sibling.borrow_mut().step(&mut cx, now(3)).is_pending());
+    sibling_peer.respond(0, b"9");
+    let mut result = completed(sibling.borrow_mut().poll(sibling_handle, &mut cx, now(4)));
+    assert_eq!(result.result().unwrap().data().unwrap().body, b"9");
+    sibling_peer.assert_released();
+}
+
+#[test]
+fn cancellation_keeps_failed_cleanup_and_raw_late_output_without_replay() {
     let peer = Peer::new();
     let open = || peer.open();
     let stats = Statistics::default();
@@ -221,36 +258,37 @@ fn cancellation_keeps_failed_cleanup_and_validated_late_output_without_replay() 
     let d = definition(&b, &codec);
     let instance = authority();
     let access = Permission::default();
-    let mut bank = account();
-    let mut runtime = ReadRuntime::bind(instance.reference(), &d, &access, &mut budget()).unwrap();
-    let lease = bank.try_reserve(runtime.required_bytes().unwrap()).unwrap();
-    let h = runtime
-        .read(lease, Deadline::NONE, now(0), &mut budget())
-        .unwrap();
+    let driving = RefCell::new(());
+    let result = ReadResultSlot::new();
+    let mut runtime = ReadRuntime::bind(&driving, instance.reference(), &d, &access).unwrap();
+    let h = runtime.read(&result, Deadline::NONE, now(0)).unwrap();
     let mut cx = Context::from_waker(core::task::Waker::noop());
-    assert!(runtime.poll(h, &mut cx, now(1), &mut budget()).is_pending());
+    assert!(runtime.poll(h, &mut cx, now(1)).is_pending());
     runtime.cancel(h).unwrap();
     instance.revoke();
-    let mut short = budget();
-    short.set_remaining(WorkClass::CleanupItems, 0);
-    assert!(runtime.poll(h, &mut cx, now(1), &mut short).is_pending());
+    codec.available.set(false);
+    access.denied.set(true);
+    let checks = access.checks.get();
     assert_eq!(stats.cancel_starts.get(), 0);
-    assert!(runtime.poll(h, &mut cx, now(1), &mut budget()).is_pending());
-    assert!(runtime.poll(h, &mut cx, now(1), &mut budget()).is_pending());
+    assert!(runtime.poll(h, &mut cx, now(1)).is_pending());
+    assert!(runtime.poll(h, &mut cx, now(1)).is_pending());
     peer.assert_open();
     peer.respond(0, b"42");
-    let s = completed(runtime.poll(h, &mut cx, now(2), &mut budget()));
+    let mut s = completed(runtime.poll(h, &mut cx, now(2)));
     assert!(matches!(s.result(), Err(CoreError::Cancelled(_))));
     assert!(matches!(s.cleanup_error(), Some(CoreError::Binding(_))));
-    assert_eq!(s.native_output().unwrap().data().unwrap().body, b"42");
-    assert_eq!(codec.validations.get(), 1);
+    assert_eq!(
+        s.native_output().unwrap().unwrap().data().unwrap().body,
+        b"42"
+    );
+    assert_eq!(codec.validations.get(), 0);
+    assert_eq!(access.checks.get(), checks);
     assert_eq!(stats.starts.get(), 1);
     assert_eq!(stats.cancel_starts.get(), 1);
     assert_eq!(stats.cancel_polls.get(), 2);
     drop(runtime);
     drop(s);
     peer.assert_released();
-    assert_eq!(bank.used(), 0);
     assert_eq!(stats.outputs_dropped.get(), 1);
 }
 
@@ -280,30 +318,26 @@ fn every_untrusted_shape_media_bound_and_schema_failure_retains_original_output(
         let d = definition(&b, &codec);
         let instance = authority();
         let access = Permission::default();
-        let mut bank = account();
-        let mut runtime =
-            ReadRuntime::bind(instance.reference(), &d, &access, &mut budget()).unwrap();
-        let lease = bank.try_reserve(runtime.required_bytes().unwrap()).unwrap();
-        let h = runtime
-            .read(lease, Deadline::NONE, now(0), &mut budget())
-            .unwrap();
+        let driving = RefCell::new(());
+        let result = ReadResultSlot::new();
+        let mut runtime = ReadRuntime::bind(&driving, instance.reference(), &d, &access).unwrap();
+        let h = runtime.read(&result, Deadline::NONE, now(0)).unwrap();
         let mut cx = Context::from_waker(core::task::Waker::noop());
-        assert!(runtime.poll(h, &mut cx, now(1), &mut budget()).is_pending());
+        assert!(runtime.poll(h, &mut cx, now(1)).is_pending());
         peer.respond(flags, body);
-        let s = completed(runtime.poll(h, &mut cx, now(2), &mut budget()));
+        let mut s = completed(runtime.poll(h, &mut cx, now(2)));
         assert!(s.result().is_err());
-        let original = s.native_output().unwrap();
+        let original = s.native_output().unwrap().unwrap();
         assert_eq!(
             original.data().map(|p| p.body),
             (flags != 4).then_some(body)
         );
         assert_eq!(codec.validations.get(), calls);
-        peer.assert_open();
+        peer.assert_released();
         drop(runtime);
         drop(s);
         peer.assert_released();
         assert_eq!(stats.outputs_dropped.get(), 1);
-        assert_eq!(bank.used(), 0);
     }
 }
 
@@ -322,50 +356,48 @@ fn same_slot_foreign_authority_and_reused_call_tokens_cannot_redirect_work() {
     let old = authority();
     let replacement = authority();
     let access = Permission::default();
-    let mut original_bank = account();
-    let mut replacement_bank = account();
-    let mut next_bank = account();
-    let mut a = ReadRuntime::bind(old.reference(), &d, &access, &mut budget()).unwrap();
-    let mut z = ReadRuntime::bind(replacement.reference(), &d, &access, &mut budget()).unwrap();
-    let lease = original_bank
-        .try_reserve(a.required_bytes().unwrap())
-        .unwrap();
-    let h = a
-        .read(lease, Deadline::NONE, now(0), &mut budget())
-        .unwrap();
-    let lease = replacement_bank
-        .try_reserve(z.required_bytes().unwrap())
-        .unwrap();
-    let k = z
-        .read(lease, Deadline::NONE, now(0), &mut budget())
-        .unwrap();
+    let driving = RefCell::new(());
+    let original = ReadResultSlot::new();
+    let replacement_result = ReadResultSlot::new();
+    let next_result = ReadResultSlot::new();
+    let mut a = ReadRuntime::bind(&driving, old.reference(), &d, &access).unwrap();
+    let mut z = ReadRuntime::bind(&driving, replacement.reference(), &d, &access).unwrap();
+    let h = a.read(&original, Deadline::NONE, now(0)).unwrap();
+    let k = z.read(&replacement_result, Deadline::NONE, now(0)).unwrap();
     assert!(matches!(z.cancel(h), Err(CoreError::StaleHandle(_))));
     let mut cx = Context::from_waker(core::task::Waker::noop());
     old.revoke();
-    assert!(a.poll(h, &mut cx, now(1), &mut budget()).is_pending());
-    let cancelled = completed(a.poll(h, &mut cx, now(1), &mut budget()));
+    assert!(a.poll(h, &mut cx, now(1)).is_pending());
+    let mut cancelled = completed(a.poll(h, &mut cx, now(1)));
     assert!(matches!(cancelled.result(), Err(CoreError::StaleHandle(_))));
-    assert!(z.poll(k, &mut cx, now(1), &mut budget()).is_pending());
+    assert!(z.poll(k, &mut cx, now(1)).is_pending());
     peer.respond(0, b"42");
-    let s = completed(z.poll(k, &mut cx, now(1), &mut budget()));
+    let mut s = completed(z.poll(k, &mut cx, now(1)));
     assert!(s.result().is_ok());
-    let lease = next_bank.try_reserve(z.required_bytes().unwrap()).unwrap();
-    let next = z
-        .read(lease, Deadline::NONE, now(2), &mut budget())
-        .unwrap();
+    let next = z.read(&next_result, Deadline::NONE, now(2)).unwrap();
+    let polls = stats.polls.get();
+    {
+        let _turn = driving.borrow_mut();
+        for handle in [next, k] {
+            assert!(
+                matches!(z.poll(handle, &mut cx, now(9)), Poll::Ready(Err(CoreError::Lifecycle(e))) if e.phase() == ErrorPhase::Readiness)
+            );
+        }
+    }
+    assert_eq!(stats.polls.get(), polls);
     assert!(matches!(z.cancel(k), Err(CoreError::StaleHandle(_))));
     assert!(matches!(
-        z.poll(k, &mut cx, now(2), &mut budget()),
+        z.poll(k, &mut cx, now(2)),
         Poll::Ready(Err(CoreError::StaleHandle(_)))
     ));
-    z.cancel(next).unwrap();
+    assert!(z.poll(next, &mut cx, now(2)).is_pending());
+    peer.respond(0, b"9");
+    let mut result = completed(z.poll(next, &mut cx, now(3)));
+    assert_eq!(result.result().unwrap().data().unwrap().body, b"9");
     drop(a);
     drop(z);
     drop(cancelled);
     drop(s);
-    assert_eq!(original_bank.used(), 0);
-    assert_eq!(replacement_bank.used(), 0);
-    assert_eq!(next_bank.used(), 0);
     assert_eq!(stats.starts.get(), 3);
     assert_eq!(stats.calls_dropped.get(), 3);
 }
@@ -384,29 +416,24 @@ fn unread_success_rechecks_live_permission_without_redecoding() {
     let d = definition(&b, &codec);
     let instance = authority();
     let access = Permission::default();
-    let mut bank = account();
-    let mut runtime = ReadRuntime::bind(instance.reference(), &d, &access, &mut budget()).unwrap();
-    let lease = bank.try_reserve(runtime.required_bytes().unwrap()).unwrap();
-    let h = runtime
-        .read(lease, Deadline::NONE, now(0), &mut budget())
-        .unwrap();
+    let driving = RefCell::new(());
+    let result = ReadResultSlot::new();
+    let mut runtime = ReadRuntime::bind(&driving, instance.reference(), &d, &access).unwrap();
+    let h = runtime.read(&result, Deadline::NONE, now(0)).unwrap();
     let mut cx = Context::from_waker(core::task::Waker::noop());
-    assert!(runtime.step(&mut cx, now(1), &mut budget()).is_pending());
+    assert!(runtime.step(&mut cx, now(1)).is_pending());
     peer.respond(0, b"42");
-    assert!(runtime.step(&mut cx, now(2), &mut budget()).is_ready());
+    assert!(matches!(runtime.step(&mut cx, now(2)), Poll::Ready(Ok(()))));
     access.denied.set(true);
-    assert!(
-        runtime
-            .poll(h, &mut cx, now(2), &mut WorkBudget::new())
-            .is_pending()
-    );
-    let s = completed(runtime.poll(h, &mut cx, now(2), &mut budget()));
+    let mut s = completed(runtime.poll(h, &mut cx, now(2)));
     assert!(matches!(s.result(), Err(CoreError::Security { .. })));
-    assert_eq!(s.native_output().unwrap().data().unwrap().body, b"42");
-    assert_eq!(codec.validations.get(), 1);
+    assert_eq!(
+        s.native_output().unwrap().unwrap().data().unwrap().body,
+        b"42"
+    );
+    assert_eq!(codec.validations.get(), 0);
     drop(runtime);
     drop(s);
-    assert_eq!(bank.used(), 0);
 }
 
 #[test]
@@ -420,7 +447,7 @@ fn callback_revocation_and_policy_rotation_fence_before_io_and_after_validation(
         configuration: 7,
     };
     let instance = authority();
-    let mut bank = account();
+    let driving = RefCell::new(());
     let invalidate = || instance.revoke();
     let codec = NumberCodec {
         callback: Some(&invalidate),
@@ -428,36 +455,30 @@ fn callback_revocation_and_policy_rotation_fence_before_io_and_after_validation(
     };
     let d = definition(&b, &codec);
     let access = Permission::default();
+    let result = ReadResultSlot::new();
     // Changing an actual service during permission cannot qualify itself.
     access.rotate_on_check.set(true);
-    assert!(ReadRuntime::bind(instance.reference(), &d, &access, &mut budget()).is_err());
+    assert!(ReadRuntime::bind(&driving, instance.reference(), &d, &access).is_err());
     assert_eq!(stats.starts.get(), 0);
-    let mut runtime = ReadRuntime::bind(instance.reference(), &d, &access, &mut budget()).unwrap();
+    let mut runtime = ReadRuntime::bind(&driving, instance.reference(), &d, &access).unwrap();
     access.rotate_on_check.set(true);
-    let lease = bank.try_reserve(runtime.required_bytes().unwrap()).unwrap();
-    let (lease, error) = runtime
-        .read(lease, Deadline::NONE, now(0), &mut budget())
-        .err()
-        .unwrap();
+    let error = runtime.read(&result, Deadline::NONE, now(0)).err().unwrap();
     assert!(matches!(error, CoreError::Validation(_)));
-    drop(lease);
     drop(runtime);
     assert_eq!(stats.starts.get(), 0);
-    assert_eq!(bank.used(), 0);
-    let mut runtime = ReadRuntime::bind(instance.reference(), &d, &access, &mut budget()).unwrap();
-    let lease = bank.try_reserve(runtime.required_bytes().unwrap()).unwrap();
-    let h = runtime
-        .read(lease, Deadline::NONE, now(0), &mut budget())
-        .unwrap();
+    let mut runtime = ReadRuntime::bind(&driving, instance.reference(), &d, &access).unwrap();
+    let h = runtime.read(&result, Deadline::NONE, now(0)).unwrap();
     let mut cx = Context::from_waker(core::task::Waker::noop());
-    assert!(runtime.poll(h, &mut cx, now(1), &mut budget()).is_pending());
+    assert!(runtime.poll(h, &mut cx, now(1)).is_pending());
     peer.respond(0, b"42");
-    let s = completed(runtime.poll(h, &mut cx, now(2), &mut budget()));
+    let mut s = completed(runtime.poll(h, &mut cx, now(2)));
     assert!(matches!(s.result(), Err(CoreError::StaleHandle(_))));
-    assert_eq!(s.native_output().unwrap().data().unwrap().body, b"42");
+    assert_eq!(
+        s.native_output().unwrap().unwrap().data().unwrap().body,
+        b"42"
+    );
     drop(runtime);
     drop(s);
-    assert_eq!(bank.used(), 0);
 }
 
 #[test]
@@ -475,22 +496,17 @@ fn time_fencing_and_cleanup_acknowledgement_preserve_first_cause() {
         let d = definition(&b, &codec);
         let instance = authority();
         let access = Permission::default();
-        let mut bank = account();
-        let mut runtime =
-            ReadRuntime::bind(instance.reference(), &d, &access, &mut budget()).unwrap();
-        let lease = bank.try_reserve(runtime.required_bytes().unwrap()).unwrap();
+        let driving = RefCell::new(());
+        let result = ReadResultSlot::new();
+        let mut runtime = ReadRuntime::bind(&driving, instance.reference(), &d, &access).unwrap();
         let h = runtime
-            .read(lease, Deadline::at(now(10)), now(1), &mut budget())
+            .read(&result, Deadline::at(now(10)), now(1))
             .unwrap();
         let mut cx = Context::from_waker(core::task::Waker::noop());
-        assert!(runtime.poll(h, &mut cx, now(2), &mut budget()).is_pending());
-        assert!(
-            runtime
-                .poll(h, &mut cx, observation, &mut budget())
-                .is_pending()
-        );
+        assert!(runtime.poll(h, &mut cx, now(2)).is_pending());
+        assert!(runtime.poll(h, &mut cx, observation).is_pending());
         runtime.cancel(h).unwrap(); // Cannot overwrite time fencing.
-        let s = completed(runtime.poll(h, &mut cx, now(11), &mut budget()));
+        let mut s = completed(runtime.poll(h, &mut cx, now(11)));
         if observation == now(10) {
             assert!(matches!(s.result(), Err(CoreError::TimedOut(_))));
         } else {
@@ -500,7 +516,6 @@ fn time_fencing_and_cleanup_acknowledgement_preserve_first_cause() {
         peer.assert_released();
         drop(runtime);
         drop(s);
-        assert_eq!(bank.used(), 0);
     }
 }
 
@@ -551,28 +566,19 @@ fn capacity_pairing_required_meaning_and_permission_refuse_without_native_effect
     let d = definition(&b, &codec);
     let instance = authority();
     let access = Permission::default();
-    let mut bank = account();
-    let mut denied_bank = account();
-    let mut runtime = ReadRuntime::bind(instance.reference(), &d, &access, &mut budget()).unwrap();
-    let lease = bank.try_reserve(1).unwrap();
-    let (lease, _) = runtime
-        .read(lease, Deadline::NONE, now(0), &mut budget())
-        .err()
-        .unwrap();
-    drop(lease);
+    let driving = RefCell::new(());
+    let result = ReadResultSlot::new();
+    let mut runtime = ReadRuntime::bind(&driving, instance.reference(), &d, &access).unwrap();
+    let occupied = driving.borrow_mut();
+    assert!(matches!(
+        runtime.read(&result, Deadline::NONE, now(0)),
+        Err(CoreError::Lifecycle(_))
+    ));
+    drop(occupied);
     access.denied.set(true);
-    let lease = denied_bank
-        .try_reserve(runtime.required_bytes().unwrap())
-        .unwrap();
-    let (lease, error) = runtime
-        .read(lease, Deadline::NONE, now(0), &mut budget())
-        .err()
-        .unwrap();
-    drop(lease);
+    let error = runtime.read(&result, Deadline::NONE, now(0)).err().unwrap();
     assert!(matches!(error, CoreError::Security { .. }));
     drop(runtime);
-    assert_eq!(bank.used(), 0);
-    assert_eq!(denied_bank.used(), 0);
     assert_eq!(stats.starts.get(), 0);
 }
 
@@ -590,22 +596,83 @@ fn last_owner_drop_disposes_native_io_locally_without_claiming_cleanup_ack() {
     let d = definition(&b, &codec);
     let instance = authority();
     let access = Permission::default();
-    let mut bank = account();
-    let mut runtime = ReadRuntime::bind(instance.reference(), &d, &access, &mut budget()).unwrap();
-    let lease = bank.try_reserve(runtime.required_bytes().unwrap()).unwrap();
-    let _lost = runtime
-        .read(lease, Deadline::NONE, now(0), &mut budget())
-        .unwrap();
+    let driving = RefCell::new(());
+    let result = ReadResultSlot::new();
+    let mut runtime = ReadRuntime::bind(&driving, instance.reference(), &d, &access).unwrap();
+    let _lost = runtime.read(&result, Deadline::NONE, now(0)).unwrap();
     peer.assert_open();
     drop(runtime);
     peer.assert_released();
     assert_eq!(stats.calls_dropped.get(), 1);
     assert_eq!(stats.cleanup_acks.get(), 0);
-    assert_eq!(bank.used(), 0);
 }
 
 #[test]
-fn complete_caller_reservation_can_be_reused_after_disposing_original_result() {
+fn dropping_active_or_taken_work_refuses_a_sibling_datagram() {
+    for (taken, in_turn) in [(false, false), (true, false), (false, true), (true, true)] {
+        let driving = RefCell::new(());
+        let issuer = authority();
+        let access = Permission::default();
+        let codec = NumberCodec::ready();
+        let sibling_peer = Peer::new();
+        let open_sibling = || sibling_peer.open();
+        let sibling_stats = Statistics::default();
+        let sibling_binding = TestBinding {
+            open: &open_sibling,
+            stats: &sibling_stats,
+            configuration: 7,
+        };
+        let sibling_definition = definition(&sibling_binding, &codec);
+        let sibling_slot = ReadResultSlot::new();
+        let sibling = RefCell::new(
+            ReadRuntime::bind(&driving, issuer.reference(), &sibling_definition, &access).unwrap(),
+        );
+        let sibling_handle = sibling
+            .borrow_mut()
+            .read(&sibling_slot, Deadline::NONE, now(0))
+            .unwrap();
+        let callback = || {
+            let mut cx = Context::from_waker(core::task::Waker::noop());
+            assert!(matches!(
+                sibling.borrow_mut().step(&mut cx, now(9)),
+                Poll::Ready(Err(CoreError::Lifecycle(_)))
+            ));
+        };
+        let peer = Peer::new();
+        let open = || peer.open();
+        let stats = Statistics::default();
+        let binding = TestBinding {
+            open: &open,
+            stats: &stats,
+            configuration: 7,
+        };
+        let definition = definition(&binding, &codec);
+        let slot = ReadResultSlot::new();
+        let mut runtime =
+            ReadRuntime::bind(&driving, issuer.reference(), &definition, &access).unwrap();
+        let handle = runtime.read(&slot, Deadline::NONE, now(0)).unwrap();
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        assert!(runtime.step(&mut cx, now(1)).is_pending());
+        let settlement = taken.then(|| {
+            peer.respond(0, b"42");
+            completed(runtime.poll(handle, &mut cx, now(1)))
+        });
+        let outer_turn = in_turn.then(|| driving.borrow_mut());
+        stats.on_drop.set(Some(&callback));
+        drop((runtime, settlement));
+        drop(outer_turn);
+        assert!(stats.on_drop.get().is_none());
+        assert_eq!(sibling_stats.polls.get(), 0, "native I/O inside disposal");
+        peer.assert_released();
+        assert!(sibling.borrow_mut().step(&mut cx, now(2)).is_pending());
+        sibling_peer.respond(0, b"9");
+        let mut result = completed(sibling.borrow_mut().poll(sibling_handle, &mut cx, now(2)));
+        assert_eq!(result.result().unwrap().data().unwrap().body, b"9");
+    }
+}
+
+#[test]
+fn held_result_excludes_the_same_backing_until_disposal() {
     let peer = Peer::new();
     let open = || peer.open();
     let stats = Statistics::default();
@@ -618,39 +685,31 @@ fn complete_caller_reservation_can_be_reused_after_disposing_original_result() {
     let d = definition(&b, &codec);
     let instance = authority();
     let access = Permission::default();
-    let mut bank = account();
-    let mut runtime = ReadRuntime::bind(instance.reference(), &d, &access, &mut budget()).unwrap();
-    let bytes = runtime.required_bytes().unwrap();
-    let lease = bank.try_reserve(bytes).unwrap();
-    let h = runtime
-        .read(lease, Deadline::NONE, now(0), &mut budget())
-        .unwrap();
+    let driving = RefCell::new(());
+    let result = ReadResultSlot::new();
+    let mut runtime = ReadRuntime::bind(&driving, instance.reference(), &d, &access).unwrap();
+    let h = runtime.read(&result, Deadline::NONE, now(0)).unwrap();
     let mut cx = Context::from_waker(core::task::Waker::noop());
-    assert!(runtime.poll(h, &mut cx, now(1), &mut budget()).is_pending());
+    assert!(runtime.poll(h, &mut cx, now(1)).is_pending());
     peer.respond(0, b"42");
-    let s = completed(runtime.poll(h, &mut cx, now(1), &mut budget()));
-    let lease = s.into_funding();
-    assert_eq!(lease.bytes(), bytes);
-    assert_eq!(stats.outputs_dropped.get(), 1);
+    let mut s = completed(runtime.poll(h, &mut cx, now(1)));
+    assert!(matches!(
+        runtime.read(&result, Deadline::NONE, now(2)),
+        Err(CoreError::Backpressure(_))
+    ));
+    assert_eq!(s.result().unwrap().data().unwrap().body, b"42");
     peer.assert_released();
-    // Refusal returns the unchanged lease too: unpaid start creates no socket.
-    let (lease, _) = runtime
-        .read(lease, Deadline::NONE, now(2), &mut WorkBudget::new())
-        .err()
-        .unwrap();
-    assert_eq!(lease.bytes(), bytes);
     assert_eq!(stats.starts.get(), 1);
-    let k = runtime
-        .read(lease, Deadline::NONE, now(2), &mut budget())
-        .unwrap();
+    drop(s);
+    assert_eq!(stats.outputs_dropped.get(), 1);
+    let k = runtime.read(&result, Deadline::NONE, now(2)).unwrap();
     assert!(matches!(runtime.cancel(h), Err(CoreError::StaleHandle(_))));
     runtime.begin_close();
-    assert!(runtime.poll(k, &mut cx, now(3), &mut budget()).is_pending());
-    let s = completed(runtime.poll(k, &mut cx, now(3), &mut budget()));
+    assert!(runtime.poll(k, &mut cx, now(3)).is_pending());
+    let mut s = completed(runtime.poll(k, &mut cx, now(3)));
     assert!(matches!(s.result(), Err(CoreError::StaleHandle(_))));
     drop(runtime);
     drop(s);
-    assert_eq!(bank.used(), 0);
     assert_eq!(stats.starts.get(), 2);
     assert_eq!(stats.calls_dropped.get(), 2);
 }
@@ -670,24 +729,24 @@ fn unavailable_original_validator_retains_late_data_without_entering_callback() 
     let d = definition(&b, &codec);
     let instance = authority();
     let access = Permission::default();
-    let mut bank = account();
-    let mut runtime = ReadRuntime::bind(instance.reference(), &d, &access, &mut budget()).unwrap();
-    let lease = bank.try_reserve(runtime.required_bytes().unwrap()).unwrap();
-    let h = runtime
-        .read(lease, Deadline::NONE, now(0), &mut budget())
-        .unwrap();
+    let driving = RefCell::new(());
+    let result = ReadResultSlot::new();
+    let mut runtime = ReadRuntime::bind(&driving, instance.reference(), &d, &access).unwrap();
+    let h = runtime.read(&result, Deadline::NONE, now(0)).unwrap();
     let mut cx = Context::from_waker(core::task::Waker::noop());
-    assert!(runtime.poll(h, &mut cx, now(1), &mut budget()).is_pending());
+    assert!(runtime.poll(h, &mut cx, now(1)).is_pending());
     codec.available.set(false);
-    assert!(runtime.poll(h, &mut cx, now(1), &mut budget()).is_pending());
+    assert!(runtime.poll(h, &mut cx, now(1)).is_pending());
     peer.respond(0, b"42");
-    let s = completed(runtime.poll(h, &mut cx, now(2), &mut budget()));
+    let mut s = completed(runtime.poll(h, &mut cx, now(2)));
     assert!(matches!(s.result(), Err(CoreError::Validation(_))));
-    assert_eq!(s.native_output().unwrap().data().unwrap().body, b"42");
+    assert_eq!(
+        s.native_output().unwrap().unwrap().data().unwrap().body,
+        b"42"
+    );
     assert_eq!(codec.validations.get(), 0);
     drop(runtime);
     drop(s);
-    assert_eq!(bank.used(), 0);
 }
 
 #[test]
@@ -707,22 +766,19 @@ fn native_construction_cannot_grant_progress_after_callback_revocation() {
     let codec = NumberCodec::ready();
     let d = definition(&b, &codec);
     let access = Permission::default();
-    let mut bank = account();
-    let mut runtime = ReadRuntime::bind(instance.reference(), &d, &access, &mut budget()).unwrap();
-    let lease = bank.try_reserve(runtime.required_bytes().unwrap()).unwrap();
-    let h = runtime
-        .read(lease, Deadline::NONE, now(0), &mut budget())
-        .unwrap();
+    let driving = RefCell::new(());
+    let result = ReadResultSlot::new();
+    let mut runtime = ReadRuntime::bind(&driving, instance.reference(), &d, &access).unwrap();
+    let h = runtime.read(&result, Deadline::NONE, now(0)).unwrap();
     let mut cx = Context::from_waker(core::task::Waker::noop());
-    assert!(runtime.poll(h, &mut cx, now(1), &mut budget()).is_pending());
+    assert!(runtime.poll(h, &mut cx, now(1)).is_pending());
     assert_eq!(stats.polls.get(), 0);
-    let s = completed(runtime.poll(h, &mut cx, now(1), &mut budget()));
+    let mut s = completed(runtime.poll(h, &mut cx, now(1)));
     assert!(matches!(s.result(), Err(CoreError::StaleHandle(_))));
     assert_eq!(stats.cleanup_acks.get(), 1);
     peer.assert_released();
     drop(runtime);
     drop(s);
-    assert_eq!(bank.used(), 0);
 }
 
 #[cfg(feature = "host-meaning")]
@@ -755,20 +811,17 @@ fn modern_host_prepared_content_lends_identical_meaning_to_caller_owned_executio
     let d = ReadDefinition::try_new(shared, &b, &PROGRAM, 7, &codec).unwrap();
     let instance = authority();
     let access = Permission::default();
-    let mut bank = account();
-    let mut runtime = ReadRuntime::bind(instance.reference(), &d, &access, &mut budget()).unwrap();
-    let lease = bank.try_reserve(runtime.required_bytes().unwrap()).unwrap();
-    let h = runtime
-        .read(lease, Deadline::NONE, now(0), &mut budget())
-        .unwrap();
+    let driving = RefCell::new(());
+    let result = ReadResultSlot::new();
+    let mut runtime = ReadRuntime::bind(&driving, instance.reference(), &d, &access).unwrap();
+    let h = runtime.read(&result, Deadline::NONE, now(0)).unwrap();
     let mut cx = Context::from_waker(core::task::Waker::noop());
-    assert!(runtime.poll(h, &mut cx, now(1), &mut budget()).is_pending());
+    assert!(runtime.poll(h, &mut cx, now(1)).is_pending());
     peer.respond(0, b"42");
-    let s = completed(runtime.poll(h, &mut cx, now(1), &mut budget()));
+    let mut s = completed(runtime.poll(h, &mut cx, now(1)));
     assert_eq!(s.result().unwrap().data().unwrap().body, b"42");
     drop(runtime);
     drop(s);
-    assert_eq!(bank.used(), 0);
 }
 
 #[test]

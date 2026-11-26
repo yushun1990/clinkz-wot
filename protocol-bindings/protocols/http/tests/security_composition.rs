@@ -475,14 +475,7 @@ fn conjunction_write_preserves_effects_when_a_required_verifier_is_revoked_befor
             );
             let mut call = client
                 .0
-                .write_property(
-                    &client.1,
-                    "on",
-                    payload(b"42"),
-                    Deadline::NONE,
-                    now(0),
-                    &mut work(),
-                )
+                .write_property(&client.1, "on", payload(b"42"), Deadline::NONE, now(0))
                 .unwrap_or_else(|e| panic!("{:?}", e.error()));
             if revoked {
                 until(&mut server, &mut call, RawFiniteState::Delivering).await;
@@ -548,7 +541,7 @@ fn api_key_rotation_cancellation_and_shared_meaning_keep_original_instance_fundi
         assert!(
             client_a
                 .0
-                .read_property(&client_a.1, "on", Deadline::NONE, now(0), &mut work())
+                .read_property(&client_a.1, "on", Deadline::NONE, now(0))
                 .is_err()
         );
         drop(server.server().take_settlement());

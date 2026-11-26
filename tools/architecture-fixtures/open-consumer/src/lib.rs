@@ -162,10 +162,7 @@ impl Drop for Call {
     }
 }
 impl Call {
-    fn result(&mut self, budget: &mut WorkBudget) -> Poll<CoreResult<InteractionOutput>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
+    fn result(&mut self) -> Poll<CoreResult<InteractionOutput>> {
         if self.socket.is_none() {
             self.probe.native.fetch_add(1, Ordering::Relaxed);
             let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -226,17 +223,11 @@ impl Call {
             _ => Poll::Ready(Err(invalid())),
         }
     }
-    fn cancel(
-        &mut self,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
+    fn cancel(&mut self) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
         if self.probe.late_on_cancel.load(Ordering::Relaxed) {
             return self
-                .result(budget)
+                .result()
                 .map(|r| Ok(BindingCallSettlement::Returned(r)));
-        }
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
         }
         if self.probe.fail_close.load(Ordering::Relaxed) {
             return Poll::Ready(Err(invalid()));
@@ -275,15 +266,13 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
     fn poll_result(
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
-        self.result(budget)
+        self.result()
     }
     fn start_cancel(
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
         _: CleanupPhaseContext,
-        budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
         if self.probe.transfer_once.swap(false, Ordering::Relaxed) {
             let request = CleanupPhaseContext::bind_with_transfer_owner(
@@ -294,7 +283,6 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
                     ),
                     self.lifetime_footprint(),
                     0,
-                    WorkBudget::new(),
                 ),
                 CleanupSlotId::new(
                     clinkz_wot_foundation::SlotIndex::new(2),
@@ -311,7 +299,7 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
                 disposition: BindingCancellationDisposition::TransferRequired(request),
             }));
         }
-        match self.cancel(budget) {
+        match self.cancel() {
             Poll::Pending => Ok(StartStatus::Pending),
             Poll::Ready(result) => result.map(StartStatus::Ready),
         }
@@ -319,9 +307,8 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
     fn poll_cancel(
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        self.cancel(budget)
+        self.cancel()
     }
 }
 pub fn execution(id: u16, probe: Arc<Probe>) -> HostConsumerBindingRegistration {
@@ -390,7 +377,8 @@ impl ConsumerDataService for Data {
         if data.content_type != "application/json"
             || data.content_coding.is_some()
             || integer.is_none()
-            || !schema.is_type_only() || !schema.accepts_kind(data_schema::ValueType::Integer)
+            || !schema.is_type_only()
+            || !schema.accepts_kind(data_schema::ValueType::Integer)
         {
             return Err(invalid());
         }
@@ -529,9 +517,15 @@ pub mod prepare {
         }
     }
     fn artifact_bytes(operation: Operation) -> u64 {
-        if operation==Operation::WriteMultipleProperties {
-            (std::mem::size_of::<Program>() + 256 + clinkz_wot_core::collection::PropertyCollectionSchema::backing_bound() + std::mem::size_of::<clinkz_wot_core::collection::PropertyCollectionSchema>() + 32) as u64
-        } else {512}
+        if operation == Operation::WriteMultipleProperties {
+            (std::mem::size_of::<Program>()
+                + 256
+                + clinkz_wot_core::collection::PropertyCollectionSchema::backing_bound()
+                + std::mem::size_of::<clinkz_wot_core::collection::PropertyCollectionSchema>()
+                + 32) as u64
+        } else {
+            512
+        }
     }
     impl BindingCompilerExtension for Compiler {
         type Cursor = Cursor;
@@ -647,7 +641,7 @@ pub mod prepare {
             let footprint = BindingArtifactFootprint::new(
                 1,
                 if self.probe.invalid_artifact.load(Ordering::Relaxed) {
-                    artifact_bytes(cursor.operation)+1
+                    artifact_bytes(cursor.operation) + 1
                 } else {
                     (std::mem::size_of::<Program>()
                         + cursor.bytes.capacity()
@@ -771,7 +765,10 @@ impl PollClientBinding for StaticClient {
         slot: &mut ClientRequestSlot<Call>,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
-        slot.state_mut().result(budget)
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return Poll::Pending;
+        }
+        slot.state_mut().result()
     }
     fn start_cancel_request(
         &mut self,
@@ -780,7 +777,10 @@ impl PollClientBinding for StaticClient {
         slot: &mut ClientRequestSlot<Call>,
         budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        match slot.state_mut().cancel(budget) {
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return Ok(StartStatus::Pending);
+        }
+        match slot.state_mut().cancel() {
             Poll::Pending => Ok(StartStatus::Pending),
             Poll::Ready(r) => r.map(StartStatus::Ready),
         }
@@ -791,7 +791,10 @@ impl PollClientBinding for StaticClient {
         slot: &mut ClientRequestSlot<Call>,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        slot.state_mut().cancel(budget)
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return Poll::Pending;
+        }
+        slot.state_mut().cancel()
     }
     fn acknowledge_request(&mut self, _: &mut ClientRequestSlot<Call>) -> CoreResult<()> {
         Ok(())

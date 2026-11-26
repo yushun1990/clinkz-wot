@@ -1,12 +1,11 @@
 //! Manually driven finite Consumer calls. This module depends only on Core and
 //! Foundation. Notification establishment/data/stop has a separate owner/API.
+use super::{ConsumerObserver, ConsumerOwned, ConsumerTurn};
 use alloc::{rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::execution::{FiniteCallDriver, FiniteCallState, NativeProgress};
 use clinkz_wot_core::thing::AffordanceSite;
 use clinkz_wot_core::{consumer::*, host_accounts::*, *};
-use clinkz_wot_foundation::{
-    Generation, MonotonicInstant, ResourceKind as K, SlotIndex, WorkBudget, WorkClass as W,
-};
+use clinkz_wot_foundation::{Generation, MonotonicInstant, ResourceKind as K, SlotIndex};
 use core::{
     cell::{Cell, RefCell},
     cmp::Ordering,
@@ -20,19 +19,26 @@ enum CallInput<'a> {
     Members(&'a [&'a str]),
 }
 
+impl CallInput<'_> {
+    fn reject(self, error: CoreError) -> BindingInputRejection<Option<Payload>> {
+        reject(
+            match self {
+                Self::Value(input) => input,
+                Self::Members(_) => None,
+            },
+            error,
+        )
+    }
+}
+
 struct Definition {
-    input: ConsumerBindingInput,
-    data_policy: ConsumerDataPolicy,
-    access_work: u64,
+    input: ConsumerOwned<ConsumerBindingInput>,
     _funding: HostCapacityReservation,
 }
 impl Definition {
     fn from_prepared(definition: ConsumerBinding, funding: HostCapacityReservation) -> Self {
-        let (input, data_policy, access_work) = definition.into_parts();
         Self {
-            input,
-            data_policy,
-            access_work,
+            input: ConsumerOwned::new(definition.into_input()),
             _funding: funding,
         }
     }
@@ -55,15 +61,11 @@ impl Definition {
         self.input.definition.configuration()
     }
     fn data_policy(&self) -> ConsumerDataPolicy {
-        self.data_policy
-    }
-    fn access_work(&self) -> u64 {
-        self.access_work
+        self.input.definition.data_policy()
     }
     fn check_dependencies(&self) -> CoreResult<()> {
         self.input.definition.check_dependencies()?;
         if self.input.access.qualification_revision() != self.input.security_revision
-            || self.input.access.work() != self.access_work
             || self.input.access.retained_bytes() != self.input.access.backing_bytes()
         {
             return Err(invalid());
@@ -113,13 +115,7 @@ impl Definition {
         &self,
         output: &InteractionOutput,
         selection: Option<collection::PropertySelection>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<()>> {
-        if !self.input.definition.data().available()
-            || self.input.definition.data().policy() != self.data_policy
-        {
-            return Poll::Ready(Err(invalid()));
-        }
+    ) -> CoreResult<()> {
         let invalid_response = || {
             CoreError::Validation(
                 ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
@@ -131,7 +127,7 @@ impl Definition {
             .response_shape()
             .validate(output.metadata().response_selection(), output.view())
         {
-            return Poll::Ready(Err(error));
+            return Err(error);
         }
         let response = content
             .responses()
@@ -140,40 +136,38 @@ impl Definition {
             .is_some_and(|r| matches!(r.data, execution::responses::ResponseData::Value(_)))
             || content.schemas().has_output();
         if output.data().is_some() != has_output {
-            return Poll::Ready(Err(invalid_response()));
+            return Err(invalid_response());
         }
         if let Some(report) = output.metadata().property_write_report() {
             let selected = match (self.input.definition.content().schemas(), selection) {
                 (ConsumerFiniteSchemas::WriteAllProperties(schema), _) => schema.all(),
                 (ConsumerFiniteSchemas::WriteMultipleProperties(_), Some(s)) => s,
-                _ => return Poll::Ready(Err(invalid_response())),
+                _ => return Err(invalid_response()),
             };
             if let Err(error) = report.validate_selection(selected) {
-                return Poll::Ready(Err(error));
+                return Err(error);
             }
         }
         // An absent data role has no decoding work. Preserve empty finite
-        // Action/Write completion under zero codec credit.
+        // Action/Write completion without entering the codec.
         if !has_output {
-            return Poll::Ready(Ok(()));
+            return Ok(());
         }
+        self.input.definition.check_dependencies()?;
         if output
             .data()
-            .is_some_and(|p| p.body.len() as u64 > self.data_policy.body_bytes)
+            .is_some_and(|p| p.body.len() as u64 > self.data_policy().body_bytes)
         {
-            return Poll::Ready(Err(invalid_response()));
-        }
-        if !pay(budget, W::CodecInputBytes, self.data_policy.validation_work) {
-            return Poll::Pending;
+            return Err(invalid_response());
         }
         if let Some(p) = output.data() {
             if response.is_some_and(|r| r.content_type.as_ref() != p.content_type.as_str())
                 || p.content_coding.is_some()
             {
-                return Poll::Ready(Err(invalid_response()));
+                return Err(invalid_response());
             }
         }
-        Poll::Ready(match response.map(|r| &r.data) {
+        match response.map(|r| &r.data) {
             Some(execution::responses::ResponseData::Value(schema)) => self
                 .input
                 .definition
@@ -184,37 +178,27 @@ impl Definition {
                 selection,
                 output.data(),
             ),
-        })
+        }
     }
     fn validate_payload(
         &self,
         payload: Option<&Payload>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<Option<collection::PropertySelection>>> {
-        Poll::Ready(
-            match (self.input.definition.content().schemas().input(), payload) {
-                (None, None) => Ok(None),
-                (Some(_), Some(payload))
-                    if payload.body.len() as u64 <= self.data_policy.body_bytes
-                        && payload.content_type == self.input.definition.request_media() =>
-                {
-                    if !self.input.definition.data().available()
-                        || self.input.definition.data().policy() != self.data_policy
-                    {
-                        return Poll::Ready(Err(invalid()));
-                    }
-                    if !pay(budget, W::CodecInputBytes, self.data_policy.validation_work) {
-                        return Poll::Pending;
-                    }
-                    self.input
-                        .definition
-                        .content()
-                        .schemas()
-                        .validate_input_selection(self.input.definition.data(), Some(payload))
-                }
-                _ => Err(invalid()),
-            },
-        )
+    ) -> CoreResult<Option<collection::PropertySelection>> {
+        match (self.input.definition.content().schemas().input(), payload) {
+            (None, None) => Ok(None),
+            (Some(_), Some(payload))
+                if payload.body.len() as u64 <= self.data_policy().body_bytes
+                    && payload.content_type == self.input.definition.request_media() =>
+            {
+                self.input.definition.check_dependencies()?;
+                self.input
+                    .definition
+                    .content()
+                    .schemas()
+                    .validate_input_selection(self.input.definition.data(), Some(payload))
+            }
+            _ => Err(invalid()),
+        }
     }
     fn start(
         &self,
@@ -223,21 +207,12 @@ impl Definition {
         variables: &[(&str, &str)],
         destination: &OutboundDestination,
         deadline: Option<Deadline>,
-        budget: &mut WorkBudget,
     ) -> Result<
         HostBindingCallBox<CoreResult<InteractionOutput>>,
         BindingInputRejection<Option<Payload>>,
     > {
-        // Issuance is a distinct linked callback. The preceding permission
-        // payment cannot fund a second traversal of the credential service.
-        if !pay(budget, W::ProviderProbes, self.access_work()) {
-            return Err(BindingInputRejection::new(
-                input,
-                BindingOperationalError::new(busy()),
-            ));
-        }
         let current = control
-            .check_admission(deadline)
+            .check_admission()
             .and_then(|()| self.check_dependencies());
         if let Err(error) = current {
             return Err(BindingInputRejection::new(
@@ -275,7 +250,7 @@ impl Definition {
         // control time as well as invalidate credentials/services. Refuse while
         // the complete original request is recoverable, before native acceptance.
         let current = control
-            .check_admission(deadline)
+            .check_admission()
             .and_then(|()| self.check_dependencies());
         if let Err(error) = current {
             return Err(BindingInputRejection::new(
@@ -330,9 +305,8 @@ impl ConsumerPropertyRead {
         calls: &ConsumerCalls,
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
-        self.read_with_variables(calls, &[], deadline, now, budget)
+        self.read_with_variables(calls, &[], deadline, now)
     }
 
     /// Variable operands remain per-interaction data; the Binding resolves
@@ -343,9 +317,10 @@ impl ConsumerPropertyRead {
         variables: &[(&str, &str)],
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
+        let mut turn = ConsumerTurn::enter()?;
         ConsumerAssociation::start_selected(
+            &mut turn,
             &self.authority,
             self.definition.clone(),
             self.bank.clone(),
@@ -355,7 +330,6 @@ impl ConsumerPropertyRead {
             variables,
             deadline,
             now,
-            budget,
         )
         .map_err(|e| e.error().error().clone())
     }
@@ -399,7 +373,7 @@ impl core::ops::Deref for StandaloneConsumerAssociation {
 
 /// Explicit, caller-driven finite capacity, independent of logical registrations.
 /// One owner may serve many associations; each association may use several owners.
-/// The application supplies scheduling, fresh clock observations and work credit.
+/// The application drives native readiness and maintenance with its monotonic clock.
 /// Logical deadlines do not install timers, and native wakes alone do not cover
 /// passive removal or handle abandonment. Explicit close retains cleanup access.
 /// Actual facade loss locally disposes abandoned work outside registry borrows;
@@ -446,16 +420,17 @@ impl Slot {
 struct CallControl {
     association: Rc<AssociationAuthority>,
     cause: RefCell<Option<CoreError>>,
+    deadline: Deadline,
     last_time: Cell<MonotonicInstant>,
     abandoned: Cell<bool>,
-    waker: RefCell<Option<core::task::Waker>>,
-    recheck: Cell<bool>,
+    observer: ConsumerObserver,
     _funding: HostCapacityReservation,
 }
 impl CallControl {
     fn new(
         bank: &Arc<HostResourceAccounts>,
         association: Rc<AssociationAuthority>,
+        deadline: Deadline,
         now: MonotonicInstant,
     ) -> CoreResult<Rc<Self>> {
         let bytes = (core::mem::size_of::<Self>() + 2 * core::mem::size_of::<usize>()) as u64;
@@ -465,10 +440,10 @@ impl CallControl {
         Ok(Rc::new(Self {
             association,
             cause: RefCell::new(None),
+            deadline,
             last_time: Cell::new(now),
             abandoned: Cell::new(false),
-            waker: RefCell::new(None),
-            recheck: Cell::new(false),
+            observer: ConsumerObserver::default(),
             _funding: funding,
         }))
     }
@@ -485,49 +460,36 @@ impl CallControl {
     fn cause(&self) -> Option<CoreError> {
         self.cause.borrow().clone()
     }
-    fn check_admission(&self, deadline: Option<Deadline>) -> CoreResult<()> {
+    fn check_admission(&self) -> CoreResult<()> {
         // Work-owner close records every original control, including a reserved
-        // admission, before notifying callbacks. Preserve that first cause and
-        // nested time observations; the parent alone cannot fence this facet.
+        // admission, before notifying callbacks. Preserve the first cause even
+        // when the parent is still current.
         if let Some(cause) = self.cause() {
             return Err(cause);
         }
         if !self.association.current() {
             return Err(stale());
         }
-        match deadline
-            .unwrap_or(Deadline::NONE)
-            .checked_is_elapsed_at(self.last_time.get())
-        {
-            Some(false) => Ok(()),
-            Some(true) => Err(CoreError::TimedOut(context())),
-            None => Err(clock_error()),
-        }
+        Ok(())
     }
-    // Only public API entry observes caller time. A resumed sweep consumes this
-    // latest observation instead of replaying its pre-callback timestamp.
+    // Latch expiry at entry so later cancellation cannot replace it.
     fn observe_time(&self, now: MonotonicInstant) {
         match now.checked_cmp(self.last_time.get()) {
-            Some(Ordering::Equal | Ordering::Greater) => self.last_time.set(now),
+            Some(Ordering::Equal | Ordering::Greater) => {
+                self.last_time.set(now);
+                match self.deadline.checked_is_elapsed_at(now) {
+                    Some(true) => self.record(CoreError::TimedOut(context())),
+                    None => self.record(clock_error()),
+                    Some(false) => {}
+                }
+            }
             _ => self.record(clock_error()),
-        }
-    }
-    fn register(&self, waker: &core::task::Waker) {
-        let next = waker.clone();
-        let old = self.waker.borrow_mut().replace(next);
-        drop(old);
-    }
-    fn wake(&self) {
-        let waker = self.waker.borrow_mut().take();
-        if let Some(waker) = waker {
-            waker.wake();
         }
     }
 }
 
-/// A reserved slot stays occupied during admission/progress, including nested
-/// entry. Unwinding restores the complete original call. Neither restoration
-/// nor removal destroys linked owners under the registry borrow.
+/// Admission and checkout borrow the execution turn for the life of the lease.
+/// Unwinding restores the original call outside linked callbacks.
 struct SlotLease<'a> {
     state: &'a State,
     index: usize,
@@ -538,7 +500,7 @@ impl State {
     fn current(&self) -> bool {
         self.active.get()
     }
-    fn reserve_slot(&self) -> CoreResult<SlotLease<'_>> {
+    fn reserve_slot<'a>(&'a self, _turn: &'a mut ConsumerTurn) -> CoreResult<SlotLease<'a>> {
         let mut registry = self.registry.borrow_mut();
         let index = registry
             .slots
@@ -558,51 +520,32 @@ impl State {
             call: None,
         })
     }
-    fn checkout(
-        &self,
+    fn checkout<'a>(
+        &'a self,
+        _turn: &'a mut ConsumerTurn,
         index: usize,
-        sequence: Option<u64>,
-        waker: &core::task::Waker,
-    ) -> Option<SlotLease<'_>> {
-        let (lease, control) = {
-            let mut registry = self.registry.borrow_mut();
-            let slot = &mut registry.slots[index];
-            match slot {
-                Slot::Ready(call) if sequence.is_none_or(|s| s == call.work.sequence) => {
-                    let Slot::Ready(call) = core::mem::replace(slot, Slot::Vacant) else {
-                        unreachable!()
-                    };
-                    let sequence = call.work.sequence;
-                    let control = call.work.control.clone();
-                    *slot = Slot::Reserved {
-                        sequence,
-                        control: Some(control.clone()),
-                    };
-                    (
-                        Some(SlotLease {
-                            state: self,
-                            index,
-                            sequence,
-                            call: Some(call),
-                        }),
-                        control,
-                    )
-                }
-                Slot::Reserved {
-                    sequence: original,
-                    control: Some(control),
-                } if sequence.is_none_or(|s| s == *original) => {
-                    control.recheck.set(true);
-                    (None, control.clone())
-                }
-                _ => return None,
-            }
+        original: Option<u64>,
+    ) -> Option<SlotLease<'a>> {
+        let mut registry = self.registry.borrow_mut();
+        let slot = &mut registry.slots[index];
+        let Slot::Ready(call) = slot else { return None };
+        let sequence = call.work.sequence;
+        if original.is_some_and(|expected| expected != sequence) {
+            return None;
+        }
+        let reserved = Slot::Reserved {
+            sequence,
+            control: Some(call.work.control.clone()),
         };
-        // Retain driver interest even when another stack frame owns this call.
-        // Waker clone/drop may reenter; the slot is already reserved and a live
-        // lease restores its original owner even if registration unwinds.
-        control.register(waker);
-        lease
+        let Slot::Ready(call) = core::mem::replace(slot, reserved) else {
+            unreachable!()
+        };
+        Some(SlotLease {
+            state: self,
+            index,
+            sequence,
+            call: Some(call),
+        })
     }
     fn revoke(&self) {
         self.active.set(false);
@@ -616,12 +559,13 @@ impl State {
         }
     }
     fn close(&self) {
+        let _turn = ConsumerTurn::scope();
         self.revoke();
         let count = self.registry.borrow().slots.len();
         for index in 0..count {
             let control = self.registry.borrow().slots[index].control().cloned();
             if let Some(control) = control {
-                control.wake();
+                control.observer.wake();
             }
         }
     }
@@ -698,15 +642,10 @@ impl Drop for SlotLease<'_> {
             let mut registry = self.state.registry.borrow_mut();
             core::mem::replace(&mut registry.slots[self.index], replacement)
         };
-        let Slot::Reserved { sequence, control } = old else {
+        let Slot::Reserved { sequence, .. } = old else {
             unreachable!()
         };
         debug_assert_eq!(sequence, self.sequence);
-        if let Some(control) = control
-            && control.recheck.replace(false)
-        {
-            control.wake();
-        }
         drop(aborted);
     }
 }
@@ -721,12 +660,12 @@ struct CallWork {
     sequence: u64,
     raw: Option<HostBindingCallBox<CoreResult<InteractionOutput>>>,
     outcome: Option<BindingCallSettlement<CoreResult<InteractionOutput>>>,
+    validated: bool,
     rejected_output: Option<InteractionOutput>,
     definition: Arc<Definition>,
     cleanup_error: Option<CoreError>,
     refused_transfer: Option<CleanupTransferRequest>,
     selection: Option<collection::PropertySelection>,
-    deadline: Deadline,
     destination: OutboundDestination,
     variables: Vec<(alloc::boxed::Box<str>, alloc::boxed::Box<str>)>,
     input: Option<Payload>,
@@ -742,9 +681,8 @@ impl ConsumerAssociation {
         variables: &[(&str, &str)],
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
-        self.start_with_variables(
+        self.start(
             calls,
             AffordanceSite::Property(name),
             Operation::ReadProperty,
@@ -752,7 +690,6 @@ impl ConsumerAssociation {
             variables,
             deadline,
             now,
-            budget,
         )
         .map_err(|e| e.error().error().clone())
     }
@@ -765,9 +702,8 @@ impl ConsumerAssociation {
         variables: &[(&str, &str)],
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Payload>> {
-        self.start_with_variables(
+        self.start(
             calls,
             AffordanceSite::Property(name),
             Operation::WriteProperty,
@@ -775,7 +711,6 @@ impl ConsumerAssociation {
             variables,
             deadline,
             now,
-            budget,
         )
         .map_err(|e| {
             let (input, error) = e.into_parts();
@@ -788,18 +723,8 @@ impl ConsumerAssociation {
         name: &str,
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
-        self.start(
-            calls,
-            AffordanceSite::Property(name),
-            Operation::ReadProperty,
-            CallInput::Value(None),
-            deadline,
-            now,
-            budget,
-        )
-        .map_err(|e| e.error().error().clone())
+        self.read_property_with_variables(calls, name, &[], deadline, now)
     }
     /// One root status exchange. Returned native records confer no local
     /// invocation authority and do not query/cancel existing Consumer handles.
@@ -808,16 +733,15 @@ impl ConsumerAssociation {
         calls: &ConsumerCalls,
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
         self.start(
             calls,
             AffordanceSite::Thing,
             Operation::QueryAllActions,
             CallInput::Value(None),
+            &[],
             deadline,
             now,
-            budget,
         )
         .map_err(|e| e.error().error().clone())
     }
@@ -827,16 +751,15 @@ impl ConsumerAssociation {
         calls: &ConsumerCalls,
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
         self.start(
             calls,
             AffordanceSite::Thing,
             Operation::ReadAllProperties,
             CallInput::Value(None),
+            &[],
             deadline,
             now,
-            budget,
         )
         .map_err(|e| e.error().error().clone())
     }
@@ -849,16 +772,15 @@ impl ConsumerAssociation {
         members: &[&str],
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
         self.start(
             calls,
             AffordanceSite::Thing,
             Operation::ReadMultipleProperties,
             CallInput::Members(members),
+            &[],
             deadline,
             now,
-            budget,
         )
         .map_err(|e| e.error().error().clone())
     }
@@ -871,16 +793,15 @@ impl ConsumerAssociation {
         input: Option<Payload>,
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
         self.start(
             calls,
             AffordanceSite::Action(name),
             Operation::InvokeAction,
             CallInput::Value(input),
+            &[],
             deadline,
             now,
-            budget,
         )
     }
     /// Validate and authorize a selected Property value before native effects.
@@ -893,16 +814,15 @@ impl ConsumerAssociation {
         input: Payload,
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Payload>> {
         self.start(
             calls,
             AffordanceSite::Property(name),
             Operation::WriteProperty,
             CallInput::Value(Some(input)),
+            &[],
             deadline,
             now,
-            budget,
         )
         .map_err(|e| {
             let (input, error) = e.into_parts();
@@ -918,16 +838,15 @@ impl ConsumerAssociation {
         input: Payload,
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Payload>> {
         self.start(
             calls,
             AffordanceSite::Thing,
             Operation::WriteAllProperties,
             CallInput::Value(Some(input)),
+            &[],
             deadline,
             now,
-            budget,
         )
         .map_err(|e| {
             let (input, error) = e.into_parts();
@@ -942,16 +861,15 @@ impl ConsumerAssociation {
         input: Payload,
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Payload>> {
         self.start(
             calls,
             AffordanceSite::Thing,
             Operation::WriteMultipleProperties,
             CallInput::Value(Some(input)),
+            &[],
             deadline,
             now,
-            budget,
         )
         .map_err(|e| {
             let (input, error) = e.into_parts();
@@ -965,15 +883,23 @@ impl ConsumerAssociation {
         target: AffordanceSite<'_>,
         operation: Operation,
         input: CallInput<'_>,
+        variables: &[(&str, &str)],
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
-        self.start_with_variables(calls, target, operation, input, &[], deadline, now, budget)
+        let mut turn = match ConsumerTurn::enter() {
+            Ok(turn) => turn,
+            Err(error) => return Err(input.reject(error)),
+        };
+        self.start_in_turn(
+            &mut turn, calls, target, operation, input, variables, deadline, now,
+        )
     }
+
     #[allow(clippy::too_many_arguments)]
-    fn start_with_variables(
+    fn start_in_turn(
         &self,
+        turn: &mut ConsumerTurn,
         calls: &ConsumerCalls,
         target: AffordanceSite<'_>,
         operation: Operation,
@@ -981,19 +907,13 @@ impl ConsumerAssociation {
         variables: &[(&str, &str)],
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
-        let (definition, bank) = match self.select(target, operation, budget) {
+        let (definition, bank) = match self.select(target, operation) {
             Ok(selected) => selected,
-            Err(error) => {
-                let input = match input {
-                    CallInput::Value(input) => input,
-                    CallInput::Members(_) => None,
-                };
-                return Err(reject(input, error));
-            }
+            Err(error) => return Err(input.reject(error)),
         };
         Self::start_selected(
+            turn,
             &self.state.authority,
             definition,
             bank,
@@ -1003,7 +923,6 @@ impl ConsumerAssociation {
             variables,
             deadline,
             now,
-            budget,
         )
     }
 
@@ -1011,7 +930,6 @@ impl ConsumerAssociation {
         &self,
         target: AffordanceSite<'_>,
         operation: Operation,
-        budget: &mut WorkBudget,
     ) -> CoreResult<(Arc<Definition>, Arc<HostResourceAccounts>)> {
         if !self.state.authority.current() {
             return Err(stale());
@@ -1028,13 +946,6 @@ impl ConsumerAssociation {
         // No association borrow crosses linked callbacks or allocation.
         let mappings = self.state.mappings.borrow();
         let mappings = mappings.as_ref().ok_or_else(stale)?;
-        if !pay(
-            budget,
-            W::PlanningItems,
-            (mappings.definitions.len() * (name_len + 1)) as u64,
-        ) {
-            return Err(busy());
-        }
         let definition = mappings
             .definitions
             .iter()
@@ -1047,16 +958,10 @@ impl ConsumerAssociation {
     /// Select once for repeated reads. Fixed destinations are resolved once by
     /// the actual Binding under funded scratch; dynamic templates stay dynamic.
     /// This performs no native I/O, credential issuance or permission grant.
-    pub fn bind_property_read(
-        &self,
-        property: &str,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<ConsumerPropertyRead> {
-        let (definition, bank) = self.select(
-            AffordanceSite::Property(property),
-            Operation::ReadProperty,
-            budget,
-        )?;
+    pub fn bind_property_read(&self, property: &str) -> CoreResult<ConsumerPropertyRead> {
+        let _turn = ConsumerTurn::enter()?;
+        let (definition, bank) =
+            self.select(AffordanceSite::Property(property), Operation::ReadProperty)?;
         definition.check_dependencies()?;
         let mapping = &definition.input.definition;
         let fixed = !mapping.content().uri_variables().is_dynamic();
@@ -1089,9 +994,6 @@ impl ConsumerAssociation {
                     (K::AdmissionTemporaryBytesGlobalMax, temporary),
                 ],
             )?;
-            if !pay(budget, W::BindingPolls, 1) {
-                return Err(busy());
-            }
             let destination =
                 mapping
                     .execution()
@@ -1121,6 +1023,7 @@ impl ConsumerAssociation {
 
     #[allow(clippy::too_many_arguments)]
     fn start_selected(
+        turn: &mut ConsumerTurn,
         authority: &Rc<AssociationAuthority>,
         definition: Arc<Definition>,
         association_bank: Arc<HostResourceAccounts>,
@@ -1130,7 +1033,6 @@ impl ConsumerAssociation {
         variables: &[(&str, &str)],
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
         let (input, members) = match input {
             CallInput::Value(input) => (input, None),
@@ -1141,11 +1043,11 @@ impl ConsumerAssociation {
         if !state.current() || !authority.current() {
             return Err(reject(input, stale()));
         }
-        let mut reserved = match state.reserve_slot() {
+        let mut reserved = match state.reserve_slot(turn) {
             Ok(reserved) => reserved,
             Err(error) => return Err(reject(input, error)),
         };
-        let control = match CallControl::new(&state.bank, authority.clone(), now) {
+        let control = match CallControl::new(&state.bank, authority.clone(), deadline, now) {
             Ok(control) => control,
             Err(error) => return Err(reject(input, error)),
         };
@@ -1163,30 +1065,11 @@ impl ConsumerAssociation {
                 return Err(invalid());
             }
             let variable_meaning = definition.input.definition.content().uri_variables();
-            if !pay(
-                budget,
-                W::PlanningItems,
-                (variables.len()
-                    * (uri_variables::MAX_VALUE_BYTES
-                        + uri_variables::MAX_VARIABLES * uri_variables::MAX_NAME_BYTES)
-                    + variable_meaning.declarations().len()
-                        * (uri_variables::MAX_VARIABLES * uri_variables::MAX_NAME_BYTES + 1))
-                    as u64,
-            ) {
-                return Err(busy());
-            }
             variable_meaning.validate(variables)?;
             let selection = match (definition.input.definition.content().schemas(), members) {
                 (ConsumerFiniteSchemas::ReadMultipleProperties(schema), Some(names)) => {
                     if names.len() > collection::PropertyCollectionSchema::MAX_MEMBERS {
                         return Err(invalid());
-                    }
-                    let work = names.len() as u64
-                        * (collection::PropertyCollectionSchema::MAX_MEMBERS as u64 + 1)
-                        * (collection::PropertyCollectionSchema::MAX_NAME_BYTES as u64 + 1)
-                        + 1;
-                    if !pay(budget, W::PlanningItems, work) {
-                        return Err(busy());
                     }
                     Some(schema.select(names)?)
                 }
@@ -1295,49 +1178,23 @@ impl ConsumerAssociation {
             definition.check_dependencies()?;
             let destination = match bound_destination {
                 Some(destination) => destination.clone(),
-                None => {
-                    if !pay(budget, W::BindingPolls, 1) {
-                        return Err(busy());
-                    }
-                    OutboundDestination::from(
-                        definition.input.definition.execution().resolve_target(
-                            definition.input.definition.target(),
-                            variables,
-                            definition.input.definition.artifact(),
-                        )?,
-                    )
-                }
+                None => OutboundDestination::from(
+                    definition.input.definition.execution().resolve_target(
+                        definition.input.definition.target(),
+                        variables,
+                        definition.input.definition.artifact(),
+                    )?,
+                ),
             };
             if destination.len() > definition.configuration().target_capacity() {
                 return Err(invalid());
             }
-            if !pay(budget, W::ProviderProbes, definition.access_work()) {
-                return Err(busy());
-            }
             definition.check_current(&authority.consumer, None, &destination)?;
-            // Prepay local-disposal bookkeeping and the one native invocation. The
-            // selected ConsumerOwnedHostV2 facet owes finite nonblocking local Drop.
-            if budget.remaining(W::BindingPolls) < 1 || budget.remaining(W::CleanupItems) < 1 {
-                return Err(busy());
-            }
-            budget.consume(W::BindingPolls, 1).unwrap();
-            budget.consume(W::CleanupItems, 1).unwrap();
-            // Acquire encoded input only after its complete lifetime/scratch and
-            // destruction allowances. On refusal it drops before this funding.
             let encoded =
                 if let (ConsumerFiniteSchemas::ReadMultipleProperties(schema), Some(selected)) =
                     (definition.input.definition.content().schemas(), selection)
                 {
-                    // Authorization may change service availability or its
-                    // work/backing declarations. Check at this callback edge.
-                    if !definition.input.definition.data().available()
-                        || definition.input.definition.data().policy() != policy
-                    {
-                        return Err(invalid());
-                    }
-                    if !pay(budget, W::CodecInputBytes, policy.validation_work) {
-                        return Err(busy());
-                    }
+                    definition.input.definition.check_dependencies()?;
                     let payload = definition
                         .input
                         .definition
@@ -1354,38 +1211,19 @@ impl ConsumerAssociation {
                     None
                 };
             if selection.is_some() {
-                if !pay(budget, W::ProviderProbes, definition.access_work()) {
-                    return Err(busy());
-                }
                 definition.check_current(&authority.consumer, None, &destination)?;
             }
             let payload = encoded.as_ref().or(input.as_ref());
-            let input_selection = match definition.validate_payload(payload, budget) {
-                Poll::Ready(result) => result?,
-                Poll::Pending => return Err(busy()),
-            };
+            let input_selection = definition.validate_payload(payload)?;
             // Codec callbacks may change current policy as well as authority.
             if payload.is_some() {
-                if !pay(budget, W::ProviderProbes, definition.access_work()) {
-                    return Err(busy());
-                }
                 definition.check_current(
                     &authority.consumer,
                     input_selection.or(selection),
                     &destination,
                 )?;
             }
-            if !state.current() || !authority.current() {
-                return Err(stale());
-            }
-            if let Some(cause) = control.cause() {
-                return Err(cause);
-            }
-            match deadline.checked_is_elapsed_at(control.last_time.get()) {
-                Some(false) => {}
-                Some(true) => return Err(CoreError::TimedOut(context())),
-                None => return Err(invalid()),
-            }
+            control.check_admission()?;
             Ok((
                 definition,
                 funding,
@@ -1409,7 +1247,6 @@ impl ConsumerAssociation {
             variables,
             &destination,
             deadline.instant().map(|_| deadline),
-            budget,
         ) {
             Ok(raw) => raw,
             Err(rejection) if operation == Operation::ReadMultipleProperties => {
@@ -1431,11 +1268,11 @@ impl ConsumerAssociation {
                 definition,
                 raw: Some(raw),
                 outcome: None,
+                validated: false,
                 rejected_output: None,
                 cleanup_error: None,
                 refused_transfer: None,
                 selection,
-                deadline,
                 destination,
                 variables: retained_variables,
                 input: retained_input,
@@ -1465,6 +1302,7 @@ impl ConsumerAssociation {
         self.state.authority.active.set(false);
     }
     fn close(&self) {
+        let _turn = ConsumerTurn::scope();
         self.fence();
         // End the borrow before linked service/artifact destructors can reenter.
         let mappings = self.state.mappings.borrow_mut().take();
@@ -1616,36 +1454,29 @@ impl ConsumerCalls {
     pub fn begin_close(&self) {
         self.state.close();
     }
-    /// Drive independent cleanup, including after every call handle was lost.
-    /// Application scheduling is required independently of native wakes. Short credit
-    /// retains the original owner and the caller's runnable/credit obligation.
-    pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant, budget: &mut WorkBudget) {
-        let (start, count) = {
+    /// Visit one slot in rotation. The application supplies independent turns
+    /// for deadlines, runnable transitions, blocked retirement and lost handles.
+    /// Recursive entry returns a lifecycle error before observing time or a waker.
+    pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant) -> CoreResult<()> {
+        let mut turn = ConsumerTurn::enter()?;
+        let index = {
             let mut registry = self.state.registry.borrow_mut();
-            // Latch one API-entry observation before any linked callback. A
-            // nested entry can advance all original controls, including busy
-            // slots, and a newly admitted call keeps its own later observation.
+            // Observe all deadlines before selecting one original slot to drive.
             for control in registry.slots.iter().filter_map(Slot::control) {
                 control.observe_time(now);
             }
-            let count = registry.slots.len();
-            let start = registry.next_slot;
-            registry.next_slot = (start + 1) % count;
-            (start, count)
+            let index = registry.next_slot;
+            registry.next_slot = (index + 1) % registry.slots.len();
+            index
         };
-        for offset in 0..count {
-            if let Some(mut lease) = self
-                .state
-                .checkout((start + offset) % count, None, cx.waker())
-            {
-                let call = lease.call.as_mut().unwrap();
-                let _ = call.step(&self.state, cx, budget);
-                if call.work.control.abandoned.get() && call.progress.is_terminal() {
-                    // Vacate the slot before disposing linked native owners.
-                    drop(lease.take());
-                }
+        if let Some(mut lease) = self.state.checkout(&mut turn, index, None) {
+            let call = lease.call.as_mut().unwrap();
+            let _ = call.step(&self.state, cx);
+            if call.work.control.abandoned.get() && call.progress.is_terminal() {
+                drop(lease.take());
             }
         }
+        Ok(())
     }
     pub fn is_idle(&self) -> bool {
         self.state
@@ -1658,6 +1489,7 @@ impl ConsumerCalls {
 }
 impl Drop for ConsumerCalls {
     fn drop(&mut self) {
+        let _turn = ConsumerTurn::scope();
         self.state.controller_present.set(false);
         self.state.revoke();
         self.state.abort_abandoned();
@@ -1676,46 +1508,69 @@ impl ConsumerCall {
     /// Record cancellation and notify the currently registered driver, if any.
     /// The notification requests a poll; it performs no native cleanup itself.
     pub fn cancel(&self) {
+        let _turn = ConsumerTurn::scope();
         self.control.record(CoreError::Cancelled(context()));
-        self.control.wake();
+        self.control.observer.wake();
     }
-    /// One explicit progress turn, with caller-supplied time and work credit.
-    /// This is not a Future: native wakes do not cover passive authority changes,
-    /// deadlines or replenished credit. The application must schedule those turns.
+    /// Observe native settlement without polling or entering a service. Handoff
+    /// still checks original authority, dependencies and permission.
+    pub fn is_settled(&self) -> bool {
+        matches!(&self.state.registry.borrow().slots[self.slot],
+            Slot::Ready(call) if call.work.sequence == self.sequence && call.progress.is_terminal())
+    }
+    /// Drive one bounded turn while retaining the result in its original slot.
+    /// A ready observation grants no future permission to collect the value.
+    /// Synchronous entry from a Host Consumer callback returns a lifecycle error.
+    pub fn progress(&self, cx: &mut Context<'_>, now: MonotonicInstant) -> Poll<CoreResult<()>> {
+        self.drive(cx, now, |_| ())
+    }
+    /// Drive and collect a settled call under current permission. The application
+    /// supplies independent turns for deadlines and retirement. Only a successful
+    /// handoff takes the original call.
     pub fn poll(
         &mut self,
         cx: &mut Context<'_>,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
-    ) -> Poll<ConsumerSettlement> {
-        self.control.observe_time(now);
+    ) -> Poll<CoreResult<ConsumerSettlement>> {
+        self.drive(cx, now, |lease| ConsumerSettlement {
+            call: Some(lease.take()),
+        })
+    }
+    fn drive<T>(
+        &self,
+        cx: &mut Context<'_>,
+        now: MonotonicInstant,
+        ready: impl FnOnce(SlotLease<'_>) -> T,
+    ) -> Poll<CoreResult<T>> {
+        let mut turn = ConsumerTurn::enter()?;
         let Some(mut lease) = self
             .state
-            .checkout(self.slot, Some(self.sequence), cx.waker())
+            .checkout(&mut turn, self.slot, Some(self.sequence))
         else {
-            return Poll::Pending;
+            return Poll::Ready(Err(stale()));
         };
+        self.control.observe_time(now);
         if lease
             .call
             .as_mut()
             .unwrap()
-            .step(&self.state, cx, budget)
+            .step(&self.state, cx)
             .is_pending()
         {
             return Poll::Pending;
         }
-        let call = lease.take();
-        Poll::Ready(ConsumerSettlement { call })
+        Poll::Ready(Ok(ready(lease)))
     }
 }
 impl Drop for ConsumerCall {
     fn drop(&mut self) {
+        let _turn = ConsumerTurn::scope();
         self.control.abandoned.set(true);
         self.control.record(CoreError::Cancelled(context()));
         self.state.abort_slot(self.slot, Some(self.sequence));
     }
 }
-/// Complete original normal/late result and retained cleanup/native owner.
+/// The original result, first cause and evidence of native retirement.
 /// Dropping this owner performs finite local disposal, then releases funding.
 /// A cancellation cause does not overwrite a late result or claim remote success.
 /// Payload access lends slices; share this owner to retain original funded bytes.
@@ -1756,7 +1611,13 @@ impl Drop for ConsumerCall {
 /// }
 /// ```
 pub struct ConsumerSettlement {
-    call: Call,
+    call: Option<Call>,
+}
+impl Drop for ConsumerSettlement {
+    fn drop(&mut self) {
+        let _turn = ConsumerTurn::scope();
+        drop(self.call.take());
+    }
 }
 
 /// Read-only original native outcome. A returned value may be late and does
@@ -1776,13 +1637,18 @@ pub enum ConsumerNativeOutcome<'a> {
 }
 
 impl ConsumerSettlement {
+    fn call(&self) -> &Call {
+        self.call
+            .as_ref()
+            .expect("settlement retains its call until disposal")
+    }
     /// Original resolved destination; it never follows a successor association.
     pub fn destination(&self) -> &str {
-        &self.call.work.destination
+        &self.call().work.destination
     }
     /// Original lexical operands, independent of caller storage and native retirement.
     pub fn uri_variables(&self) -> impl ExactSizeIterator<Item = (&str, &str)> {
-        self.call
+        self.call()
             .work
             .variables
             .iter()
@@ -1790,7 +1656,7 @@ impl ConsumerSettlement {
     }
     /// Original finite input, including an encoded member selection, as slices.
     pub fn input(&self) -> Option<PayloadView<'_>> {
-        self.call.work.input.as_ref().map(Payload::view)
+        self.call().work.input.as_ref().map(Payload::view)
     }
     /// Original writable meaning and invocation set, retained even after source
     /// destruction, replacement or native-report rejection. Report indices must
@@ -1802,14 +1668,14 @@ impl ConsumerSettlement {
         collection::PropertySelection,
     )> {
         match (
-            self.call
+            self.call()
                 .work
                 .definition
                 .input
                 .definition
                 .content()
                 .schemas(),
-            self.call.work.selection,
+            self.call().work.selection,
         ) {
             (
                 ConsumerFiniteSchemas::WriteAllProperties(schema)
@@ -1820,17 +1686,17 @@ impl ConsumerSettlement {
         }
     }
     pub fn effect(&self) -> ConsumerEffect {
-        self.call.work.effect
+        self.call().work.effect
     }
     pub fn consumer(&self) -> &ConsumerInstanceRef {
-        &self.call.work.consumer
+        &self.call().work.consumer
     }
     pub fn operation(&self) -> Operation {
-        self.call.work.definition.input.definition.operation()
+        self.call().work.definition.input.definition.operation()
     }
     /// Lends the original coordinate without exposing its shared name owner.
     pub fn affordance(&self) -> AffordanceSite<'_> {
-        match self.call.work.definition.input.definition.affordance() {
+        match self.call().work.definition.input.definition.affordance() {
             AffordanceTarget::Thing => AffordanceSite::Thing,
             AffordanceTarget::Property(name) => AffordanceSite::Property(name),
             AffordanceTarget::Action(name) => AffordanceSite::Action(name),
@@ -1838,25 +1704,25 @@ impl ConsumerSettlement {
         }
     }
     pub fn first_cause(&self) -> Option<&CoreError> {
-        self.call.progress.first_cause()
+        self.call().progress.first_cause()
     }
     /// Lends original native output rejected by captured result validation.
     pub fn rejected_output(&self) -> Option<InteractionOutputView<'_>> {
-        self.call
+        self.call()
             .work
             .rejected_output
             .as_ref()
             .map(InteractionOutput::view)
     }
     pub fn refused_transfer(&self) -> Option<&CleanupTransferRequest> {
-        self.call.work.refused_transfer.as_ref()
+        self.call().work.refused_transfer.as_ref()
     }
     pub fn cleanup_error(&self) -> Option<&CoreError> {
-        self.call.work.cleanup_error.as_ref()
+        self.call().work.cleanup_error.as_ref()
     }
     /// Lends the complete original outcome without exposing payload owners.
     pub fn native_outcome(&self) -> ConsumerNativeOutcome<'_> {
-        match self.call.work.outcome.as_ref().unwrap() {
+        match self.call().work.outcome.as_ref().unwrap() {
             BindingCallSettlement::Returned(result) => {
                 ConsumerNativeOutcome::Returned(result.as_ref().map(InteractionOutput::view))
             }
@@ -1872,7 +1738,7 @@ impl ConsumerSettlement {
     /// Authoritative application outcome. A retained late native success does
     /// not override cancellation, revocation, policy or validation failure.
     pub fn result(&self) -> CoreResult<InteractionOutputView<'_>> {
-        if let Some(error) = self.call.progress.first_cause() {
+        if let Some(error) = self.call().progress.first_cause() {
             return Err(error.clone());
         }
         match self.native_outcome() {
@@ -1887,31 +1753,44 @@ impl ConsumerSettlement {
         }
     }
     pub fn binding(&self) -> BindingRegistrationIdentity {
-        self.call.work.definition.binding()
+        self.call().work.definition.binding()
     }
 }
 impl Call {
-    fn step(&mut self, state: &State, cx: &mut Context<'_>, budget: &mut WorkBudget) -> Poll<()> {
-        self.progress.step(
-            &mut HostCallDriver {
-                work: &mut self.work,
-                state,
-            },
-            cx,
-            budget,
-        )
+    fn step(&mut self, state: &State, cx: &mut Context<'_>) -> Poll<()> {
+        self.work.control.observer.register(cx.waker());
+        let mut driver = HostCallDriver {
+            work: &mut self.work,
+            state,
+        };
+        if self.progress.step(&mut driver, cx).is_pending() {
+            return Poll::Pending;
+        }
+        // Set the kernel's terminal bit before linked disposal can unwind.
+        if !driver.work.control.abandoned.get() {
+            drop(driver.work.raw.take());
+        }
+        // Native polling and destruction may both revoke permission before decoding.
+        if !driver.work.validated && driver.has_success() {
+            self.progress.check_current(&mut driver);
+        } else {
+            self.progress.fence(&mut driver);
+        }
+        if !driver.work.validated
+            && driver.has_success()
+            && (self.progress.first_cause().is_none() || driver.has_empty_write_reply())
+        {
+            match driver.validate_output() {
+                Ok(()) => driver.work.validated = true,
+                Err(error) => driver.record(error),
+            }
+            self.progress.check_current(&mut driver);
+        }
+        Poll::Ready(())
     }
 }
 impl CallWork {
     fn fence(&mut self, state: &State) -> Option<CoreError> {
-        match self
-            .deadline
-            .checked_is_elapsed_at(self.control.last_time.get())
-        {
-            Some(false) => {}
-            Some(true) => self.control.record(CoreError::TimedOut(context())),
-            None => self.control.record(clock_error()),
-        }
         if !state.current() || !self.control.association.current() {
             self.control.record(stale());
         }
@@ -1929,9 +1808,6 @@ impl FiniteCallDriver for HostCallDriver<'_> {
     fn record(&mut self, error: CoreError) {
         self.work.control.record(error);
     }
-    fn access_work(&self) -> u64 {
-        self.work.definition.access_work()
-    }
     fn check_current(&mut self) -> CoreResult<()> {
         self.work.definition.check_current(
             &self.work.consumer,
@@ -1943,7 +1819,6 @@ impl FiniteCallDriver for HostCallDriver<'_> {
         &mut self,
         cx: &mut Context<'_>,
         cancel: Option<(&CoreError, bool)>,
-        budget: &mut WorkBudget,
     ) -> NativeProgress {
         let work = &mut self.work;
         work.effect = ConsumerEffect::Unknown;
@@ -1951,7 +1826,7 @@ impl FiniteCallDriver for HostCallDriver<'_> {
         let mut progress = NativeProgress::Pending;
         work.outcome = if let Some((cause, started)) = cancel {
             if started {
-                match raw.as_pin_mut().poll_cancel(cx, budget) {
+                match raw.as_pin_mut().poll_cancel(cx) {
                     Poll::Pending => None,
                     Poll::Ready(Ok(value)) => Some(value),
                     Poll::Ready(Err(error)) => {
@@ -1965,13 +1840,12 @@ impl FiniteCallDriver for HostCallDriver<'_> {
                         CleanupSlotId::new(SlotIndex::new(0), Generation::INITIAL),
                         work.definition.resources().admitted(),
                         0,
-                        WorkBudget::new().with_remaining(W::CleanupItems, 1),
                     ),
                     CleanupOperation::CancelRequest,
                     cause.clone(),
                     Deadline::NONE,
                 );
-                match raw.as_pin_mut().start_cancel(cx, cleanup, budget) {
+                match raw.as_pin_mut().start_cancel(cx, cleanup) {
                     Ok(StartStatus::Pending) => {
                         progress = NativeProgress::Cancelling;
                         None
@@ -1984,7 +1858,7 @@ impl FiniteCallDriver for HostCallDriver<'_> {
                 }
             }
         } else {
-            match raw.as_pin_mut().poll_result(cx, budget) {
+            match raw.as_pin_mut().poll_result(cx) {
                 Poll::Pending => None,
                 Poll::Ready(result) => {
                     if let Err(error) = &result {
@@ -2023,21 +1897,30 @@ impl FiniteCallDriver for HostCallDriver<'_> {
             progress
         }
     }
+}
+impl HostCallDriver<'_> {
+    fn has_empty_write_reply(&self) -> bool {
+        matches!(
+            self.work.definition.input.definition.operation(),
+            Operation::WriteProperty
+                | Operation::WriteAllProperties
+                | Operation::WriteMultipleProperties
+        ) && matches!(&self.work.outcome, Some(BindingCallSettlement::Returned(Ok(output))) if output.data().is_none())
+    }
     fn has_success(&self) -> bool {
         matches!(
             self.work.outcome,
             Some(BindingCallSettlement::Returned(Ok(_)))
         )
     }
-    fn validate_output(&mut self, budget: &mut WorkBudget) -> Poll<CoreResult<()>> {
+    fn validate_output(&mut self) -> CoreResult<()> {
         let work = &mut self.work;
         let outcome = work.outcome.as_mut().unwrap();
         let BindingCallSettlement::Returned(Ok(output)) = outcome else {
             unreachable!()
         };
-        match work.definition.validate(output, work.selection, budget) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Ok(())) => {
+        match work.definition.validate(output, work.selection) {
+            Ok(()) => {
                 if output.status() == InteractionStatus::Ok
                     && output.metadata().response_selection() == ResponseSelection::Primary
                     && matches!(
@@ -2057,15 +1940,15 @@ impl FiniteCallDriver for HostCallDriver<'_> {
                         ConsumerEffect::Completed
                     };
                 }
-                Poll::Ready(Ok(()))
+                Ok(())
             }
-            Poll::Ready(Err(error)) => {
+            Err(error) => {
                 if let BindingCallSettlement::Returned(Ok(original)) =
                     core::mem::replace(outcome, BindingCallSettlement::Returned(Err(error.clone())))
                 {
                     work.rejected_output = Some(original);
                 }
-                Poll::Ready(Err(error))
+                Err(error)
             }
         }
     }

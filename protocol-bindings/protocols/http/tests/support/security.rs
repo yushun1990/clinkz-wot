@@ -389,7 +389,7 @@ impl SecureFixture {
                 self.server().first_cause()
             );
             self.step();
-            if let Poll::Ready(result) = call.poll(&mut cx(), now(0), &mut work()) {
+            if let Poll::Ready(Ok(result)) = call.poll(&mut cx(), now(0)) {
                 return result;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;
@@ -511,7 +511,7 @@ fn secure_client(
     (runtime, content)
 }
 fn read_secure(client: &(StandaloneConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
-    client.0.read_property(&client.1, "on", Deadline::NONE, now(0), &mut work())
+    client.0.read_property(&client.1, "on", Deadline::NONE, now(0))
         .unwrap()
 }
 
@@ -519,7 +519,7 @@ async fn until(server: &mut SecureFixture, call: &mut ConsumerCall, state: RawFi
     let start = Instant::now();
     loop {
         server.step();
-        assert!(call.poll(&mut cx(), now(0), &mut work()).is_pending());
+        assert!(call.poll(&mut cx(), now(0)).is_pending());
         if server.server().state() == state {
             return;
         }

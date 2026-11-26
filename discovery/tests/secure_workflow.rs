@@ -23,7 +23,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
     },
     task::{Context, Waker},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use support::*;
 use tokio::net::TcpListener;
@@ -144,6 +144,7 @@ async fn untouched(listener: &TcpListener) {
     );
 }
 struct App {
+    clock_origin: Instant,
     instance: ConsumerInstance,
     bank: Arc<HostResourceAccounts>,
     policy: Arc<Permission>,
@@ -161,6 +162,7 @@ impl App {
                 .unwrap(),
         );
         Self {
+            clock_origin: Instant::now(),
             instance,
             bank,
             policy,
@@ -223,24 +225,32 @@ impl ConsumerDataService for ObservedData {
         Ok(())
     }
 }
-fn read(runtime: &(StandaloneConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
+fn read(
+    runtime: &(StandaloneConsumerAssociation, ConsumerCalls),
+    clock_origin: Instant,
+) -> ConsumerCall {
+    let admitted_at = now(clock_origin);
     runtime
         .0
         .read_property(
             &runtime.1,
             "level",
-            Deadline::at(now().checked_add_ticks(4_000).unwrap()),
-            now(),
-            &mut work(),
+            Deadline::at(admitted_at.checked_add_ticks(4_000).unwrap()),
+            admitted_at,
         )
         .unwrap()
 }
-async fn until_request(runtime: &(StandaloneConsumerAssociation, ConsumerCalls), peer: &Peer) {
+async fn until_request(
+    runtime: &(StandaloneConsumerAssociation, ConsumerCalls),
+    peer: &Peer,
+    clock_origin: Instant,
+) {
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             runtime
                 .1
-                .step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+                .step(&mut Context::from_waker(Waker::noop()), now(clock_origin))
+                .unwrap();
             if !peer.requests.lock().unwrap().is_empty() {
                 break;
             }
@@ -256,7 +266,11 @@ async fn authenticated_directory_to_exact_basic_https_form_validates_structured_
     let directory_keys = Keys::new("127.0.0.1");
     let thing_keys = Keys::new("127.0.0.1");
     assert_ne!(directory_keys.cert, thing_keys.cert);
-    let thing = thing_peer(&thing_keys, reply(BODY, "application/json", "")).await;
+    let (release, wait) = tokio::sync::oneshot::channel();
+    let mut step = Step::new("/level", reply(BODY, "application/json", ""))
+        .authenticated(THING_USER, THING_PASSWORD);
+    step.reply_after = Some(wait);
+    let thing = Peer::start(vec![step], Some(&thing_keys)).await;
     let sentinel = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let other = format!("https://{}/unselected", sentinel.local_addr().unwrap());
     let target = thing.url("/level", true);
@@ -273,11 +287,33 @@ async fn authenticated_directory_to_exact_basic_https_form_validates_structured_
     assert!(
         runtime
             .0
-            .read_property(&runtime.1, "mirror", Deadline::NONE, now(), &mut work())
+            .read_property(&runtime.1, "mirror", Deadline::NONE, now(app.clock_origin))
             .is_err()
     );
-    let mut call = read(&runtime);
-    let result = settle(&mut call).await;
+    let mut call = read(&runtime, app.clock_origin);
+    // Drop only the waiter after the authenticated request is on the wire.
+    {
+        let mut waiting = std::pin::pin!(settle(&mut call, app.clock_origin));
+        tokio::select! {
+            _ = waiting.as_mut() => panic!("the peer is holding its reply"),
+            _ = thing.wait_request() => {}
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        assert!(
+            waiting
+                .as_mut()
+                .poll(&mut Context::from_waker(Waker::noop()))
+                .is_pending()
+        );
+    }
+    release.send(()).unwrap();
+    let result = settle(&mut call, app.clock_origin).await.unwrap();
+    assert!(matches!(
+        std::pin::pin!(settle(&mut call, app.clock_origin))
+            .as_mut()
+            .poll(&mut Context::from_waker(Waker::noop())),
+        std::task::Poll::Ready(Err(CoreError::StaleHandle(_)))
+    ));
     assert_eq!(
         result.result().unwrap().data().unwrap().body,
         BODY.as_bytes()
@@ -422,7 +458,7 @@ async fn discovery_does_not_supply_missing_credentials_policy_or_instance_author
         assert!(
             runtime
                 .0
-                .read_property(&runtime.1, "level", Deadline::NONE, now(), &mut work())
+                .read_property(&runtime.1, "level", Deadline::NONE, now(app.clock_origin))
                 .is_err(),
             "case {case}"
         );
@@ -446,8 +482,8 @@ async fn tls_domains_are_independent_in_both_directions() {
         Some(credentials(THING_USER, THING_PASSWORD)),
     );
     let runtime = app.prepare(&selected, 1, &app.instance).unwrap();
-    let mut call = read(&runtime);
-    let result = settle(&mut call).await;
+    let mut call = read(&runtime, app.clock_origin);
+    let result = settle(&mut call, app.clock_origin).await.unwrap();
     assert!(result.result().is_err());
     assert!(
         thing.requests.lock().unwrap().is_empty(),
@@ -508,8 +544,8 @@ async fn wrong_credentials_forbidden_and_redirect_responses_do_not_retry_or_navi
         };
         let app = App::new(&target, &keys, Some(credentials(user, password)));
         let runtime = app.prepare(&selected, 1, &app.instance).unwrap();
-        let mut call = read(&runtime);
-        let result = settle(&mut call).await;
+        let mut call = read(&runtime, app.clock_origin);
+        let result = settle(&mut call, app.clock_origin).await.unwrap();
         assert!(result.result().is_err(), "case {case}");
         assert_credentials(&thing, user, password);
         drop((result, call, runtime));
@@ -538,8 +574,8 @@ async fn authenticated_success_still_requires_selected_dataschema_validation() {
             Some(credentials(THING_USER, THING_PASSWORD)),
         );
         let runtime = app.prepare(&selected, 1, &app.instance).unwrap();
-        let mut call = read(&runtime);
-        let result = settle(&mut call).await;
+        let mut call = read(&runtime, app.clock_origin);
+        let result = settle(&mut call, app.clock_origin).await.unwrap();
         assert!(result.result().is_err(), "{body}");
         assert_credentials(&thing, THING_USER, THING_PASSWORD);
         drop((result, call, runtime));
@@ -572,9 +608,9 @@ async fn in_flight_cancellation_revocation_rotation_and_abandonment_release_the_
         // Engine deadline must not impersonate cancellation or revocation.
         let mut call = runtime
             .0
-            .read_property(&runtime.1, "level", Deadline::NONE, now(), &mut work())
+            .read_property(&runtime.1, "level", Deadline::NONE, now(app.clock_origin))
             .unwrap();
-        until_request(&runtime, &thing).await;
+        until_request(&runtime, &thing, app.clock_origin).await;
         match case {
             0 => call.cancel(),
             1 => app.policy.allowed.store(false, Ordering::Release),
@@ -584,7 +620,7 @@ async fn in_flight_cancellation_revocation_rotation_and_abandonment_release_the_
             _ => unreachable!(),
         }
         if case != 4 {
-            let result = settle(&mut call).await;
+            let result = settle(&mut call, app.clock_origin).await.unwrap();
             let error = result.result().expect_err("invalidated read succeeded");
             let expected = match case {
                 0 => matches!(error, CoreError::Cancelled(_)),
@@ -640,13 +676,17 @@ async fn validated_unread_success_is_fenced_by_changed_policy_or_original_instan
             &app.bank,
         )
         .unwrap();
-        let mut call = read(&runtime);
+        let mut call = read(&runtime, app.clock_origin);
         // Drive native completion/validation without handing the result to the application.
         tokio::time::timeout(Duration::from_secs(3), async {
             while validations.load(Ordering::Acquire) == 0 {
                 runtime
                     .1
-                    .step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+                    .step(
+                        &mut Context::from_waker(Waker::noop()),
+                        now(app.clock_origin),
+                    )
+                    .unwrap();
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
         })
@@ -659,7 +699,7 @@ async fn validated_unread_success_is_fenced_by_changed_policy_or_original_instan
             }
             _ => app.instance.revoke(),
         }
-        let result = settle(&mut call).await;
+        let result = settle(&mut call, app.clock_origin).await.unwrap();
         assert!(result.result().is_err());
         assert!(
             matches!(

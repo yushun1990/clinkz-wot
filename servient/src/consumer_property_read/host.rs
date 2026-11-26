@@ -1346,7 +1346,6 @@ fn progress(
                     policy.work[3]
                 };
                 if pay(work, &[(W::CleanupItems, 1), (W::BindingPolls, cost)]) {
-                    let mut callback = WorkBudget::new().with_remaining(W::BindingPolls, cost);
                     if phase == CallPhase::Running {
                         let backed = call.transfer_backed(
                             transfer_bytes(policy).expect("qualified destination"),
@@ -1354,11 +1353,12 @@ fn progress(
                         let cleanup = c.kernel.cleanup_phase(policy, backed);
                         c.kernel.call_phase = CallPhase::Cancelling;
                         drop(c);
-                        let result = call.raw.as_mut().unwrap().as_pin_mut().start_cancel(
-                            cx,
-                            cleanup,
-                            &mut callback,
-                        );
+                        let result = call
+                            .raw
+                            .as_mut()
+                            .unwrap()
+                            .as_pin_mut()
+                            .start_cancel(cx, cleanup);
                         match result {
                             Ok(StartStatus::Pending) => {}
                             Ok(StartStatus::Ready(s)) => settle(root, driver, Ok(s), offer),
@@ -1366,12 +1366,8 @@ fn progress(
                         }
                     } else {
                         drop(c);
-                        if let Poll::Ready(s) = call
-                            .raw
-                            .as_mut()
-                            .unwrap()
-                            .as_pin_mut()
-                            .poll_cancel(cx, &mut callback)
+                        if let Poll::Ready(s) =
+                            call.raw.as_mut().unwrap().as_pin_mut().poll_cancel(cx)
                         {
                             settle(root, driver, s, offer);
                         }
@@ -1382,15 +1378,8 @@ fn progress(
                 && phase == CallPhase::Running
                 && pay(work, &[(W::BindingPolls, policy.work[3])])
             {
-                let mut callback =
-                    WorkBudget::new().with_remaining(W::BindingPolls, policy.work[3]);
                 drop(c);
-                if let Poll::Ready(result) = call
-                    .raw
-                    .as_mut()
-                    .unwrap()
-                    .as_pin_mut()
-                    .poll_result(cx, &mut callback)
+                if let Poll::Ready(result) = call.raw.as_mut().unwrap().as_pin_mut().poll_result(cx)
                 {
                     call.result = Some(result);
                     lock(&root.get().cell).kernel.settle();

@@ -302,7 +302,7 @@ fn silent_peer_removal_fences_without_a_wake_and_keeps_funded_cleanup_reachable(
         let wakes = Arc::new(ProgressWake(std::sync::atomic::AtomicUsize::new(0)));
         let waker = Waker::from(wakes.clone());
         let mut driver = Context::from_waker(&waker);
-        assert!(call.poll(&mut driver, now(0), &mut work()).is_pending());
+        assert!(call.poll(&mut driver, now(0)).is_pending());
         wakes.0.store(0, Ordering::Release);
         owner.remove_instance(&id, &mut work()).unwrap();
         assert_eq!(wakes.0.load(Ordering::Acquire), 0);
@@ -310,10 +310,7 @@ fn silent_peer_removal_fences_without_a_wake_and_keeps_funded_cleanup_reachable(
             start(&view, &calls, &peer),
             Err(CoreError::StaleHandle(_))
         ));
-        assert!(
-            call.poll(&mut driver, now(0), &mut WorkBudget::new())
-                .is_pending()
-        );
+        assert!(!calls.is_idle());
         assert!(!calls.is_idle());
         assert_eq!((outstanding(&account), outstanding(&work_bank)), (1, 1));
         assert_eq!(
@@ -322,8 +319,8 @@ fn silent_peer_removal_fences_without_a_wake_and_keeps_funded_cleanup_reachable(
             "removal is not drain"
         );
         // The application supplies this lifecycle turn; no peer response occurs.
-        calls.step(&mut driver, now(0), &mut work());
-        let Poll::Ready(result) = call.poll(&mut driver, now(0), &mut work()) else {
+        calls.step(&mut driver, now(0)).unwrap();
+        let Poll::Ready(Ok(result)) = call.poll(&mut driver, now(0)) else {
             panic!("funded original cleanup was not reachable");
         };
         assert!(matches!(result.result(), Err(CoreError::StaleHandle(_))));
@@ -434,7 +431,7 @@ fn configure(
     account: &Arc<HostResourceAccounts>,
     peers: &[&Peer],
 ) -> ConsumerAssociation {
-    let original = owner.instance(id, &mut work()).unwrap().consumer();
+    let original = owner.instance(id).unwrap().consumer();
     let raw = associate_ref(definition, original, account, peers);
     owner
         .set_configuration(id, configuration, raw, &mut work())
@@ -456,7 +453,6 @@ fn read_by_id(
         &[("port", &port), ("item", "x"), ("q", "q")],
         Deadline::NONE,
         now(0),
-        &mut work(),
     )
 }
 
@@ -558,10 +554,7 @@ fn same_thing_configurations_keep_permissions_and_accepted_context_across_update
             &[&a],
         ));
         assert!(!admin.is_current() && readonly.is_current() && original.is_current());
-        assert_eq!(
-            owner.instance(id, &mut work()).unwrap().consumer(),
-            original
-        );
+        assert_eq!(owner.instance(id).unwrap().consumer(), original);
         assert!(matches!(
             start(&admin, &calls, &b),
             Err(CoreError::StaleHandle(_))
@@ -586,7 +579,7 @@ fn same_thing_configurations_keep_permissions_and_accepted_context_across_update
             .remove_configuration(id, "admin", &mut work())
             .unwrap();
         assert!(matches!(
-            owner.association(id, "admin", &mut work()),
+            owner.association(id, "admin"),
             Err(CoreError::NotFound(_))
         ));
         assert!(readonly.is_current());
@@ -690,7 +683,7 @@ fn same_id_recreation_does_not_retarget_old_calls_views_or_configuration_inputs(
 }
 
 #[test]
-fn real_http_id_and_configuration_admission_uses_small_credit_at_different_populations() {
+fn real_http_id_and_configuration_admission_finds_the_original_mapping_at_different_populations() {
     io().block_on(async {
         for population in [64, 4096] {
             let peer = Peer::new();
@@ -717,16 +710,12 @@ fn real_http_id_and_configuration_admission_uses_small_credit_at_different_popul
                 .remove_configuration(&id, "access-016", &mut work())
                 .unwrap();
             assert!(matches!(
-                owner.association(&id, "access-016", &mut work()),
+                owner.association(&id, "access-016"),
                 Err(CoreError::NotFound(_))
             ));
             let capacity = limited_bank(1);
             let calls = ConsumerCalls::try_new(capacity.clone(), 1).unwrap();
             for configuration in ["access-000", "access-015", "access-031"] {
-                // The same fixed credit serves both populations. It is far
-                // below the previous full-population reservation, with no
-                // adjustment to policy/native/cleanup work or configured limits.
-                let mut credit = work().with_remaining(WorkClass::QueueOperations, 1024);
                 let port = peer.address.port().to_string();
                 let mut call = owner
                     .read_property_with_variables(
@@ -737,10 +726,8 @@ fn real_http_id_and_configuration_admission_uses_small_credit_at_different_popul
                         &[("port", &port), ("item", "x"), ("q", "q")],
                         Deadline::NONE,
                         now(0),
-                        &mut credit,
                     )
                     .unwrap();
-                assert!(credit.remaining(WorkClass::QueueOperations) > 0);
                 assert_eq!(
                     finish(&mut call)
                         .await
@@ -784,14 +771,14 @@ fn real_http_mixed_removal_recreation_and_configuration_update_preserves_origina
         let capacity = limited_bank(2);
         let calls = ConsumerCalls::try_new(capacity.clone(), 2).unwrap();
         for _ in 0..12 {
-            let original = owner.instance(id, &mut lifecycle()).unwrap();
+            let original = owner.instance(id).unwrap();
             let old_view = configure(&owner, id, "default", &da, &account, &[&a]);
             let closed_before = a.closed.load(Ordering::Acquire);
             let received_before = a.count();
             let mut old = read_by_id(&owner, id, "default", &calls, &a).unwrap();
             let stop = Instant::now() + Duration::from_secs(5);
             while a.count() == received_before {
-                assert!(old.poll(&mut cx(), now(0), &mut work()).is_pending());
+                assert!(old.poll(&mut cx(), now(0)).is_pending());
                 assert!(Instant::now() < stop, "no new HTTP request");
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }

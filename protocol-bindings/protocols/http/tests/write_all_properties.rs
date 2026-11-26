@@ -82,14 +82,7 @@ fn complete_writable_map_uses_actual_root_form_services_and_one_native_put() {
             // Individual write and all-read remain distinct on this listener.
             let mut single = client
                 .0
-                .write_property(
-                    &client.1,
-                    "on",
-                    payload(b"true"),
-                    Deadline::NONE,
-                    now(0),
-                    &mut work(),
-                )
+                .write_property(&client.1, "on", payload(b"true"), Deadline::NONE, now(0))
                 .unwrap_or_else(|_| panic!());
             let (local, remote) = server.exchange(&mut single).await;
             assert!(local.result().is_ok());
@@ -138,7 +131,7 @@ fn invalid_inputs() -> Vec<Vec<u8>> {
 }
 
 #[test]
-fn invalid_missing_duplicate_readonly_and_unpaid_input_returns_original_without_io() {
+fn invalid_missing_duplicate_or_readonly_input_returns_original_without_io() {
     io().block_on(async {
         let addr = address();
         let td = write_description(addr);
@@ -154,13 +147,7 @@ fn invalid_missing_duplicate_readonly_and_unpaid_input_returns_original_without_
         for input in inputs {
             let rejected = client
                 .0
-                .write_all_properties(
-                    &client.1,
-                    input.clone(),
-                    Deadline::NONE,
-                    now(0),
-                    &mut work(),
-                )
+                .write_all_properties(&client.1, input.clone(), Deadline::NONE, now(0))
                 .err()
                 .unwrap()
                 .into_input();
@@ -170,43 +157,12 @@ fn invalid_missing_duplicate_readonly_and_unpaid_input_returns_original_without_
                 ResourceKind::ALL.map(|k| accounts.account(k).used())
             );
         }
-        for class in [
-            WorkClass::CodecInputBytes,
-            WorkClass::ProviderProbes,
-            WorkClass::PlanningItems,
-            WorkClass::CleanupItems,
-            WorkClass::BindingPolls,
-        ] {
-            let input = payload(VALUES);
-            let rejected = client
-                .0
-                .write_all_properties(
-                    &client.1,
-                    input.clone(),
-                    Deadline::NONE,
-                    now(0),
-                    &mut work().with_remaining(class, 0),
-                )
-                .err()
-                .unwrap()
-                .into_input();
-            assert!(Arc::ptr_eq(&input.body, &rejected.body));
-            assert_eq!(
-                baseline,
-                ResourceKind::ALL.map(|k| accounts.account(k).used())
-            );
-        }
+
         denied.store(true, Ordering::Relaxed);
         assert!(
             client
                 .0
-                .write_all_properties(
-                    &client.1,
-                    payload(VALUES),
-                    Deadline::NONE,
-                    now(0),
-                    &mut work()
-                )
+                .write_all_properties(&client.1, payload(VALUES), Deadline::NONE, now(0))
                 .is_err()
         );
         server.step();
@@ -291,7 +247,7 @@ fn writable_input_schema_is_independent_of_readable_members_and_individual_forms
     let (definitions, funding) = prepared.into_execution();
     assert_eq!(definitions.len(), 1);
     assert_eq!(definitions[0].form(), 1);
-    let (input, _, _) = definitions.into_iter().next().unwrap().into_parts();
+    let input = definitions.into_iter().next().unwrap().into_input();
     match input.definition.content().schemas() {
         ConsumerFiniteSchemas::WriteAllProperties(s) => assert_eq!(
             s.members()
@@ -348,7 +304,7 @@ fn writable_input_schema_is_independent_of_readable_members_and_individual_forms
     )
     .unwrap();
     let (d, f) = p.into_execution();
-    let (input, _, _) = d.into_iter().next().unwrap().into_parts();
+    let input = d.into_iter().next().unwrap().into_input();
     assert!(
         input
             .definition
@@ -449,13 +405,10 @@ fn captured_map_service_validates_the_whole_input_and_service_loss_fences_native
                     })
                     .unwrap_or_else(|_| panic!());
             let original = payload(VALUES);
-            let call = client.0.write_all_properties(
-                &client.1,
-                original.clone(),
-                Deadline::NONE,
-                now(0),
-                &mut work(),
-            );
+            let call =
+                client
+                    .0
+                    .write_all_properties(&client.1, original.clone(), Deadline::NONE, now(0));
             assert_eq!(calls.load(Ordering::Relaxed), 1);
             if lost {
                 assert!(Arc::ptr_eq(

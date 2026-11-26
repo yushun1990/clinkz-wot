@@ -5,7 +5,6 @@ use crate::{
     BindingGeneration, BindingId, CoreError, CoreResult, Deadline, InteractionOutputView, PlanId,
     ThingSlotId,
 };
-use clinkz_wot_foundation::WorkBudget;
 use core::{
     cell::Cell,
     task::{Context, Poll},
@@ -88,7 +87,8 @@ pub struct ReadMapping<'a> {
 }
 
 /// Original output owner lends bytes; it need not be Arc-backed or heap-backed.
-/// Drop must perform finite local disposal without network waits.
+/// A validated handoff must lend the same view it checked. Successive views
+/// can differ. Drop performs finite local disposal without network waits.
 pub trait ReadOutput {
     fn view(&self) -> InteractionOutputView<'_>;
 }
@@ -101,24 +101,18 @@ pub enum ReadNativeSettlement<O> {
 }
 /// Cooperative original native work. Drop performs bounded local disposal with
 /// no network wait and makes no acknowledgement or remote-effect claim. Errors
-/// during cancellation retain the complete work for another paid cleanup poll.
+/// during cancellation retain the complete work for another bounded cleanup poll.
 pub trait ReadNativeCall {
     type Output: ReadOutput;
-    fn poll_result(
-        &mut self,
-        cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<Self::Output>>;
+    fn poll_result(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<Self::Output>>;
     fn start_cancel(
         &mut self,
         cause: &CoreError,
         cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> CoreResult<Poll<ReadNativeSettlement<Self::Output>>>;
     fn poll_cancel(
         &mut self,
         cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<ReadNativeSettlement<Self::Output>>>;
 }
 
@@ -132,10 +126,8 @@ pub trait ReadBinding {
     fn configuration(&self) -> &Self::Configuration;
     fn mapping<'a>(&'a self, program: &'a Self::Program) -> ReadMapping<'a>;
     fn supports(&self, program: &Self::Program, meaning: ValueExecution<'_>, media: &str) -> bool;
-    /// Complete Engine-retained indirect backing beyond inline Work/Call
-    /// layouts, including output/retirement opportunities. Binding-private
-    /// socket/SDK resources keep their native owner's separate bounded policy.
-    fn backing_bytes(&self) -> u64;
+    /// Acquire bounded native storage and its retirement path before returning.
+    /// A refused start has disposed any partial acquisition.
     fn start(&self, program: &Self::Program, deadline: Deadline) -> CoreResult<Self::Call>;
 }
 
@@ -145,7 +137,6 @@ pub trait ReadAccess {
     fn revision(&self) -> u64 {
         0
     }
-    fn work(&self) -> u64;
     fn authorize(&self, consumer: LocalConsumerRef<'_>, mapping: ReadMapping<'_>)
     -> CoreResult<()>;
 }

@@ -71,7 +71,7 @@ fn shared_failure_before_during_and_after_application_never_implies_rollback_or_
             );
             for _ in 0..10 {
                 server.step();
-                client.1.step(&mut cx(), now(0), &mut work());
+                client.1.step(&mut cx(), now(0)).unwrap();
             }
             assert_eq!(server.controls.requests.get(), 1);
             assert_eq!(server.app.roots.get(), 1);
@@ -135,7 +135,7 @@ fn shared_ambiguous_or_partial_native_completion_never_confirms_or_replays_the_g
             let mut call = start_write(&client);
             let start = Instant::now();
             let result = loop {
-                if let Poll::Ready(s) = call.poll(&mut cx(), now(0), &mut work()) {
+                if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) {
                     break s;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -152,7 +152,7 @@ fn shared_ambiguous_or_partial_native_completion_never_confirms_or_replays_the_g
                 }
             );
             for _ in 0..10 {
-                client.1.step(&mut cx(), now(0), &mut work());
+                client.1.step(&mut cx(), now(0)).unwrap();
             }
             drop(result);
             drop(call);
@@ -294,7 +294,7 @@ fn shared_valid_head_without_eof_is_not_completion_and_retains_funding_until_set
             let mut call = start_collection_at(&client, operation, Deadline::at(now(10))).unwrap();
             let start = Instant::now();
             loop {
-                assert!(call.poll(&mut cx(), now(0), &mut work()).is_pending());
+                assert!(call.poll(&mut cx(), now(0)).is_pending());
                 if received.try_recv().is_ok() {
                     break;
                 }
@@ -304,7 +304,7 @@ fn shared_valid_head_without_eof_is_not_completion_and_retains_funding_until_set
             let retained = ResourceKind::ALL.map(|k| accounts.account(k).used());
             for _ in 0..10 {
                 assert!(
-                    call.poll(&mut cx(), now(0), &mut work()).is_pending(),
+                    call.poll(&mut cx(), now(0)).is_pending(),
                     "head alone cannot confirm a write"
                 );
                 tokio::time::sleep(Duration::from_millis(1)).await;
@@ -319,12 +319,9 @@ fn shared_valid_head_without_eof_is_not_completion_and_retains_funding_until_set
             }
             release.send(()).unwrap();
             let instant = now(if fault == "timeout" { 10 } else { 0 });
-            assert!(
-                call.poll(&mut cx(), instant, &mut WorkBudget::new())
-                    .is_pending()
-            );
+            assert!(!client.1.is_idle());
             let result = loop {
-                if let Poll::Ready(s) = call.poll(&mut cx(), instant, &mut work()) {
+                if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), instant) {
                     break s;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -357,38 +354,6 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
     let write_description = |addr| collection_description(addr, operation);
     let start_write =
         |client: &(StandaloneConsumerAssociation, ConsumerCalls)| start_collection_at(client, operation, Deadline::NONE).unwrap();
-    use std::sync::atomic::AtomicUsize;
-    struct CountAccess(Access, Arc<AtomicUsize>);
-    impl ConsumerAccessService for CountAccess {
-        fn qualification_revision(&self) -> u64 {
-            self.0.qualification_revision()
-        }
-
-        fn authorize(
-            &self,
-            b: BindingRegistrationIdentity,
-            t: &str,
-            o: Operation,
-        ) -> CoreResult<()> {
-            self.0.authorize(b, t, o)
-        }
-        fn authorize_instance(
-            &self,
-            i: &ConsumerInstanceRef,
-            b: BindingRegistrationIdentity,
-            t: &str,
-            o: Operation,
-        ) -> CoreResult<()> {
-            self.1.fetch_add(1, Ordering::Relaxed);
-            self.0.authorize_instance(i, b, t, o)
-        }
-        fn retained_bytes(&self) -> u64 {
-            128
-        }
-        fn work(&self) -> u64 {
-            1
-        }
-    }
     io().block_on(async {
         for fault in ["cancel", "replace", "policy"] {
             let addr = address();
@@ -397,24 +362,28 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
             let accounts = bank();
             let owner = consumer_instance();
             let denied = Arc::new(AtomicBool::new(false));
-            let checks = Arc::new(AtomicUsize::new(0));
-            let mut reg = registration();
-            reg.services.access = Arc::new(CountAccess(Access(denied.clone()), checks.clone()));
-            let p = prepare_consumer(&td, accounts.clone(), vec![reg], ConsumerSelector::default()).unwrap();
-            let (d, f) = p.into_execution();
-            let client = StandaloneConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone()).map(|association| (association, ConsumerCalls::try_new(accounts.clone(), 1).unwrap())).unwrap_or_else(|_| panic!());
+            let mut registration = registration();
+            registration.services.access = Arc::new(Access(denied.clone()));
+            let prepared = prepare_consumer(
+                &td,
+                accounts.clone(),
+                vec![registration],
+                ConsumerSelector::default(),
+            ).unwrap();
+            let (definitions, funding) = prepared.into_execution();
+            let association = StandaloneConsumerAssociation::try_new(
+                owner.reference(), definitions, funding, accounts.clone(),
+            ).unwrap_or_else(|e| panic!("{:?}", e.error()));
+            let client = (association, ConsumerCalls::try_new(accounts.clone(), 1).unwrap());
             let mut call = start_write(&client);
             let start = Instant::now();
-            // Withhold handoff. Two authorization callbacks in one step witness
-            // the post-validation completion check without private-state access.
             let mut remote = None;
-            let mut completed = false;
-            while !completed || remote.is_none() {
+            while !call.is_settled() || remote.is_none() {
                 server.step();
-                let before = checks.load(Ordering::Relaxed);
-                client.1.step(&mut cx(), now(0), &mut work());
-                completed |= checks.load(Ordering::Relaxed) - before == 2;
-                if let Some(s) = server.server().take_settlement() { remote = Some(s); }
+                client.1.step(&mut cx(), now(0)).unwrap();
+                if let Some(settlement) = server.server().take_settlement() {
+                    remote = Some(settlement);
+                }
                 assert!(start.elapsed() < Duration::from_secs(5));
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
@@ -422,8 +391,8 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
             assert!(start_collection_at(&client, operation, Deadline::NONE).is_err(), "unread Engine slot retains original call capacity");
             match fault { "cancel" => call.cancel(), "replace" => owner.revoke(), _ => denied.store(true, Ordering::Relaxed) }
             let retained = ResourceKind::ALL.map(|k| accounts.account(k).used());
-            assert!(call.poll(&mut cx(), now(0), &mut WorkBudget::new()).is_pending());
-            let Poll::Ready(local) = call.poll(&mut cx(), now(0), &mut work()) else { panic!("original completed result retained") };
+            assert!(!client.1.is_idle());
+            let Poll::Ready(Ok(local)) = call.poll(&mut cx(), now(0)) else { panic!("original completed result retained") };
             assert!(local.result().is_err());
             assert_eq!(local.effect(), ConsumerEffect::Completed);
             assert!(matches!(local.native_outcome(), ConsumerNativeOutcome::Returned(Ok(o)) if o.data().is_none()));

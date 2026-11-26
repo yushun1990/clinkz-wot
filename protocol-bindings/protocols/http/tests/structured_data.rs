@@ -77,7 +77,7 @@ fn bind_mappings(
     let bindings = definitions
         .into_iter()
         .map(|d| {
-            d.bind(access.clone(), bank.clone(), &mut work())
+            d.bind(access.clone(), bank.clone())
                 .unwrap_or_else(|e| panic!("{:?}", e.error()))
         })
         .collect();
@@ -156,14 +156,7 @@ fn shared_constraints_survive_source_retirement_and_keep_instances_independent()
         let original = invalid.body.clone();
         let rejected = client_a
             .0
-            .write_property(
-                &client_a.1,
-                "on",
-                invalid,
-                Deadline::NONE,
-                now(0),
-                &mut work(),
-            )
+            .write_property(&client_a.1, "on", invalid, Deadline::NONE, now(0))
             .err()
             .unwrap()
             .into_input();
@@ -180,7 +173,6 @@ fn shared_constraints_survive_source_retirement_and_keep_instances_independent()
                 payload(&valid(42)),
                 Deadline::NONE,
                 now(0),
-                &mut work(),
             )
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let (written, produced) = a.exchange(&mut write).await;
@@ -197,12 +189,12 @@ fn shared_constraints_survive_source_retirement_and_keep_instances_independent()
         assert!(
             client_a
                 .0
-                .read_property(&client_a.1, "on", Deadline::NONE, now(0), &mut work())
+                .read_property(&client_a.1, "on", Deadline::NONE, now(0))
                 .is_err()
         );
         let mut read_b = client_b
             .0
-            .read_property(&client_b.1, "on", Deadline::NONE, now(0), &mut work())
+            .read_property(&client_b.1, "on", Deadline::NONE, now(0))
             .unwrap();
         let (result_b, producer_b) = b.exchange(&mut read_b).await;
         assert_eq!(result_b.result().unwrap().data().unwrap().body, valid(20));
@@ -212,7 +204,7 @@ fn shared_constraints_survive_source_retirement_and_keep_instances_independent()
         denied_a.store(false, Ordering::Relaxed);
         let mut read_a = client_a
             .0
-            .read_property(&client_a.1, "on", Deadline::NONE, now(0), &mut work())
+            .read_property(&client_a.1, "on", Deadline::NONE, now(0))
             .unwrap();
         let (result_a, producer_a) = a.exchange(&mut read_a).await;
         assert_eq!(result_a.result().unwrap().data().unwrap().body, valid(42));
@@ -296,7 +288,7 @@ fn producer_validates_declared_nested_output_before_delivery() {
         );
         let mut call = client
             .0
-            .read_property(&client.1, "on", Deadline::NONE, now(0), &mut work())
+            .read_property(&client.1, "on", Deadline::NONE, now(0))
             .unwrap();
         let (result, produced) = server.exchange(&mut call).await;
         assert_eq!(server.app.reads.get(), 1);
@@ -467,13 +459,11 @@ fn unsupported_nested_assertions_are_not_weakened_for_either_role() {
 }
 
 #[test]
-fn consumer_rejects_invalid_wire_values_and_preserves_late_constraint_evidence() {
+fn unread_invalid_wire_value_retains_its_first_validation_error_across_cancel_or_replacement() {
     io().block_on(async {
         for mode in ["normal", "cancel", "replace"] {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let addr = listener.local_addr().unwrap();
-            let sent = Arc::new(AtomicBool::new(false));
-            let done = sent.clone();
             let wire = std::thread::spawn(move || {
                 let (mut peer, _) = listener.accept().unwrap();
                 peer.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
@@ -492,7 +482,6 @@ fn consumer_rejects_invalid_wire_values_and_preserves_late_constraint_evidence()
                 )
                 .unwrap();
                 peer.write_all(body).unwrap();
-                done.store(true, Ordering::Release);
             });
             let td = structured_description(addr);
             let backing = bank();
@@ -513,30 +502,11 @@ fn consumer_rejects_invalid_wire_values_and_preserves_late_constraint_evidence()
                 Arc::new(AtomicBool::new(false)),
             );
             drop(td);
-            let mut call = client.0.read_property(&client.1, "on", Deadline::NONE, now(0), &mut work())
+            let mut call = client.0.read_property(&client.1, "on", Deadline::NONE, now(0))
                 .unwrap();
             let start = Instant::now();
-            while !sent.load(Ordering::Acquire) {
-                assert!(
-                    call.poll(
-                        &mut cx(),
-                        now(0),
-                        &mut work().with_remaining(WorkClass::CodecInputBytes, 0),
-                    )
-                    .is_pending()
-                );
+            while call.progress(&mut cx(), now(0)).is_pending() {
                 assert!(start.elapsed() < Duration::from_secs(5));
-                tokio::time::sleep(Duration::from_millis(1)).await;
-            }
-            for _ in 0..4 {
-                assert!(
-                    call.poll(
-                        &mut cx(),
-                        now(0),
-                        &mut work().with_remaining(WorkClass::CodecInputBytes, 0),
-                    )
-                    .is_pending()
-                );
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
             match mode {
@@ -545,7 +515,7 @@ fn consumer_rejects_invalid_wire_values_and_preserves_late_constraint_evidence()
                 _ => {}
             }
             let settlement = loop {
-                if let Poll::Ready(s) = call.poll(&mut cx(), now(0), &mut work()) {
+                if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) {
                     break s;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -555,14 +525,9 @@ fn consumer_rejects_invalid_wire_values_and_preserves_late_constraint_evidence()
             assert!(settlement.result().is_err(), "{mode}");
             assert!(
                 settlement.rejected_output().is_some(),
-                "original schema must validate normal and late output: {mode}"
+                "original rejected value missing: {mode}"
             );
-            if mode == "cancel" {
-                assert!(matches!(
-                    settlement.first_cause(),
-                    Some(CoreError::Cancelled(_))
-                ));
-            }
+            assert!(matches!(settlement.first_cause(), Some(CoreError::Validation(_))));
             drop(call);
             drop(client);
             drop(owner);
@@ -677,16 +642,13 @@ fn structured_preparation_cancellation_and_binding_refusal_preserve_funded_owner
         &accounts,
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    for saturated in [false, true] {
+    {
         let mut limits = GatewayDefaultV1::LIMITS.clone();
-        if saturated {
-            assert!(limits.set(ResourceKind::EngineLiveBytesGlobalMax, Some(1)));
-        }
+        assert!(limits.set(ResourceKind::EngineLiveBytesGlobalMax, Some(1)));
         let bank = Arc::new(HostResourceAccounts::new(&limits));
-        let mut budget = if saturated { work() } else { WorkBudget::new() };
         let refused = definition
             .clone()
-            .bind(policy.clone(), bank.clone(), &mut budget)
+            .bind(policy.clone(), bank.clone())
             .err()
             .unwrap();
         let (returned_definition, returned_policy) = refused.into_input();

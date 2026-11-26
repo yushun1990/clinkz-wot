@@ -57,6 +57,8 @@ A bound Property Read retains the selected mapping, original authority and fixed
 destination. The Binding resolves a fixed destination once. Variable templates
 retain per-interaction validation and resolution. Repeated Reads need no new
 name lookup. Dropping a handle is passive. Removal or replacement fences it.
+Releasing the last selected service from that handle holds the shared Consumer
+turn, including after its original association closes.
 The destination owner supplies immutable bytes through the last handle,
 native request or settlement using them. A dynamic destination belongs to
 its admitted call. Refusal returns protected operands to their original owner.
@@ -314,6 +316,10 @@ Applications schedule progress/cleanup after passive revocation and cursor loss,
 either individually or with the aggregate turn below. There is no scheduler or
 automatic authority-change wake mechanism.
 
+The Host holds the shared Consumer turn through the final release of a raw
+context, a report's retained validator and an idle association's captured
+services. Public notification report fields can move out independently.
+
 `RawNotificationServient::step` and `ConsumerNotifications::step` visit every
 original conversation at most once per turn, rotating the first visit across
 turns. A pending participant or retained error cannot starve sibling visits.
@@ -503,13 +509,11 @@ A destructor cannot wait for a peer or user callback, or certify completed drain
 `SAFE-CONCUR-001`: Acceptance, revocation, publication, completion and transfer
 MUST have explicit linearization points under one logical ownership authority.
 No handler, Binding/service callback, allocation or unbounded destruction occurs
-under registry-wide locks or constrained critical sections. A public turn
-includes all synchronous callbacks and nested drives, even through independent
-siblings. The deployment may defer nested drives and schedule the target for a
-later turn. Cancellation and revocation still fence checked-out work immediately.
-A deployment allowing nesting must bound inclusive depth, fan-out and callback
-cost at every reachable drive entry. Ready siblings and draining owners get
-turns under admission pressure.
+under registry-wide locks or constrained critical sections. Each public drive
+bounds the synchronous work it admits through linked callbacks. The Host
+Consumer capacities reserve execution for independent application turns. Cancellation and revocation fence checked-out
+work immediately. Ready siblings and draining owners get turns under admission
+pressure.
 
 Pending names the retry owner and enabling event. An event-driven capacity
 wait registers bounded interest, then rechecks before sleeping. Publish the
@@ -524,8 +528,8 @@ responsible for progress. Taking a result leaves its loan held until disposal.
 The Host finite Consumer registry is borrowed only to reserve, check out,
 restore or remove an original call slot. Admission/progress callbacks and linked
 destructors run after that borrow ends. A checked-out or admitting slot remains
-occupied; reentrant progress cannot poll it again or overwrite it through nested
-admission. Passive per-call control retains the first cause and abandonment even
+occupied throughout the exclusive execution turn. Passive per-call control
+retains the first cause and abandonment even
 while native work is outside the registry. Explicit cancellation and work-owner close
 wake registered progress outside registry/control borrows. Managed removal and
 standalone authority loss are passive fences requiring application-scheduled
@@ -575,22 +579,22 @@ Things. Removal can drain that Thing's own configurations and services in bounde
 before disposal and releases all retained ticket backing. Neither operation
 claims native drain or automatic scheduling.
 
-Runtime driver entry records its time observation on every original live or
-admitting call before invoking callbacks; direct call polling records its own
-entry observation. Resumed progress uses each call's latest accepted observation,
-including later nested progress or admission, rather than replaying an outer
-sweep's earlier timestamp. Genuine caller time regressions and clock-domain
-changes still record an invariant failure. Deadline fences use that latest
-observation after callbacks and before native effects or successful handoff.
-Runtime drivers and direct call polls both retain wake interest when the original
-slot is checked out. Busy entry requests a retry on restoration; waker registration
-and the restoration wake occur outside registry borrows, including when an inline
-cancellation wake reenters a pending call's driver.
+An independent finite capacity step observes time for all its original calls
+before driving one slot. Direct polling observes time for its own call.
+Expiry, time regression or a change of clock domain records a first cause
+before linked callbacks can close or cancel work.
 
-Slot restoration on unwind retains the original owner; it grants no guarantee
-that arbitrary panicking linked code can resume execution. The independent
-control allocation is funded before native construction and keeps its original
-lease through its last handle/call reference. It cannot address a reused slot.
+An accepted poll that waits for an event registers the current task's waker.
+Explicit close or cancellation racing waker replacement must reach the new
+waiter or be observed by its poll. Publish state before signalling and run
+waker clone, wake and drop outside registry borrows. A synchronously invoked
+waker can mark its task runnable for an independent application turn.
+Worker-local owners can retire accepted calls during thread shutdown.
+
+Unwinding a checkout restores the original owner. The independent control
+allocation is funded before native construction and keeps its original lease
+through its last handle or call reference. Each control addresses one slot
+generation.
 
 ### Continuing Action associations and invocation capacity
 
@@ -655,6 +659,8 @@ capacity/control ownership for progress; settlements retain their original
 association and work leases through final native/data/service disposal. Input,
 normal and late output access lends slices tied to that settlement; it cannot
 detach the original payload Arc from its funding.
+The last idle Action view holds the shared Consumer turn through destruction
+of its retained services.
 Cleanup still uses the bounded Host local-abort contract; this adds no scheduler,
 background task, native pool or general async cleanup transfer.
 
@@ -663,14 +669,11 @@ separately funded passive controls. Registry borrows end before access,
 validation, destination/start, poll/retirement and linked destruction callbacks.
 The original invocation keeps its opaque token, selected mappings, exchange,
 normal/late evidence and funding across checkout. Admission reserves its slot
-and sequence before callbacks; nested admission cannot reuse or overwrite it.
-Reentrant query/cancel, settlement and native-state inspection return
-`Backpressure` while that invocation is checked out. Identity, first cause and
-local cancellation remain accessible. Reentrant progress records time and wake
-interest, returns `Backpressure`, and requests a retry after restoration; it
-never polls the same exchange concurrently. Runtime drivers retain that interest
-too. Time observations, explicit close/cancellation wakes, passive Drop and
-unwind restoration follow the boundary rules above independently for this owner.
+and sequence before invoking linked services. Identity, first cause and local
+cancellation remain accessible during checkout. Inspection of checked-out
+native state returns `Backpressure`. Mapped query/cancel, progress and
+settlement require an independent Host Consumer turn. The same registration,
+close and unwind rules apply to this owner.
 
 Action access, native and validation callbacks are followed by fresh original
 control/dependency checks before another native effect or successful handoff.
@@ -728,8 +731,32 @@ The existing finite named-configuration registry stays finite; Action and
 notification associations are explicitly bound, not looked up through a new
 universal configuration registry. Removing/replacing a parent or dropping its
 owner fences every original facet without retargeting work. Closing a capacity
-still fences only that capacity. The progress helper accepts no new authority,
-definition, service or configuration override and changes no admission rules.
+still fences only that capacity. The deployment calls each capacity directly.
+One finite capacity step observes deadlines for all its original calls and
+visits one slot in rotation for native progress. Cancellation and close preserve
+any expiry already recorded as the first cause.
+
+The application holds execution authority for finite, continuing Action and
+notification capacities on a Host thread, including direct handle polls.
+Admission, native progress and application handoff require exclusive entry.
+Bindings receive the original exchange or transport inputs, codecs receive the
+representation and schema, and access providers receive the original permission
+request. Captured sibling handles confer no synchronous execution authority.
+During execution or final Host-owned release, a drive attempted by a linked
+callback, waker or destructor returns `Lifecycle` in the readiness phase with
+`RetryClass::Never`. Refusal precedes
+clock observation, spending work, cloning a waker and native I/O. The caller
+keeps any offered input. The original work, first cause and registered waiter
+stay with their owner. Dependent interactions can run on later application
+turns. Local cancellation and revocation can still fence their original work
+during a callback.
+
+A retained finite handle can drive on an independent turn, inspect settlement
+passively and collect under fresh permission. Acknowledgement retires the
+native owner. The result and its share of outstanding quota survive through
+disposal. The execution boundary covers final release of Host-held native
+work, services, data and continuations, including unused association views
+and collected reports.
 
 The deployment supplies turns for native readiness, passive lifecycle changes,
 deadlines and transitions that are locally runnable. A timer, command loop or
@@ -823,11 +850,17 @@ the slot owner can close/step or perform local disposal.
 
 The [existing downstream fixture](../evidence/constrained-finite-execution.md)
 exercises issuer identity, real datagrams and inline result retention, and
-compiles for a target without pointer atomics. Its Read entry still takes a
-reservation and work credits. The successor must exercise those cases with
-the typed slot as backing. Host execution currently shares the finite kernel
-and uses an Rc registry, reentrant controls, a Host account bank and boxed
-native calls.
+compiles for a target without pointer atomics. Admission borrows the caller's
+`ReadResultSlot` exclusively through result disposal. Runtimes reachable from
+one another's callbacks share a caller-owned drive cell. The cell stays held
+while disposing an active native call or a taken output. A poll entered from
+either destructor returns a readiness-phase lifecycle error before observing
+time or touching a sibling's native work. Each validated loan checks the
+exact native view returned and rechecks permission after validation. Once a cause
+is known, local close can retain a racing raw output without entering an access
+or codec service.
+Host execution shares the finite kernel and uses an Rc registry, passive
+controls, a Host account bank and boxed native calls.
 
 ### Caller-owned continuing Action
 

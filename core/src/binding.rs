@@ -652,7 +652,6 @@ pub struct CleanupReservation {
     subject: CleanupSlotId,
     lifetime: BindingLifetimeFootprint,
     durable_status_records: u32,
-    work: WorkBudget,
 }
 
 impl CleanupReservation {
@@ -661,13 +660,11 @@ impl CleanupReservation {
         subject: CleanupSlotId,
         lifetime: BindingLifetimeFootprint,
         durable_status_records: u32,
-        work: WorkBudget,
     ) -> Self {
         Self {
             subject,
             lifetime,
             durable_status_records,
-            work,
         }
     }
 
@@ -684,11 +681,6 @@ impl CleanupReservation {
     /// Returns the durable record capacity retained by the reservation.
     pub const fn durable_status_records(&self) -> u32 {
         self.durable_status_records
-    }
-
-    /// Returns the admitted cleanup work allowance.
-    pub const fn work(&self) -> &WorkBudget {
-        &self.work
     }
 }
 
@@ -3488,22 +3480,20 @@ pub trait HostBindingCall<T, C = NoCleanupSuccessor>: Send + 'static {
     /// Returns the immutable maximum retained footprint before first poll.
     fn lifetime_footprint(&self) -> BindingLifetimeFootprint;
 
-    /// Polls exactly one terminal result under explicit work budget.
-    fn poll_result(self: Pin<&mut Self>, cx: &mut Context<'_>, budget: &mut WorkBudget) -> Poll<T>;
+    /// Performs one bounded native poll. The Binding bounds bytes and callbacks before returning.
+    fn poll_result(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T>;
 
     /// Starts cancellation with one immutable cleanup phase.
     fn start_cancel(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         cleanup: CleanupPhaseContext,
-        budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<T, C>>>;
 
     /// Polls an accepted cancellation to explicit settlement.
     fn poll_cancel(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<T, C>>>;
 
     /// Returns the next binding-local deadline requiring an independent wake.
@@ -3608,27 +3598,24 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for HostConsumerCallEnvelope
     fn poll_result(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
-        self.as_mut().get_mut().as_pin_mut().poll_result(cx, budget)
+        self.as_mut().get_mut().as_pin_mut().poll_result(cx)
     }
     fn start_cancel(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         cleanup: CleanupPhaseContext,
-        budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
         self.as_mut()
             .get_mut()
             .as_pin_mut()
-            .start_cancel(cx, cleanup, budget)
+            .start_cancel(cx, cleanup)
     }
     fn poll_cancel(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        self.as_mut().get_mut().as_pin_mut().poll_cancel(cx, budget)
+        self.as_mut().get_mut().as_pin_mut().poll_cancel(cx)
     }
 }
 
@@ -3703,10 +3690,9 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for SealedHostConsumerCall {
     fn poll_result(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
         let this = self.as_mut().get_mut();
-        match this.raw.as_pin_mut().poll_result(cx, budget) {
+        match this.raw.as_pin_mut().poll_result(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(result) => Poll::Ready(this.seal_result(result)),
         }
@@ -3716,10 +3702,9 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for SealedHostConsumerCall {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         cleanup: CleanupPhaseContext,
-        budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
         let this = self.as_mut().get_mut();
-        match this.raw.as_pin_mut().start_cancel(cx, cleanup, budget)? {
+        match this.raw.as_pin_mut().start_cancel(cx, cleanup)? {
             StartStatus::Pending => Ok(StartStatus::Pending),
             StartStatus::Ready(settlement) => {
                 Ok(StartStatus::Ready(this.seal_settlement(settlement)))
@@ -3730,10 +3715,9 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for SealedHostConsumerCall {
     fn poll_cancel(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
         let this = self.as_mut().get_mut();
-        match this.raw.as_pin_mut().poll_cancel(cx, budget) {
+        match this.raw.as_pin_mut().poll_cancel(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
             Poll::Ready(Ok(settlement)) => Poll::Ready(Ok(this.seal_settlement(settlement))),
@@ -3769,7 +3753,6 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for RejectedAcceptedHostCons
     fn poll_result(
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
-        _: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
         Poll::Ready(Err(self
             .error
@@ -3781,7 +3764,6 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for RejectedAcceptedHostCons
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
         _: CleanupPhaseContext,
-        _: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
         Ok(StartStatus::Ready(BindingCallSettlement::Returned(Err(
             self.error
@@ -3793,7 +3775,6 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for RejectedAcceptedHostCons
     fn poll_cancel(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
-        _: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
         Poll::Ready(Err(self._seal.validation_error(
             311,

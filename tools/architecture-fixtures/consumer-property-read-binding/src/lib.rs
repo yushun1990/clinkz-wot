@@ -219,10 +219,7 @@ impl State {
             self.prepared = true;
         }
     }
-    fn poll(&mut self, budget: &mut WorkBudget) -> Poll<CoreResult<InteractionOutput>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
+    fn poll(&mut self) -> Poll<CoreResult<InteractionOutput>> {
         self.stats.hook();
         self.stats.polls.fetch_add(1, Ordering::SeqCst);
         if self.owned.as_mut().is_some_and(|p| !p.progress()) {
@@ -237,12 +234,8 @@ impl State {
     fn cancel(
         &mut self,
         cleanup: CleanupPhaseContext,
-        budget: &mut WorkBudget,
         host: bool,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Ok(StartStatus::Pending);
-        }
         self.stats.hook();
         self.stats.cancels.fetch_add(1, Ordering::SeqCst);
         self.prepare();
@@ -265,12 +258,7 @@ impl State {
                     let subject = cleanup.reservation().subject();
                     self.static_fabricated = true;
                     CleanupPhaseContext::bind_with_transfer_owner(
-                        CleanupReservation::new(
-                            subject,
-                            BindingLifetimeFootprint::new(1, 1),
-                            1,
-                            WorkBudget::new(),
-                        ),
+                        CleanupReservation::new(subject, BindingLifetimeFootprint::new(1, 1), 1),
                         subject,
                         CleanupOperation::CancelRequest,
                         error(),
@@ -310,11 +298,7 @@ impl State {
     }
     fn poll_cancel(
         &mut self,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
         self.stats.hook();
         self.stats.cancels.fetch_add(1, Ordering::SeqCst);
         self.prepare();
@@ -438,7 +422,10 @@ impl PollClientBinding for StaticClient {
         slot: &mut ClientRequestSlot<State>,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
-        slot.state_mut().poll(budget)
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return Poll::Pending;
+        }
+        slot.state_mut().poll()
     }
     fn start_cancel_request(
         &mut self,
@@ -447,7 +434,10 @@ impl PollClientBinding for StaticClient {
         slot: &mut ClientRequestSlot<State>,
         budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        slot.state_mut().cancel(cleanup, budget, false)
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return Ok(StartStatus::Pending);
+        }
+        slot.state_mut().cancel(cleanup, false)
     }
     fn poll_cancel_request(
         &mut self,
@@ -455,7 +445,10 @@ impl PollClientBinding for StaticClient {
         slot: &mut ClientRequestSlot<State>,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        slot.state_mut().poll_cancel(budget)
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return Poll::Pending;
+        }
+        slot.state_mut().poll_cancel()
     }
     fn acknowledge_request(&mut self, slot: &mut ClientRequestSlot<State>) -> CoreResult<()> {
         if slot.state_mut().mode == Mode::AckFailure {
@@ -648,24 +641,21 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for State {
     fn poll_result(
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
-        self.poll(budget)
+        self.poll()
     }
     fn start_cancel(
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
         cleanup: CleanupPhaseContext,
-        budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        self.cancel(cleanup, budget, true)
+        self.cancel(cleanup, true)
     }
     fn poll_cancel(
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        State::poll_cancel(&mut self, budget)
+        State::poll_cancel(&mut self)
     }
 }
 #[cfg(feature = "std")]

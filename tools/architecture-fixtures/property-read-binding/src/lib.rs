@@ -1356,7 +1356,6 @@ mod host_fixture {
         transfer_owner: Option<CleanupSlotId>,
         lifetime: BindingLifetimeFootprint,
         durable_status_records: u32,
-        work: [u64; 10],
         operation: CleanupOperation,
         first_cause: CoreError,
         deadline: Deadline,
@@ -1369,12 +1368,6 @@ mod host_fixture {
                 transfer_owner: context.transfer_owner(),
                 lifetime: context.reservation().lifetime_footprint(),
                 durable_status_records: context.reservation().durable_status_records(),
-                work: core::array::from_fn(|index| {
-                    context
-                        .reservation()
-                        .work()
-                        .remaining(WorkClass::ALL[index])
-                }),
                 operation: context.operation(),
                 first_cause: context.first_cause().clone(),
                 deadline: context.deadline(),
@@ -1924,11 +1917,7 @@ mod host_fixture {
         fn poll_result(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            budget: &mut WorkBudget,
         ) -> Poll<RoutePrepareOutcome<HostPreparedRouteGuard>> {
-            if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-                return Poll::Pending;
-            }
             if !self.started {
                 self.started = true;
                 self.probe.with(|state| {
@@ -1999,7 +1988,6 @@ mod host_fixture {
             mut self: Pin<&mut Self>,
             _cx: &mut Context<'_>,
             cleanup: CleanupPhaseContext,
-            _budget: &mut WorkBudget,
         ) -> clinkz_wot_core::CoreResult<
             StartStatus<
                 BindingCallSettlement<
@@ -2023,7 +2011,6 @@ mod host_fixture {
         fn poll_cancel(
             mut self: Pin<&mut Self>,
             _cx: &mut Context<'_>,
-            _budget: &mut WorkBudget,
         ) -> Poll<
             clinkz_wot_core::CoreResult<
                 BindingCallSettlement<
@@ -2074,11 +2061,7 @@ mod host_fixture {
         fn poll_result(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            budget: &mut WorkBudget,
         ) -> Poll<RouteReadinessOutcome<HostPreparedRouteGuard>> {
-            if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-                return Poll::Pending;
-            }
             if !self.started {
                 self.started = true;
                 self.probe.with(|state| {
@@ -2099,7 +2082,6 @@ mod host_fixture {
             mut self: Pin<&mut Self>,
             _cx: &mut Context<'_>,
             cleanup: CleanupPhaseContext,
-            _budget: &mut WorkBudget,
         ) -> clinkz_wot_core::CoreResult<
             StartStatus<
                 BindingCallSettlement<
@@ -2123,7 +2105,6 @@ mod host_fixture {
         fn poll_cancel(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            budget: &mut WorkBudget,
         ) -> Poll<
             clinkz_wot_core::CoreResult<
                 BindingCallSettlement<
@@ -2133,9 +2114,6 @@ mod host_fixture {
             >,
         > {
             record_cancel_poll(&self.probe, MockLifecyclePhase::Readiness);
-            if budget.consume(WorkClass::CleanupItems, 1).is_err() {
-                return Poll::Pending;
-            }
             if self.cancel_pending_once {
                 self.cancel_pending_once = false;
                 cx.waker().wake_by_ref();
@@ -2186,11 +2164,7 @@ mod host_fixture {
         fn poll_result(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            budget: &mut WorkBudget,
         ) -> Poll<RouteActivationOutcome<HostPreparedRouteGuard, HostActiveRouteGuard>> {
-            if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-                return Poll::Pending;
-            }
             if !self.started {
                 self.started = true;
                 self.probe.with(|state| {
@@ -2222,7 +2196,6 @@ mod host_fixture {
             mut self: Pin<&mut Self>,
             _cx: &mut Context<'_>,
             cleanup: CleanupPhaseContext,
-            _budget: &mut WorkBudget,
         ) -> clinkz_wot_core::CoreResult<
             StartStatus<
                 BindingCallSettlement<
@@ -2246,7 +2219,6 @@ mod host_fixture {
         fn poll_cancel(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            budget: &mut WorkBudget,
         ) -> Poll<
             clinkz_wot_core::CoreResult<
                 BindingCallSettlement<
@@ -2256,9 +2228,6 @@ mod host_fixture {
             >,
         > {
             record_cancel_poll(&self.probe, MockLifecyclePhase::Activate);
-            if budget.consume(WorkClass::CleanupItems, 1).is_err() {
-                return Poll::Pending;
-            }
             if self.cancel_pending_once {
                 self.cancel_pending_once = false;
                 cx.waker().wake_by_ref();
@@ -2327,11 +2296,7 @@ mod host_fixture {
         fn poll_result(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            budget: &mut WorkBudget,
         ) -> Poll<RouteCommitOutcome<HostActiveRouteGuard, HostCommittedRouteGuard>> {
-            if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-                return Poll::Pending;
-            }
             if !self.started {
                 self.started = true;
                 self.probe
@@ -2362,7 +2327,6 @@ mod host_fixture {
             mut self: Pin<&mut Self>,
             _cx: &mut Context<'_>,
             cleanup: CleanupPhaseContext,
-            _budget: &mut WorkBudget,
         ) -> clinkz_wot_core::CoreResult<
             StartStatus<
                 BindingCallSettlement<
@@ -2386,7 +2350,6 @@ mod host_fixture {
         fn poll_cancel(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            budget: &mut WorkBudget,
         ) -> Poll<
             clinkz_wot_core::CoreResult<
                 BindingCallSettlement<
@@ -2396,9 +2359,6 @@ mod host_fixture {
             >,
         > {
             record_cancel_poll(&self.probe, MockLifecyclePhase::Commit);
-            if budget.consume(WorkClass::CleanupItems, 1).is_err() {
-                return Poll::Pending;
-            }
             if self.cancel_pending_once {
                 self.cancel_pending_once = false;
                 cx.waker().wake_by_ref();
@@ -2445,11 +2405,7 @@ mod host_fixture {
         fn poll_result(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            budget: &mut WorkBudget,
         ) -> Poll<BindingDeliveryOutcome> {
-            if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-                return Poll::Pending;
-            }
             if !self.started {
                 self.started = true;
                 self.probe.with(|state| {
@@ -2497,7 +2453,6 @@ mod host_fixture {
             mut self: Pin<&mut Self>,
             _cx: &mut Context<'_>,
             cleanup: CleanupPhaseContext,
-            _budget: &mut WorkBudget,
         ) -> clinkz_wot_core::CoreResult<StartStatus<BindingCallSettlement<BindingDeliveryOutcome>>>
         {
             assert!(
@@ -2519,13 +2474,9 @@ mod host_fixture {
         fn poll_cancel(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            budget: &mut WorkBudget,
         ) -> Poll<clinkz_wot_core::CoreResult<BindingCallSettlement<BindingDeliveryOutcome>>>
         {
             record_cancel_poll(&self.probe, MockLifecyclePhase::ResponseDelivery);
-            if budget.consume(WorkClass::CleanupItems, 1).is_err() {
-                return Poll::Pending;
-            }
             if self.cancel_pending_once {
                 self.cancel_pending_once = false;
                 cx.waker().wake_by_ref();
@@ -2787,11 +2738,7 @@ mod host_fixture {
         fn poll_result(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            budget: &mut WorkBudget,
         ) -> Poll<RouteCleanupOutcome> {
-            if budget.consume(WorkClass::CleanupItems, 1).is_err() {
-                return Poll::Pending;
-            }
             assert_eq!(
                 self.route_state_drops.load(Ordering::SeqCst),
                 0,
@@ -2810,7 +2757,6 @@ mod host_fixture {
             mut self: Pin<&mut Self>,
             _cx: &mut Context<'_>,
             cleanup: CleanupPhaseContext,
-            _budget: &mut WorkBudget,
         ) -> clinkz_wot_core::CoreResult<
             StartStatus<BindingCallSettlement<RouteCleanupOutcome, HostRouteCleanupSuccessor>>,
         > {
@@ -2834,16 +2780,12 @@ mod host_fixture {
         fn poll_cancel(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            budget: &mut WorkBudget,
         ) -> Poll<
             clinkz_wot_core::CoreResult<
                 BindingCallSettlement<RouteCleanupOutcome, HostRouteCleanupSuccessor>,
             >,
         > {
             record_cancel_poll(&self.probe, MockLifecyclePhase::CleanupCallCancellation);
-            if budget.consume(WorkClass::CleanupItems, 1).is_err() {
-                return Poll::Pending;
-            }
             self.begin_if_needed();
             if self.cancel_pending_once {
                 self.cancel_pending_once = false;

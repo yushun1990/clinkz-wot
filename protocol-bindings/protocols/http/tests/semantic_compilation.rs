@@ -762,11 +762,7 @@ mod reply_bus {
         fn poll_result(
             self: Pin<&mut Self>,
             _: &mut Context<'_>,
-            budget: &mut WorkBudget,
         ) -> Poll<CoreResult<InteractionOutput>> {
-            if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-                return Poll::Pending;
-            }
             Poll::Ready(Ok(InteractionOutput::with_data(Payload::new(
                 vec![b'7'],
                 "application/json",
@@ -787,11 +783,7 @@ mod reply_bus {
             self: Pin<&mut Self>,
             _: &mut Context<'_>,
             _: CleanupPhaseContext,
-            budget: &mut WorkBudget,
         ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-            if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-                return Ok(StartStatus::Pending);
-            }
             Ok(StartStatus::Ready(BindingCallSettlement::Cancelled {
                 retry_class: RetryClass::Never,
                 disposition: BindingCancellationDisposition::Complete {
@@ -802,13 +794,9 @@ mod reply_bus {
         fn poll_cancel(
             self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            budget: &mut WorkBudget,
         ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
             // This source-free fixture owns no network resources to retire.
             let _ = cx;
-            if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-                return Poll::Pending;
-            }
             Poll::Ready(Ok(BindingCallSettlement::Cancelled {
                 retry_class: RetryClass::Never,
                 disposition: BindingCancellationDisposition::Complete {

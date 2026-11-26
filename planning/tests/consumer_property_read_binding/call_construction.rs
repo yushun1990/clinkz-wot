@@ -198,12 +198,8 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
     fn poll_result(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
         self.check_address();
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
         self.stats.polls.fetch_add(1, Ordering::SeqCst);
         Poll::Ready(self.output.take().unwrap())
     }
@@ -211,12 +207,8 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
         cleanup: CleanupPhaseContext,
-        budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
         self.check_address();
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Ok(StartStatus::Pending);
-        }
         self.stats.cancels.fetch_add(1, Ordering::SeqCst);
         match self.mode {
             Mode::LateStart => Ok(StartStatus::Ready(BindingCallSettlement::Returned(
@@ -234,12 +226,8 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
     fn poll_cancel(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
         self.check_address();
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
         self.stats.cancels.fetch_add(1, Ordering::SeqCst);
         if matches!(self.mode, Mode::LatePoll | Mode::Transfer) {
             Poll::Ready(Ok(BindingCallSettlement::Returned(
@@ -394,7 +382,6 @@ fn cleanup_context(transfer: bool) -> CleanupPhaseContext {
         CleanupSlotId::new(SlotIndex::new(59), Generation::INITIAL),
         CEILING,
         1,
-        binding_budget(2),
     );
     let cause = CoreError::TimedOut(ErrorContext::new(ErrorPhase::Binding, RetryClass::Never));
     if transfer {
@@ -517,10 +504,9 @@ fn both_accepted_branches_have_zero_allocation_after_acceptance_and_exact_releas
             let peak = BACKING.with(|b| b.get().peak);
             assert_eq!(peak, trace.layouts[0].0 + trace.layouts[1].0);
             observe(Some(0));
-            let result = call.as_pin_mut().poll_result(
-                &mut Context::from_waker(Waker::noop()),
-                &mut binding_budget(1),
-            );
+            let result = call
+                .as_pin_mut()
+                .poll_result(&mut Context::from_waker(Waker::noop()));
             assert_eq!(disarm().requests, 0);
             assert_eq!(matches!(result, Poll::Ready(Ok(_))), raw == RAW);
             assert_eq!(stats.polls.load(Ordering::SeqCst), usize::from(raw == RAW));
@@ -574,10 +560,7 @@ fn identity_barrier_raw_rejection_and_byte_item_boundaries_preserve_owners() {
         let envelope = disarm().layouts[0].0 as u64;
         assert!(
             call.as_pin_mut()
-                .poll_result(
-                    &mut Context::from_waker(Waker::noop()),
-                    &mut binding_budget(1)
-                )
+                .poll_result(&mut Context::from_waker(Waker::noop()))
                 .is_ready()
         );
         drop(call);
@@ -621,10 +604,9 @@ fn identity_barrier_raw_rejection_and_byte_item_boundaries_preserve_owners() {
                 call.as_pin_mut().lifetime_footprint(),
                 BindingLifetimeFootprint::new(8, 2048 + envelope)
             );
-            let result = call.as_pin_mut().poll_result(
-                &mut Context::from_waker(Waker::noop()),
-                &mut binding_budget(1),
-            );
+            let result = call
+                .as_pin_mut()
+                .poll_result(&mut Context::from_waker(Waker::noop()));
             assert_eq!(matches!(result, Poll::Ready(Ok(_))), accepted);
             assert_eq!(stats.polls.load(Ordering::SeqCst), usize::from(accepted));
             assert_eq!(stats.drops.load(Ordering::SeqCst), 0);
@@ -663,50 +645,22 @@ fn normal_and_both_late_paths_preserve_validation_raw_errors_budget_and_deadline
                 let deadline = request(72).deadline();
                 observe(Some(0));
                 assert_eq!(call.as_pin_mut().next_deadline(), deadline);
-                assert!(
-                    call.as_pin_mut()
-                        .poll_result(&mut cx, &mut binding_budget(0))
-                        .is_pending()
-                );
                 let result = match mode {
-                    Mode::Result => match call
-                        .as_pin_mut()
-                        .poll_result(&mut cx, &mut binding_budget(1))
-                    {
+                    Mode::Result => match call.as_pin_mut().poll_result(&mut cx) {
                         Poll::Ready(r) => r,
                         _ => panic!("paid normal result"),
                     },
                     _ => {
-                        assert!(matches!(
-                            call.as_pin_mut()
-                                .start_cancel(
-                                    &mut cx,
-                                    cleanup_context(false),
-                                    &mut binding_budget(0)
-                                )
-                                .unwrap(),
-                            StartStatus::Pending
-                        ));
                         let started = call
                             .as_pin_mut()
-                            .start_cancel(&mut cx, cleanup_context(false), &mut binding_budget(1))
+                            .start_cancel(&mut cx, cleanup_context(false))
                             .unwrap();
                         match started {
                             StartStatus::Ready(BindingCallSettlement::Returned(r)) => r,
-                            StartStatus::Pending => {
-                                assert!(
-                                    call.as_pin_mut()
-                                        .poll_cancel(&mut cx, &mut binding_budget(0))
-                                        .is_pending()
-                                );
-                                match call
-                                    .as_pin_mut()
-                                    .poll_cancel(&mut cx, &mut binding_budget(1))
-                                {
-                                    Poll::Ready(Ok(BindingCallSettlement::Returned(r))) => r,
-                                    _ => panic!("paid late result stays Returned"),
-                                }
-                            }
+                            StartStatus::Pending => match call.as_pin_mut().poll_cancel(&mut cx) {
+                                Poll::Ready(Ok(BindingCallSettlement::Returned(r))) => r,
+                                _ => panic!("paid late result stays Returned"),
+                            },
                             _ => panic!("late result stays Returned"),
                         }
                     }
@@ -767,7 +721,7 @@ fn cancellation_and_rejected_accepted_settlement_retain_raw_until_explicit_relea
             observe(Some(0));
             let started = call
                 .as_pin_mut()
-                .start_cancel(&mut cx, cleanup_context(false), &mut binding_budget(1))
+                .start_cancel(&mut cx, cleanup_context(false))
                 .unwrap();
             if overrun {
                 assert_eq!(call.as_pin_mut().next_deadline(), None);
@@ -778,22 +732,15 @@ fn cancellation_and_rejected_accepted_settlement_retain_raw_until_explicit_relea
                     )))
                 ));
                 assert!(matches!(
-                    call.as_pin_mut()
-                        .poll_cancel(&mut cx, &mut binding_budget(1)),
+                    call.as_pin_mut().poll_cancel(&mut cx),
                     Poll::Ready(Err(CoreError::Validation(_)))
                 ));
                 assert_eq!(stats.cancels.load(Ordering::SeqCst), 0);
                 assert_eq!(stats.deadlines.load(Ordering::SeqCst), 0);
             } else {
                 assert!(matches!(started, StartStatus::Pending));
-                assert!(
-                    call.as_pin_mut()
-                        .poll_cancel(&mut cx, &mut binding_budget(0))
-                        .is_pending()
-                );
                 assert!(matches!(
-                    call.as_pin_mut()
-                        .poll_cancel(&mut cx, &mut binding_budget(1)),
+                    call.as_pin_mut().poll_cancel(&mut cx),
                     Poll::Ready(Ok(BindingCallSettlement::Cancelled {
                         retry_class: RetryClass::Never,
                         disposition: BindingCancellationDisposition::Complete { .. },
@@ -836,10 +783,7 @@ fn cleanup_offers_preserve_complete_call_first_cause_accounting_and_unused_seal(
             let StartStatus::Ready(BindingCallSettlement::Cancelled {
                 disposition: BindingCancellationDisposition::TransferRequired(transfer),
                 ..
-            }) = call
-                .as_pin_mut()
-                .start_cancel(&mut cx, phase, &mut binding_budget(1))
-                .unwrap()
+            }) = call.as_pin_mut().start_cancel(&mut cx, phase).unwrap()
             else {
                 panic!("complete transfer request");
             };
@@ -866,9 +810,7 @@ fn cleanup_offers_preserve_complete_call_first_cause_accounting_and_unused_seal(
             // A provisional transfer does not consume the result seal. Original
             // owner can still receive a late validated result after succession.
             assert!(matches!(
-                retained
-                    .as_pin_mut()
-                    .poll_cancel(&mut cx, &mut binding_budget(1)),
+                retained.as_pin_mut().poll_cancel(&mut cx),
                 Poll::Ready(Ok(BindingCallSettlement::Returned(Ok(_))))
             ));
             assert_eq!(disarm().requests, 0);
@@ -918,11 +860,7 @@ macro_rules! constructor_call {
             fn next_deadline(&self) -> Option<Deadline> {
                 None
             }
-            fn poll_result(
-                self: Pin<&mut Self>,
-                _: &mut Context<'_>,
-                _: &mut WorkBudget,
-            ) -> Poll<()> {
+            fn poll_result(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<()> {
                 ($check)(self.as_ref().get_ref());
                 Poll::Ready(())
             }
@@ -930,14 +868,12 @@ macro_rules! constructor_call {
                 self: Pin<&mut Self>,
                 _: &mut Context<'_>,
                 _: CleanupPhaseContext,
-                _: &mut WorkBudget,
             ) -> CoreResult<StartStatus<BindingCallSettlement<()>>> {
                 Ok(StartStatus::Pending)
             }
             fn poll_cancel(
                 self: Pin<&mut Self>,
                 _: &mut Context<'_>,
-                _: &mut WorkBudget,
             ) -> Poll<CoreResult<BindingCallSettlement<()>>> {
                 Poll::Pending
             }
@@ -997,10 +933,7 @@ fn public_try_new_handles_zst_overalignment_pinning_and_returns_original_concret
             let mut call = result.unwrap_or_else(|_| panic!("one concrete allocation"));
             assert!(
                 call.as_pin_mut()
-                    .poll_result(
-                        &mut Context::from_waker(Waker::noop()),
-                        &mut binding_budget(0)
-                    )
+                    .poll_result(&mut Context::from_waker(Waker::noop()))
                     .is_ready()
             );
             // Move the owning erased box and poll again; concrete address stays fixed.
@@ -1008,10 +941,7 @@ fn public_try_new_handles_zst_overalignment_pinning_and_returns_original_concret
             assert!(
                 moved
                     .as_pin_mut()
-                    .poll_result(
-                        &mut Context::from_waker(Waker::noop()),
-                        &mut binding_budget(0)
-                    )
+                    .poll_result(&mut Context::from_waker(Waker::noop()))
                     .is_ready()
             );
             drop(moved);

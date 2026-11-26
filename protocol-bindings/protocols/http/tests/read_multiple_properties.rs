@@ -13,7 +13,7 @@ fn start_selected(
 ) -> ConsumerCall {
     client
         .0
-        .read_multiple_properties(&client.1, names, Deadline::NONE, now(0), &mut work())
+        .read_multiple_properties(&client.1, names, Deadline::NONE, now(0))
         .unwrap()
 }
 fn body(result: &ConsumerSettlement) -> Value {
@@ -150,7 +150,7 @@ fn same_td_supports_different_per_call_subsets_and_distinct_read_all() {
 }
 
 #[test]
-fn unsupported_selections_and_unpaid_encoding_have_no_native_effect() {
+fn unsupported_selections_preserve_capacity_and_have_no_native_effect() {
     io().block_on(async {
         let addr = address();
         let td = selected_description(addr);
@@ -176,13 +176,7 @@ fn unsupported_selections_and_unpaid_encoding_have_no_native_effect() {
             assert!(
                 client
                     .0
-                    .read_multiple_properties(
-                        &client.1,
-                        &names,
-                        Deadline::NONE,
-                        now(0),
-                        &mut work()
-                    )
+                    .read_multiple_properties(&client.1, &names, Deadline::NONE, now(0))
                     .is_err()
             );
             assert_eq!(
@@ -190,30 +184,7 @@ fn unsupported_selections_and_unpaid_encoding_have_no_native_effect() {
                 ResourceKind::ALL.map(|k| accounts.account(k).used())
             );
         }
-        for class in [
-            WorkClass::CodecInputBytes,
-            WorkClass::CleanupItems,
-            WorkClass::BindingPolls,
-            WorkClass::PlanningItems,
-        ] {
-            let mut unpaid = work().with_remaining(class, 0);
-            assert!(
-                client
-                    .0
-                    .read_multiple_properties(
-                        &client.1,
-                        &["on"],
-                        Deadline::NONE,
-                        now(0),
-                        &mut unpaid
-                    )
-                    .is_err()
-            );
-            assert_eq!(
-                baseline,
-                ResourceKind::ALL.map(|k| accounts.account(k).used())
-            );
-        }
+
         server.step();
         assert_eq!(server.controls.requests.get(), 0);
         assert_eq!(server.app.roots.get(), 0);
@@ -397,7 +368,7 @@ fn independent_peer_cannot_return_unrequested_missing_duplicate_invalid_or_parti
             let mut call = start_selected(&client, &["on"]);
             let start = Instant::now();
             let settled = loop {
-                if let Poll::Ready(s) = call.poll(&mut cx(), now(0), &mut work()) {
+                if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) {
                     break s;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -689,13 +660,10 @@ fn selected_service_is_actual_static_preparation_never_encodes_and_callback_loss
                     })
                     .unwrap_or_else(|_| panic!());
             let baseline = ResourceKind::ALL.map(|k| accounts.account(k).used());
-            let result = client.0.read_multiple_properties(
-                &client.1,
-                &["on"],
-                Deadline::NONE,
-                now(0),
-                &mut work(),
-            );
+            let result =
+                client
+                    .0
+                    .read_multiple_properties(&client.1, &["on"], Deadline::NONE, now(0));
             assert_eq!(encodes.load(Ordering::Relaxed), 1);
             if fault == "encode" {
                 assert!(result.is_err());
@@ -719,13 +687,7 @@ fn selected_service_is_actual_static_preparation_never_encodes_and_callback_loss
             assert!(
                 client
                     .0
-                    .read_multiple_properties(
-                        &client.1,
-                        &["level"],
-                        Deadline::NONE,
-                        now(0),
-                        &mut work()
-                    )
+                    .read_multiple_properties(&client.1, &["level"], Deadline::NONE, now(0))
                     .is_err()
             );
             drop(client);
@@ -753,8 +715,7 @@ fn pending_output_keeps_original_selection_and_funding_across_failed_sibling_adm
         let start = Instant::now();
         let held = loop {
             server.step();
-            let mut unpaid = work().with_remaining(WorkClass::CodecInputBytes, 0);
-            assert!(call.poll(&mut cx(), now(0), &mut unpaid).is_pending());
+            let _ = call.progress(&mut cx(), now(0));
             if let Some(remote) = server.server().take_settlement() {
                 assert!(remote.result.is_ok());
                 break ResourceKind::ALL.map(|k| accounts.account(k).used());
@@ -762,22 +723,16 @@ fn pending_output_keeps_original_selection_and_funding_across_failed_sibling_adm
             assert!(start.elapsed() < Duration::from_secs(5));
             tokio::time::sleep(Duration::from_millis(1)).await;
         };
-        // The original raw call keeps native occupancy through unread output.
+        // The active or unread call still owns its admission slot.
         assert!(
             client
                 .0
-                .read_multiple_properties(
-                    &client.1,
-                    &["level"],
-                    Deadline::NONE,
-                    now(0),
-                    &mut work()
-                )
+                .read_multiple_properties(&client.1, &["level"], Deadline::NONE, now(0))
                 .is_err()
         );
         assert_eq!(held, ResourceKind::ALL.map(|k| accounts.account(k).used()));
         let local = loop {
-            if let Poll::Ready(s) = call.poll(&mut cx(), now(0), &mut work()) {
+            if let Poll::Ready(Ok(s)) = call.poll(&mut cx(), now(0)) {
                 break s;
             }
             assert!(start.elapsed() < Duration::from_secs(5));
@@ -827,7 +782,7 @@ fn escaping_expansion_refuses_with_funded_cleanup_before_native_start() {
         let accounts = bank(); let owner = consumer_instance();
         let client = client(td, Arc::new(AtomicBool::new(false)), accounts.clone(), &owner);
         let baseline = ResourceKind::ALL.map(|k| accounts.account(k).used());
-        assert!(client.0.read_multiple_properties(&client.1, &names.iter().map(String::as_str).collect::<Vec<_>>(), Deadline::NONE, now(0), &mut work()).is_err());
+        assert!(client.0.read_multiple_properties(&client.1, &names.iter().map(String::as_str).collect::<Vec<_>>(), Deadline::NONE, now(0)).is_err());
         assert_eq!(baseline, ResourceKind::ALL.map(|k| accounts.account(k).used()));
         assert!(client.1.is_idle());
         listener.set_nonblocking(true).unwrap();
@@ -920,13 +875,7 @@ fn authorization_service_loss_fences_each_admission_boundary() {
             assert!(
                 client
                     .0
-                    .read_multiple_properties(
-                        &client.1,
-                        &["on"],
-                        Deadline::NONE,
-                        now(0),
-                        &mut work()
-                    )
+                    .read_multiple_properties(&client.1, &["on"], Deadline::NONE, now(0))
                     .is_err()
             );
             assert_eq!(
@@ -966,7 +915,7 @@ impl ConsumerDataService for ReviewData {
         let mut policy = self.actual.policy();
         policy.retained_bytes += 256;
         if self.fault == "policy" && self.changed.load(Ordering::Relaxed) {
-            policy.validation_work += 1;
+            policy.temporary_bytes += 1;
         }
         policy
     }
@@ -1033,7 +982,7 @@ struct ReviewAccess {
 }
 impl ConsumerAccessService for ReviewAccess {
     fn qualification_revision(&self) -> u64 {
-        0
+        u64::from(self.fault == "access" && self.changed.load(Ordering::Relaxed))
     }
 
     fn authorize(&self, _: BindingRegistrationIdentity, _: &str, _: Operation) -> CoreResult<()> {
@@ -1055,11 +1004,7 @@ impl ConsumerAccessService for ReviewAccess {
         128
     }
     fn work(&self) -> u64 {
-        if self.fault == "access" && self.changed.load(Ordering::Relaxed) {
-            2
-        } else {
-            1
-        }
+        1
     }
 }
 
@@ -1117,21 +1062,14 @@ fn review_authorization_changes_fence_immediate_and_unread_validated_result_hand
                     // final permission callback, retaining an unread result.
                     while validated.load(Ordering::Relaxed) == 0 {
                         server.step();
-                        client.1.step(
-                            &mut cx(),
-                            now(0),
-                            &mut work().with_remaining(WorkClass::ProviderProbes, 1),
-                        );
+                        client.1.step(&mut cx(), now(0)).unwrap();
                         assert!(start.elapsed() < Duration::from_secs(5));
                         tokio::time::sleep(Duration::from_millis(1)).await;
                     }
                     assert!(!changed.load(Ordering::Relaxed));
                     let retained = ResourceKind::ALL.map(|k| accounts.account(k).used());
                     armed.store(true, Ordering::Relaxed);
-                    assert!(
-                        call.poll(&mut cx(), now(0), &mut WorkBudget::new())
-                            .is_pending()
-                    );
+                    assert!(!client.1.is_idle());
                     assert!(
                         !changed.load(Ordering::Relaxed),
                         "no unpaid permission callback"
@@ -1140,11 +1078,7 @@ fn review_authorization_changes_fence_immediate_and_unread_validated_result_hand
                         retained,
                         ResourceKind::ALL.map(|k| accounts.account(k).used())
                     );
-                    let Poll::Ready(local) = call.poll(
-                        &mut cx(),
-                        now(0),
-                        &mut WorkBudget::new().with_remaining(WorkClass::ProviderProbes, 1),
-                    ) else {
+                    let Poll::Ready(Ok(local)) = call.poll(&mut cx(), now(0)) else {
                         panic!("validated result requires only the paid current check");
                     };
                     assert_eq!(
@@ -1244,13 +1178,10 @@ fn review_preparation_qualifies_generic_array_input_independently_of_selection_f
                         )
                     })
                     .unwrap_or_else(|_| panic!());
-            let result = client.0.read_multiple_properties(
-                &client.1,
-                &["on"],
-                Deadline::NONE,
-                now(0),
-                &mut work(),
-            );
+            let result =
+                client
+                    .0
+                    .read_multiple_properties(&client.1, &["on"], Deadline::NONE, now(0));
             if array_supported {
                 let mut call = result.unwrap();
                 let (local, remote) = server.exchange(&mut call).await;

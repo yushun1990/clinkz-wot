@@ -1,5 +1,6 @@
 //! Continuing invocation authority, independent of each finite native exchange.
 //! No TD, native token interpretation, URL synthesis, retry or protocol cases.
+use super::{ConsumerObserver, ConsumerOwned, ConsumerTurn};
 use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::{
     action::raw_action_output_shape, consumer::*, consumer_action::*, data_schema::PreparedSchema,
@@ -10,7 +11,7 @@ use core::{
     any::Any,
     cell::{Cell, RefCell},
     cmp::Ordering,
-    task::{Context, Poll, Waker},
+    task::{Context, Poll},
 };
 
 use clinkz_wot_core::execution::action::{
@@ -189,7 +190,7 @@ impl Association {
 /// Persistent checked association, independent of invocation capacity. Clones
 /// are passive non-revoking views; admitted work keeps the original association.
 pub struct ConsumerActionAssociation {
-    captured: Rc<Association>,
+    captured: Rc<ConsumerOwned<Association>>,
 }
 impl Clone for ConsumerActionAssociation {
     fn clone(&self) -> Self {
@@ -208,6 +209,10 @@ impl ConsumerActionAssociation {
         budget: &mut WorkBudget,
     ) -> Result<Self, BindingInputRejection<(Rc<ConsumerActionDefinition>, ConsumerActionAccess)>>
     {
+        let _turn = match ConsumerTurn::enter() {
+            Ok(turn) => turn,
+            Err(error) => return Err(reject((definition, access), error)),
+        };
         // This is an explicit new policy binding, never a replacement snapshot
         // of prepared native/data declarations.
         let captured = [
@@ -258,7 +263,7 @@ impl ConsumerActionAssociation {
                 &bank,
                 &[(
                     K::EngineLiveBytesGlobalMax,
-                    core::mem::size_of::<Association>() as u64 + 128,
+                    core::mem::size_of::<ConsumerOwned<Association>>() as u64 + 128,
                 )],
             )
         })();
@@ -267,13 +272,13 @@ impl ConsumerActionAssociation {
             Err(error) => return Err(reject((definition, access), error)),
         };
         Ok(Self {
-            captured: Rc::new(Association {
+            captured: Rc::new(ConsumerOwned::new(Association {
                 consumer,
                 definition,
                 access: captured,
                 bank,
                 _funding: funding,
-            }),
+            })),
         })
     }
     pub fn consumer(&self) -> &ConsumerInstanceRef {
@@ -302,7 +307,7 @@ struct Invocation {
     input: Option<Payload>,
     operation: usize,
     effect: ConsumerEffect,
-    association: Rc<Association>,
+    association: Rc<ConsumerOwned<Association>>,
     _funding: Vec<HostCapacityReservation>,
 }
 struct State {
@@ -311,6 +316,12 @@ struct State {
     registry: RefCell<Registry>,
     // Last: all original native, service and control owners precede funding.
     _funding: Vec<HostCapacityReservation>,
+}
+impl Drop for State {
+    fn drop(&mut self) {
+        let _turn = ConsumerTurn::scope();
+        self.registry.get_mut().slots.clear();
+    }
 }
 struct Registry {
     slots: Vec<Slot>,
@@ -343,8 +354,7 @@ struct Control {
     deadline: Deadline,
     last_time: Cell<MonotonicInstant>,
     abandoned: Cell<bool>,
-    waker: RefCell<Option<Waker>>,
-    recheck: Cell<bool>,
+    observer: ConsumerObserver,
     _funding: HostCapacityReservation,
 }
 impl Control {
@@ -372,8 +382,7 @@ impl Control {
             deadline,
             last_time: Cell::new(now),
             abandoned: Cell::new(false),
-            waker: RefCell::new(None),
-            recheck: Cell::new(false),
+            observer: ConsumerObserver::default(),
             _funding: funding,
         }))
     }
@@ -385,29 +394,20 @@ impl Control {
     }
     fn observe_time(&self, now: MonotonicInstant) {
         match now.checked_cmp(self.last_time.get()) {
-            Some(Ordering::Equal | Ordering::Greater) => self.last_time.set(now),
+            Some(Ordering::Equal | Ordering::Greater) => {
+                self.last_time.set(now);
+                if let Err(error) = check_time(self.deadline, now) {
+                    self.record(error);
+                }
+            }
             _ => self.record(invalid()),
         }
     }
     fn check(&self, state: &State) -> CoreResult<()> {
-        if let Err(e) = check_time(self.deadline, self.last_time.get()) {
-            self.record(e);
-        }
         if !state.active.get() || !self.identity.consumer.is_current() {
             self.record(stale());
         }
         self.cause().map_or(Ok(()), Err)
-    }
-    fn register(&self, waker: &Waker) {
-        let next = waker.clone();
-        let old = self.waker.borrow_mut().replace(next);
-        drop(old);
-    }
-    fn wake(&self) {
-        let waker = self.waker.borrow_mut().take();
-        if let Some(waker) = waker {
-            waker.wake();
-        }
     }
 }
 /// An occupied slot is never temporarily vacant during callbacks or unwind.
@@ -418,7 +418,7 @@ struct Lease<'a> {
     invocation: Option<Box<Invocation>>,
 }
 impl State {
-    fn reserve_slot(&self) -> CoreResult<Lease<'_>> {
+    fn reserve_slot<'a>(&'a self, _turn: &'a mut ConsumerTurn) -> CoreResult<Lease<'a>> {
         let mut r = self.registry.borrow_mut();
         let slot = r
             .slots
@@ -438,56 +438,34 @@ impl State {
             invocation: None,
         })
     }
-    fn checkout(
-        &self,
+    fn checkout<'a>(
+        &'a self,
+        _turn: &'a mut ConsumerTurn,
         slot: usize,
-        sequence: Option<u64>,
-        waker: Option<&Waker>,
-    ) -> CoreResult<Lease<'_>> {
-        let (lease, control) = {
-            let mut r = self.registry.borrow_mut();
-            let entry = &mut r.slots[slot];
-            match entry {
-                Slot::Ready(v) if sequence.is_none_or(|n| n == v.control.identity.sequence) => {
-                    let control = v.control.clone();
-                    let sequence = control.identity.sequence;
-                    let Slot::Ready(v) = core::mem::replace(
-                        entry,
-                        Slot::Reserved {
-                            sequence,
-                            control: Some(control.clone()),
-                        },
-                    ) else {
-                        unreachable!()
-                    };
-                    (
-                        Some(Lease {
-                            state: self,
-                            slot,
-                            sequence,
-                            invocation: Some(v),
-                        }),
-                        control,
-                    )
-                }
-                Slot::Reserved {
-                    sequence: original,
-                    control: Some(control),
-                } if sequence.is_none_or(|n| n == *original) => {
-                    if waker.is_some() {
-                        control.recheck.set(true);
-                    }
-                    (None, control.clone())
-                }
-                _ => return Err(stale()),
-            }
+        original: Option<u64>,
+    ) -> Option<Lease<'a>> {
+        let mut registry = self.registry.borrow_mut();
+        let entry = &mut registry.slots[slot];
+        let Slot::Ready(invocation) = entry else {
+            return None;
         };
-        // A waker's clone/drop/wake is also linked code. The lease already exists
-        // so even unwinding registration restores the original occupied owner.
-        if let Some(waker) = waker {
-            control.register(waker);
+        let sequence = invocation.control.identity.sequence;
+        if original.is_some_and(|expected| expected != sequence) {
+            return None;
         }
-        lease.ok_or_else(busy)
+        let reserved = Slot::Reserved {
+            sequence,
+            control: Some(invocation.control.clone()),
+        };
+        let Slot::Ready(invocation) = core::mem::replace(entry, reserved) else {
+            unreachable!()
+        };
+        Some(Lease {
+            state: self,
+            slot,
+            sequence,
+            invocation: Some(invocation),
+        })
     }
     fn revoke(&self) {
         self.active.set(false);
@@ -502,12 +480,13 @@ impl State {
         }
     }
     fn close(&self) {
+        let _turn = ConsumerTurn::scope();
         self.revoke();
         let count = self.registry.borrow().slots.len();
         for i in 0..count {
             let control = self.registry.borrow().slots[i].control().cloned();
             if let Some(control) = control {
-                control.wake();
+                control.observer.wake();
             }
         }
     }
@@ -531,15 +510,10 @@ impl Drop for Lease<'_> {
             let mut r = self.state.registry.borrow_mut();
             core::mem::replace(&mut r.slots[self.slot], replacement)
         };
-        let Slot::Reserved { sequence, control } = old else {
+        let Slot::Reserved { sequence, .. } = old else {
             unreachable!()
         };
         debug_assert_eq!(sequence, self.sequence);
-        if let Some(control) = control
-            && control.recheck.replace(false)
-        {
-            control.wake();
-        }
     }
 }
 /// Bounded continuing Action execution capacity shared by independent Consumer
@@ -583,7 +557,12 @@ impl ConsumerActions {
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> Result<ConsumerActionHandle, BindingInputRejection<Option<Payload>>> {
+        let mut turn = match ConsumerTurn::enter() {
+            Ok(turn) => turn,
+            Err(error) => return Err(reject(input, error)),
+        };
         let state = &self.state;
+        let mut input = input;
         let checked = (|| {
             let d = association.captured.clone();
             if !state.active.get() || !d.consumer.is_current() {
@@ -591,7 +570,7 @@ impl ConsumerActions {
             }
             d.check_dependencies()?;
             check_time(deadline, now)?;
-            let reserved = state.reserve_slot()?;
+            let mut reserved = state.reserve_slot(&mut turn)?;
             let control = Control::new(&d.consumer, reserved.sequence, &state.bank, deadline, now)?;
             reserved.attach(control.clone());
             let invoke = d.selected(0)?;
@@ -681,32 +660,34 @@ impl ConsumerActions {
             });
             let raw = invoke.op.mapping.start(input.as_ref(), None)?;
             invocation.exchange = Some(Exchange(Some(raw)));
-            Ok((reserved, invocation))
+            let slot = reserved.slot;
+            let sequence = reserved.sequence;
+            let control = invocation.control.clone();
+            invocation.input = input.take();
+            // A successful start may already own native effects, even if its
+            // callback closed this invocation. Retain the complete exchange.
+            invocation.fence(state);
+            reserved.invocation = Some(invocation);
+            Ok(ConsumerActionHandle {
+                state: self.state.clone(),
+                slot,
+                sequence,
+                control,
+            })
         })();
-        let (mut reserved, mut invocation) = match checked {
-            Ok(v) => v,
-            Err(e) => return Err(reject(input, e)),
-        };
-        let slot = reserved.slot;
-        let sequence = reserved.sequence;
-        let control = invocation.control.clone();
-        invocation.input = input;
-        // A successful start may own native effects already. Keep its complete
-        // returned exchange even if the callback closed this invocation.
-        invocation.fence(state);
-        reserved.invocation = Some(invocation);
-        drop(reserved);
-        Ok(ConsumerActionHandle {
-            state: self.state.clone(),
-            slot,
-            sequence,
-            control,
-        })
+        checked.map_err(|error| reject(input, error))
     }
     pub fn begin_close(&self) {
         self.state.close();
     }
-    pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant, budget: &mut WorkBudget) {
+    /// Drive the invocation capacity from an independent application turn.
+    pub fn step(
+        &self,
+        cx: &mut Context<'_>,
+        now: MonotonicInstant,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<()> {
+        let mut turn = ConsumerTurn::enter()?;
         let (start, count) = {
             let mut r = self.state.registry.borrow_mut();
             for control in r.slots.iter().filter_map(Slot::control) {
@@ -718,17 +699,16 @@ impl ConsumerActions {
             (start, count)
         };
         for i in 0..count {
-            if let Ok(mut lease) = self
-                .state
-                .checkout((start + i) % count, None, Some(cx.waker()))
-            {
-                let v = lease.invocation.as_mut().unwrap();
-                v.step(&self.state, cx, budget);
-                if v.control.abandoned.get() && v.progress.state.settlement_ready() {
-                    drop(lease.take());
-                }
+            let Some(mut lease) = self.state.checkout(&mut turn, (start + i) % count, None) else {
+                continue;
+            };
+            let v = lease.invocation.as_mut().unwrap();
+            v.step(&self.state, cx, budget);
+            if v.control.abandoned.get() && v.progress.state.settlement_ready() {
+                drop(lease.take());
             }
         }
+        Ok(())
     }
     pub fn is_idle(&self) -> bool {
         self.state
@@ -763,6 +743,18 @@ impl ConsumerActionHandle {
         } else {
             Err(stale())
         }
+    }
+    fn checkout<'a>(
+        &'a self,
+        turn: &'a mut ConsumerTurn,
+        now: MonotonicInstant,
+    ) -> CoreResult<Lease<'a>> {
+        let lease = self
+            .state
+            .checkout(turn, self.slot, Some(self.sequence))
+            .ok_or_else(stale)?;
+        self.control.observe_time(now);
+        Ok(lease)
     }
     pub fn identity(&self) -> CoreResult<ConsumerActionIdentity> {
         self.live()?;
@@ -807,7 +799,7 @@ impl ConsumerActionHandle {
             .remote_cancel)
     }
     /// Explicit described control; neither call automatically queries/reinvokes.
-    /// A reentrant control of the checked-out original invocation is busy.
+    /// Mapped control requires an independent application turn.
     pub fn query(&self, now: MonotonicInstant, budget: &mut WorkBudget) -> CoreResult<()> {
         self.control(1, now, budget)
     }
@@ -820,9 +812,8 @@ impl ConsumerActionHandle {
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
-        self.live()?;
-        self.control.observe_time(now);
-        let mut lease = self.state.checkout(self.slot, Some(self.sequence), None)?;
+        let mut turn = ConsumerTurn::enter()?;
+        let mut lease = self.checkout(&mut turn, now)?;
         let v = lease.invocation.as_mut().unwrap();
         v.fence(&self.state);
         self.control.check(&self.state)?;
@@ -877,24 +868,22 @@ impl ConsumerActionHandle {
     /// Stops local work only. Does not send a hidden CancelAction or claim that
     /// a remote effect was undone. First cause and any late result are retained.
     pub fn cancel_local(&self) {
+        let _turn = ConsumerTurn::scope();
         if self.live().is_ok() {
             self.control.record(CoreError::Cancelled(context()));
-            self.control.wake();
+            self.control.observer.wake();
         }
     }
-    /// Reentrant progress records time and wake interest but cannot poll twice.
-    /// It returns Backpressure until the outer owner restores the slot.
+    /// Drive the original invocation. A callback attempting another drive
+    /// receives a lifecycle error before it can change the clock or waiter.
     pub fn progress(
         &self,
         cx: &mut Context<'_>,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerActionState> {
-        self.live()?;
-        self.control.observe_time(now);
-        let mut lease = self
-            .state
-            .checkout(self.slot, Some(self.sequence), Some(cx.waker()))?;
+        let mut turn = ConsumerTurn::enter()?;
+        let mut lease = self.checkout(&mut turn, now)?;
         let v = lease.invocation.as_mut().unwrap();
         v.step(&self.state, cx, budget);
         Ok(v.progress.state)
@@ -906,9 +895,8 @@ impl ConsumerActionHandle {
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerActionSettlement> {
-        self.live()?;
-        self.control.observe_time(now);
-        let mut lease = self.state.checkout(self.slot, Some(self.sequence), None)?;
+        let mut turn = ConsumerTurn::enter()?;
+        let mut lease = self.checkout(&mut turn, now)?;
         let v = lease.invocation.as_mut().unwrap();
         v.fence(&self.state);
         if !v.progress.state.settlement_ready() || !pay(budget, W::CleanupItems, 1) {
@@ -916,7 +904,9 @@ impl ConsumerActionHandle {
         }
         v.refresh_access(&self.state, budget)?;
         v.fence(&self.state);
-        Ok(ConsumerActionSettlement(lease.take()))
+        Ok(ConsumerActionSettlement {
+            invocation: Some(lease.take()),
+        })
     }
 }
 impl Drop for ConsumerActionHandle {
@@ -960,37 +950,50 @@ impl Drop for ConsumerActionHandle {
 ///     s.result().unwrap().data().unwrap().body
 /// }
 /// ```
-pub struct ConsumerActionSettlement(Box<Invocation>);
+pub struct ConsumerActionSettlement {
+    invocation: Option<Box<Invocation>>,
+}
+impl Drop for ConsumerActionSettlement {
+    fn drop(&mut self) {
+        let _turn = ConsumerTurn::scope();
+        drop(self.invocation.take());
+    }
+}
 impl ConsumerActionSettlement {
+    fn invocation(&self) -> &Invocation {
+        self.invocation
+            .as_deref()
+            .expect("settlement retains its invocation until disposal")
+    }
     pub fn input(&self) -> Option<PayloadView<'_>> {
-        self.0.input.as_ref().map(Payload::view)
+        self.invocation().input.as_ref().map(Payload::view)
     }
     pub fn identity(&self) -> &ConsumerActionIdentity {
-        &self.0.control.identity
+        &self.invocation().control.identity
     }
     pub fn effect(&self) -> ConsumerEffect {
-        self.0.effect
+        self.invocation().effect
     }
     pub fn state(&self) -> ConsumerActionState {
-        self.0.progress.state
+        self.invocation().progress.state
     }
     pub fn first_cause(&self) -> Option<&CoreError> {
-        self.0.progress.first_cause.as_ref()
+        self.invocation().progress.first_cause.as_ref()
     }
     pub fn cleanup_error(&self) -> Option<&CoreError> {
-        self.0.progress.cleanup_error.as_ref()
+        self.invocation().progress.cleanup_error.as_ref()
     }
     pub fn validation_error(&self) -> Option<&CoreError> {
-        self.0.progress.validation_error.as_ref()
+        self.invocation().progress.validation_error.as_ref()
     }
     pub fn accepted(&self) -> bool {
-        self.0.progress.accepted
+        self.invocation().progress.accepted
     }
     pub fn remote_cancellation(&self) -> ConsumerActionCancellation {
-        self.0.progress.remote_cancel
+        self.invocation().progress.remote_cancel
     }
     pub fn native_result(&self) -> Option<Result<InteractionOutputView<'_>, &CoreError>> {
-        self.0
+        self.invocation()
             .native_result
             .as_ref()
             .map(|r| r.as_ref().map(InteractionOutput::view))
@@ -998,14 +1001,16 @@ impl ConsumerActionSettlement {
     /// Original poll failure, independent of a subsequently retained late output
     /// and of an earlier local cancellation or cleanup failure.
     pub fn native_error(&self) -> Option<&CoreError> {
-        self.0.native_error.as_ref()
+        self.invocation().native_error.as_ref()
     }
     pub fn result(&self) -> CoreResult<InteractionOutputView<'_>> {
-        if let Some(e) = &self.0.progress.first_cause {
+        if let Some(e) = &self.invocation().progress.first_cause {
             return Err(e.clone());
         }
-        match &self.0.native_result {
-            Some(Ok(o)) if self.0.progress.state == ConsumerActionState::Completed => Ok(o.view()),
+        match &self.invocation().native_result {
+            Some(Ok(o)) if self.invocation().progress.state == ConsumerActionState::Completed => {
+                Ok(o.view())
+            }
             Some(Err(e)) => Err(e.clone()),
             _ => Err(invalid()),
         }
@@ -1020,7 +1025,7 @@ impl ConsumerActionSettlement {
             Operation::CancelAction => 2,
             _ => return None,
         };
-        self.0.association.operations()[i].map(|s| (s.identity, s.form))
+        self.invocation().association.operations()[i].map(|s| (s.identity, s.form))
     }
 }
 impl Invocation {
@@ -1097,6 +1102,7 @@ impl Invocation {
         Ok(())
     }
     fn step(&mut self, state: &State, cx: &mut Context<'_>, budget: &mut WorkBudget) {
+        self.control.observer.register(cx.waker());
         step_action(
             &mut HostActionDriver {
                 invocation: self,

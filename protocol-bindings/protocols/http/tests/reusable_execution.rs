@@ -131,7 +131,7 @@ fn bind(
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let binding = definition
-        .bind(policy, accounts.clone(), &mut work())
+        .bind(policy, accounts.clone())
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
     StandaloneConsumerAssociation::try_new(
         owner.reference(),
@@ -233,7 +233,7 @@ fn independent_endpoints_share_preparation_but_keep_policy_authority_and_origina
         assert!(
             client_a
                 .0
-                .read_all_properties(&client_a.1, Deadline::NONE, now(0), &mut work())
+                .read_all_properties(&client_a.1, Deadline::NONE, now(0))
                 .is_err()
         );
         assert_eq!(server_a.controls.requests.get(), 0);
@@ -323,7 +323,7 @@ fn source_free_rebinding_preserves_bank_guards_and_returns_failed_binding_owners
         .unwrap();
     let refusal = definition
         .clone()
-        .bind(policy.clone(), account_b.clone(), &mut work())
+        .bind(policy.clone(), account_b.clone())
         .err()
         .unwrap();
     let (returned_definition, returned_policy) = refusal.into_input();
@@ -336,7 +336,7 @@ fn source_free_rebinding_preserves_bank_guards_and_returns_failed_binding_owners
     drop(returned_policy);
     let binding = definition
         .clone()
-        .bind(policy.clone(), account_b.clone(), &mut work())
+        .bind(policy.clone(), account_b.clone())
         .unwrap_or_else(|_| panic!());
     let refused = StandaloneConsumerAssociation::try_new(
         owner.reference(),
@@ -384,7 +384,7 @@ fn source_free_rebinding_preserves_bank_guards_and_returns_failed_binding_owners
     assert!(
         runtime
             .0
-            .read_all_properties(&runtime.1, Deadline::NONE, now(0), &mut work())
+            .read_all_properties(&runtime.1, Deadline::NONE, now(0))
             .is_err()
     );
     drop(runtime);
@@ -505,7 +505,7 @@ fn changed_path_and_headers_are_compiled_for_the_actual_endpoint() {
         let client = bind(actual, &owner, &account, Arc::new(AtomicBool::new(false)));
         let mut call = start_read(&client); let started = Instant::now();
         let result = loop {
-            if let Poll::Ready(result) = call.poll(&mut cx(), now(0), &mut work()) { break result; }
+            if let Poll::Ready(Ok(result)) = call.poll(&mut cx(), now(0)) { break result; }
             assert!(started.elapsed() < Duration::from_secs(5));
             tokio::time::sleep(Duration::from_millis(1)).await;
         };
@@ -539,7 +539,7 @@ fn source_free_binding_and_warm_admission_cannot_refresh_changed_service_bounds(
             let mut p = self.inner.policy();
             p.retained_bytes += 128;
             if self.mode.load(Ordering::Relaxed) == 2 {
-                p.validation_work += 1;
+                p.temporary_bytes += 1;
             }
             p
         }
@@ -605,7 +605,7 @@ fn source_free_binding_and_warm_admission_cannot_refresh_changed_service_bounds(
         assert!(
             client
                 .0
-                .read_all_properties(&client.1, Deadline::NONE, now(0), &mut work())
+                .read_all_properties(&client.1, Deadline::NONE, now(0))
                 .is_err()
         );
         let policy = ConsumerServiceOwner::retain_access(
@@ -616,12 +616,7 @@ fn source_free_binding_and_warm_admission_cannot_refresh_changed_service_bounds(
             &account,
         )
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
-        assert!(
-            definition
-                .clone()
-                .bind(policy, account.clone(), &mut work())
-                .is_err()
-        );
+        assert!(definition.clone().bind(policy, account.clone()).is_err());
         listener.set_nonblocking(true).unwrap();
         assert!(matches!(listener.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock));
         drop(client);
@@ -791,27 +786,13 @@ fn replacement_and_late_results_retain_the_original_shared_meaning() {
             let started = Instant::now();
             while server_a.app.roots.get() == 0 {
                 server_a.step();
-                assert!(
-                    a.poll(
-                        &mut cx(),
-                        now(0),
-                        &mut work().with_remaining(WorkClass::CodecInputBytes, 0)
-                    )
-                    .is_pending()
-                );
+                let _ = a.progress(&mut cx(), now(0));
                 assert!(started.elapsed() < Duration::from_secs(5));
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
             for _ in 0..20 {
                 server_a.step();
-                assert!(
-                    a.poll(
-                        &mut cx(),
-                        now(0),
-                        &mut work().with_remaining(WorkClass::CodecInputBytes, 0)
-                    )
-                    .is_pending()
-                );
+                let _ = a.progress(&mut cx(), now(0));
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
             if cancelled {

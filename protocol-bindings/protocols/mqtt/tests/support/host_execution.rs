@@ -360,7 +360,7 @@ async fn until(
                 assert!(report.locally_written || report.cause.is_some());
             }
         }
-        e.turn(&mut cx(), &mut full);
+        e.turn(&mut cx(), true);
         if observe(owner, exposures, e) {
             return;
         }
@@ -516,11 +516,8 @@ fn host_turns_join_independent_publications_all_families_replacement_and_complet
             |_, _, e| {
                 peer_done |= read(&mut peer, &mut sibling_bytes);
                 if result.is_none()
-                    && let Poll::Ready(s) = call.poll(
-                        &mut cx(),
-                        e.now(),
-                        &mut budget().with_remaining(WorkClass::BindingPolls, 0),
-                    )
+                    && call.is_settled()
+                    && let Poll::Ready(Ok(s)) = call.poll(&mut cx(), e.now())
                 {
                     result = Some(s);
                 }

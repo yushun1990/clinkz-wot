@@ -111,8 +111,14 @@ must separately bound retained backing and validate actual media/DataSchema.
 The finite transition kernel checks current permission before an effect, retains
 the first cause and keeps native settlement distinct from successful delivery.
 It can poll local close without calling a codec or an access service. A racing
-result keeps its original storage or loan through disposal. A bounded driver
-supplies the actual native/output owners and acknowledges any cleanup transfer.
+result keeps its original storage or loan through disposal. Each turn performs
+at most one native poll. A terminal acknowledgement releases the native call
+owner. Unread results and taken settlements retain their original backing and
+applicable quotas. A Host can validate its immutable output once and recheck
+permission at collection. A caller-owned Read validates the exact view it lends.
+A racing value after a local cause is raw evidence. A write acknowledgement
+can still establish the effect through its sealed metadata. Cleanup transfer
+requires acknowledgement by its destination.
 
 At acceptance, a promised validated handoff MUST have space for the retained
 result **and** the overlapping workspace to decode, validate and deliver it
@@ -984,8 +990,9 @@ Neither path exposes an owning output, Payload, or the original body's Arc.
 The original affordance name is likewise borrowed as an `AffordanceSite`.
 Sharing original data requires retaining the settlement owner; explicit byte
 copies create separate caller-owned backing. Dropping a call or runtime cannot
-release funding still held by a settlement. Final disposal destroys original
-native/result/definition backing before releasing its reservations.
+release funding still held by a settlement. Acknowledged calls can release
+native I/O while a result is held. Final disposal releases the retained value
+and definitions before returning their remaining quotas.
 An admitted native success is not by itself a successful application outcome:
 `native_outcome()` retains normal/late native results independently of
 `result()`, which also requires terminal shape, captured validation, live original

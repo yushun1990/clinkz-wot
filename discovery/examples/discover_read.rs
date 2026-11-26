@@ -72,7 +72,7 @@ impl ConsumerAccessService for Permission {
         4096
     }
 }
-fn main() {
+fn main() -> CoreResult<()> {
     let args: Vec<_> = std::env::args().collect();
     assert!(
         (6..=7).contains(&args.len()),
@@ -170,14 +170,11 @@ fn main() {
                 &args[4],
                 Deadline::at(now().checked_add_ticks(10_000).unwrap()),
                 now(),
-                &mut work(),
             )
             .unwrap();
         let result = loop {
-            if let Poll::Ready(result) =
-                call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
-            {
-                break result;
+            if let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), now()) {
+                break result?;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;
         };
@@ -196,5 +193,6 @@ fn main() {
                 .into_iter()
                 .all(|k| accounts.account(k).used() == 0)
         );
-    });
+        Ok(())
+    })
 }

@@ -92,7 +92,7 @@ pub trait ConsumerDataService: Send + Sync {
         false
     }
     /// Encode precisely this set with the selected Form's media type. Pure,
-    /// bounded by policy.body_bytes/temporary_bytes/validation_work. The caller
+    /// bounded by the admitted member, body and temporary-storage limits. The caller
     /// reserves policy.encoded_selection_bytes of complete returned payload
     /// backing (body, Arc and media/coding capacities) before entry.
     fn encode_property_selection(
@@ -122,7 +122,7 @@ pub struct ConsumerDataPolicy {
     /// Complete returned selection-payload backing, reserved before encoding.
     /// Zero declines selection encoding. Separate from transient encoder scratch.
     pub encoded_selection_bytes: u64,
-    /// Complete maximum callback/traversal work, prepaid before validation.
+    /// Legacy callback allowance for continuing Actions and notifications.
     pub validation_work: u64,
 }
 
@@ -156,8 +156,8 @@ pub trait ConsumerAccessService: Send + Sync {
     fn supports_security(&self, requirement: &crate::security::SecurityRequirement) -> bool {
         *requirement == crate::security::SecurityRequirement::NOSEC
     }
-    /// Called after fresh destination/instance permission, with a separate
-    /// complete work() prepayment. Permission credit cannot fund issuance too.
+    /// Called after fresh destination/instance permission. Issuance is a separate
+    /// bounded callback and may invalidate the captured configuration.
     /// Live material is scoped to one call, never stored in reusable definitions.
     fn outbound_security(
         &self,
@@ -214,7 +214,7 @@ pub trait ConsumerAccessService: Send + Sync {
     /// Fresh permission for the complete original writable set, before native
     /// effects and on result handoff. Default group permission covers every
     /// member; policies with member restrictions override this callback.
-    /// `work()` bounds the complete callback, including member inspection.
+    /// The admitted bounded member set limits synchronous inspection.
     fn authorize_property_write(
         &self,
         consumer: &ConsumerInstanceRef,
@@ -927,7 +927,6 @@ impl ConsumerDefinition {
             || !input
                 .content
                 .supports_data(input.data.service(), &input.content_type)
-            || policy.validation_work == 0
             || input.data.qualification_revision() != data_revision
             || input.execution.qualification_revision() != execution_revision
         {
@@ -989,8 +988,13 @@ impl ConsumerDefinition {
     /// qualification. Also checked after callbacks and at result handoff.
     /// A new instance cannot refresh a changed definition's revisions/bounds.
     pub fn check_dependencies(&self) -> CoreResult<()> {
+        let policy = self.data().policy();
+        let captured = self.data_policy;
         if self.execution().consumer_configuration() != Some(self.configuration())
-            || self.data().policy() != self.data_policy
+            || policy.body_bytes != captured.body_bytes
+            || policy.temporary_bytes != captured.temporary_bytes
+            || policy.retained_bytes != captured.retained_bytes
+            || policy.encoded_selection_bytes != captured.encoded_selection_bytes
             || !self.data().available()
             || self.data().qualification_revision() != self.data_revision
             || self.execution().qualification_revision() != self.execution_revision
@@ -1033,7 +1037,6 @@ impl ConsumerDefinition {
         self: Arc<Self>,
         access: Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>,
         bank: Arc<HostResourceAccounts>,
-        budget: &mut WorkBudget,
     ) -> Result<
         ConsumerBinding,
         BindingInputRejection<(
@@ -1041,15 +1044,8 @@ impl ConsumerDefinition {
             Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>,
         )>,
     > {
-        let access_work = access.work();
         let security_revision = access.qualification_revision();
         let checked = (|| {
-            if access_work == 0 {
-                return Err(invalid());
-            }
-            if !pay(budget, WorkClass::ProviderProbes, access_work) {
-                return Err(busy());
-            }
             self.check_dependencies()?;
             if !access.supports_security(self.content().security()) {
                 return Err(invalid());
@@ -1059,7 +1055,6 @@ impl ConsumerDefinition {
             }
             self.check_dependencies()?;
             if access.qualification_revision() != security_revision
-                || access.work() != access_work
                 || access.retained_bytes() != access.backing_bytes()
             {
                 return Err(invalid());
@@ -1084,7 +1079,6 @@ impl ConsumerDefinition {
                 funding,
                 bank,
             },
-            access_work,
         })
     }
     pub fn into_input(self) -> ConsumerDefinitionInput {
@@ -1098,7 +1092,6 @@ impl ConsumerDefinition {
 /// capacity bank while retaining an outstanding-call quota at this instance bank.
 pub struct ConsumerBinding {
     input: ConsumerBindingInput,
-    access_work: u64,
 }
 pub struct ConsumerBindingInput {
     pub security_revision: u64,
@@ -1129,9 +1122,8 @@ impl ConsumerBinding {
     pub fn bank(&self) -> &Arc<HostResourceAccounts> {
         &self.input.bank
     }
-    pub fn into_parts(self) -> (ConsumerBindingInput, ConsumerDataPolicy, u64) {
-        let policy = self.definition().data_policy();
-        (self.input, policy, self.access_work)
+    pub fn into_input(self) -> ConsumerBindingInput {
+        self.input
     }
 }
 

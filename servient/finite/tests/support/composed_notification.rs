@@ -11,8 +11,8 @@ use std::{
 };
 
 pub struct NotificationFixture<B: ConsumerNotificationBinding> {
-    association: ConsumerNotificationAssociation<B>,
-    work: ConsumerNotifications<B>,
+    pub(crate) association: ConsumerNotificationAssociation<B>,
+    pub(crate) work: ConsumerNotifications<B>,
 }
 impl<B: ConsumerNotificationBinding + Clone + 'static> NotificationFixture<B>
 where

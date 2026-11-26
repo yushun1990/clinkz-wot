@@ -68,7 +68,7 @@ fn one_retained_td_writes_different_subsets_without_touching_omitted_members() {
             let input = payload(input);
             let mut call = client
                 .0
-                .write_multiple_properties(&client.1, input, Deadline::NONE, now(0), &mut work())
+                .write_multiple_properties(&client.1, input, Deadline::NONE, now(0))
                 .unwrap_or_else(|_| panic!());
             let (local, remote) = server.exchange(&mut call).await;
             assert!(local.result().unwrap().data().is_none());
@@ -98,13 +98,7 @@ fn one_retained_td_writes_different_subsets_without_touching_omitted_members() {
         assert!(
             client
                 .0
-                .write_all_properties(
-                    &client.1,
-                    payload(VALUES),
-                    Deadline::NONE,
-                    now(0),
-                    &mut work()
-                )
+                .write_all_properties(&client.1, payload(VALUES), Deadline::NONE, now(0))
                 .is_err(),
             "root operations do not acquire one another"
         );
@@ -120,7 +114,7 @@ fn one_retained_td_writes_different_subsets_without_touching_omitted_members() {
 }
 
 #[test]
-fn invalid_input_and_short_work_or_capacity_return_original_before_native_effects() {
+fn invalid_input_and_occupied_capacity_return_original_before_native_effects() {
     let addr = address();
     let accounts = bank();
     let owner = consumer_instance();
@@ -142,32 +136,7 @@ fn invalid_input_and_short_work_or_capacity_return_original_before_native_effect
         let original = input.clone();
         let error = client
             .0
-            .write_multiple_properties(&client.1, input, Deadline::NONE, now(0), &mut work())
-            .err()
-            .unwrap();
-        assert!(Arc::ptr_eq(&original.body, &error.into_input().body));
-        assert_eq!(
-            retained,
-            ResourceKind::ALL.map(|k| accounts.account(k).used())
-        );
-    }
-    for class in [
-        WorkClass::CodecInputBytes,
-        WorkClass::ProviderProbes,
-        WorkClass::BindingPolls,
-        WorkClass::CleanupItems,
-    ] {
-        let input = payload(VALUES);
-        let original = input.clone();
-        let error = client
-            .0
-            .write_multiple_properties(
-                &client.1,
-                input,
-                Deadline::NONE,
-                now(0),
-                &mut work().with_remaining(class, 0),
-            )
+            .write_multiple_properties(&client.1, input, Deadline::NONE, now(0))
             .err()
             .unwrap();
         assert!(Arc::ptr_eq(&original.body, &error.into_input().body));
@@ -184,14 +153,13 @@ fn invalid_input_and_short_work_or_capacity_return_original_before_native_effect
                 payload(br#"{"on":false}"#),
                 Deadline::NONE,
                 now(0),
-                &mut work(),
             )
             .unwrap_or_else(|_| panic!());
         let input = payload(VALUES);
         let original = input.clone();
         let error = client
             .0
-            .write_multiple_properties(&client.1, input, Deadline::NONE, now(0), &mut work())
+            .write_multiple_properties(&client.1, input, Deadline::NONE, now(0))
             .err()
             .unwrap();
         assert!(
@@ -288,13 +256,7 @@ fn consumer_and_producer_member_permission_refuse_the_entire_group_before_effect
         assert!(
             client
                 .0
-                .write_multiple_properties(
-                    &client.1,
-                    payload(VALUES),
-                    Deadline::NONE,
-                    now(0),
-                    &mut work()
-                )
+                .write_multiple_properties(&client.1, payload(VALUES), Deadline::NONE, now(0))
                 .is_err()
         );
         assert_eq!(server.controls.requests.get(), 0);
@@ -306,7 +268,6 @@ fn consumer_and_producer_member_permission_refuse_the_entire_group_before_effect
                 payload(br#"{"on":false}"#),
                 Deadline::NONE,
                 now(0),
-                &mut work(),
             )
             .unwrap_or_else(|_| panic!());
         let (local, _) = server.exchange(&mut allowed).await;
@@ -386,11 +347,11 @@ fn selected_write_requires_its_own_data_facet_and_prepares_all_eligible_schemas(
     .unwrap();
     let (d, f) = p.into_execution();
     assert_eq!(d.iter().filter(|d| d.operation() == WRITE).count(), 1);
-    let (input, _, _) = d
+    let input = d
         .into_iter()
         .find(|d| d.operation() == WRITE)
         .unwrap()
-        .into_parts();
+        .into_input();
     let ConsumerFiniteSchemas::WriteMultipleProperties(s) = input.definition.content().schemas()
     else {
         panic!()

@@ -16,7 +16,7 @@ fn work() -> WorkBudget {
         .into_iter()
         .fold(WorkBudget::new(), |b, w| b.with_remaining(w, 1_000_000))
 }
-fn main() {
+fn main() -> CoreResult<()> {
     let args: Vec<_> = std::env::args().collect();
     assert_eq!(args.len(), 3, "provide TD.json and property name");
     let thing: clinkz_wot_td::thing::Thing =
@@ -55,7 +55,7 @@ fn main() {
     // This move-only startup input is transferred into the managed owner. It
     // is not an application-owned registered lifetime or a retained handle table.
     let standalone = StandaloneConsumerAssociation::try_new(
-        owner.instance(&thing_id, &mut work()).unwrap().consumer(),
+        owner.instance(&thing_id).unwrap().consumer(),
         definitions,
         funding,
         bank.clone(),
@@ -69,9 +69,9 @@ fn main() {
     // Retain the selected operation for repeated use without another name
     // lookup or fixed-target resolution. Each read still checks live permission.
     let read = owner
-        .association(&thing_id, "default", &mut work())
+        .association(&thing_id, "default")
         .unwrap()
-        .bind_property_read(&args[2], &mut work())
+        .bind_property_read(&args[2])
         .unwrap();
     let calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
     let clock = Instant::now();
@@ -81,15 +81,11 @@ fn main() {
         .enable_time()
         .build()
         .unwrap();
-    io.block_on(async {
-        let mut call = read
-            .read(&calls, Deadline::NONE, now(), &mut work())
-            .unwrap();
+    let outcome = io.block_on(async {
+        let mut call = read.read(&calls, Deadline::NONE, now()).unwrap();
         let result = loop {
-            if let Poll::Ready(result) =
-                call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
-            {
-                break result;
+            if let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), now()) {
+                break result?;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;
         };
@@ -97,6 +93,7 @@ fn main() {
             Ok(output) => println!("{}", String::from_utf8_lossy(&output.data().unwrap().body)),
             Err(error) => eprintln!("{error:?}"),
         }
+        Ok(())
     });
     owner.remove_thing(&thing_id, &mut work()).unwrap();
     drop((owner, calls, read));
@@ -105,4 +102,5 @@ fn main() {
             .iter()
             .all(|&kind| bank.account(kind).used() == 0)
     );
+    outcome
 }

@@ -227,7 +227,7 @@ fn bind_dynamic(
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let binding = definition
-        .bind(access, accounts.clone(), &mut work())
+        .bind(access, accounts.clone())
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
     StandaloneConsumerAssociation::try_new(
         owner.reference(),
@@ -246,7 +246,7 @@ fn bind_dynamic(
 async fn finish(call: &mut ConsumerCall) -> ConsumerSettlement {
     let stop = Instant::now() + Duration::from_secs(5);
     loop {
-        if let Poll::Ready(result) = call.poll(&mut cx(), now(0), &mut work()) {
+        if let Poll::Ready(Ok(result)) = call.poll(&mut cx(), now(0)) {
             return result;
         }
         assert!(Instant::now() < stop, "dynamic call stalled");
@@ -256,7 +256,7 @@ async fn finish(call: &mut ConsumerCall) -> ConsumerSettlement {
 async fn received(peer: &Peer, call: &mut ConsumerCall) {
     let stop = Instant::now() + Duration::from_secs(5);
     while peer.count() == 0 {
-        assert!(call.poll(&mut cx(), now(0), &mut work()).is_pending());
+        assert!(call.poll(&mut cx(), now(0)).is_pending());
         assert!(Instant::now() < stop, "no native HTTP request");
         tokio::time::sleep(Duration::from_millis(1)).await;
     }
@@ -295,8 +295,7 @@ fn boolean_query_continuation_executes_and_relative_templates_refuse() {
                     "level",
                     &[("item", "x"), ("q", "1")],
                     Deadline::NONE,
-                    now(0),
-                    &mut work()
+                    now(0)
                 )
                 .is_err()
         );
@@ -308,7 +307,6 @@ fn boolean_query_continuation_executes_and_relative_templates_refuse() {
                 &[("item", "x"), ("q", "true")],
                 Deadline::NONE,
                 now(0),
-                &mut work(),
             )
             .unwrap();
         let result = finish(&mut call).await;
@@ -350,14 +348,7 @@ fn root_query_templates_execute_with_fixed_and_dynamic_ports() {
             }
             let mut call = client
                 .0
-                .read_property_with_variables(
-                    &client.1,
-                    "level",
-                    &values,
-                    Deadline::NONE,
-                    now(0),
-                    &mut work(),
-                )
+                .read_property_with_variables(&client.1, "level", &values, Deadline::NONE, now(0))
                 .unwrap();
             let result = finish(&mut call).await;
             assert!(
@@ -417,7 +408,6 @@ fn one_definition_changes_native_destinations_and_encodes_values_with_independen
                     &[("port", &port), ("item", "north/a%2F?"), ("q", "雪 &/?%#")],
                     Deadline::NONE,
                     now(0),
-                    &mut work(),
                 )
                 .unwrap();
             let result = finish(&mut call).await;
@@ -438,8 +428,7 @@ fn one_definition_changes_native_destinations_and_encodes_values_with_independen
                     "level",
                     &[("port", &port), ("item", "x"), ("q", "q")],
                     Deadline::NONE,
-                    now(0),
-                    &mut work()
+                    now(0)
                 )
                 .is_err()
         );
@@ -451,7 +440,6 @@ fn one_definition_changes_native_destinations_and_encodes_values_with_independen
                 &[("port", &port), ("item", "north/a%2F?"), ("q", "雪 &/?%#")],
                 Deadline::NONE,
                 now(0),
-                &mut work(),
             )
             .unwrap();
         let result = finish(&mut surviving).await;
@@ -525,7 +513,6 @@ fn malformed_missing_unsupported_and_denied_values_have_no_io_and_return_write_i
                 &values,
                 Deadline::NONE,
                 now(0),
-                &mut work(),
             )
             .err()
             .expect("refused before I/O");
@@ -683,7 +670,6 @@ fn actual_http_compatibility_and_expansion_capacity_refuse_before_network() {
                 &[("port", port), ("item", "x"), ("q", "q")],
                 Deadline::NONE,
                 now(0),
-                &mut work(),
             )
             .err()
             .unwrap();
@@ -699,8 +685,7 @@ fn actual_http_compatibility_and_expansion_capacity_refuse_before_network() {
                 "level",
                 &[("port", &port), ("item", "x"), ("q", &unicode)],
                 Deadline::NONE,
-                now(0),
-                &mut work()
+                now(0)
             )
             .is_err()
     );
@@ -756,7 +741,6 @@ fn https_dynamic_resolution_uses_actual_audience_and_rejects_substituted_native_
                 &[("resource", "on")],
                 Deadline::NONE,
                 now(0),
-                &mut work(),
             )
             .unwrap();
         let result = server.exchange(&mut call).await;
@@ -771,8 +755,7 @@ fn https_dynamic_resolution_uses_actual_audience_and_rejects_substituted_native_
                     "on",
                     &[("resource", "off")],
                     Deadline::NONE,
-                    now(0),
-                    &mut work()
+                    now(0)
                 )
                 .err()
                 .unwrap(),
@@ -834,14 +817,11 @@ fn a_late_native_value_retains_original_destination_and_funding_after_permission
                 &[("port", &port), ("item", "x"), ("q", "q")],
                 Deadline::NONE,
                 now(0),
-                &mut work(),
             )
             .unwrap();
-        // Let native completion happen while shared output validation has no
-        // credit. Revocation must preserve that returned value as late evidence.
-        for _ in 0..50 {
-            let mut budget = work().with_remaining(WorkClass::CodecInputBytes, 0);
-            assert!(call.poll(&mut cx(), now(0), &mut budget).is_pending());
+        let started = Instant::now();
+        while call.progress(&mut cx(), now(0)).is_pending() {
+            assert!(started.elapsed() < Duration::from_secs(5));
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
         assert_eq!(peer.count(), 1);
@@ -886,7 +866,6 @@ fn dynamic_write_executes_once_and_revoked_pending_work_keeps_original_cleanup()
                 &values,
                 Deadline::NONE,
                 now(0),
-                &mut work(),
             )
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let result = finish(&mut call).await;
@@ -903,12 +882,11 @@ fn dynamic_write_executes_once_and_revoked_pending_work_keeps_original_cleanup()
                 &values,
                 Deadline::NONE,
                 now(0),
-                &mut work(),
             )
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let stop = Instant::now() + Duration::from_secs(5);
         while peer.count() < 2 {
-            assert!(call.poll(&mut cx(), now(0), &mut work()).is_pending());
+            assert!(call.poll(&mut cx(), now(0)).is_pending());
             assert!(Instant::now() < stop);
             tokio::time::sleep(Duration::from_millis(1)).await;
         }

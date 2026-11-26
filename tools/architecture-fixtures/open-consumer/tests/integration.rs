@@ -94,8 +94,8 @@ fn runtime(prepared: PreparedConsumer, bank: Arc<HostResourceAccounts>) -> Runti
 fn poll(call: &mut ConsumerCall) -> ConsumerSettlement {
     let start = Instant::now();
     loop {
-        if let Poll::Ready(settlement) =
-            call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+        if let Poll::Ready(Ok(settlement)) =
+            call.poll(&mut Context::from_waker(Waker::noop()), now())
         {
             return settlement;
         }
@@ -200,8 +200,8 @@ fn downstream_owned_incremental_and_http_use_one_public_selection_path_after_sou
     drop(registry);
     assert_eq!(probe.compiler_drops.load(Ordering::Relaxed), 1);
     let rt = runtime(prepared, bank.clone());
-    let read_a = rt.0.bind_property_read("a", &mut work()).unwrap();
-    let read_b = rt.0.bind_property_read("b", &mut work()).unwrap();
+    let read_a = rt.0.bind_property_read("a").unwrap();
+    let read_b = rt.0.bind_property_read("b").unwrap();
     let io = tokio::runtime::Builder::new_current_thread()
         .enable_io()
         .enable_time()
@@ -210,20 +210,11 @@ fn downstream_owned_incremental_and_http_use_one_public_selection_path_after_sou
     io.block_on(async {
         for name in ["a", "a", "b"] {
             let read = if name == "a" { &read_a } else { &read_b };
-            let mut call = read
-                .read(
-                    &rt.1,
-                    Deadline::NONE,
-                    now(),
-                    &mut work()
-                        .with_remaining(WorkClass::PlanningItems, 0)
-                        .with_remaining(WorkClass::BindingPolls, 1),
-                )
-                .unwrap();
+            let mut call = read.read(&rt.1, Deadline::NONE, now()).unwrap();
             let start = Instant::now();
             let settlement = loop {
-                if let Poll::Ready(s) =
-                    call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+                if let Poll::Ready(Ok(s)) =
+                    call.poll(&mut Context::from_waker(Waker::noop()), now())
                 {
                     break s;
                 }
@@ -347,6 +338,78 @@ fn exact_pair_refusal_recovers_compiler_and_executor_before_io() {
     assert_eq!(p.starts.load(Ordering::Relaxed), 0);
 }
 #[test]
+fn fixed_form_preparation_charges_both_destination_authorizations() {
+    struct MeteredAccess {
+        costs: [u64; 2],
+        calls: std::sync::atomic::AtomicUsize,
+    }
+    impl consumer::ConsumerAccessService for MeteredAccess {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+        fn authorize_instance(
+            &self,
+            _: &consumer::ConsumerInstanceRef,
+            _: BindingRegistrationIdentity,
+            _: &str,
+            _: Operation,
+        ) -> CoreResult<()> {
+            panic!("preparation cannot authorize an instance")
+        }
+        fn retained_bytes(&self) -> u64 {
+            std::mem::size_of::<Self>() as u64
+        }
+        fn work(&self) -> u64 {
+            self.costs[self.calls.load(Ordering::Relaxed).min(1)]
+        }
+        fn authorize(
+            &self,
+            _: BindingRegistrationIdentity,
+            _: &str,
+            _: Operation,
+        ) -> CoreResult<()> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            Ok(())
+        }
+    }
+    let (_peer, target) = udp();
+    let td = source(json!([{"href":target}]));
+    for (costs, credit, expected_calls, accepted) in [
+        ([0, 0], 1, 0, false),
+        ([2, 0], 5, 1, false),
+        ([2, 2], 2, 0, false),
+        ([2, 2], 4, 1, false),
+        ([2, 2], 5, 2, true),
+    ] {
+        let access = Arc::new(MeteredAccess {
+            costs,
+            calls: Default::default(),
+        });
+        let mut registration = registration(1, Arc::new(Probe::default()));
+        registration.services.access = access.clone();
+        let registry = registry(vec![registration]);
+        let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+        let mut budget = work().with_remaining(WorkClass::ProviderProbes, credit);
+        let result = registry.prepare(
+            &td,
+            &GatewayDefaultV1::LIMITS,
+            bank.clone(),
+            ConsumerSelector::default(),
+            &mut budget,
+            drive,
+        );
+        assert_eq!(
+            access.calls.load(Ordering::Relaxed),
+            expected_calls,
+            "{costs:?}, {credit}"
+        );
+        assert_eq!(result.is_ok(), accepted, "{costs:?}, {credit}");
+        drop(result);
+        clean(&bank);
+    }
+}
+
+#[test]
 fn unpaid_cancelled_failed_and_capacity_refused_preparation_releases_every_owner() {
     let p = Arc::new(Probe::default());
     let (_peer, target) = udp();
@@ -449,22 +512,22 @@ fn validation_unread_results_configuration_loss_and_original_account_pressure() 
     });
     p.changed.store(true, Ordering::Relaxed);
     assert!(
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .is_err()
     );
     assert_eq!(p.native.load(Ordering::Relaxed), 0);
     p.changed.store(false, Ordering::Relaxed);
     p.denied.store(true, Ordering::Relaxed);
     assert!(
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .is_err()
     );
     p.denied.store(false, Ordering::Relaxed);
     let mut call =
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
     assert!(
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .is_err(),
         "occupied logical slot"
     );
@@ -486,12 +549,12 @@ fn validation_unread_results_configuration_loss_and_original_account_pressure() 
         .reserve(ResourceKind::PendingHandlerCallsGlobalMax, amount)
         .unwrap();
     assert!(
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .is_err()
     );
     drop(pressure);
     let mut call =
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
     let settlement = poll(&mut call);
     drop(rt);
@@ -511,15 +574,15 @@ fn real_late_result_after_revocation_retains_first_cause_and_original_binding() 
     let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
     let rt = runtime(prepare(&registry, &thing, bank.clone()), bank.clone());
     let mut call =
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
     assert!(
-        call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+        call.poll(&mut Context::from_waker(Waker::noop()), now())
             .is_pending()
     );
     rt.1.begin_close();
     assert!(
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .is_err()
     );
     exchange(&peer, b"11");
@@ -534,7 +597,7 @@ fn real_late_result_after_revocation_retains_first_cause_and_original_binding() 
         "late original result preserved: {:?}",
         settlement.native_outcome()
     );
-    assert_eq!(p.validates.load(Ordering::Relaxed), 1);
+    assert_eq!(p.validates.load(Ordering::Relaxed), 0);
     drop(rt);
     drop(registry);
     drop(settlement);
@@ -553,28 +616,25 @@ fn lost_handles_failed_and_pending_cleanup_stay_funded_until_final_release() {
     drop(registry);
     drop(thing);
     let mut call =
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
     assert!(
-        call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+        call.poll(&mut Context::from_waker(Waker::noop()), now())
             .is_pending()
     );
     p.fail_close.store(true, Ordering::Relaxed);
     drop(call);
-    rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+        .unwrap();
     assert!(!rt.1.is_idle());
     assert_eq!(p.calls.load(Ordering::Relaxed), 0);
     p.fail_close.store(false, Ordering::Relaxed);
     p.pending_close.store(1, Ordering::Relaxed);
-    rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+        .unwrap();
     assert!(!rt.1.is_idle());
-    rt.1.step(
-        &mut Context::from_waker(Waker::noop()),
-        now(),
-        &mut WorkBudget::new(),
-    );
-    assert!(!rt.1.is_idle());
-    rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+        .unwrap();
     assert!(rt.1.is_idle());
     assert_eq!(p.calls.load(Ordering::Relaxed), 1);
     drop(rt);
@@ -684,7 +744,7 @@ fn selected_service_loss_deadline_clock_errors_and_root_loss_fence_real_calls() 
     drop(registry);
     drop(thing);
     assert!(matches!(
-        rt.0.read_property(&rt.1, "a", Deadline::at(now()), now(), &mut work()),
+        rt.0.read_property(&rt.1, "a", Deadline::at(now()), now()),
         Err(CoreError::TimedOut(_))
     ));
     assert!(
@@ -692,39 +752,29 @@ fn selected_service_loss_deadline_clock_errors_and_root_loss_fence_real_calls() 
             &rt.1,
             "a",
             Deadline::at(MonotonicInstant::new(ClockId::new(100), 2)),
-            now(),
-            &mut work()
+            now()
         )
         .is_err()
     );
     p.data_lost.store(true, Ordering::Relaxed);
     assert!(
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .is_err()
     );
     assert_eq!(p.native.load(Ordering::Relaxed), 0);
     p.data_lost.store(false, Ordering::Relaxed);
     let mut call =
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
-    assert!(
-        call.poll(
-            &mut Context::from_waker(Waker::noop()),
-            now(),
-            &mut WorkBudget::new()
-        )
-        .is_pending()
-    );
+    assert!(!rt.1.is_idle());
     assert_eq!(p.native.load(Ordering::Relaxed), 0);
     assert!(
-        call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+        call.poll(&mut Context::from_waker(Waker::noop()), now())
             .is_pending()
     );
     let later = MonotonicInstant::new(ClockId::new(100), 2);
     let settlement = loop {
-        if let Poll::Ready(s) =
-            call.poll(&mut Context::from_waker(Waker::noop()), later, &mut work())
-        {
+        if let Poll::Ready(Ok(s)) = call.poll(&mut Context::from_waker(Waker::noop()), later) {
             break s;
         }
     };
@@ -735,7 +785,7 @@ fn selected_service_loss_deadline_clock_errors_and_root_loss_fence_real_calls() 
     drop(settlement);
     drop(call);
     let mut call =
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
     drop(rt);
     let settlement = poll(&mut call);
@@ -760,11 +810,11 @@ fn replacement_and_unread_results_never_gain_the_new_incarnations_authority() {
     let new = runtime(prepare(&new_reg, &thing, bank.clone()), bank.clone());
     let mut old_call = old
         .0
-        .read_property(&old.1, "a", Deadline::NONE, now(), &mut work())
+        .read_property(&old.1, "a", Deadline::NONE, now())
         .unwrap();
     assert!(
         old_call
-            .poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+            .poll(&mut Context::from_waker(Waker::noop()), now())
             .is_pending()
     );
     old.1.begin_close();
@@ -774,17 +824,18 @@ fn replacement_and_unread_results_never_gain_the_new_incarnations_authority() {
     assert!(old_result.result().is_err());
     let mut new_call = new
         .0
-        .read_property(&new.1, "a", Deadline::NONE, now(), &mut work())
+        .read_property(&new.1, "a", Deadline::NONE, now())
         .unwrap();
     assert!(
         new_call
-            .poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+            .poll(&mut Context::from_waker(Waker::noop()), now())
             .is_pending()
     );
     exchange(&peer, b"9");
     // Drive to an unread terminal slot, then revoke before handoff.
     new.1
-        .step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+        .step(&mut Context::from_waker(Waker::noop()), now())
+        .unwrap();
     new.1.begin_close();
     let new_result = poll(&mut new_call);
     assert_eq!(new_result.binding().binding_id(), BindingId::new(2));
@@ -894,10 +945,10 @@ fn unsupported_semantic_alternative_keeps_the_supported_form_executable() {
     drop(thing);
     drop(registry);
     let mut call =
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
     assert!(
-        call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+        call.poll(&mut Context::from_waker(Waker::noop()), now())
             .is_pending()
     );
     exchange(&peer, b"7");
@@ -918,14 +969,15 @@ fn unread_native_failure_wins_over_later_cancel_and_fabricated_transfer_stays_ow
     let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
     let rt = runtime(prepare(&registry, &thing, bank.clone()), bank.clone());
     let mut call =
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
     assert!(
-        call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+        call.poll(&mut Context::from_waker(Waker::noop()), now())
             .is_pending()
     );
     exchange(&peer, &[b'x'; 1025]);
-    rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+        .unwrap();
     call.cancel();
     let outcome = poll(&mut call);
     assert!(
@@ -936,11 +988,11 @@ fn unread_native_failure_wins_over_later_cancel_and_fabricated_transfer_stays_ow
     drop(call);
     p.transfer_once.store(true, Ordering::Relaxed);
     let mut call =
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
     call.cancel();
     assert!(
-        call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+        call.poll(&mut Context::from_waker(Waker::noop()), now())
             .is_pending(),
         "transfer was never acknowledged"
     );
@@ -990,17 +1042,20 @@ fn unavailable_selected_codec_is_never_called_for_a_late_native_result() {
     drop(registry);
     drop(thing);
     let mut call =
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
     assert!(
-        call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+        call.poll(&mut Context::from_waker(Waker::noop()), now())
             .is_pending()
     );
     p.data_lost.store(true, Ordering::Relaxed);
     exchange(&peer, b"7");
     let result = poll(&mut call);
     assert!(result.result().is_err());
-    assert!(result.rejected_output().is_some());
+    let ConsumerNativeOutcome::Returned(Ok(value)) = result.native_outcome() else {
+        panic!("original native response");
+    };
+    assert_eq!(value.data().unwrap().body, b"7");
     assert_eq!(p.validates.load(Ordering::Relaxed), 0);
     drop(result);
     drop(call);
@@ -1038,7 +1093,7 @@ fn review_long_unselected_alternative_does_not_hide_supported_form() {
 }
 
 #[test]
-fn review_cleanup_progress_is_fair_with_one_native_credit() {
+fn one_slot_per_turn_retires_a_sibling_while_original_cleanup_fails() {
     let first = Arc::new(Probe::default());
     let second = Arc::new(Probe::default());
     first.fail_close.store(true, Ordering::Relaxed);
@@ -1067,42 +1122,35 @@ fn review_cleanup_progress_is_fair_with_one_native_credit() {
             })
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let mut a =
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
     let mut b =
-        rt.0.read_property(&rt.1, "b", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "b", Deadline::NONE, now())
             .unwrap();
     assert!(
-        a.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+        a.poll(&mut Context::from_waker(Waker::noop()), now())
             .is_pending()
     );
     assert!(
-        b.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+        b.poll(&mut Context::from_waker(Waker::noop()), now())
             .is_pending()
     );
     drop(a);
     drop(b);
-    for _ in 0..64 {
-        let mut budget = work();
-        budget.set_remaining(WorkClass::BindingPolls, 1);
-        rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut budget);
-    }
-    let second_released = second.calls.load(Ordering::Relaxed);
+    let mut cx = Context::from_waker(Waker::noop());
+    rt.1.step(&mut cx, now()).unwrap();
+    assert_eq!(first.calls.load(Ordering::Relaxed), 0);
+    assert_eq!(second.calls.load(Ordering::Relaxed), 0);
+    rt.1.step(&mut cx, now()).unwrap();
+    assert_eq!(second.calls.load(Ordering::Relaxed), 1);
+    assert!(!rt.1.is_idle());
     first.fail_close.store(false, Ordering::Relaxed);
-    rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
-    assert_eq!(
-        second.calls.load(Ordering::Relaxed),
-        1,
-        "larger credit control"
-    );
+    rt.1.step(&mut cx, now()).unwrap();
+    assert!(rt.1.is_idle());
     drop(rt);
     drop(reg_a);
     drop(reg_b);
     clean(&bank);
-    assert_eq!(
-        second_released, 1,
-        "second abandoned call never receives cleanup credit"
-    );
 }
 
 #[test]
@@ -1288,10 +1336,10 @@ fn target_envelope_is_partial_support_and_selected_short_form_still_executes() {
     drop(thing);
     drop(registry);
     let mut call =
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
     assert!(
-        call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+        call.poll(&mut Context::from_waker(Waker::noop()), now())
             .is_pending()
     );
     exchange(&peer, b"7");
@@ -1308,150 +1356,119 @@ fn target_envelope_is_partial_support_and_selected_short_form_still_executes() {
 
 #[test]
 fn pending_native_read_cannot_starve_an_independent_ready_result() {
-    for minimal in [false, true] {
-        let first = Arc::new(Probe::default());
-        let second = Arc::new(Probe::default());
-        let (_peer_a, target_a) = udp();
-        let (peer_b, target_b) = udp();
-        let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
-        let reg_a = registry(vec![registration(1, first.clone())]);
-        let reg_b = registry(vec![registration(2, second.clone())]);
-        let source_a = source(json!([{"href":target_a}]));
-        let mut value_b = serde_json::to_value(source(json!([{"href":target_b}]))).unwrap();
-        value_b["properties"]["b"] = value_b["properties"]["a"].take();
-        value_b["properties"].as_object_mut().unwrap().remove("a");
-        let source_b = serde_json::from_value(value_b).unwrap();
-        let (mut definitions, mut funding) =
-            prepare(&reg_a, &source_a, bank.clone()).into_execution();
-        let (mut second_definitions, mut second_funding) =
-            prepare(&reg_b, &source_b, bank.clone()).into_execution();
-        definitions.append(&mut second_definitions);
-        funding.append(&mut second_funding);
-        let owner = instance();
-        let rt = StandaloneConsumerAssociation::try_new(
-            owner.reference(),
-            definitions,
-            funding,
-            bank.clone(),
+    let first = Arc::new(Probe::default());
+    let second = Arc::new(Probe::default());
+    let (_peer_a, target_a) = udp();
+    let (peer_b, target_b) = udp();
+    let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+    let reg_a = registry(vec![registration(1, first.clone())]);
+    let reg_b = registry(vec![registration(2, second.clone())]);
+    let source_a = source(json!([{"href":target_a}]));
+    let mut value_b = serde_json::to_value(source(json!([{"href":target_b}]))).unwrap();
+    value_b["properties"]["b"] = value_b["properties"]["a"].take();
+    value_b["properties"].as_object_mut().unwrap().remove("a");
+    let source_b = serde_json::from_value(value_b).unwrap();
+    let (mut definitions, mut funding) = prepare(&reg_a, &source_a, bank.clone()).into_execution();
+    let (mut second_definitions, mut second_funding) =
+        prepare(&reg_b, &source_b, bank.clone()).into_execution();
+    definitions.append(&mut second_definitions);
+    funding.append(&mut second_funding);
+    let owner = instance();
+    let rt = StandaloneConsumerAssociation::try_new(
+        owner.reference(),
+        definitions,
+        funding,
+        bank.clone(),
+    )
+    .map(|association| {
+        (
+            association,
+            ConsumerCalls::try_new(bank.clone(), 2).unwrap(),
         )
-        .map(|association| {
-            (
-                association,
-                ConsumerCalls::try_new(bank.clone(), 2).unwrap(),
-            )
-        })
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
-        drop(reg_a);
-        drop(reg_b);
-        drop(source_a);
-        drop(source_b);
-        let mut a =
-            rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
-                .unwrap();
-        let mut b =
-            rt.0.read_property(&rt.1, "b", Deadline::NONE, now(), &mut work())
-                .unwrap();
-        assert!(
-            a.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
-                .is_pending()
-        );
-        assert!(
-            b.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
-                .is_pending()
-        );
-        exchange(&peer_b, b"9");
-        for _ in 0..2 {
-            let mut budget = work();
-            budget.set_remaining(WorkClass::BindingPolls, 1);
-            if minimal {
-                budget.set_remaining(WorkClass::ProviderProbes, 2);
-                budget.set_remaining(WorkClass::HandlerSteps, 1);
-            }
-            rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut budget);
-        }
-        assert_eq!(
-            second.validates.load(Ordering::Relaxed),
-            1,
-            "minimal={minimal}: ready result starved behind the pending read"
-        );
-        let mut no_native = work();
-        no_native.set_remaining(WorkClass::BindingPolls, 0);
-        let Poll::Ready(result) = b.poll(
-            &mut Context::from_waker(Waker::noop()),
-            now(),
-            &mut no_native,
-        ) else {
-            panic!("background progress did not retain the ready result");
-        };
-        assert!(result.result().is_ok());
-        assert_eq!(result.binding().binding_id(), BindingId::new(2));
-        drop(result);
-        drop(b);
-        drop(a);
-        rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
-        assert!(rt.1.is_idle());
-        drop(rt);
-        clean(&bank);
-        for probe in [first, second] {
-            for &port in probe.ports.lock().unwrap().iter() {
-                drop(UdpSocket::bind(port).unwrap());
-            }
+    })
+    .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    drop(reg_a);
+    drop(reg_b);
+    drop(source_a);
+    drop(source_b);
+    let mut a =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
+            .unwrap();
+    let mut b =
+        rt.0.read_property(&rt.1, "b", Deadline::NONE, now())
+            .unwrap();
+    assert!(
+        a.poll(&mut Context::from_waker(Waker::noop()), now())
+            .is_pending()
+    );
+    assert!(
+        b.poll(&mut Context::from_waker(Waker::noop()), now())
+            .is_pending()
+    );
+    exchange(&peer_b, b"9");
+    for _ in 0..2 {
+        rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+            .unwrap();
+    }
+    assert_eq!(
+        second.validates.load(Ordering::Relaxed),
+        1,
+        "ready result starved behind the pending read"
+    );
+    assert!(b.is_settled());
+    let Poll::Ready(Ok(result)) = b.poll(&mut Context::from_waker(Waker::noop()), now()) else {
+        panic!("background progress did not retain the ready result");
+    };
+    assert!(result.result().is_ok());
+    assert_eq!(result.binding().binding_id(), BindingId::new(2));
+    drop(result);
+    drop(b);
+    drop(a);
+    rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+        .unwrap();
+    assert!(rt.1.is_idle());
+    drop(rt);
+    clean(&bank);
+    for probe in [first, second] {
+        for &port in probe.ports.lock().unwrap().iter() {
+            drop(UdpSocket::bind(port).unwrap());
         }
     }
 }
 
 #[test]
-fn rereview_unread_success_cannot_bypass_changed_access_with_short_credit() {
-    for short_credit in [false, true] {
-        let p = Arc::new(Probe::default());
-        let (peer, target) = udp();
-        let registry = registry(vec![registration(1, p.clone())]);
-        let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
-        let thing = source(json!([{"href":target}]));
-        let rt = runtime(prepare(&registry, &thing, bank.clone()), bank.clone());
-        let mut call =
-            rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
-                .unwrap();
-        assert!(
-            call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
-                .is_pending()
-        );
-        exchange(&peer, b"7");
-        let start = Instant::now();
-        while p.validates.load(Ordering::Relaxed) == 0 {
-            rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
-            assert!(start.elapsed() < Duration::from_secs(5));
-        }
-        p.denied.store(true, Ordering::Relaxed);
-        let mut budget = work();
-        if short_credit {
-            budget.set_remaining(WorkClass::ProviderProbes, 0);
-        }
-        let accepted = match call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut budget)
-        {
-            Poll::Ready(result) => {
-                if !short_credit {
-                    assert!(
-                        matches!(result.result(), Err(CoreError::Validation(_))),
-                        "fully paid control must enforce the changed policy"
-                    );
-                }
-                result.result().is_ok()
-            }
-            Poll::Pending => {
-                assert!(short_credit, "fully paid terminal control must settle");
-                false
-            }
-        };
-        drop(call);
-        drop(rt);
-        drop(registry);
-        clean(&bank);
-        assert!(
-            !accepted,
-            "short_credit={short_credit}: delivered success without the current access policy check"
-        );
+fn unread_success_cannot_bypass_changed_access() {
+    let p = Arc::new(Probe::default());
+    let (peer, target) = udp();
+    let registry = registry(vec![registration(1, p.clone())]);
+    let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+    let thing = source(json!([{"href":target}]));
+    let rt = runtime(prepare(&registry, &thing, bank.clone()), bank.clone());
+    let mut call =
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
+            .unwrap();
+    assert!(
+        call.poll(&mut Context::from_waker(Waker::noop()), now())
+            .is_pending()
+    );
+    exchange(&peer, b"7");
+    let start = Instant::now();
+    while p.validates.load(Ordering::Relaxed) == 0 {
+        rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+            .unwrap();
+        assert!(start.elapsed() < Duration::from_secs(5));
     }
+    p.denied.store(true, Ordering::Relaxed);
+    assert!(call.is_settled());
+    let Poll::Ready(Ok(result)) = call.poll(&mut Context::from_waker(Waker::noop()), now()) else {
+        panic!("unread value must be collectible");
+    };
+    assert!(matches!(result.result(), Err(CoreError::Validation(_))));
+    drop(result);
+    drop(call);
+    drop(rt);
+    drop(registry);
+    clean(&bank);
 }
 
 #[test]
@@ -1607,7 +1624,7 @@ fn rereview_inspection_scratch_must_obey_the_admission_limit() {
 }
 
 #[test]
-fn unread_result_retains_its_owner_until_fully_paid_current_checks_can_run() {
+fn unread_result_retains_its_owner_through_fresh_permission_at_handoff() {
     for change in ["none", "access", "configuration", "data"] {
         let p = Arc::new(Probe::default());
         let (peer, target) = udp();
@@ -1618,16 +1635,17 @@ fn unread_result_retains_its_owner_until_fully_paid_current_checks_can_run() {
             bank.clone(),
         );
         let mut call =
-            rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
                 .unwrap();
         assert!(
-            call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+            call.poll(&mut Context::from_waker(Waker::noop()), now())
                 .is_pending()
         );
         exchange(&peer, b"7");
         let start = Instant::now();
         while p.validates.load(Ordering::Relaxed) == 0 {
-            rt.1.step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+            rt.1.step(&mut Context::from_waker(Waker::noop()), now())
+                .unwrap();
             assert!(start.elapsed() < Duration::from_secs(5));
         }
         match change {
@@ -1641,29 +1659,10 @@ fn unread_result_retains_its_owner_until_fully_paid_current_checks_can_run() {
             .iter()
             .map(|&kind| bank.account(kind).used())
             .collect();
-        for credit in [0, 1] {
-            let mut budget = work();
-            budget.set_remaining(WorkClass::ProviderProbes, credit);
-            assert!(
-                call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut budget)
-                    .is_pending(),
-                "{change}, credit={credit}: handoff must wait for the full current check"
-            );
-            assert!(!rt.1.is_idle());
-            assert_eq!(p.calls.load(Ordering::Relaxed), 0);
-            assert_eq!(
-                charged,
-                ResourceKind::ALL
-                    .iter()
-                    .map(|&kind| bank.account(kind).used())
-                    .collect::<Vec<_>>()
-            );
-        }
-        let mut budget = WorkBudget::new().with_remaining(WorkClass::ProviderProbes, 2);
-        let Poll::Ready(settlement) =
-            call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut budget)
+        assert!(!rt.1.is_idle());
+        let Poll::Ready(Ok(settlement)) = call.poll(&mut Context::from_waker(Waker::noop()), now())
         else {
-            panic!("{change}: a paid terminal check must allow handoff");
+            panic!("{change}: terminal handoff must check current permission");
         };
         if change == "none" {
             assert!(settlement.result().is_ok());
@@ -1679,8 +1678,12 @@ fn unread_result_retains_its_owner_until_fully_paid_current_checks_can_run() {
             settlement.native_outcome(),
             ConsumerNativeOutcome::Returned(Ok(_))
         ));
+        assert_eq!(
+            charged,
+            ResourceKind::ALL.map(|kind| bank.account(kind).used())
+        );
         assert!(rt.1.is_idle());
-        assert_eq!(p.calls.load(Ordering::Relaxed), 0);
+        assert_eq!(p.calls.load(Ordering::Relaxed), 1);
         drop(settlement);
         assert_eq!(p.calls.load(Ordering::Relaxed), 1);
         drop(call);

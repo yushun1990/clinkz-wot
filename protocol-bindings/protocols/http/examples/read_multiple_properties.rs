@@ -14,7 +14,7 @@ fn work() -> WorkBudget {
         .into_iter()
         .fold(WorkBudget::new(), |b, w| b.with_remaining(w, 1_000_000))
 }
-fn main() {
+fn main() -> CoreResult<()> {
     let args: Vec<_> = std::env::args().collect();
     assert!(
         args.len() >= 2,
@@ -70,15 +70,13 @@ fn main() {
         .enable_time()
         .build()
         .unwrap();
-    io.block_on(async {
+    let outcome = io.block_on(async {
         let mut call = association
-            .read_multiple_properties(&calls, &names, Deadline::NONE, now(), &mut work())
+            .read_multiple_properties(&calls, &names, Deadline::NONE, now())
             .unwrap();
         let result = loop {
-            if let Poll::Ready(result) =
-                call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
-            {
-                break result;
+            if let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), now()) {
+                break result?;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;
         };
@@ -86,6 +84,7 @@ fn main() {
             Ok(output) => println!("{}", String::from_utf8_lossy(&output.data().unwrap().body)),
             Err(error) => eprintln!("{error:?}"),
         }
+        Ok(())
     });
     drop((association, calls));
     assert!(
@@ -93,4 +92,5 @@ fn main() {
             .iter()
             .all(|&kind| bank.account(kind).used() == 0)
     );
+    outcome
 }

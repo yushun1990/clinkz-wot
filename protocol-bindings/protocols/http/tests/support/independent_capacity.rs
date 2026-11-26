@@ -41,7 +41,7 @@ fn associate_ref(
     .unwrap_or_else(|_| panic!());
     let binding = definition
         .clone()
-        .bind(access, accounts.clone(), &mut work())
+        .bind(access, accounts.clone())
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
     assert!(Arc::ptr_eq(binding.definition(), definition));
     StandaloneConsumerAssociation::try_new(consumer, vec![binding], vec![], accounts.clone())
@@ -59,7 +59,6 @@ fn start(
         &[("port", &port), ("item", "x"), ("q", "q")],
         Deadline::NONE,
         now(0),
-        &mut work(),
     )
 }
 
@@ -194,14 +193,7 @@ fn late_http_result_survives_association_and_capacity_roots_and_cannot_move_to_r
         // actual HTTP lane retires. Acquiring that lane proves native settlement.
         let stop = Instant::now() + Duration::from_secs(5);
         let mut sibling_call = loop {
-            assert!(
-                call.poll(
-                    &mut cx(),
-                    now(0),
-                    &mut work().with_remaining(WorkClass::CodecInputBytes, 0)
-                )
-                .is_pending()
-            );
+            let _ = call.progress(&mut cx(), now(0));
             if let Ok(next) = start(&other, &other_calls, &b) {
                 break next;
             }
@@ -302,7 +294,7 @@ fn shared_admission_reentry_reserves_capacity_and_closes_only_the_original_assoc
             .unwrap_or_else(|_| panic!());
         let binding = definition
             .clone()
-            .bind(access, account.clone(), &mut work())
+            .bind(access, account.clone())
             .unwrap_or_else(|_| panic!());
         let association = Rc::new(
             StandaloneConsumerAssociation::try_new(
@@ -322,10 +314,13 @@ fn shared_admission_reentry_reserves_capacity_and_closes_only_the_original_assoc
         REENTER.with(|pending| {
             *pending.borrow_mut() = Some(Box::new(move || {
                 assert!(!nested.is_idle());
-                nested.step(&mut cx(), now(0), &mut work());
+                assert!(matches!(
+                    nested.step(&mut cx(), now(0)),
+                    Err(CoreError::Lifecycle(_))
+                ));
                 assert!(matches!(
                     start(&other, &nested, &destination),
-                    Err(CoreError::Backpressure(_))
+                    Err(CoreError::Lifecycle(_))
                 ));
                 closing.begin_close();
             }))
@@ -339,7 +334,7 @@ fn shared_admission_reentry_reserves_capacity_and_closes_only_the_original_assoc
         assert_eq!(peer.count(), 0);
         let call = start(&sibling_association, &calls, &peer).unwrap();
         drop(call); // Abandonment still leaves a complete owner for manual cleanup.
-        calls.step(&mut cx(), now(0), &mut work());
+        calls.step(&mut cx(), now(0)).unwrap();
         assert!(calls.is_idle());
         let mut call = start(&sibling_association, &calls, &peer).unwrap();
         let result = finish(&mut call).await;
@@ -416,7 +411,6 @@ fn admitted_write_retains_original_operands_and_input_after_http_retirement_and_
                 &[("port", &port), ("item", &item), ("q", "q")],
                 Deadline::NONE,
                 now(0),
-                &mut work(),
             )
             .unwrap_or_else(|_| panic!());
         item.replace_range(.., "successor");
@@ -463,7 +457,7 @@ fn a_specialized_mapping_does_not_gain_dynamic_destination_authority_from_shared
         assert_eq!((a.count(), b.count()), (0, 0));
         assert_eq!((outstanding(&account), outstanding(&work_bank)), (0, 0));
         let mut call = association
-            .read_property(&calls, "level", Deadline::NONE, now(0), &mut work())
+            .read_property(&calls, "level", Deadline::NONE, now(0))
             .unwrap();
         let result = finish(&mut call).await;
         assert_eq!(
@@ -505,7 +499,7 @@ fn quiet_http_peer_needs_application_progress_after_passive_association_loss() {
             let wakes = Arc::new(ProgressWake(std::sync::atomic::AtomicUsize::new(0)));
             let waker = Waker::from(wakes.clone());
             let mut driver = Context::from_waker(&waker);
-            assert!(call.poll(&mut driver, now(0), &mut work()).is_pending());
+            assert!(call.poll(&mut driver, now(0)).is_pending());
             let funded = ResourceKind::ALL.map(|k| work_bank.account(k).used());
             wakes.0.store(0, Ordering::Release);
             if drop_association {
@@ -520,10 +514,6 @@ fn quiet_http_peer_needs_application_progress_after_passive_association_loss() {
             assert_eq!(wakes.0.load(Ordering::Acquire), 0);
             assert!(!calls.is_idle());
             assert_eq!(peer.closed.load(Ordering::Acquire), 0);
-            assert!(
-                call.poll(&mut driver, now(0), &mut WorkBudget::new())
-                    .is_pending()
-            );
             assert_eq!(
                 ResourceKind::ALL.map(|k| work_bank.account(k).used()),
                 funded
@@ -531,15 +521,14 @@ fn quiet_http_peer_needs_application_progress_after_passive_association_loss() {
             assert_eq!((outstanding(&account), outstanding(&work_bank)), (1, 1));
             if abandon_handle {
                 drop(call);
-                calls.step(&mut driver, now(0), &mut WorkBudget::new());
                 assert!(!calls.is_idle());
                 assert_eq!(outstanding(&work_bank), 1);
-                calls.step(&mut driver, now(0), &mut work());
+                calls.step(&mut driver, now(0)).unwrap();
             } else {
                 // The same cleanup owner can advance a retained handle. Native
                 // response activity is not needed to cancel the HTTP exchange.
-                calls.step(&mut driver, now(0), &mut work());
-                let Poll::Ready(result) = call.poll(&mut driver, now(0), &mut work()) else {
+                calls.step(&mut driver, now(0)).unwrap();
+                let Poll::Ready(Ok(result)) = call.poll(&mut driver, now(0)) else {
                     panic!("funded HTTP local cancellation did not settle");
                 };
                 assert!(matches!(result.result(), Err(CoreError::StaleHandle(_))));
