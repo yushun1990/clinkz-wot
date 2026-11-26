@@ -6,7 +6,10 @@ use alloc::{
     sync::Arc,
     vec::Vec,
 };
-use clinkz_wot_core::{finite::FiniteIngressBinding, producer::*, publication::*, *};
+use clinkz_wot_core::{
+    finite::FiniteIngressBinding, host_accounts::HostResourceAccounts, producer::*, publication::*,
+    *,
+};
 use clinkz_wot_foundation::{
     Generation, MonotonicInstant, ResourceLimits, SlotIndex, WorkBudget, WorkClass,
 };
@@ -47,6 +50,9 @@ pub struct HostProducerLimits {
     pub exchange: RawFiniteLimits,
     pub active_exchanges: usize,
     pub retained_results: usize,
+    /// Optional deployment-wide `PendingHandlerCallsGlobalMax` quota. Each finite
+    /// exchange holds its permit from admission through disposal of its result.
+    pub shared_handler_quota: Option<Arc<HostResourceAccounts>>,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -260,6 +266,7 @@ impl HostExposure {
     pub fn key(&self) -> ProducerInstanceKey {
         self.publication.key()
     }
+    /// First cause observed during publication or while driving a committed member.
     pub fn publication_failure(&self) -> Option<&CoreError> {
         self.failure.as_ref()
     }
@@ -404,7 +411,7 @@ impl HostProducer {
             config.exchange,
             config.active_exchanges,
             config.retained_results,
-            None,
+            config.shared_handler_quota,
         )?;
         Ok(Self {
             owner,
@@ -567,22 +574,37 @@ impl HostProducer {
         drop(PublicationFacts::lock_current(&[&stage.facts])?);
         match stage.phase {
             Phase::Draft => {
-                let draft = select(
-                    &thing.publication,
-                    &self.services,
-                    &self.planning,
-                    &mut stage.work,
-                    &mut stage.facts,
-                )?;
                 stage
                     .services
                     .try_reserve_exact(self.services.len())
                     .map_err(|_| busy())?;
                 if let Some(acquire) = &self.acquire {
+                    let providers: Vec<&dyn ProducerCapability> =
+                        self.services.iter().map(|s| s.as_ref() as _).collect();
+                    let advertised = check_finite_draft(
+                        &source.description,
+                        key,
+                        &self.planning,
+                        &mut stage.work,
+                        &providers,
+                        |scope, op| publication_supports(&thing.publication, scope, op),
+                        &mut stage.facts,
+                    )?;
+                    if !thing.publication.behaviors_described_by(|site, op| {
+                        advertised.iter().any(|(s, o)| s.site() == site && *o == op)
+                    }) {
+                        return Err(CoreError::UnsupportedOperation(context()));
+                    }
                     stage.endpoint = Some(acquire()?);
                     stage.phase = Phase::Specialize;
                 } else {
-                    stage.prepared = Some(draft);
+                    stage.prepared = Some(select(
+                        &thing.publication,
+                        &self.services,
+                        &self.planning,
+                        &mut stage.work,
+                        &mut stage.facts,
+                    )?);
                     stage.services.clone_from(&self.services);
                     stage.phase = Phase::Select;
                 }
@@ -590,17 +612,21 @@ impl HostProducer {
             Phase::Specialize => {
                 let endpoint = stage.endpoint.as_ref().unwrap();
                 let index = stage.observed;
-                stage
-                    .work
-                    .consume(WorkClass::ProviderProbes, 1)
-                    .map_err(|_| busy())?;
                 if index == stage.services.len() {
+                    stage
+                        .work
+                        .consume(WorkClass::ProviderProbes, 1)
+                        .map_err(|_| busy())?;
                     match endpoint.service(index) {
                         Ok(service) => stage.services.push(service),
                         Err(CoreError::Backpressure(_)) => return Ok(false),
                         Err(error) => return Err(error),
                     }
                 }
+                stage
+                    .work
+                    .consume(WorkClass::ProviderProbes, 1)
+                    .map_err(|_| busy())?;
                 match stage.services[index].observe_configuration(&mut stage.facts.observer()) {
                     Ok(()) => stage.observed += 1,
                     Err(CoreError::Backpressure(_)) => return Ok(false),
@@ -747,11 +773,16 @@ impl HostProducer {
         let member = loan.as_deref_mut().unwrap();
         let key = thing.key();
         if !member.associated_with(&thing.issuer, key) {
+            thing.failure.get_or_insert_with(stale);
             thing.publication.revoke();
             member.begin_retire(ProducerRetirement::Close);
         }
         let _ = member.poll_one(&self.owner, cx, now)?;
+        if let Some(cause) = member.native_failure() {
+            thing.failure.get_or_insert_with(|| cause.clone());
+        }
         if let Err(error) = self.owner.reconcile_participation(key, member) {
+            thing.failure.get_or_insert_with(|| error.clone());
             thing.publication.revoke();
             member.begin_retire(ProducerRetirement::Close);
             return Err(error);

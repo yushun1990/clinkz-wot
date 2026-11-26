@@ -257,7 +257,16 @@ impl<'a, 'slots, B: ReadMember> ReadPublication<'a, 'slots, B> {
         self.failure.as_ref()
     }
     fn fence(&mut self, cause: CoreError) {
-        self.failure.get_or_insert(cause);
+        if self.failure.is_none() {
+            for exchange in self
+                .active
+                .iter_mut()
+                .filter_map(|slot| slot.active.as_mut())
+            {
+                exchange.outcome.retirement.interrupt(cause.clone());
+            }
+            self.failure = Some(cause);
+        }
         self.gate.withdraw();
         self.key.revoke();
     }

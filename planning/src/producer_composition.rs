@@ -288,15 +288,19 @@ impl ProducerRegistrations {
     }
 }
 
+fn charge_provider_visit(budget: &mut WorkBudget) -> CoreResult<()> {
+    budget
+        .consume(WorkClass::ProviderProbes, 1)
+        .map_err(|_| busy())
+}
+
 fn observe_providers(
     providers: &[&dyn ProducerCapability],
     facts: &mut PublicationFacts,
     budget: &mut WorkBudget,
 ) -> CoreResult<()> {
-    budget
-        .consume(WorkClass::ProviderProbes, providers.len() as u64)
-        .map_err(|_| busy())?;
     for provider in providers {
+        charge_provider_visit(budget)?;
         provider.observe_configuration(&mut facts.observer())?;
     }
     Ok(())
@@ -326,6 +330,35 @@ pub fn prepare_thing(
         &mut facts,
         Some(core::mem::size_of::<PreparedThing>()),
     )
+}
+
+/// Validate the assigned-base draft and report its advertised behaviors. The
+/// final address determines native provider matching after endpoint acquisition.
+pub fn check_finite_draft(
+    description: &str,
+    instance: ProducerInstanceKey,
+    limits: &ResourceLimits,
+    budget: &mut WorkBudget,
+    providers: &[&dyn ProducerCapability],
+    behavior: impl Fn(ValidatedProducerScope<'_>, Operation) -> bool,
+    facts: &mut PublicationFacts,
+) -> CoreResult<Vec<(FormSite, Operation)>> {
+    observe_providers(providers, facts, budget)?;
+    let mut advertised = Vec::new();
+    visit_thing(
+        description,
+        instance,
+        limits,
+        budget,
+        &behavior,
+        |_, input, _| {
+            advertised.try_reserve(1).map_err(|_| busy())?;
+            advertised.push((input.site.clone(), input.operation));
+            Ok(())
+        },
+    )?;
+    drop(PublicationFacts::lock_current(&[facts])?);
+    Ok(advertised)
 }
 
 /// Select every advertised operation and retain the observed deployment versions
@@ -373,9 +406,7 @@ fn select_thing(
         |_, input, budget| {
             let mut chosen = None;
             for (i, provider) in providers.iter().enumerate() {
-                budget
-                    .consume(WorkClass::PlanningItems, 1)
-                    .map_err(|_| busy())?;
+                charge_provider_visit(budget)?;
                 if let Some(definition) = provider.prepare(input, budget)? {
                     if chosen.is_some() {
                         return Err(unsupported());
@@ -607,9 +638,7 @@ impl<'a> ProducerQualification<'a> {
                 }
                 let mut chosen = None;
                 for (i, provider) in providers.iter().enumerate() {
-                    budget
-                        .consume(WorkClass::PlanningItems, 1)
-                        .map_err(|_| busy())?;
+                    charge_provider_visit(budget)?;
                     let supported = if i == old.provider {
                         if old.binding != provider.identity() {
                             return Err(unsupported());

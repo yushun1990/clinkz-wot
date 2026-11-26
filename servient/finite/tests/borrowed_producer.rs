@@ -333,7 +333,8 @@ fn trial(mode: Failure) {
         ));
     } else {
         assert!(p.description().is_none());
-        assert!(matches!(p.failure(), Some(CoreError::Binding(_))));
+        assert_eq!(p.failure(), Some(&error()));
+        assert_eq!(retained.first_cause(), Some(&error()));
         assert_eq!(retained.delivery(), FiniteDelivery::NotDelivered);
         let (extra, e) = p.accept(extra, &buffers[2], now(5)).err().unwrap();
         assert!(matches!(e, CoreError::StaleHandle(_)));
@@ -477,4 +478,75 @@ fn revocation_in_delivery_authorization_keeps_the_original_value_off_the_wire() 
         peer.recv(&mut [0]).unwrap_err().kind(),
         std::io::ErrorKind::WouldBlock
     );
+}
+
+#[test]
+fn close_interrupts_original_exchanges_before_their_next_turn() {
+    let stats = Rc::new(Stats::default());
+    let member = Datagram::new(stats.clone());
+    let address = member.socket.local_addr().unwrap();
+    let target = format!("udp://{address}/read");
+    let td = source(&target);
+    let schemas = ValueSchemas {
+        input: None,
+        output: Some(PreparedSchema::Type(ValueType::Integer)),
+    };
+    let definition = definition(&address, &target, &td, &schemas);
+    let turns = ProducerTurns::default();
+    let slot = PublicationSlot::new(&turns);
+    let app = Application(Cell::new(0));
+    let buffers = [const { RefCell::new([0; 4]) }; 3];
+    let mut slots = std::array::from_fn::<_, 3, _>(|_| ReadSlot::new([0; 4]));
+    let mut p = ReadPublication::stage(
+        &slot,
+        None,
+        &definition,
+        member,
+        &app,
+        &mut slots,
+        Deadline::NONE,
+    )
+    .ok()
+    .unwrap();
+    assert!(matches!(
+        p.poll_publish(&mut cx(), now(0)),
+        Poll::Ready(Ok(()))
+    ));
+    let peer = socket();
+    let [expired, early, late] = [0, 1, 2].map(|i| {
+        let request = offer(&mut p, address, &peer, if i == 0 { 3 } else { 6 }, 2);
+        p.accept(request, &buffers[i], now(2)).ok().unwrap()
+    });
+    stats.fail.set(Some(Failure::Isolated));
+    assert!(p.poll_exchange(expired, &mut cx(), now(3)).is_pending());
+
+    p.close();
+    p.close();
+    assert!(p.description().is_none());
+    assert!(matches!(p.failure(), Some(CoreError::Cancelled(_))));
+    for key in [early, late] {
+        assert!(matches!(
+            p.retirement(key).unwrap().first_cause,
+            Some(CoreError::Cancelled(_))
+        ));
+    }
+    for (key, t, value) in [(early, 3, b'2'), (late, 9, b'3')] {
+        let result = finish(&mut p, key, t);
+        assert!(matches!(
+            result.first_cause(),
+            Some(CoreError::Cancelled(_))
+        ));
+        assert_eq!(result.delivery(), FiniteDelivery::NotDelivered);
+        assert_eq!(result.result().unwrap(), &[value]);
+    }
+    let result = finish(&mut p, expired, 9);
+    assert!(matches!(result.first_cause(), Some(CoreError::TimedOut(_))));
+    assert_eq!(result.cleanup_error(), Some(&error()));
+    assert_eq!(result.result().unwrap(), b"1");
+    assert_eq!(app.0.get(), 3);
+    assert_eq!(
+        (stats.sent.get(), stats.retire.get(), stats.disposed.get()),
+        (0, 4, 3)
+    );
+    p.retire().unwrap();
 }

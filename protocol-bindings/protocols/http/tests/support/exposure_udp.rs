@@ -10,6 +10,7 @@ pub struct Datagram {
     pub observations: Rc<Cell<usize>>,
     pub associated: Rc<Cell<bool>>,
     pub starts: Rc<Cell<usize>>,
+    pub fail_ingress: Rc<Cell<bool>>,
     pub fail_send: Rc<Cell<bool>>,
     pub retire_attempts: Rc<Cell<u8>>,
     receive_bytes: usize,
@@ -28,6 +29,7 @@ impl Datagram {
             observations: Rc::default(),
             associated: Rc::new(Cell::new(true)),
             starts: Rc::default(),
+            fail_ingress: Rc::default(),
             fail_send: Rc::default(),
             retire_attempts: Rc::default(),
             receive_bytes,
@@ -111,10 +113,7 @@ impl ProducerCapability for Datagram {
             .matches(i)?
             .then(|| Box::new(self.address()) as Box<dyn Any>))
     }
-    fn supports(&self, i: ProducerOperationInput<'_>, budget: &mut WorkBudget) -> CoreResult<bool> {
-        budget.consume(WorkClass::ProviderProbes, 1).map_err(|_| {
-            CoreError::Backpressure(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
-        })?;
+    fn supports(&self, i: ProducerOperationInput<'_>, _: &mut WorkBudget) -> CoreResult<bool> {
         self.matches(i)
     }
     fn check_final(
@@ -149,6 +148,7 @@ impl FiniteProducerService for Datagram {
                 lease: self.leased.clone(),
                 associated: self.associated.clone(),
                 starts: self.starts.clone(),
+                fail_ingress: self.fail_ingress.clone(),
                 fail_send: self.fail_send.clone(),
                 retire_attempts: self.retire_attempts.clone(),
                 installed: false,
@@ -165,6 +165,7 @@ pub struct Native {
     lease: Rc<Cell<bool>>,
     associated: Rc<Cell<bool>>,
     starts: Rc<Cell<usize>>,
+    fail_ingress: Rc<Cell<bool>>,
     fail_send: Rc<Cell<bool>>,
     retire_attempts: Rc<Cell<u8>>,
     installed: bool,
@@ -219,6 +220,16 @@ impl FiniteIngressBinding for Native {
             Ok(())
         } else {
             Err(refused())
+        }
+    }
+    fn check_ingress(&self) -> CoreResult<()> {
+        if self.fail_ingress.get() {
+            Err(CoreError::Binding(ErrorContext::new(
+                ErrorPhase::Binding,
+                RetryClass::Safe,
+            )))
+        } else {
+            Ok(())
         }
     }
     fn validator(&self) -> Option<&dyn FiniteValidator> {

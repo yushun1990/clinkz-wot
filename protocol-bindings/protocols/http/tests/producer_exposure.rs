@@ -35,6 +35,7 @@ fn limits() -> HostProducerLimits {
             output_retained_bytes: 2048,
         },
         active_exchanges: 1,
+        shared_handler_quota: None,
         retained_results: 3,
         candidates: 4,
         members: 4,
@@ -63,12 +64,9 @@ fn deployment(
     members: usize,
     acquired: Acquired,
 ) -> HostProducer {
-    // The port-zero registration uniquely owns the draft relative Form. Each
-    // final candidate has a different draft address and the same acquired socket.
-    let mut registrations = vec![
-        FiniteProducerRegistration::fixed(udp),
-        FiniteProducerRegistration::fixed(draft()),
-    ];
+    // No registration matches the relative HTTP Form at its provisional port.
+    // Each eligible HTTP service specializes to the real closed endpoint.
+    let mut registrations = vec![FiniteProducerRegistration::fixed(udp)];
     for &id in finals {
         let provider = HttpFiniteProducer::try_new(
             HttpProducerConfig::for_loopback(([127, 0, 0, 1], 8080).into()).unwrap(),
@@ -384,6 +382,24 @@ fn ambiguous_final_and_missing_behavior_release_only_the_candidate() {
     .unwrap();
     assert!(publication_result(&mut host, &mut missing).is_err());
     assert_eq!(acquired.borrow().len(), 1);
+    let mut extra = expose(
+        &mut host,
+        &source(false, Some(address)),
+        &["absolute", "unused"],
+        2,
+        &count,
+        None,
+    )
+    .unwrap();
+    assert!(matches!(
+        publication_result(&mut host, &mut extra),
+        Err(CoreError::UnsupportedOperation(_))
+    ));
+    let mut invalid_td = source(true, None);
+    invalid_td["properties"]["relative"]["type"] = json!("invalid");
+    let mut invalid = expose(&mut host, &invalid_td, &["relative"], 2, &count, None).unwrap();
+    assert!(publication_result(&mut host, &mut invalid).is_err());
+    assert_eq!(acquired.borrow().len(), 1);
     let mut contender = expose(
         &mut host,
         &source(true, None),
@@ -576,7 +592,7 @@ fn cancellation_and_expiry_at_closed_native_readiness_release_the_assigned_socke
     let udp = udp::Datagram::new();
     let mut host = deployment(udp.clone(), &[14], 2, acquired.clone());
     let count = Rc::new(Cell::new(0));
-    for polls in [1, 7] {
+    for polls in [1, 6] {
         for expire in [false, true] {
             let td: Arc<str> = source(true, Some(udp.address())).to_string().into();
             let mut candidate = host
@@ -627,7 +643,7 @@ static ALLOCATOR: meter::Allocator = meter::Allocator;
 fn checked_handoff_of_escaped_structured_values_has_no_heap_scratch() {
     use clinkz_wot_core::data_schema::{PreparedSchema, SchemaProperty};
     let schema = PreparedSchema::object(vec![SchemaProperty {
-        name: "name".into(),
+        name: "na\u{8}me".into(),
         required: true,
         schema: PreparedSchema::String {
             min_length: Some(512),
@@ -636,7 +652,7 @@ fn checked_handoff_of_escaped_structured_values_has_no_heap_scratch() {
     }])
     .unwrap();
     let value = format!(
-        r#"{{"n\u0061me":"{}","extra":[{{"x":true}}]}}"#,
+        r#"{{"n\u0061\bme":"{}","extra":[{{"x":true}}]}}"#,
         "\\u0061".repeat(512)
     );
     let before = meter::read();
@@ -784,7 +800,23 @@ fn busy_specialization_retries_the_same_lease_and_observed_provider_drift_is_ter
             assert_eq!(read_http(&mut host, &mut candidate).0, "7");
         }
     }
-    assert_eq!(addresses.borrow().len(), 2);
+    held.set(true);
+    let mut exhausted = expose(
+        &mut host,
+        &source(true, None),
+        &["relative"],
+        7,
+        &count,
+        None,
+    )
+    .unwrap();
+    assert!(matches!(
+        publication_result(&mut host, &mut exhausted),
+        Err(CoreError::Backpressure(_))
+    ));
+    assert_eq!(addresses.borrow().len(), 3);
+    TcpListener::bind(addresses.borrow()[2])
+        .expect("retry exhaustion released the original endpoint");
 }
 
 #[test]
@@ -906,4 +938,164 @@ fn host_retires_an_isolated_send_error_without_losing_the_member() {
     assert!(host.description(thing.key()).is_some());
     assert_eq!(read_udp(&mut host, &mut thing, addr), 7);
     assert_eq!(calls.get(), 2);
+}
+
+#[test]
+fn committed_idle_member_failure_reports_its_original_cause_through_retirement() {
+    let udp = udp::Datagram::new();
+    let mut host = deployment(udp.clone(), &[20], 2, Acquired::default());
+    let calls = Rc::new(Cell::new(0));
+    let mut idle = expose(
+        &mut host,
+        &source(false, Some(udp.address())),
+        &["absolute"],
+        1,
+        &calls,
+        None,
+    )
+    .unwrap();
+    let mut independent = expose(
+        &mut host,
+        &source(true, None),
+        &["relative"],
+        2,
+        &calls,
+        None,
+    )
+    .unwrap();
+    publish(&mut host, &mut idle);
+    publish(&mut host, &mut independent);
+    udp.fail_ingress.set(true);
+    step(&mut host, &mut idle);
+    let cause = CoreError::Binding(ErrorContext::new(ErrorPhase::Binding, RetryClass::Safe));
+    assert!(host.description(idle.key()).is_none());
+    assert_eq!(idle.publication_failure(), Some(&cause));
+    assert!(idle.take_finite_settlement().is_none());
+    assert_eq!(calls.get(), 0);
+    assert_eq!(read_http(&mut host, &mut independent).0, "2");
+    retire(&mut host, &mut idle);
+    assert_eq!(idle.publication_failure(), Some(&cause));
+    assert!(independent.publication_failure().is_none());
+}
+
+#[test]
+fn assigned_port_selects_the_only_final_registration_despite_an_ambiguous_draft() {
+    let acquired = Acquired::default();
+    let record = acquired.clone();
+    let serving = HttpFiniteProducer::for_assigned_port(
+        zero().ip(),
+        BindingId::new(12),
+        BindingGeneration::INITIAL,
+        100,
+    )
+    .unwrap();
+    let mut host = HostProducer::with_assigned_base(
+        vec![
+            FiniteProducerRegistration::fixed(draft()),
+            FiniteProducerRegistration::at_base(serving, HttpFiniteProducer::at_endpoint),
+        ],
+        move || {
+            let endpoint = HttpProducerEndpoint::acquire(zero())?;
+            record.borrow_mut().push(addr(endpoint.as_ref()));
+            Ok(endpoint)
+        },
+        limits(),
+        GatewayDefaultV1::LIMITS.clone(),
+    )
+    .unwrap();
+    let calls = Rc::new(Cell::new(0));
+    let mut thing = expose(
+        &mut host,
+        &source(true, None),
+        &["relative"],
+        7,
+        &calls,
+        None,
+    )
+    .unwrap();
+    publish(&mut host, &mut thing);
+    let td: Value = serde_json::from_str(host.description(thing.key()).unwrap()).unwrap();
+    assert_eq!(&*acquired.borrow(), &[addr(td["base"].as_str().unwrap())]);
+    let (wire, result) = read_http(&mut host, &mut thing);
+    assert_eq!(wire, "7");
+    assert_eq!(result.binding().0, BindingId::new(12));
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn two_host_deployments_share_one_handler_permit_through_result_disposal() {
+    use clinkz_wot_core::host_accounts::HostResourceAccounts;
+    let kind = ResourceKind::PendingHandlerCallsGlobalMax;
+    let bank = Arc::new(HostResourceAccounts::new(
+        &GatewayDefaultV1::LIMITS.clone().with_limit(kind, Some(1)),
+    ));
+    let config = || HostProducerLimits {
+        shared_handler_quota: Some(bank.clone()),
+        ..limits()
+    };
+    let mut assigned = HostProducer::with_assigned_base(
+        vec![FiniteProducerRegistration::at_base(
+            draft(),
+            HttpFiniteProducer::at_endpoint,
+        )],
+        || HttpProducerEndpoint::acquire(zero()),
+        config(),
+        GatewayDefaultV1::LIMITS.clone(),
+    )
+    .unwrap();
+    let endpoint = HttpProducerEndpoint::acquire(zero()).unwrap();
+    let address = addr(endpoint.as_ref());
+    let mut fixed_td = source(true, None);
+    fixed_td["base"] = json!(endpoint.as_ref());
+    let mut fixed = HostProducer::new(
+        vec![FiniteProducerRegistration::fixed(
+            draft().at_endpoint(&endpoint).unwrap(),
+        )],
+        config(),
+        GatewayDefaultV1::LIMITS.clone(),
+    )
+    .unwrap();
+    let calls = Rc::new(Cell::new(0));
+    let mut first = expose(
+        &mut assigned,
+        &source(true, None),
+        &["relative"],
+        1,
+        &calls,
+        None,
+    )
+    .unwrap();
+    let mut second = expose(&mut fixed, &fixed_td, &["relative"], 2, &calls, None).unwrap();
+    publish(&mut assigned, &mut first);
+    publish(&mut fixed, &mut second);
+    assert_eq!(http_wire(&mut assigned, &mut first), "1");
+    assert_eq!(bank.account(kind).used(), 1);
+
+    let mut peer = TcpStream::connect(address).unwrap();
+    write!(
+        peer,
+        "GET /level HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    for _ in 0..8 {
+        step(&mut fixed, &mut second);
+    }
+    let first_result = first.take_finite_settlement().unwrap();
+    for _ in 0..8 {
+        step(&mut fixed, &mut second);
+    }
+    assert_eq!(calls.get(), 1);
+    assert!(second.take_finite_settlement().is_none());
+    assert_eq!(bank.account(kind).used(), 1);
+    drop(first_result);
+    assert_eq!(bank.account(kind).used(), 0);
+    let second_result = outcome(&mut fixed, &mut second);
+    assert_eq!(bank.account(kind).used(), 1);
+    assert_eq!(calls.get(), 2);
+    peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+    let mut wire = String::new();
+    peer.read_to_string(&mut wire).unwrap();
+    assert_eq!(wire.split_once("\r\n\r\n").unwrap().1, "2");
+    drop(second_result);
+    assert_eq!(bank.account(kind).used(), 0);
 }

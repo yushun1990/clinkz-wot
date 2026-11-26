@@ -108,6 +108,7 @@ fn main() {
             output_retained_bytes: 8192,
         },
         active_exchanges: 1,
+        shared_handler_quota: None,
         retained_results: 2,
         candidates: 1,
         members: 1,
