@@ -682,7 +682,7 @@ impl ConsumerAssociation {
         deadline: Deadline,
         now: MonotonicInstant,
     ) -> CoreResult<ConsumerCall> {
-        self.start_with_variables(
+        self.start(
             calls,
             AffordanceSite::Property(name),
             Operation::ReadProperty,
@@ -703,7 +703,7 @@ impl ConsumerAssociation {
         deadline: Deadline,
         now: MonotonicInstant,
     ) -> Result<ConsumerCall, BindingInputRejection<Payload>> {
-        self.start_with_variables(
+        self.start(
             calls,
             AffordanceSite::Property(name),
             Operation::WriteProperty,
@@ -724,15 +724,7 @@ impl ConsumerAssociation {
         deadline: Deadline,
         now: MonotonicInstant,
     ) -> CoreResult<ConsumerCall> {
-        self.start(
-            calls,
-            AffordanceSite::Property(name),
-            Operation::ReadProperty,
-            CallInput::Value(None),
-            deadline,
-            now,
-        )
-        .map_err(|e| e.error().error().clone())
+        self.read_property_with_variables(calls, name, &[], deadline, now)
     }
     /// One root status exchange. Returned native records confer no local
     /// invocation authority and do not query/cancel existing Consumer handles.
@@ -747,6 +739,7 @@ impl ConsumerAssociation {
             AffordanceSite::Thing,
             Operation::QueryAllActions,
             CallInput::Value(None),
+            &[],
             deadline,
             now,
         )
@@ -764,6 +757,7 @@ impl ConsumerAssociation {
             AffordanceSite::Thing,
             Operation::ReadAllProperties,
             CallInput::Value(None),
+            &[],
             deadline,
             now,
         )
@@ -784,6 +778,7 @@ impl ConsumerAssociation {
             AffordanceSite::Thing,
             Operation::ReadMultipleProperties,
             CallInput::Members(members),
+            &[],
             deadline,
             now,
         )
@@ -804,6 +799,7 @@ impl ConsumerAssociation {
             AffordanceSite::Action(name),
             Operation::InvokeAction,
             CallInput::Value(input),
+            &[],
             deadline,
             now,
         )
@@ -824,6 +820,7 @@ impl ConsumerAssociation {
             AffordanceSite::Property(name),
             Operation::WriteProperty,
             CallInput::Value(Some(input)),
+            &[],
             deadline,
             now,
         )
@@ -847,6 +844,7 @@ impl ConsumerAssociation {
             AffordanceSite::Thing,
             Operation::WriteAllProperties,
             CallInput::Value(Some(input)),
+            &[],
             deadline,
             now,
         )
@@ -869,6 +867,7 @@ impl ConsumerAssociation {
             AffordanceSite::Thing,
             Operation::WriteMultipleProperties,
             CallInput::Value(Some(input)),
+            &[],
             deadline,
             now,
         )
@@ -884,18 +883,6 @@ impl ConsumerAssociation {
         target: AffordanceSite<'_>,
         operation: Operation,
         input: CallInput<'_>,
-        deadline: Deadline,
-        now: MonotonicInstant,
-    ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
-        self.start_with_variables(calls, target, operation, input, &[], deadline, now)
-    }
-    #[allow(clippy::too_many_arguments)]
-    fn start_with_variables(
-        &self,
-        calls: &ConsumerCalls,
-        target: AffordanceSite<'_>,
-        operation: Operation,
-        input: CallInput<'_>,
         variables: &[(&str, &str)],
         deadline: Deadline,
         now: MonotonicInstant,
@@ -904,12 +891,29 @@ impl ConsumerAssociation {
             Ok(turn) => turn,
             Err(error) => return Err(input.reject(error)),
         };
+        self.start_in_turn(
+            &mut turn, calls, target, operation, input, variables, deadline, now,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn start_in_turn(
+        &self,
+        turn: &mut ConsumerTurn,
+        calls: &ConsumerCalls,
+        target: AffordanceSite<'_>,
+        operation: Operation,
+        input: CallInput<'_>,
+        variables: &[(&str, &str)],
+        deadline: Deadline,
+        now: MonotonicInstant,
+    ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
         let (definition, bank) = match self.select(target, operation) {
             Ok(selected) => selected,
             Err(error) => return Err(input.reject(error)),
         };
         Self::start_selected(
-            &mut turn,
+            turn,
             &self.state.authority,
             definition,
             bank,

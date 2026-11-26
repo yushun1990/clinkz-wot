@@ -375,12 +375,25 @@ fn same_slot_foreign_authority_and_reused_call_tokens_cannot_redirect_work() {
     let mut s = completed(z.poll(k, &mut cx, now(1)));
     assert!(s.result().is_ok());
     let next = z.read(&next_result, Deadline::NONE, now(2)).unwrap();
+    let polls = stats.polls.get();
+    {
+        let _turn = driving.borrow_mut();
+        for handle in [next, k] {
+            assert!(
+                matches!(z.poll(handle, &mut cx, now(9)), Poll::Ready(Err(CoreError::Lifecycle(e))) if e.phase() == ErrorPhase::Readiness)
+            );
+        }
+    }
+    assert_eq!(stats.polls.get(), polls);
     assert!(matches!(z.cancel(k), Err(CoreError::StaleHandle(_))));
     assert!(matches!(
         z.poll(k, &mut cx, now(2)),
         Poll::Ready(Err(CoreError::StaleHandle(_)))
     ));
-    z.cancel(next).unwrap();
+    assert!(z.poll(next, &mut cx, now(2)).is_pending());
+    peer.respond(0, b"9");
+    let mut result = completed(z.poll(next, &mut cx, now(3)));
+    assert_eq!(result.result().unwrap().data().unwrap().body, b"9");
     drop(a);
     drop(z);
     drop(cancelled);

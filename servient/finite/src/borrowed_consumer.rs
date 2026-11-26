@@ -238,9 +238,17 @@ impl<'a, B: ReadBinding> ReadRuntime<'a, B> {
     /// Progress/cleanup remains possible after cancellation or revocation.
     /// An unread terminal result stays in its original occupied slot.
     pub fn step(&mut self, cx: &mut Context<'_>, now: MonotonicInstant) -> Poll<CoreResult<()>> {
-        let _turn = self.driving.try_borrow_mut().map_err(|_| reentry())?;
+        let mut turn = self.driving.try_borrow_mut().map_err(|_| reentry())?;
+        self.step_in_turn(&mut turn, cx, now).map(Ok)
+    }
+    fn step_in_turn(
+        &mut self,
+        _turn: &mut RefMut<'_, ()>,
+        cx: &mut Context<'_>,
+        now: MonotonicInstant,
+    ) -> Poll<()> {
         let Some(call) = &mut self.call else {
-            return Poll::Ready(Ok(()));
+            return Poll::Ready(());
         };
         match now.checked_cmp(call.owner.last_time) {
             Some(Ordering::Equal | Ordering::Greater) => call.owner.last_time = now,
@@ -251,7 +259,7 @@ impl<'a, B: ReadBinding> ReadRuntime<'a, B> {
             drop(call.owner.native.take());
             call.progress.fence(&mut call.owner);
         }
-        progress.map(Ok)
+        progress
     }
     pub fn poll(
         &mut self,
@@ -259,10 +267,11 @@ impl<'a, B: ReadBinding> ReadRuntime<'a, B> {
         cx: &mut Context<'_>,
         now: MonotonicInstant,
     ) -> Poll<CoreResult<ReadSettlement<'a, B>>> {
+        let mut turn = self.driving.try_borrow_mut().map_err(|_| reentry())?;
         if !self.original(handle) {
             return Poll::Ready(Err(stale()));
         }
-        core::task::ready!(self.step(cx, now))?;
+        core::task::ready!(self.step_in_turn(&mut turn, cx, now));
         Poll::Ready(Ok(ReadSettlement {
             owner: self.call.take().unwrap().owner,
         }))

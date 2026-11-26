@@ -1444,6 +1444,43 @@ fn managed_shutdown_fences_all_parents_before_reentrant_service_destruction() {
 }
 
 #[test]
+fn named_read_checks_the_turn_before_resolving_thing_or_configuration() {
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+    let owner = Rc::new(ConsumerOwner::try_new(bank.clone(), 1, 1).unwrap());
+    let id = "urn:pump";
+    let instance = owner.register_thing(id, &mut work()).unwrap();
+    let (rt, probe) = association_harness(1, None, bank.clone(), instance.consumer());
+    let (association, calls) = Rc::try_unwrap(rt).ok().unwrap();
+    owner
+        .set_configuration(id, "default", association, &mut work())
+        .unwrap_or_else(|_| panic!());
+    let calls = Rc::new(calls);
+    let named = move |thing: &str, config: &str| {
+        owner.read_property(thing, config, &calls, "level", Deadline::NONE, now())
+    };
+    let nested = named.clone();
+    let missing = [("urn:missing", "default"), (id, "missing")];
+    hook(Edge::Access, move || {
+        for (thing, config) in [(id, "default")].into_iter().chain(missing) {
+            assert!(
+                matches!(nested(thing, config), Err(CoreError::Lifecycle(e)) if e.phase() == ErrorPhase::Readiness)
+            );
+        }
+    });
+    let mut call = named(id, "default").unwrap();
+    assert_eq!(probe.starts.load(Ordering::Relaxed), 1);
+    assert_eq!(probe.polls.load(Ordering::Relaxed), 0);
+    assert!(settle(&mut call).result().is_ok());
+    for (thing, config) in missing {
+        assert!(
+            matches!(named(thing, config), Err(CoreError::NotFound(e)) if e.phase() == ErrorPhase::Admission)
+        );
+    }
+    drop((call, named, instance));
+    clean(&bank);
+}
+
+#[test]
 fn id_resolved_admission_never_retries_a_replacement_created_during_credentials() {
     for http in [false, true] {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();

@@ -301,9 +301,12 @@ fn main() {
             // Application results/decisions share this Host task with progress.
             if let Some(call) = read.as_mut()
                 && call.is_settled()
-                && let Poll::Ready(Ok(result)) = call.poll(cx, now())
+                && let Poll::Ready(result) = call.poll(cx, now())
             {
-                eprintln!("Property: {:?}", result.result());
+                match result {
+                    Ok(settlement) => eprintln!("Property: {:?}", settlement.result()),
+                    Err(error) => eprintln!("Property: {error:?}"),
+                }
                 read = None;
             }
             if let Some(handle) = &action {

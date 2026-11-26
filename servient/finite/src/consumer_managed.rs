@@ -559,11 +559,22 @@ impl ConsumerOwner {
         deadline: Deadline,
         now: MonotonicInstant,
     ) -> CoreResult<ConsumerCall> {
+        let mut turn = ConsumerTurn::enter()?;
         // Snapshot and end the registry borrow before policy/credential/native
         // callbacks. If it is removed in a callback, admission must refuse;
         // it cannot retry lookup and accidentally use a successor.
         self.association(thing_id, configuration)?
-            .read_property_with_variables(calls, property, variables, deadline, now)
+            .start_in_turn(
+                &mut turn,
+                calls,
+                AffordanceSite::Property(property),
+                Operation::ReadProperty,
+                CallInput::Value(None),
+                variables,
+                deadline,
+                now,
+            )
+            .map_err(|e| e.error().error().clone())
     }
 
     fn check_id(&self, id: &str) -> CoreResult<()> {

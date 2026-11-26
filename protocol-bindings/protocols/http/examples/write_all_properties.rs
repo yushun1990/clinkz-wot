@@ -14,7 +14,7 @@ fn work() -> WorkBudget {
         .into_iter()
         .fold(WorkBudget::new(), |b, w| b.with_remaining(w, 1_000_000))
 }
-fn main() {
+fn main() -> CoreResult<()> {
     let args: Vec<_> = std::env::args().collect();
     assert_eq!(
         args.len(),
@@ -71,15 +71,13 @@ fn main() {
         .enable_time()
         .build()
         .unwrap();
-    io.block_on(async {
+    let outcome = io.block_on(async {
         let mut call = association
             .write_all_properties(&calls, input, Deadline::NONE, now())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let result = loop {
-            if let Poll::Ready(Ok(result)) =
-                call.poll(&mut Context::from_waker(Waker::noop()), now())
-            {
-                break result;
+            if let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), now()) {
+                break result?;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;
         };
@@ -90,6 +88,7 @@ fn main() {
                 result.effect()
             ),
         }
+        Ok(())
     });
     drop((association, calls));
     assert!(
@@ -97,4 +96,5 @@ fn main() {
             .iter()
             .all(|&kind| bank.account(kind).used() == 0)
     );
+    outcome
 }

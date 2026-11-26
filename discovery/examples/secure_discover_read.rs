@@ -155,14 +155,13 @@ pub(crate) fn prepare_read(
     .map_err(|e| e.error().error().clone())
 }
 
-pub(crate) async fn settle(call: &mut ConsumerCall) -> ConsumerSettlement {
+pub(crate) async fn settle(call: &mut ConsumerCall) -> CoreResult<ConsumerSettlement> {
     tokio::time::timeout(Duration::from_secs(5), async {
         let start = Instant::now();
         loop {
             let instant =
                 MonotonicInstant::new(ClockId::new(771), start.elapsed().as_millis() as u64);
-            if let Poll::Ready(Ok(result)) =
-                call.poll(&mut Context::from_waker(Waker::noop()), instant)
+            if let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), instant)
             {
                 return result;
             }
@@ -173,7 +172,7 @@ pub(crate) async fn settle(call: &mut ConsumerCall) -> ConsumerSettlement {
     .expect("bounded interaction did not settle")
 }
 
-fn main() {
+fn main() -> CoreResult<()> {
     let args: Vec<_> = std::env::args().collect();
     assert_eq!(
         args.len(),
@@ -271,7 +270,7 @@ fn main() {
                 now(),
             )
             .unwrap();
-        let result = settle(&mut call).await;
+        let result = settle(&mut call).await?;
         let output = result.result().expect("Thing read refused");
         println!(
             "{}",
@@ -283,5 +282,6 @@ fn main() {
                 .into_iter()
                 .all(|k| accounts.account(k).used() == 0)
         );
-    });
+        Ok(())
+    })
 }

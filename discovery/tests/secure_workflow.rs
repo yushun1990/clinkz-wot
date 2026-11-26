@@ -277,7 +277,13 @@ async fn authenticated_directory_to_exact_basic_https_form_validates_structured_
             .is_err()
     );
     let mut call = read(&runtime);
-    let result = settle(&mut call).await;
+    let result = settle(&mut call).await.unwrap();
+    assert!(matches!(
+        std::pin::pin!(settle(&mut call))
+            .as_mut()
+            .poll(&mut Context::from_waker(Waker::noop())),
+        std::task::Poll::Ready(Err(CoreError::StaleHandle(_)))
+    ));
     assert_eq!(
         result.result().unwrap().data().unwrap().body,
         BODY.as_bytes()
@@ -447,7 +453,7 @@ async fn tls_domains_are_independent_in_both_directions() {
     );
     let runtime = app.prepare(&selected, 1, &app.instance).unwrap();
     let mut call = read(&runtime);
-    let result = settle(&mut call).await;
+    let result = settle(&mut call).await.unwrap();
     assert!(result.result().is_err());
     assert!(
         thing.requests.lock().unwrap().is_empty(),
@@ -509,7 +515,7 @@ async fn wrong_credentials_forbidden_and_redirect_responses_do_not_retry_or_navi
         let app = App::new(&target, &keys, Some(credentials(user, password)));
         let runtime = app.prepare(&selected, 1, &app.instance).unwrap();
         let mut call = read(&runtime);
-        let result = settle(&mut call).await;
+        let result = settle(&mut call).await.unwrap();
         assert!(result.result().is_err(), "case {case}");
         assert_credentials(&thing, user, password);
         drop((result, call, runtime));
@@ -539,7 +545,7 @@ async fn authenticated_success_still_requires_selected_dataschema_validation() {
         );
         let runtime = app.prepare(&selected, 1, &app.instance).unwrap();
         let mut call = read(&runtime);
-        let result = settle(&mut call).await;
+        let result = settle(&mut call).await.unwrap();
         assert!(result.result().is_err(), "{body}");
         assert_credentials(&thing, THING_USER, THING_PASSWORD);
         drop((result, call, runtime));
@@ -584,7 +590,7 @@ async fn in_flight_cancellation_revocation_rotation_and_abandonment_release_the_
             _ => unreachable!(),
         }
         if case != 4 {
-            let result = settle(&mut call).await;
+            let result = settle(&mut call).await.unwrap();
             let error = result.result().expect_err("invalidated read succeeded");
             let expected = match case {
                 0 => matches!(error, CoreError::Cancelled(_)),
@@ -660,7 +666,7 @@ async fn validated_unread_success_is_fenced_by_changed_policy_or_original_instan
             }
             _ => app.instance.revoke(),
         }
-        let result = settle(&mut call).await;
+        let result = settle(&mut call).await.unwrap();
         assert!(result.result().is_err());
         assert!(
             matches!(
