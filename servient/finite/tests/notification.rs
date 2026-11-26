@@ -726,7 +726,8 @@ fn aggregate_turn_rotates_short_credit_and_preserves_live_reports() {
         root.step(
             &mut cx,
             &mut budget().with_remaining(WorkClass::BindingPolls, 1),
-        );
+        )
+        .unwrap();
         // Mixing aggregate progress with explicit report cleanup must not
         // reset the active-conversation rotation under short credit.
         assert!(root.step_cleanup(&mut cx, &mut budget()).unwrap().is_none());
@@ -741,19 +742,19 @@ fn aggregate_turn_rotates_short_credit_and_preserves_live_reports() {
     );
     bus.borrow_mut().close = Mode::Fail;
     drop(stalled);
-    root.step(&mut cx, &mut budget());
+    root.step(&mut cx, &mut budget()).unwrap();
     assert!(root.status(&stalled_id).unwrap().cleanup_error.is_some());
     Bus::publish(&bus, ("sensor", 1), Some(payload("sibling")));
-    root.step(&mut cx, &mut budget());
+    root.step(&mut cx, &mut budget()).unwrap();
     assert_eq!(data(&mut root, &mut live), b"sibling");
     root.advance(&mut live, &mut budget()).unwrap();
     bus.borrow_mut().close = Mode::Ready;
-    root.step(&mut cx, &mut budget());
+    root.step(&mut cx, &mut budget()).unwrap();
     assert!(root.status(&stalled_id).is_err());
     assert_eq!(root.retained_subscriptions(), 1);
 
     root.begin_close();
-    root.step(&mut cx, &mut budget());
+    root.step(&mut cx, &mut budget()).unwrap();
     assert_eq!(
         root.status(&live_id).unwrap().state,
         NotificationState::Closed
@@ -763,7 +764,7 @@ fn aggregate_turn_rotates_short_credit_and_preserves_live_reports() {
         1,
         "live receiver owns its unread report"
     );
-    root.step(&mut cx, &mut budget());
+    root.step(&mut cx, &mut budget()).unwrap();
     let report = root.take_settlement(&live_id).unwrap();
     assert_eq!(report.delivered_items, 1);
     assert!(matches!(report.first_cause, Some(CoreError::Cancelled(_))));
@@ -779,24 +780,24 @@ fn aggregate_abandonment_keeps_original_reply_until_retired_even_with_stop_views
     let identity = cursor.identity().clone();
     let stop = cursor.stop_handle();
     let mut cx = Context::from_waker(Waker::noop());
-    root.step(&mut cx, &mut budget());
+    root.step(&mut cx, &mut budget()).unwrap();
     Bus::publish(&bus, ("sensor", 1), Some(payload("reply owned")));
-    root.step(&mut cx, &mut budget());
+    root.step(&mut cx, &mut budget()).unwrap();
     assert_eq!(bus.borrow().physical[&("sensor", 1)].jobs, 1);
     let retained = root.reserved_engine_bytes();
     drop(cursor);
-    root.step(&mut cx, &mut WorkBudget::new());
+    root.step(&mut cx, &mut WorkBudget::new()).unwrap();
     assert_eq!(root.reserved_engine_bytes(), retained);
     bus.borrow_mut().retire = Mode::Pending;
-    root.step(&mut cx, &mut budget());
+    root.step(&mut cx, &mut budget()).unwrap();
     bus.borrow_mut().retire = Mode::Fail;
-    root.step(&mut cx, &mut budget());
+    root.step(&mut cx, &mut budget()).unwrap();
     assert_eq!(root.reserved_engine_bytes(), retained);
     assert!(root.status(&identity).unwrap().cleanup_error.is_some());
     assert_eq!(bus.borrow().physical[&("sensor", 1)].jobs, 1);
     bus.borrow_mut().retire = Mode::Ready;
     for _ in 0..8 {
-        root.step(&mut cx, &mut budget());
+        root.step(&mut cx, &mut budget()).unwrap();
     }
     assert_eq!(root.retained_subscriptions(), 0);
     assert!(bus.borrow().physical.is_empty());
@@ -819,16 +820,16 @@ fn aggregate_zero_credit_observes_passive_parent_loss_without_discarding_report(
         Program::property(),
     );
     let mut cx = Context::from_waker(Waker::noop());
-    root.step(&mut cx, &mut budget());
+    root.step(&mut cx, &mut budget()).unwrap();
     root._instance.revoke();
     let polls = bus.borrow().close_polls;
-    root.step(&mut cx, &mut WorkBudget::new());
+    root.step(&mut cx, &mut WorkBudget::new()).unwrap();
     assert_eq!(bus.borrow().close_polls, polls);
     assert_eq!(
         root.status(cursor.identity()).unwrap().state,
         NotificationState::Closing
     );
-    root.step(&mut cx, &mut budget());
+    root.step(&mut cx, &mut budget()).unwrap();
     let report = root.take_settlement(cursor.identity()).unwrap();
     assert!(matches!(
         report.first_cause,
@@ -2701,7 +2702,7 @@ impl NotificationValidation for ValidationProbe {
 }
 
 #[test]
-fn raw_validator_final_release_defers_sibling_receive_for_idle_context_and_report() {
+fn raw_validator_final_release_refuses_sibling_receive_for_idle_context_and_report() {
     for admit in [false, true] {
         let bus = Bus::new();
         let (mut sibling, _, _) = root(&bus, limits());
@@ -2728,7 +2729,7 @@ fn raw_validator_final_release_defers_sibling_receive_for_idle_context_and_repor
                     &mut Context::from_waker(Waker::noop()),
                     &mut budget(),
                 );
-                assert!(matches!(result, Err(CoreError::Backpressure(_))));
+                assert!(matches!(result, Err(CoreError::Lifecycle(_))));
             })),
         };
         let (mut original, _, _) = root(&Bus::new(), limits());

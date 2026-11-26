@@ -614,7 +614,7 @@ fn authorization_can_close_and_refuse_the_original_write_before_native_construct
 #[test]
 fn credential_callback_fences_refuse_native_acceptance_and_recover_original_input() {
     for http in [false, true] {
-        for change in 0..5 {
+        for close_association in [false, true] {
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
             listener.set_nonblocking(true).unwrap();
             let h = harness(1, http.then(|| listener.local_addr().unwrap()));
@@ -622,15 +622,10 @@ fn credential_callback_fences_refuse_native_acceptance_and_recover_original_inpu
             let rt = h.rt.clone();
             hook(Edge::Issue, move || {
                 assert!(!rt.1.is_idle(), "admission must retain its reserved slot");
-                match change {
-                    0 => rt.0.begin_close(),
-                    1 => rt.1.begin_close(),
-                    2 => rt.1.step(&mut cx(), at(2)).unwrap(),
-                    3 => rt.1.step(&mut cx(), at(0)).unwrap(),
-                    _ => {
-                        rt.1.begin_close();
-                        rt.1.step(&mut cx(), at(0)).unwrap();
-                    }
+                if close_association {
+                    rt.0.begin_close();
+                } else {
+                    rt.1.begin_close();
                 }
             });
             let input = Payload::new(b"8".as_slice(), "application/json");
@@ -640,14 +635,7 @@ fn credential_callback_fences_refuse_native_acceptance_and_recover_original_inpu
                     .write_property(&h.rt.1, "level", input, Deadline::at(at(2)), now())
                     .err()
                     .expect("credential callback fenced the original admission");
-            match change {
-                0 | 1 | 4 => assert!(matches!(refused.error().error(), CoreError::StaleHandle(_))),
-                2 => assert!(matches!(refused.error().error(), CoreError::TimedOut(_))),
-                _ => assert!(matches!(
-                    refused.error().error(),
-                    CoreError::InternalInvariant(_)
-                )),
-            }
+            assert!(matches!(refused.error().error(), CoreError::StaleHandle(_)));
             assert!(h.owner.reference().is_current(), "the parent stays current");
             let (input, _) = refused.into_parts();
             assert!(Arc::ptr_eq(&original, &input.body));
@@ -662,7 +650,7 @@ fn credential_callback_fences_refuse_native_acceptance_and_recover_original_inpu
                 matches!(listener.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock)
             );
             assert!(h.rt.1.is_idle());
-            if change == 0 {
+            if close_association {
                 // Closing releases unselected mapping/service backing now;
                 // refusal must add no retained call or scratch debit.
                 assert!(
@@ -681,13 +669,16 @@ fn credential_callback_fences_refuse_native_acceptance_and_recover_original_inpu
 }
 
 #[test]
-fn nested_admission_defers_even_with_a_free_sibling_slot() {
+fn nested_admission_is_refused_even_with_a_free_sibling_slot() {
     for capacity in [1, 2] {
         let h = harness(capacity, None);
         let rt = h.rt.clone();
         hook(Edge::Access, move || {
-            rt.1.step(&mut cx(), now()).unwrap();
-            assert!(matches!(read(&rt), Err(CoreError::Backpressure(_))));
+            assert!(matches!(
+                rt.1.step(&mut cx(), now()),
+                Err(CoreError::Lifecycle(_))
+            ));
+            assert!(matches!(read(&rt), Err(CoreError::Lifecycle(_))));
         });
         let mut outer = read(&h.rt).unwrap();
         assert!(settle(&mut outer).result().is_ok());
@@ -699,12 +690,17 @@ fn nested_admission_defers_even_with_a_free_sibling_slot() {
 }
 
 #[test]
-fn advancing_nested_sweep_does_not_regress_a_siblings_call_time() {
+fn refused_sweep_cannot_advance_any_original_call_clock() {
     let h = harness(2, None);
     let mut first = read(&h.rt).unwrap();
     let mut sibling = read(&h.rt).unwrap();
     let rt = h.rt.clone();
-    hook(Edge::Poll, move || rt.1.step(&mut cx(), at(2)).unwrap());
+    hook(Edge::Poll, move || {
+        assert!(matches!(
+            rt.1.step(&mut cx(), at(9)),
+            Err(CoreError::Lifecycle(_))
+        ))
+    });
     h.rt.1.step(&mut cx(), at(1)).unwrap();
     for call in [&mut first, &mut sibling] {
         let Poll::Ready(Ok(s)) = call.poll(&mut cx(), at(3)) else {
@@ -719,7 +715,7 @@ fn advancing_nested_sweep_does_not_regress_a_siblings_call_time() {
 }
 
 #[test]
-fn nested_drives_across_three_capacities_defer_io_but_preserve_cancellation() {
+fn a_callback_cannot_drive_independent_capacities_but_can_cancel_an_original_call() {
     let first = harness(1, None);
     let second = harness(1, None);
     let third = harness(1, None);
@@ -730,10 +726,14 @@ fn nested_drives_across_three_capacities_defer_io_but_preserve_cancellation() {
     let third_driver = third.rt.clone();
     let cancel = c.clone();
     hook(Edge::Poll, move || {
-        hook(Edge::Poll, move || {
-            third_driver.1.step(&mut cx(), at(3)).unwrap()
-        });
-        second_driver.1.step(&mut cx(), at(2)).unwrap();
+        assert!(matches!(
+            second_driver.1.step(&mut cx(), at(2)),
+            Err(CoreError::Lifecycle(_))
+        ));
+        assert!(matches!(
+            third_driver.1.step(&mut cx(), at(3)),
+            Err(CoreError::Lifecycle(_))
+        ));
         cancel.cancel();
     });
     first.rt.1.step(&mut cx(), at(1)).unwrap();
@@ -809,40 +809,6 @@ fn expiry_observed_on_a_sibling_wins_over_later_cancel_or_close() {
 }
 
 #[test]
-fn nested_time_advancement_expires_checked_out_work_before_effects_or_handoff() {
-    for edge in [Edge::Access, Edge::Poll, Edge::Validate] {
-        let h = harness(1, None);
-        let mut call =
-            h.rt.0
-                .read_property(&h.rt.1, "level", Deadline::at(at(2)), at(1))
-                .unwrap();
-        let rt = h.rt.clone();
-        hook(edge, move || rt.1.step(&mut cx(), at(2)).unwrap());
-        let Poll::Ready(Ok(s)) = call.poll(&mut cx(), at(1)) else {
-            panic!("not ready")
-        };
-        assert!(
-            matches!(s.result(), Err(CoreError::TimedOut(_))),
-            "{:?}",
-            s.result()
-        );
-        assert_eq!(
-            h.probe.polls.load(Ordering::Relaxed),
-            usize::from(edge != Edge::Access)
-        );
-        if edge != Edge::Access {
-            assert!(matches!(
-                s.native_outcome(),
-                ConsumerNativeOutcome::Returned(Ok(_))
-            ));
-        }
-        drop(s);
-        drop(call);
-        dispose(h);
-    }
-}
-
-#[test]
 fn native_construction_can_close_but_the_new_work_only_enters_cancellation() {
     let h = harness(1, None);
     let rt = h.rt.clone();
@@ -865,7 +831,10 @@ fn cancellation_callback_can_close_without_replacing_the_first_cause() {
     let rt = h.rt.clone();
     hook(Edge::Cancel, move || {
         rt.1.begin_close();
-        rt.1.step(&mut cx(), now()).unwrap();
+        assert!(matches!(
+            rt.1.step(&mut cx(), now()),
+            Err(CoreError::Lifecycle(_))
+        ));
     });
     let s = settle(&mut call);
     assert!(matches!(s.result(), Err(CoreError::Cancelled(_))));
@@ -939,9 +908,12 @@ fn reentrant_progress_can_cancel_a_sibling_without_polling_the_checked_out_call_
     let rt = h.rt.clone();
     let capture = second.clone();
     hook(Edge::Poll, move || {
-        assert!(matches!(read(&rt), Err(CoreError::Backpressure(_))));
+        assert!(matches!(read(&rt), Err(CoreError::Lifecycle(_))));
         capture.borrow().as_ref().unwrap().cancel();
-        rt.1.step(&mut cx(), now()).unwrap();
+        assert!(matches!(
+            rt.1.step(&mut cx(), now()),
+            Err(CoreError::Lifecycle(_))
+        ));
     });
     let s = settle(&mut first);
     assert!(s.result().is_ok());
@@ -1007,7 +979,7 @@ fn abandonment_and_native_destruction_can_reenter_after_the_original_slot_is_vac
         drop(capture.borrow_mut().take());
         hook(Edge::Dispose, move || {
             assert!(rt.1.is_idle());
-            assert!(matches!(read(&rt), Err(CoreError::Backpressure(_))));
+            assert!(matches!(read(&rt), Err(CoreError::Lifecycle(_))));
         });
     });
     h.rt.1.step(&mut cx(), now()).unwrap();
@@ -1053,86 +1025,6 @@ impl Drop for WakeProbe {
 }
 
 #[test]
-fn inline_retry_registers_another_reads_close_waker_and_reports_exhausted_interest() {
-    let outer = harness(1, None);
-    outer.probe.pending.store(true, Ordering::Relaxed);
-    let trigger = read(&outer.rt).unwrap();
-    let replacements = harness(2, None);
-    let first = Rc::new(read(&replacements.rt).unwrap());
-    let second = Rc::new(read(&replacements.rt).unwrap());
-    let (a, b) = (first.clone(), second.clone());
-    hook(Edge::Poll, move || {
-        for call in [a, b] {
-            let old = Waker::from(Arc::new(WakeProbe(AtomicUsize::new(0))));
-            assert!(
-                call.progress(&mut Context::from_waker(&old), now())
-                    .is_pending()
-            );
-        }
-    });
-    assert!(trigger.progress(&mut cx(), now()).is_pending());
-
-    let retry_owner = harness(1, None);
-    let retry_call = Rc::new(read(&retry_owner.rt).unwrap());
-    let other = harness(1, None);
-    let other_call = Rc::new(read(&other.rt).unwrap());
-    let overflow = harness(1, None);
-    let overflow_call = Rc::new(RefCell::new(read(&overflow.rt).unwrap()));
-    let retry_count = Arc::new(WakeProbe(AtomicUsize::new(0)));
-    let retry_waker = Waker::from(retry_count.clone());
-    let other_count = Arc::new(WakeProbe(AtomicUsize::new(0)));
-    let other_waker = Waker::from(other_count.clone());
-    let overflow_handle = overflow_call.clone();
-    let nested = other_call.clone();
-    let retry = retry_call.clone();
-    hook(Edge::Poll, move || {
-        hook(Edge::WakerDrop, move || {
-            hook(Edge::WakerDrop, move || {
-                hook(Edge::Wake, move || {
-                    assert!(
-                        nested
-                            .progress(&mut Context::from_waker(&other_waker), now())
-                            .is_pending()
-                    );
-                });
-                for _ in 0..2 {
-                    assert!(
-                        retry
-                            .progress(&mut Context::from_waker(&retry_waker), now())
-                            .is_pending()
-                    );
-                }
-                // The one retry already belongs to another task. A caller can
-                // retry this exact accepted Read without waiting for a signal.
-                let Poll::Ready(Err(CoreError::Backpressure(error))) =
-                    overflow_handle.borrow_mut().poll(&mut cx(), now())
-                else {
-                    panic!("unregistered observer needs an explicit retry");
-                };
-                assert_eq!(error.retry_class(), RetryClass::Safe);
-            });
-            assert!(second.progress(&mut cx(), now()).is_pending());
-        });
-        assert!(first.progress(&mut cx(), now()).is_pending());
-    });
-    assert!(trigger.progress(&mut cx(), now()).is_pending());
-    HOOK.with(|h| assert!(h.borrow().is_none()));
-    assert_eq!(retry_count.0.load(Ordering::Relaxed), 1);
-    assert_eq!(other_count.0.load(Ordering::Relaxed), 0);
-    for h in [&replacements, &retry_owner, &other, &overflow] {
-        assert_eq!(h.probe.polls.load(Ordering::Relaxed), 0);
-    }
-    other.rt.1.begin_close();
-    assert_eq!(other_count.0.load(Ordering::Relaxed), 1);
-    assert!(settle(&mut overflow_call.borrow_mut()).result().is_ok());
-    assert_eq!(overflow.probe.polls.load(Ordering::Relaxed), 1);
-    drop((trigger, retry_call, other_call, overflow_call));
-    for h in [outer, replacements, retry_owner, other, overflow] {
-        dispose(h);
-    }
-}
-
-#[test]
 fn dropping_a_bound_property_read_guards_its_last_selected_service() {
     let original = harness(1, None);
     let read_view = original.rt.0.bind_property_read("level").unwrap();
@@ -1141,7 +1033,10 @@ fn dropping_a_bound_property_read_guards_its_last_selected_service() {
     let mut next = read(&sibling.rt).unwrap();
     let rt = sibling.rt.clone();
     hook(Edge::ServiceDrop, move || {
-        rt.1.step(&mut cx(), now()).unwrap()
+        assert!(matches!(
+            rt.1.step(&mut cx(), now()),
+            Err(CoreError::Lifecycle(_))
+        ))
     });
     drop(read_view);
     HOOK.with(|h| assert!(h.borrow().is_none()));
@@ -1164,7 +1059,10 @@ fn collected_read_guards_its_last_service_destructor() {
     let mut next = read(&sibling.rt).unwrap();
     let rt = sibling.rt.clone();
     hook(Edge::ServiceDrop, move || {
-        rt.1.step(&mut cx(), now()).unwrap()
+        assert!(matches!(
+            rt.1.step(&mut cx(), now()),
+            Err(CoreError::Lifecycle(_))
+        ))
     });
     drop(result);
     HOOK.with(|h| assert!(h.borrow().is_none()));
@@ -1176,165 +1074,6 @@ fn collected_read_guards_its_last_service_destructor() {
     );
     drop(next);
     dispose(sibling);
-}
-
-#[test]
-fn checked_out_read_wakes_only_its_latest_observer_on_restoration() {
-    let h = harness(1, None);
-    h.probe.pending.store(true, Ordering::Relaxed);
-    let call = Rc::new(read(&h.rt).unwrap());
-    let nested = call.clone();
-    let rt = h.rt.clone();
-    let first = Arc::new(WakeProbe(AtomicUsize::new(0)));
-    let latest = Arc::new(WakeProbe(AtomicUsize::new(0)));
-    let first_waker = Waker::from(first.clone());
-    let latest_waker = Waker::from(latest.clone());
-    hook(Edge::Poll, move || {
-        rt.1.step(&mut Context::from_waker(&first_waker), now())
-            .unwrap();
-        let mut cx = Context::from_waker(&latest_waker);
-        assert!(nested.progress(&mut cx, now()).is_pending());
-        assert!(nested.progress(&mut cx, now()).is_pending());
-    });
-    assert!(call.progress(&mut cx(), now()).is_pending());
-    assert_eq!(first.0.load(Ordering::Relaxed), 0);
-    assert_eq!(latest.0.load(Ordering::Relaxed), 1);
-    assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
-    drop(call);
-    dispose(h);
-}
-
-#[test]
-fn deferred_ready_read_registers_only_its_live_handle_for_close_or_cancel() {
-    for close in [true, false] {
-        let outer = harness(1, None);
-        let trigger = read(&outer.rt).unwrap();
-        let sibling = harness(1, None);
-        let mut retired = read(&sibling.rt).unwrap();
-        drop(settle(&mut retired));
-        let call = Rc::new(read(&sibling.rt).unwrap());
-        sibling.probe.pending.store(true, Ordering::Relaxed);
-        assert!(call.progress(&mut cx(), now()).is_pending());
-        let polls = sibling.probe.polls.load(Ordering::Relaxed);
-        let latest = Arc::new(WakeProbe(AtomicUsize::new(0)));
-        let waker = Waker::from(latest.clone());
-        let nested = call.clone();
-        hook(Edge::Poll, move || {
-            assert!(
-                nested
-                    .progress(&mut Context::from_waker(&waker), now())
-                    .is_pending()
-            );
-            assert!(retired.progress(&mut cx(), now()).is_pending());
-        });
-        assert!(trigger.progress(&mut cx(), now()).is_ready());
-        assert_eq!(sibling.probe.polls.load(Ordering::Relaxed), polls);
-        assert_eq!(latest.0.load(Ordering::Relaxed), 0);
-        if close {
-            sibling.rt.1.begin_close();
-        } else {
-            call.cancel();
-        }
-        assert_eq!(latest.0.load(Ordering::Relaxed), 1);
-        drop((trigger, call));
-        dispose(outer);
-        dispose(sibling);
-    }
-}
-
-#[test]
-fn nested_poll_registers_interest_and_wakes_after_the_call_is_restored() {
-    let h = harness(1, None);
-    let handle = Rc::new(RefCell::new(Some(read(&h.rt).unwrap())));
-    let capture = handle.clone();
-    let counter = Arc::new(WakeProbe(AtomicUsize::new(0)));
-    let count = counter.clone();
-    hook(Edge::Poll, move || {
-        let waker = Waker::from(count);
-        assert!(
-            capture
-                .borrow_mut()
-                .as_mut()
-                .unwrap()
-                .poll(&mut Context::from_waker(&waker), now())
-                .is_pending()
-        );
-    });
-    h.rt.1.step(&mut cx(), now()).unwrap();
-    assert_eq!(counter.0.load(Ordering::Relaxed), 1);
-    let mut call = handle.borrow_mut().take().unwrap();
-    assert!(settle(&mut call).result().is_ok());
-    drop(call);
-    drop(handle);
-    drop(counter);
-    dispose(h);
-}
-
-#[test]
-fn nested_runtime_driver_keeps_interest_while_the_original_native_poll_is_pending() {
-    let h = harness(1, None);
-    let mut call = read(&h.rt).unwrap();
-    let counter = Arc::new(WakeProbe(AtomicUsize::new(0)));
-    let capture = counter.clone();
-    let rt = h.rt.clone();
-    hook(Edge::Access, move || {
-        let waker = Waker::from(capture);
-        rt.1.step(&mut Context::from_waker(&waker), now()).unwrap();
-    });
-    h.probe.pending.store(true, Ordering::Relaxed);
-    h.rt.1.step(&mut cx(), now()).unwrap();
-    call.cancel();
-    assert!(
-        counter.0.load(Ordering::Relaxed) > 0,
-        "nested driver lost its wake registration"
-    );
-    assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
-    drop(settle(&mut call));
-    drop(call);
-    drop(counter);
-    dispose(h);
-}
-
-#[test]
-fn consumed_inline_cancel_wake_is_rearmed_after_pending_native_work_is_restored() {
-    let h = harness(1, None);
-    h.probe.pending.store(true, Ordering::Relaxed);
-    let handle = Rc::new(RefCell::new(Some(read(&h.rt).unwrap())));
-    let capture = handle.clone();
-    let counter = Arc::new(WakeProbe(AtomicUsize::new(0)));
-    let waker = Waker::from(counter.clone());
-    let rt = h.rt.clone();
-    let nested_waker = waker.clone();
-    hook(Edge::Poll, move || {
-        hook(Edge::Wake, move || {
-            rt.1.step(&mut Context::from_waker(&nested_waker), now())
-                .unwrap()
-        });
-        capture.borrow().as_ref().unwrap().cancel();
-    });
-    h.rt.1
-        .step(&mut Context::from_waker(&waker), now())
-        .unwrap();
-    assert!(
-        counter.0.load(Ordering::Relaxed) >= 2,
-        "busy-slot restoration lost the inline cancellation wake"
-    );
-    assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
-    // The restoration wake supplies the next driver turn; no native I/O or
-    // unrelated event is needed to enter cancellation and retire the owner.
-    h.rt.1
-        .step(&mut Context::from_waker(&waker), now())
-        .unwrap();
-    assert_eq!(h.probe.cancels.load(Ordering::Relaxed), 1);
-    let mut call = handle.borrow_mut().take().unwrap();
-    let s = settle(&mut call);
-    assert!(matches!(s.result(), Err(CoreError::Cancelled(_))));
-    drop(s);
-    drop(call);
-    drop(handle);
-    drop(waker);
-    drop(counter);
-    dispose(h);
 }
 
 #[test]
@@ -1357,6 +1096,69 @@ fn replacing_a_waker_may_close_without_borrow_conflicts_or_successful_handoff() 
     drop(s);
     drop(call);
     dispose(h);
+}
+
+#[test]
+fn close_wakes_a_parked_read_after_a_callback_attempts_to_replace_its_waiter() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap();
+    tokio::task::LocalSet::new().block_on(&runtime, async {
+        let h = harness(1, None);
+        h.probe.pending.store(true, Ordering::Relaxed);
+        let call = Rc::new(RefCell::new(read(&h.rt).unwrap()));
+        let waiter = call.clone();
+        let (ready, parked) = tokio::sync::oneshot::channel();
+        let mut ready = Some(ready);
+        let task = tokio::task::spawn_local(async move {
+            std::future::poll_fn(|cx| {
+                let poll = waiter.borrow_mut().poll(cx, now());
+                if poll.is_pending()
+                    && let Some(ready) = ready.take()
+                {
+                    ready.send(()).unwrap();
+                }
+                poll
+            })
+            .await
+            .unwrap()
+        });
+        parked.await.unwrap();
+        assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
+
+        let trigger = harness(1, None);
+        let mut outer = read(&trigger.rt).unwrap();
+        let count = Arc::new(WakeProbe(AtomicUsize::new(0)));
+        let waker = Waker::from(count.clone());
+        let nested = call.clone();
+        let closing = h.rt.clone();
+        hook(Edge::Poll, move || {
+            assert!(matches!(
+                nested
+                    .borrow_mut()
+                    .poll(&mut Context::from_waker(&waker), at(9)),
+                Poll::Ready(Err(CoreError::Lifecycle(_)))
+            ));
+            closing.1.begin_close();
+        });
+        assert!(settle(&mut outer).result().is_ok());
+        assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
+        // The timeout observes the join handle. Only a wake can repoll the Read task.
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(matches!(
+            result.first_cause(),
+            Some(CoreError::StaleHandle(_))
+        ));
+        assert_eq!(count.0.load(Ordering::Relaxed), 0);
+        assert_eq!(h.probe.cancels.load(Ordering::Relaxed), 1);
+        drop((result, call, outer));
+        dispose(trigger);
+        dispose(h);
+    });
 }
 
 #[test]
@@ -1443,7 +1245,10 @@ fn real_http_retains_one_original_result_when_validation_reenters_close_or_cance
                 } else {
                     capture.borrow().as_ref().unwrap().cancel();
                 }
-                rt.1.step(&mut cx(), now()).unwrap();
+                assert!(matches!(
+                    rt.1.step(&mut cx(), now()),
+                    Err(CoreError::Lifecycle(_))
+                ));
             });
             let start = Instant::now();
             loop {

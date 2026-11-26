@@ -21,7 +21,7 @@ an Embedded socket implementation.
 The executable cases cover these ownership and execution boundaries.
 
 - one native poll per turn across sibling runtimes sharing a caller drive cell,
-  including a UDP Read deferred during destruction of an active call or taken output
+  including explicit refusal to drive a UDP Read during destruction of an active call or taken output
 - fresh permission for unread results and validation of the exact view returned,
   including a native value that changes between views
 - actual native identity/status/role/media/payload-bound and DataSchema refusals,

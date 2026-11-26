@@ -63,9 +63,10 @@ define the corresponding lifecycle boundaries.
 
 `RES-WORK-001`: A public drive MUST bound the work until it returns. Use a
 bounded native or handler poll, a byte slice, or a cursor over a bounded number
-of records or nodes. Count synchronous callbacks and reentry into siblings in
-that bound. Split, restrict or decline callbacks whose inclusive cost exceeds
-the supported turn. A passive observation or zero-sized batch invokes no linked
+of records or nodes. Include all synchronous callbacks and any sibling execution
+the deployment explicitly supports in that bound. Refuse unsupported reentry
+at the drive boundary. Split, restrict or decline callbacks whose inclusive
+cost exceeds the supported turn. A passive observation or zero-sized batch invokes no linked
 code. On yield keep the cursor and the original owners. Distinguish advancement
 or a runnable yield, waiting for an identified event, exhausted job limits and
 terminal outcomes. Host and manual entry points take the operation they can

@@ -50,25 +50,40 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
-std::thread_local! { static DRIVING_CONSUMER: Cell<bool> = const { Cell::new(false) }; }
+mod consumer_turn {
+    use super::{Cell, CoreError, CoreResult, ErrorContext, ErrorPhase, Rc, RetryClass};
+    use core::marker::PhantomData;
 
-/// Native, codec and access callbacks may reenter another capacity on this
-/// thread. The application's independent turns retry deferred work.
-struct ConsumerTurn;
-impl ConsumerTurn {
-    fn enter() -> Option<Self> {
-        if DRIVING_CONSUMER.replace(true) {
-            None
-        } else {
-            Some(Self)
+    std::thread_local! { static DRIVING: Cell<bool> = const { Cell::new(false) }; }
+
+    /// Exclusive execution across the Host Consumer owners reachable on this thread.
+    pub(super) struct ConsumerTurn(PhantomData<Rc<()>>);
+
+    impl ConsumerTurn {
+        pub(super) fn enter() -> CoreResult<Self> {
+            Self::scope().ok_or_else(|| {
+                CoreError::Lifecycle(ErrorContext::new(ErrorPhase::Readiness, RetryClass::Never))
+            })
+        }
+
+        /// Keep linked wake and disposal callbacks inside the current turn,
+        /// opening a scope when the application closes or drops an idle owner.
+        pub(super) fn scope() -> Option<Self> {
+            if DRIVING.replace(true) {
+                None
+            } else {
+                Some(Self(PhantomData))
+            }
+        }
+    }
+
+    impl Drop for ConsumerTurn {
+        fn drop(&mut self) {
+            DRIVING.set(false);
         }
     }
 }
-impl Drop for ConsumerTurn {
-    fn drop(&mut self) {
-        DRIVING_CONSUMER.set(false);
-    }
-}
+use consumer_turn::ConsumerTurn;
 
 /// A Host-held owner whose final release can call linked code. Field drop
 /// order inside the value (including funding) is preserved under the turn.
@@ -86,123 +101,38 @@ impl<T> core::ops::Deref for ConsumerOwned<T> {
 }
 impl<T> Drop for ConsumerOwned<T> {
     fn drop(&mut self) {
-        let _turn = ConsumerTurn::enter();
+        let _turn = ConsumerTurn::scope();
         drop(self.0.take());
     }
 }
 
-// A waker's clone or drop can register another observer, on this call or a
-// sibling. Allow the original installation and that callback's replacement.
-std::thread_local! {
-    static WAKER_INSTALL_DEPTH: Cell<u8> = const { Cell::new(0) };
-    static RETRY_WAKER: RefCell<Option<Waker>> = const { RefCell::new(None) };
-}
-
-struct WakerInstallation(u8);
-impl WakerInstallation {
-    fn enter() -> Option<Self> {
-        let depth = WAKER_INSTALL_DEPTH.get();
-        if depth == 2 {
-            return None;
-        }
-        WAKER_INSTALL_DEPTH.set(depth + 1);
-        Some(Self(depth))
-    }
-    fn request_retry(waker: &Waker) -> CoreResult<()> {
-        let busy =
-            || CoreError::Backpressure(ErrorContext::new(ErrorPhase::Delivery, RetryClass::Safe));
-        // Copying or delivering the retry can itself reenter. When its slot
-        // is unavailable, return the retry to the caller without a vtable call.
-        RETRY_WAKER
-            .try_with(|retry| {
-                let mut slot = retry.try_borrow_mut().map_err(|_| busy())?;
-                match slot.as_ref() {
-                    Some(queued) if queued.will_wake(waker) => Ok(()),
-                    Some(_) => Err(busy()),
-                    None => {
-                        *slot = Some(waker.clone());
-                        Ok(())
-                    }
-                }
-            })
-            .map_err(|_| busy())?
-    }
-}
-impl Drop for WakerInstallation {
-    fn drop(&mut self) {
-        WAKER_INSTALL_DEPTH.set(self.0);
-        if self.0 == 0 {
-            // Both installations are free for callbacks from the wake. A
-            // worker-local owner can outlive the retry slot during teardown.
-            let _ = RETRY_WAKER.try_with(|retry| {
-                if let Ok(mut slot) = retry.try_borrow_mut()
-                    && let Some(waker) = slot.take()
-                {
-                    waker.wake();
-                }
-            });
-        }
-    }
-}
-
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-enum WakerCopy {
-    #[default]
-    Idle,
-    Copying,
-    Signalled,
-}
-
-struct ResetWakerCopy<'a>(&'a Cell<WakerCopy>);
-impl Drop for ResetWakerCopy<'_> {
-    fn drop(&mut self) {
-        self.0.set(WakerCopy::Idle);
-    }
-}
-
+/// Only the executing owner installs a waiter. Close and cancellation can
+/// still signal the original call from the incoming waker's clone callback.
 #[derive(Default)]
 struct ConsumerObserver {
     waker: RefCell<Option<Waker>>,
-    copy: Cell<WakerCopy>,
+    notified: Cell<bool>,
 }
 impl ConsumerObserver {
-    fn register(&self, waker: &Waker) -> CoreResult<()> {
+    fn register(&self, waker: &Waker) {
         if self
             .waker
             .borrow()
             .as_ref()
             .is_some_and(|old| old.will_wake(waker))
         {
-            self.copy.set(WakerCopy::Idle);
-            return Ok(());
+            return;
         }
-        let Some(_installing) = WakerInstallation::enter() else {
-            return WakerInstallation::request_retry(waker);
-        };
-        // Restore idle on unwind from an outer clone. A nested clone
-        // shares its pending signal and may publish the newer observer.
-        let _reset = (self.copy.get() == WakerCopy::Idle).then(|| {
-            self.copy.set(WakerCopy::Copying);
-            ResetWakerCopy(&self.copy)
-        });
+        self.notified.set(false);
         let next = waker.clone();
-        let copied = self.copy.replace(WakerCopy::Idle);
-        if copied == WakerCopy::Idle {
-            // A newer registration completed inside clone.
-            return Ok(());
-        }
         let old = self.waker.replace(Some(next));
-        // Close or cancellation may have signalled before clone returned.
-        if copied == WakerCopy::Signalled {
+        if self.notified.get() {
             self.wake();
         }
         drop(old);
-        Ok(())
     }
     fn wake(&self) {
-        if self.copy.get() == WakerCopy::Copying {
-            self.copy.set(WakerCopy::Signalled);
-        }
+        self.notified.set(true);
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
@@ -210,7 +140,7 @@ impl ConsumerObserver {
 }
 impl Drop for ConsumerObserver {
     fn drop(&mut self) {
-        let _turn = ConsumerTurn::enter();
+        let _turn = ConsumerTurn::scope();
         drop(self.waker.get_mut().take());
     }
 }

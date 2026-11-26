@@ -128,7 +128,10 @@ fn native_read_bounded_turn_unread_result_and_exact_final_release() {
     let mut cx = Context::from_waker(core::task::Waker::noop());
     // A nested drive names the same manual loop and cannot enter a native callback.
     let outer = driving.borrow_mut();
-    assert!(runtime.poll(handle, &mut cx, now(1)).is_pending());
+    assert!(matches!(
+        runtime.poll(handle, &mut cx, now(9)),
+        Poll::Ready(Err(CoreError::Lifecycle(_)))
+    ));
     assert_eq!(stats.polls.get(), 0);
     drop(outer);
     assert!(runtime.poll(handle, &mut cx, now(1)).is_pending());
@@ -163,7 +166,7 @@ fn native_read_bounded_turn_unread_result_and_exact_final_release() {
 }
 
 #[test]
-fn validation_lends_the_checked_view_and_defers_a_sibling_native_drive() {
+fn validation_lends_the_checked_view_and_refuses_a_sibling_native_drive() {
     let driving = RefCell::new(());
     let authority = authority();
     let access = Permission::default();
@@ -201,7 +204,10 @@ fn validation_lends_the_checked_view_and_defers_a_sibling_native_drive() {
         .unwrap();
     let nested = || {
         let mut cx = Context::from_waker(core::task::Waker::noop());
-        assert!(sibling.borrow_mut().step(&mut cx, now(2)).is_pending());
+        assert!(matches!(
+            sibling.borrow_mut().step(&mut cx, now(9)),
+            Poll::Ready(Err(CoreError::Lifecycle(_)))
+        ));
         assert_eq!(sibling_stats.polls.get(), 0);
     };
     let codec = NumberCodec {
@@ -404,7 +410,7 @@ fn unread_success_rechecks_live_permission_without_redecoding() {
     let mut cx = Context::from_waker(core::task::Waker::noop());
     assert!(runtime.step(&mut cx, now(1)).is_pending());
     peer.respond(0, b"42");
-    assert!(runtime.step(&mut cx, now(2)).is_ready());
+    assert!(matches!(runtime.step(&mut cx, now(2)), Poll::Ready(Ok(()))));
     access.denied.set(true);
     let mut s = completed(runtime.poll(h, &mut cx, now(2)));
     assert!(matches!(s.result(), Err(CoreError::Security { .. })));
@@ -553,7 +559,7 @@ fn capacity_pairing_required_meaning_and_permission_refuse_without_native_effect
     let occupied = driving.borrow_mut();
     assert!(matches!(
         runtime.read(&result, Deadline::NONE, now(0)),
-        Err(CoreError::Backpressure(_))
+        Err(CoreError::Lifecycle(_))
     ));
     drop(occupied);
     access.denied.set(true);
@@ -589,7 +595,7 @@ fn last_owner_drop_disposes_native_io_locally_without_claiming_cleanup_ack() {
 }
 
 #[test]
-fn dropping_active_or_taken_work_defers_a_sibling_datagram() {
+fn dropping_active_or_taken_work_refuses_a_sibling_datagram() {
     for (taken, in_turn) in [(false, false), (true, false), (false, true), (true, true)] {
         let driving = RefCell::new(());
         let issuer = authority();
@@ -614,7 +620,10 @@ fn dropping_active_or_taken_work_defers_a_sibling_datagram() {
             .unwrap();
         let callback = || {
             let mut cx = Context::from_waker(core::task::Waker::noop());
-            assert!(sibling.borrow_mut().step(&mut cx, now(1)).is_pending());
+            assert!(matches!(
+                sibling.borrow_mut().step(&mut cx, now(9)),
+                Poll::Ready(Err(CoreError::Lifecycle(_)))
+            ));
         };
         let peer = Peer::new();
         let open = || peer.open();

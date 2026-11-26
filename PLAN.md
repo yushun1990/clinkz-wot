@@ -78,8 +78,9 @@ still use legacy accounting. The remaining dependencies determine the order.
 benchmarks, build features and CI compile and run without the superseded APIs,
 generated tables or work factories. Current specifications and public inventories
 must describe the enforcing owners. Verify real Host and independent Binding I/O,
-caller-owned execution and the no-pointer-atomics build, bounded callback/reentry
-and job exhaustion, first cause and late evidence, and reuse after final release.
+caller-owned execution and the no-pointer-atomics build, bounded callbacks and
+refusal of unsupported reentry, job exhaustion, first cause and late evidence,
+and reuse after final release.
 For each continuing shared ceiling, test last-unit contention with a held result.
 Review that evidence and the execution-only dependency graph at one revision.
 [Runtime safety](docs/spec/runtime-safety.md) · [Integration obligations](docs/work-packages/WP-700-integration.md)

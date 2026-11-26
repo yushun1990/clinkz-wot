@@ -673,7 +673,10 @@ fn reentrant_policy_cancellation_fences_native_start_and_preserves_completed_unr
                     }
                     // The checked-out original slot remains occupied. No RefCell
                     // registry borrow surrounds the access callback.
-                    nested_client.1.step(&mut cx(), now(0)).unwrap();
+                    assert!(matches!(
+                        nested_client.1.step(&mut cx(), now(0)),
+                        Err(CoreError::Lifecycle(_))
+                    ));
                     assert!(!nested_client.1.is_idle());
                 }))
             });

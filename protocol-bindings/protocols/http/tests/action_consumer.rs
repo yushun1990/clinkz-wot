@@ -2003,14 +2003,23 @@ fn actual_http_action_callbacks_reenter_original_owner_and_retain_fenced_complet
             on_callback(edge, move || {
                 assert!(!rt.calls.is_idle());
                 assert!(nested.identity().is_ok());
-                assert!(nested.query(now(), &mut budget()).is_err());
-                assert!(nested.take_settlement(now(), &mut budget()).is_err());
+                assert!(matches!(
+                    nested.query(now(), &mut budget()),
+                    Err(CoreError::Lifecycle(_))
+                ));
+                assert!(matches!(
+                    nested.take_settlement(now(), &mut budget()),
+                    Err(CoreError::Lifecycle(_))
+                ));
                 if edge == CallbackEdge::Access || edge == CallbackEdge::Close {
                     rt.calls.begin_close();
                 } else {
                     nested.cancel_local();
                 }
-                rt.calls.step(&mut cx(), now(), &mut budget()).unwrap();
+                assert!(matches!(
+                    rt.calls.step(&mut cx(), now(), &mut budget()),
+                    Err(CoreError::Lifecycle(_))
+                ));
             });
             if edge != CallbackEdge::Access {
                 producer.drive(&h, ConsumerActionState::Closed).await;

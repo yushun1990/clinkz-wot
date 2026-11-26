@@ -48,8 +48,8 @@ passively observing native settlement. The fixture exercises the following cases
 - With one outstanding unit shared by finite and continuing calls, holding either
   taken result refuses the other family. Disposal permits its next admission.
 - A finite Read and continuing Action each try to drive the other handle from
-  an authorization callback. Both resume under independent turns and return
-  their original HTTP results.
+  an authorization callback. Both attempts return a lifecycle error. Independent
+  application turns complete the original HTTP operations.
 - Invoke/Query complete with original Consumer identity and validated output.
   Explicit mapped Cancel reports Requested while the Action remains pending;
   a later explicit Query completes. Local cancellation wakes the registered Host
@@ -89,10 +89,11 @@ Sibling delivery continues under failed cleanup. Live cursors keep their termina
 reports until explicit handoff. No response is fabricated, and prepaid backing
 cannot be released before complete original response/participant retirement.
 
-The downstream observation Binding attempts a finite Read from its native
-receive callback under both aggregate and per-conversation progress. The test
-checks the UDP peer after the callback and receives the request only after an
-independent finite turn. [Downstream composition fixture](../../tools/architecture-fixtures/open-consumer/tests/support/composition.rs)
+The downstream observation Binding attempts a finite Read from its receive
+callback and from final service release by a report or idle view. Each attempt
+returns a lifecycle error. The UDP peer has received zero bytes when the
+callback returns, then receives the request and answers the independently
+driven Read. [Downstream composition fixture](../../tools/architecture-fixtures/open-consumer/tests/support/composition.rs)
 
 Aggregate driving intentionally discards a fully retired abandoned cursor's report.
 Keep the cursor for a required report, or use the existing manual cleanup/report

@@ -55,9 +55,9 @@ credit selector with its callers. Drive ready siblings and local drains
 while admission is saturated. Hold the only result slot with a second request
 waiting. Taking the result still holds the slot. Its final disposal alone must enable exactly one dispatch via a pool
 wake or promised maintenance turn, including release during waiter registration.
-Exercise a three-owner callback chain. Deferring nested drives bounds a one-poll
-outer turn to one poll while a nested cancellation takes effect immediately.
-If the driver permits nesting, exercise its maximum depth and fan-out.
+Exercise independent Consumer owners captured by the same linked callback.
+Refused drives must leave a one-poll turn at one poll while local cancellation
+takes effect immediately.
 
 The implementation increments below record the original Host and caller-owned
 paths. Their account and work-credit oracles characterize those revisions.
@@ -372,8 +372,8 @@ The continuing owner now isolates linked execution from registry borrows under
 [public callback regressions](../../servient/finite/tests/consumer_action_callbacks.rs)
 reproduce admission/control, native poll/retirement, validation, settlement and
 destruction borrow failures. They cover occupied-slot reentry, independent
-invocation identity, cancellation and service-loss fencing, nested time,
-synchronous native/cancellation wakes, unwind evidence retention, short work,
+invocation identity, cancellation and service-loss fencing, refused callback
+drives, native and cancellation wakes, unwind evidence retention, short work,
 original funding and final disposal. The actual HTTP Action integration adds
 reentrant access, validator and native poll/retirement callbacks with retained
 fenced completion; existing HTTP and independent datagram lifecycle evidence
@@ -577,16 +577,14 @@ are checked after callbacks before effects/handoff; late native evidence keeps
 its original funding. The control allocation has its own original-bank lease
 through the final reference, including a call handle retained after settlement.
 [Callback regressions](../../protocol-bindings/protocols/http/tests/consumer_callbacks.rs)
-reproduce the prior public-API borrow panic and exercise nested capacity,
-sibling progress, close/cancel, first cause, abandonment, wakers, unwind
-restoration, advancing-time nested progress/admission, genuine clock faults,
-pending-call driver wake retention and actual HTTP result retention/physical
-retirement. Time observations are recorded at API entry and remain accessible
-while a slot is checked out; resumed progress and deadline fences use the latest
-observation. Both direct polls and runtime drivers register wake interest on busy
-slots and request a restoration retry. Their executed
-revision and validation results belong to the PR; no broad package acceptance
-is inferred. The separate continuing Action correction is evidenced above.
+exercise refused callback admission and progress, immediate close/cancel,
+first cause, abandonment, unwind restoration, clock faults and actual HTTP
+result retention and retirement. A task parked on a pending Read receives its
+close wake after a callback attempts to replace its waiter. The task runs with
+maintenance disabled. The continuing Action fixtures cover cancellation during
+waker registration. The [downstream datagram fixture](../../tools/architecture-fixtures/open-consumer/tests/support/composition.rs)
+checks wire silence during final service destruction and completes the same
+Read on its next independent turn.
 
 ## First joined finite Producer
 

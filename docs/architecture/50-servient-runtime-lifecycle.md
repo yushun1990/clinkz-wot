@@ -53,9 +53,10 @@ looks up a replacement handler or maps an old packet into a successor slot.
 In the Host finite and continuing Action Consumer owners, mutable registry
 access ends before linked authorization, data, native progress or destruction. Reserved original slots and
 separately retained passive controls keep cancellation visible during checkout.
-A public drive bounds synchronous reentry through siblings or defers nested progress. [Runtime Safety](../spec/runtime-safety.md)
-owns the callback, handoff, wake and funding guarantees; this is a correction to
-those distinct owners, not a shared scheduler or automatic execution model.
+The application drives finite, continuing Action and notification work on
+independent turns. A captured handle cannot grant a linked callback or destructor
+authority to poll a sibling. The wake, handoff and funding contracts are defined
+in [Runtime Safety](../spec/runtime-safety.md#host-consumer-execution-turns).
 
 The finite `ConsumerOwner` creates instance authority and consumes named association authority;
 application handles/views are non-revoking. Explicit removal, replacement and

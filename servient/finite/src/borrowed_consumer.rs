@@ -148,7 +148,7 @@ impl<'a, B: ReadBinding> ReadRuntime<'a, B> {
         definition: &'a ReadDefinition<'a, B>,
         access: &'a dyn ReadAccess,
     ) -> CoreResult<Self> {
-        let _turn = driving.try_borrow_mut().map_err(|_| busy())?;
+        let _turn = driving.try_borrow_mut().map_err(|_| reentry())?;
         let runtime = Self {
             driving,
             consumer,
@@ -169,7 +169,7 @@ impl<'a, B: ReadBinding> ReadRuntime<'a, B> {
         deadline: Deadline,
         now: MonotonicInstant,
     ) -> CoreResult<ReadHandle<'a>> {
-        let _turn = self.driving.try_borrow_mut().map_err(|_| busy())?;
+        let _turn = self.driving.try_borrow_mut().map_err(|_| reentry())?;
         if self.closed || !self.consumer.is_current() {
             return Err(stale());
         }
@@ -237,24 +237,21 @@ impl<'a, B: ReadBinding> ReadRuntime<'a, B> {
     }
     /// Progress/cleanup remains possible after cancellation or revocation.
     /// An unread terminal result stays in its original occupied slot.
-    pub fn step(&mut self, cx: &mut Context<'_>, now: MonotonicInstant) -> Poll<()> {
+    pub fn step(&mut self, cx: &mut Context<'_>, now: MonotonicInstant) -> Poll<CoreResult<()>> {
+        let _turn = self.driving.try_borrow_mut().map_err(|_| reentry())?;
         let Some(call) = &mut self.call else {
-            return Poll::Ready(());
+            return Poll::Ready(Ok(()));
         };
         match now.checked_cmp(call.owner.last_time) {
             Some(Ordering::Equal | Ordering::Greater) => call.owner.last_time = now,
             _ => call.owner.record(clock_error()),
         }
-        let Ok(_turn) = self.driving.try_borrow_mut() else {
-            call.owner.fence();
-            return Poll::Pending;
-        };
         let progress = call.progress.step(&mut call.owner, cx);
         if progress.is_ready() {
             drop(call.owner.native.take());
             call.progress.fence(&mut call.owner);
         }
-        progress
+        progress.map(Ok)
     }
     pub fn poll(
         &mut self,
@@ -265,9 +262,7 @@ impl<'a, B: ReadBinding> ReadRuntime<'a, B> {
         if !self.original(handle) {
             return Poll::Ready(Err(stale()));
         }
-        if self.step(cx, now).is_pending() {
-            return Poll::Pending;
-        }
+        core::task::ready!(self.step(cx, now))?;
         Poll::Ready(Ok(ReadSettlement {
             owner: self.call.take().unwrap().owner,
         }))
@@ -296,7 +291,7 @@ impl<B: ReadBinding> ReadSettlement<'_, B> {
     }
     /// Inspect the original native record, including an unvalidated late value.
     pub fn native_output(&self) -> CoreResult<Option<InteractionOutputView<'_>>> {
-        let _turn = self.owner.driving.try_borrow_mut().map_err(|_| busy())?;
+        let _turn = self.owner.driving.try_borrow_mut().map_err(|_| reentry())?;
         Ok(match self.owner.outcome.as_ref() {
             Some(ReadNativeSettlement::Returned(Ok(output))) => Some(output.view()),
             _ => None,
@@ -310,7 +305,7 @@ impl<B: ReadBinding> ReadSettlement<'_, B> {
         if let Some(error) = &owner.first_cause {
             return Err(error.clone());
         }
-        let _turn = owner.driving.try_borrow_mut().map_err(|_| busy())?;
+        let _turn = owner.driving.try_borrow_mut().map_err(|_| reentry())?;
         let checked = (|| {
             let current = || {
                 check_current(
@@ -459,6 +454,9 @@ fn busy() -> CoreError {
 }
 fn stale() -> CoreError {
     CoreError::StaleHandle(context())
+}
+fn reentry() -> CoreError {
+    CoreError::Lifecycle(ErrorContext::new(ErrorPhase::Readiness, RetryClass::Never))
 }
 fn clock_error() -> CoreError {
     CoreError::InternalInvariant(ErrorContext::new(ErrorPhase::Binding, RetryClass::Never))

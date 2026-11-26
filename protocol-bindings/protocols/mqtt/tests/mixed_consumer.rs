@@ -332,7 +332,7 @@ impl Engine {
             self.calls.step(cx, now).unwrap();
         }
         self.actions.step(cx, now, &mut budget()).unwrap();
-        self.notifications.step(cx, &mut budget());
+        self.notifications.step(cx, &mut budget()).unwrap();
         self.calls.is_idle()
             && self.actions.is_idle()
             && self.notifications.retained_subscriptions() == 0
@@ -425,7 +425,7 @@ fn clean(bank: &HostResourceAccounts) {
 }
 
 #[test]
-fn finite_and_continuing_handles_defer_each_others_authorization_callbacks() {
+fn authorization_callbacks_cannot_drive_captured_handles_across_families() {
     runtime().block_on(async {
         let broker = Broker::start();
         let peer = HttpPeer::new();
@@ -440,11 +440,10 @@ fn finite_and_continuing_handles_defer_each_others_authorization_callbacks() {
         let finite_probes = original.access[0].calls.load(Ordering::Relaxed);
         let nested = read.clone();
         ON_INSTANCE_ACCESS.set(Some(Box::new(move || {
-            assert!(
-                nested
-                    .progress(&mut Context::from_waker(std::task::Waker::noop()), now)
-                    .is_pending()
-            );
+            assert!(matches!(
+                nested.progress(&mut Context::from_waker(std::task::Waker::noop()), now),
+                Poll::Ready(Err(CoreError::Lifecycle(_)))
+            ));
         })));
         action.progress(&mut cx, now, &mut budget()).unwrap();
         assert!(ON_INSTANCE_ACCESS.take().is_none());
@@ -461,7 +460,7 @@ fn finite_and_continuing_handles_defer_each_others_authorization_callbacks() {
                     now,
                     &mut budget()
                 ),
-                Err(CoreError::Backpressure(_))
+                Err(CoreError::Lifecycle(_))
             ));
         })));
         let _ = read.progress(&mut cx, now);
@@ -790,7 +789,9 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
         e.actions
             .step(&mut cx(), e.now(), &mut WorkBudget::new())
             .unwrap();
-        e.notifications.step(&mut cx(), &mut WorkBudget::new());
+        e.notifications
+            .step(&mut cx(), &mut WorkBudget::new())
+            .unwrap();
         assert_eq!(action.state().unwrap(), ConsumerActionState::Closed);
         assert!(matches!(
             action.query(e.now(), &mut budget()),

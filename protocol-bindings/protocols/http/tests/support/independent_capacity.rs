@@ -314,10 +314,13 @@ fn shared_admission_reentry_reserves_capacity_and_closes_only_the_original_assoc
         REENTER.with(|pending| {
             *pending.borrow_mut() = Some(Box::new(move || {
                 assert!(!nested.is_idle());
-                nested.step(&mut cx(), now(0)).unwrap();
+                assert!(matches!(
+                    nested.step(&mut cx(), now(0)),
+                    Err(CoreError::Lifecycle(_))
+                ));
                 assert!(matches!(
                     start(&other, &nested, &destination),
-                    Err(CoreError::Backpressure(_))
+                    Err(CoreError::Lifecycle(_))
                 ));
                 closing.begin_close();
             }))

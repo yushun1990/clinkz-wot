@@ -1265,11 +1265,10 @@ fn notification_report_and_last_idle_view_guard_service_disposal_against_udp_rea
         let flag = fired.clone();
         ON_ACCESS_DROP.set(Some(Box::new(move || {
             flag.set(true);
-            assert!(
-                nested
-                    .progress(&mut Context::from_waker(Waker::noop()), now())
-                    .is_pending()
-            );
+            assert!(matches!(
+                nested.progress(&mut Context::from_waker(Waker::noop()), now()),
+                Poll::Ready(Err(CoreError::Lifecycle(_)))
+            ));
         })));
         drop(root.association);
         assert!(!fired.get());
@@ -1303,7 +1302,7 @@ fn notification_report_and_last_idle_view_guard_service_disposal_against_udp_rea
 }
 
 #[test]
-fn notification_callbacks_defer_finite_handle_and_capacity_io_until_an_independent_turn() {
+fn notification_callbacks_cannot_drive_a_finite_handle_or_its_capacity() {
     let notify_peer = UdpSocket::bind("127.0.0.1:0").unwrap();
     let hub = hub(notify_peer.local_addr().unwrap());
     let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
@@ -1343,11 +1342,17 @@ fn notification_callbacks_defer_finite_handle_and_capacity_io_until_an_independe
         let nested_calls = calls.clone();
         *hub.hook.borrow_mut() = Some(Box::new(move || {
             let mut cx = Context::from_waker(Waker::noop());
-            assert!(nested.progress(&mut cx, now()).is_pending());
-            nested_calls.step(&mut cx, now()).unwrap();
+            assert!(matches!(
+                nested.progress(&mut cx, now()),
+                Poll::Ready(Err(CoreError::Lifecycle(_)))
+            ));
+            assert!(matches!(
+                nested_calls.step(&mut cx, now()),
+                Err(CoreError::Lifecycle(_))
+            ));
         }));
         if capacity_turn {
-            root.step(&mut cx, &mut work());
+            root.step(&mut cx, &mut work()).unwrap();
         } else {
             root.progress(cursor.identity(), &mut cx, &mut work())
                 .unwrap();

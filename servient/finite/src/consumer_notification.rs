@@ -260,11 +260,14 @@ impl<B: ConsumerNotificationBinding> ConsumerNotificationAssociation<B> {
             Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>,
         )>,
     > {
-        let Some(_turn) = ConsumerTurn::enter() else {
-            return Err(BindingInputRejection::new(
-                (definition, access),
-                BindingOperationalError::new(busy()),
-            ));
+        let _turn = match ConsumerTurn::enter() {
+            Ok(turn) => turn,
+            Err(error) => {
+                return Err(BindingInputRejection::new(
+                    (definition, access),
+                    BindingOperationalError::new(error),
+                ));
+            }
         };
         let access_work = access.work();
         let security_revision = access.qualification_revision();
@@ -379,8 +382,8 @@ where
     /// identities. Live cursors keep their data/reports; abandoned cursors are
     /// reclaimed only after local retirement. No application response or remote
     /// cancellation input is invented. See `RawNotificationServient::step`.
-    pub fn step(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) {
-        self.root.step(cx, budget);
+    pub fn step(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) -> CoreResult<()> {
+        self.root.step(cx, budget)
     }
     pub fn subscribe(
         &mut self,
@@ -390,11 +393,14 @@ where
         overflow: NotificationOverflow,
         budget: &mut WorkBudget,
     ) -> Result<NotificationCursor, BindingInputRejection<SubscriptionInput>> {
-        let Some(turn) = ConsumerTurn::enter() else {
-            return Err(BindingInputRejection::new(
-                input,
-                BindingOperationalError::new(busy()),
-            ));
+        let mut turn = match ConsumerTurn::enter() {
+            Ok(turn) => turn,
+            Err(error) => {
+                return Err(BindingInputRejection::new(
+                    input,
+                    BindingOperationalError::new(error),
+                ));
+            }
         };
         let captured = &association.captured;
         let build = (|| {
@@ -414,7 +420,8 @@ where
                 captured.policy().temporary_bytes,
             )?;
             let definition = captured.definition.input();
-            RawNotificationContext::try_new(
+            RawNotificationContext::new_in_turn(
+                &mut turn,
                 definition.binding.clone(),
                 definition.configuration.clone(),
                 CapturedAuthorizer {
@@ -440,7 +447,7 @@ where
         let definition = captured.definition.input();
         self.root
             .subscribe_in_turn(
-                &turn,
+                &mut turn,
                 RawNotificationRequest {
                     target: definition.target.clone(),
                     kind: definition.schemas.kind(),

@@ -292,7 +292,7 @@ fn main() {
             let instant = now();
             calls.step(cx, instant).unwrap();
             actions.step(cx, instant, &mut work()).unwrap();
-            notifications.step(cx, &mut work());
+            notifications.step(cx, &mut work()).unwrap();
             let idle =
                 calls.is_idle() && actions.is_idle() && notifications.retained_subscriptions() == 0;
             if closing {

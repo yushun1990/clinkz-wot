@@ -19,6 +19,18 @@ enum CallInput<'a> {
     Members(&'a [&'a str]),
 }
 
+impl CallInput<'_> {
+    fn reject(self, error: CoreError) -> BindingInputRejection<Option<Payload>> {
+        reject(
+            match self {
+                Self::Value(input) => input,
+                Self::Members(_) => None,
+            },
+            error,
+        )
+    }
+}
+
 struct Definition {
     input: ConsumerOwned<ConsumerBindingInput>,
     _funding: HostCapacityReservation,
@@ -306,7 +318,9 @@ impl ConsumerPropertyRead {
         deadline: Deadline,
         now: MonotonicInstant,
     ) -> CoreResult<ConsumerCall> {
+        let mut turn = ConsumerTurn::enter()?;
         ConsumerAssociation::start_selected(
+            &mut turn,
             &self.authority,
             self.definition.clone(),
             self.bank.clone(),
@@ -410,7 +424,6 @@ struct CallControl {
     last_time: Cell<MonotonicInstant>,
     abandoned: Cell<bool>,
     observer: ConsumerObserver,
-    recheck: Cell<bool>,
     _funding: HostCapacityReservation,
 }
 impl CallControl {
@@ -431,7 +444,6 @@ impl CallControl {
             last_time: Cell::new(now),
             abandoned: Cell::new(false),
             observer: ConsumerObserver::default(),
-            recheck: Cell::new(false),
             _funding: funding,
         }))
     }
@@ -450,8 +462,8 @@ impl CallControl {
     }
     fn check_admission(&self) -> CoreResult<()> {
         // Work-owner close records every original control, including a reserved
-        // admission, before notifying callbacks. Preserve that first cause and
-        // nested time observations; the parent alone cannot fence this facet.
+        // admission, before notifying callbacks. Preserve the first cause even
+        // when the parent is still current.
         if let Some(cause) = self.cause() {
             return Err(cause);
         }
@@ -460,8 +472,7 @@ impl CallControl {
         }
         Ok(())
     }
-    // Only public API entry observes caller time. A resumed sweep consumes this
-    // latest observation instead of replaying its pre-callback timestamp.
+    // Latch expiry at entry so later cancellation cannot replace it.
     fn observe_time(&self, now: MonotonicInstant) {
         match now.checked_cmp(self.last_time.get()) {
             Some(Ordering::Equal | Ordering::Greater) => {
@@ -477,9 +488,8 @@ impl CallControl {
     }
 }
 
-/// A reserved slot stays occupied during admission/progress, including nested
-/// entry. Unwinding restores the complete original call. Neither restoration
-/// nor removal destroys linked owners under the registry borrow.
+/// Admission and checkout borrow the execution turn for the life of the lease.
+/// Unwinding restores the original call outside linked callbacks.
 struct SlotLease<'a> {
     state: &'a State,
     index: usize,
@@ -490,7 +500,7 @@ impl State {
     fn current(&self) -> bool {
         self.active.get()
     }
-    fn reserve_slot(&self) -> CoreResult<SlotLease<'_>> {
+    fn reserve_slot<'a>(&'a self, _turn: &'a mut ConsumerTurn) -> CoreResult<SlotLease<'a>> {
         let mut registry = self.registry.borrow_mut();
         let index = registry
             .slots
@@ -510,67 +520,32 @@ impl State {
             call: None,
         })
     }
-    fn checkout(
-        &self,
+    fn checkout<'a>(
+        &'a self,
+        _turn: &'a mut ConsumerTurn,
         index: usize,
-        sequence: Option<u64>,
-        waker: &core::task::Waker,
-    ) -> CoreResult<Option<SlotLease<'_>>> {
-        let (lease, control) = {
-            let mut registry = self.registry.borrow_mut();
-            let slot = &mut registry.slots[index];
-            match slot {
-                Slot::Ready(call) if sequence.is_none_or(|s| s == call.work.sequence) => {
-                    let Slot::Ready(call) = core::mem::replace(slot, Slot::Vacant) else {
-                        unreachable!()
-                    };
-                    let sequence = call.work.sequence;
-                    let control = call.work.control.clone();
-                    *slot = Slot::Reserved {
-                        sequence,
-                        control: Some(control.clone()),
-                    };
-                    (
-                        SlotLease {
-                            state: self,
-                            index,
-                            sequence,
-                            call: Some(call),
-                        },
-                        control,
-                    )
-                }
-                _ => return Ok(None),
-            }
-        };
-        // Retain driver interest even when another stack frame owns this call.
-        // Waker clone/drop may reenter; the slot is already reserved and a live
-        // lease restores its original owner even if registration unwinds.
-        control.observer.register(waker)?;
-        Ok(Some(lease))
-    }
-    fn defer(&self, original: Option<(usize, u64)>, waker: &core::task::Waker) -> CoreResult<()> {
-        let control = {
-            let registry = self.registry.borrow();
-            let slots = original.map_or(&registry.slots[..], |(i, _)| &registry.slots[i..=i]);
-            slots.iter().find_map(|slot| match slot {
-                Slot::Reserved {
-                    sequence,
-                    control: Some(control),
-                } if original.is_none_or(|(_, s)| *sequence == s) => {
-                    control.recheck.set(true);
-                    Some(control.clone())
-                }
-                Slot::Ready(call) if original.is_some_and(|(_, s)| call.work.sequence == s) => {
-                    Some(call.work.control.clone())
-                }
-                _ => None,
-            })
-        };
-        if let Some(control) = control {
-            control.observer.register(waker)?;
+        original: Option<u64>,
+    ) -> Option<SlotLease<'a>> {
+        let mut registry = self.registry.borrow_mut();
+        let slot = &mut registry.slots[index];
+        let Slot::Ready(call) = slot else { return None };
+        let sequence = call.work.sequence;
+        if original.is_some_and(|expected| expected != sequence) {
+            return None;
         }
-        Ok(())
+        let reserved = Slot::Reserved {
+            sequence,
+            control: Some(call.work.control.clone()),
+        };
+        let Slot::Ready(call) = core::mem::replace(slot, reserved) else {
+            unreachable!()
+        };
+        Some(SlotLease {
+            state: self,
+            index,
+            sequence,
+            call: Some(call),
+        })
     }
     fn revoke(&self) {
         self.active.set(false);
@@ -584,7 +559,7 @@ impl State {
         }
     }
     fn close(&self) {
-        let _turn = ConsumerTurn::enter();
+        let _turn = ConsumerTurn::scope();
         self.revoke();
         let count = self.registry.borrow().slots.len();
         for index in 0..count {
@@ -662,22 +637,15 @@ impl Drop for SlotLease<'_> {
                 .as_ref()
                 .is_some_and(|call| call.work.control.abandoned.get());
         let aborted = if abort { self.call.take() } else { None };
-        let restoring = self.call.is_some();
         let replacement = self.call.take().map_or(Slot::Vacant, Slot::Ready);
         let old = {
             let mut registry = self.state.registry.borrow_mut();
             core::mem::replace(&mut registry.slots[self.index], replacement)
         };
-        let Slot::Reserved { sequence, control } = old else {
+        let Slot::Reserved { sequence, .. } = old else {
             unreachable!()
         };
         debug_assert_eq!(sequence, self.sequence);
-        if restoring
-            && let Some(control) = control
-            && control.recheck.replace(false)
-        {
-            control.observer.wake();
-        }
         drop(aborted);
     }
 }
@@ -932,17 +900,16 @@ impl ConsumerAssociation {
         deadline: Deadline,
         now: MonotonicInstant,
     ) -> Result<ConsumerCall, BindingInputRejection<Option<Payload>>> {
+        let mut turn = match ConsumerTurn::enter() {
+            Ok(turn) => turn,
+            Err(error) => return Err(input.reject(error)),
+        };
         let (definition, bank) = match self.select(target, operation) {
             Ok(selected) => selected,
-            Err(error) => {
-                let input = match input {
-                    CallInput::Value(input) => input,
-                    CallInput::Members(_) => None,
-                };
-                return Err(reject(input, error));
-            }
+            Err(error) => return Err(input.reject(error)),
         };
         Self::start_selected(
+            &mut turn,
             &self.state.authority,
             definition,
             bank,
@@ -988,7 +955,7 @@ impl ConsumerAssociation {
     /// the actual Binding under funded scratch; dynamic templates stay dynamic.
     /// This performs no native I/O, credential issuance or permission grant.
     pub fn bind_property_read(&self, property: &str) -> CoreResult<ConsumerPropertyRead> {
-        let _turn = ConsumerTurn::enter().ok_or_else(busy)?;
+        let _turn = ConsumerTurn::enter()?;
         let (definition, bank) =
             self.select(AffordanceSite::Property(property), Operation::ReadProperty)?;
         definition.check_dependencies()?;
@@ -1052,6 +1019,7 @@ impl ConsumerAssociation {
 
     #[allow(clippy::too_many_arguments)]
     fn start_selected(
+        turn: &mut ConsumerTurn,
         authority: &Rc<AssociationAuthority>,
         definition: Arc<Definition>,
         association_bank: Arc<HostResourceAccounts>,
@@ -1066,15 +1034,12 @@ impl ConsumerAssociation {
             CallInput::Value(input) => (input, None),
             CallInput::Members(members) => (None, Some(members)),
         };
-        let Some(_turn) = ConsumerTurn::enter() else {
-            return Err(reject(input, busy()));
-        };
         let operation = definition.input.definition.operation();
         let state = &calls.state;
         if !state.current() || !authority.current() {
             return Err(reject(input, stale()));
         }
-        let mut reserved = match state.reserve_slot() {
+        let mut reserved = match state.reserve_slot(turn) {
             Ok(reserved) => reserved,
             Err(error) => return Err(reject(input, error)),
         };
@@ -1333,7 +1298,7 @@ impl ConsumerAssociation {
         self.state.authority.active.set(false);
     }
     fn close(&self) {
-        let _turn = ConsumerTurn::enter();
+        let _turn = ConsumerTurn::scope();
         self.fence();
         // End the borrow before linked service/artifact destructors can reenter.
         let mappings = self.state.mappings.borrow_mut().take();
@@ -1487,25 +1452,20 @@ impl ConsumerCalls {
     }
     /// Visit one slot in rotation. The application supplies independent turns
     /// for deadlines, runnable transitions, blocked retirement and lost handles.
-    /// Retry safe delivery backpressure on a later independent turn.
+    /// Recursive entry returns a lifecycle error before observing time or a waker.
     pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant) -> CoreResult<()> {
-        let turn = ConsumerTurn::enter();
+        let mut turn = ConsumerTurn::enter()?;
         let index = {
             let mut registry = self.state.registry.borrow_mut();
-            // Even a nested entry observes time for checked-out calls. This
-            // passive scan is bounded by MAX_CALLS and invokes no linked code.
+            // Observe all deadlines before selecting one original slot to drive.
             for control in registry.slots.iter().filter_map(Slot::control) {
                 control.observe_time(now);
-            }
-            if turn.is_none() {
-                drop(registry);
-                return self.state.defer(None, cx.waker());
             }
             let index = registry.next_slot;
             registry.next_slot = (index + 1) % registry.slots.len();
             index
         };
-        if let Some(mut lease) = self.state.checkout(index, None, cx.waker())? {
+        if let Some(mut lease) = self.state.checkout(&mut turn, index, None) {
             let call = lease.call.as_mut().unwrap();
             let _ = call.step(&self.state, cx);
             if call.work.control.abandoned.get() && call.progress.is_terminal() {
@@ -1525,7 +1485,7 @@ impl ConsumerCalls {
 }
 impl Drop for ConsumerCalls {
     fn drop(&mut self) {
-        let _turn = ConsumerTurn::enter();
+        let _turn = ConsumerTurn::scope();
         self.state.controller_present.set(false);
         self.state.revoke();
         self.state.abort_abandoned();
@@ -1544,7 +1504,7 @@ impl ConsumerCall {
     /// Record cancellation and notify the currently registered driver, if any.
     /// The notification requests a poll; it performs no native cleanup itself.
     pub fn cancel(&self) {
-        let _turn = ConsumerTurn::enter();
+        let _turn = ConsumerTurn::scope();
         self.control.record(CoreError::Cancelled(context()));
         self.control.observer.wake();
     }
@@ -1556,16 +1516,13 @@ impl ConsumerCall {
     }
     /// Drive one bounded turn while retaining the result in its original slot.
     /// A ready observation grants no future permission to collect the value.
-    /// Deferred progress retains the waker for this call's cancellation or close.
-    /// If recursive registration exhausts retry capacity, `Ready(Err(..))`
-    /// returns the retry to the caller. Drive the same call on an independent turn.
+    /// Synchronous entry from a Host Consumer callback returns a lifecycle error.
     pub fn progress(&self, cx: &mut Context<'_>, now: MonotonicInstant) -> Poll<CoreResult<()>> {
         self.drive(cx, now, |_| ())
     }
     /// Drive and collect a settled call under current permission. The application
-    /// supplies independent turns for deadlines, deferred drives and retirement.
-    /// Only `Ready(Ok(settlement))` takes the original call. A retryable
-    /// registration error leaves the handle and its original work available.
+    /// supplies independent turns for deadlines and retirement. Only a successful
+    /// handoff takes the original call.
     pub fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -1581,18 +1538,14 @@ impl ConsumerCall {
         now: MonotonicInstant,
         ready: impl FnOnce(SlotLease<'_>) -> T,
     ) -> Poll<CoreResult<T>> {
-        self.control.observe_time(now);
-        let Some(_turn) = ConsumerTurn::enter() else {
-            self.state
-                .defer(Some((self.slot, self.sequence)), cx.waker())?;
-            return Poll::Pending;
-        };
+        let mut turn = ConsumerTurn::enter()?;
         let Some(mut lease) = self
             .state
-            .checkout(self.slot, Some(self.sequence), cx.waker())?
+            .checkout(&mut turn, self.slot, Some(self.sequence))
         else {
-            return Poll::Pending;
+            return Poll::Ready(Err(stale()));
         };
+        self.control.observe_time(now);
         if lease
             .call
             .as_mut()
@@ -1607,7 +1560,7 @@ impl ConsumerCall {
 }
 impl Drop for ConsumerCall {
     fn drop(&mut self) {
-        let _turn = ConsumerTurn::enter();
+        let _turn = ConsumerTurn::scope();
         self.control.abandoned.set(true);
         self.control.record(CoreError::Cancelled(context()));
         self.state.abort_slot(self.slot, Some(self.sequence));
@@ -1658,7 +1611,7 @@ pub struct ConsumerSettlement {
 }
 impl Drop for ConsumerSettlement {
     fn drop(&mut self) {
-        let _turn = ConsumerTurn::enter();
+        let _turn = ConsumerTurn::scope();
         drop(self.call.take());
     }
 }
@@ -1801,6 +1754,7 @@ impl ConsumerSettlement {
 }
 impl Call {
     fn step(&mut self, state: &State, cx: &mut Context<'_>) -> Poll<()> {
+        self.work.control.observer.register(cx.waker());
         let mut driver = HostCallDriver {
             work: &mut self.work,
             state,

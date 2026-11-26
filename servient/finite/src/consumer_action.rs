@@ -11,7 +11,7 @@ use core::{
     any::Any,
     cell::{Cell, RefCell},
     cmp::Ordering,
-    task::{Context, Poll, Waker},
+    task::{Context, Poll},
 };
 
 use clinkz_wot_core::execution::action::{
@@ -209,8 +209,9 @@ impl ConsumerActionAssociation {
         budget: &mut WorkBudget,
     ) -> Result<Self, BindingInputRejection<(Rc<ConsumerActionDefinition>, ConsumerActionAccess)>>
     {
-        let Some(_turn) = ConsumerTurn::enter() else {
-            return Err(reject((definition, access), busy()));
+        let _turn = match ConsumerTurn::enter() {
+            Ok(turn) => turn,
+            Err(error) => return Err(reject((definition, access), error)),
         };
         // This is an explicit new policy binding, never a replacement snapshot
         // of prepared native/data declarations.
@@ -318,7 +319,7 @@ struct State {
 }
 impl Drop for State {
     fn drop(&mut self) {
-        let _turn = ConsumerTurn::enter();
+        let _turn = ConsumerTurn::scope();
         self.registry.get_mut().slots.clear();
     }
 }
@@ -354,7 +355,6 @@ struct Control {
     last_time: Cell<MonotonicInstant>,
     abandoned: Cell<bool>,
     observer: ConsumerObserver,
-    recheck: Cell<bool>,
     _funding: HostCapacityReservation,
 }
 impl Control {
@@ -383,7 +383,6 @@ impl Control {
             last_time: Cell::new(now),
             abandoned: Cell::new(false),
             observer: ConsumerObserver::default(),
-            recheck: Cell::new(false),
             _funding: funding,
         }))
     }
@@ -405,9 +404,6 @@ impl Control {
         }
     }
     fn check(&self, state: &State) -> CoreResult<()> {
-        if let Err(e) = check_time(self.deadline, self.last_time.get()) {
-            self.record(e);
-        }
         if !state.active.get() || !self.identity.consumer.is_current() {
             self.record(stale());
         }
@@ -422,7 +418,7 @@ struct Lease<'a> {
     invocation: Option<Box<Invocation>>,
 }
 impl State {
-    fn reserve_slot(&self) -> CoreResult<Lease<'_>> {
+    fn reserve_slot<'a>(&'a self, _turn: &'a mut ConsumerTurn) -> CoreResult<Lease<'a>> {
         let mut r = self.registry.borrow_mut();
         let slot = r
             .slots
@@ -442,72 +438,34 @@ impl State {
             invocation: None,
         })
     }
-    fn checkout(
-        &self,
+    fn checkout<'a>(
+        &'a self,
+        _turn: &'a mut ConsumerTurn,
         slot: usize,
-        sequence: Option<u64>,
-        waker: Option<&Waker>,
-    ) -> CoreResult<Lease<'_>> {
-        let (lease, control) = {
-            let mut r = self.registry.borrow_mut();
-            let entry = &mut r.slots[slot];
-            match entry {
-                Slot::Ready(v) if sequence.is_none_or(|n| n == v.control.identity.sequence) => {
-                    let control = v.control.clone();
-                    let sequence = control.identity.sequence;
-                    let Slot::Ready(v) = core::mem::replace(
-                        entry,
-                        Slot::Reserved {
-                            sequence,
-                            control: Some(control.clone()),
-                        },
-                    ) else {
-                        unreachable!()
-                    };
-                    (
-                        Lease {
-                            state: self,
-                            slot,
-                            sequence,
-                            invocation: Some(v),
-                        },
-                        control,
-                    )
-                }
-                _ => return Err(stale()),
-            }
+        original: Option<u64>,
+    ) -> Option<Lease<'a>> {
+        let mut registry = self.registry.borrow_mut();
+        let entry = &mut registry.slots[slot];
+        let Slot::Ready(invocation) = entry else {
+            return None;
         };
-        // A waker's clone/drop/wake is also linked code. The lease already exists
-        // so even unwinding registration restores the original occupied owner.
-        if let Some(waker) = waker {
-            control.observer.register(waker)?;
+        let sequence = invocation.control.identity.sequence;
+        if original.is_some_and(|expected| expected != sequence) {
+            return None;
         }
-        Ok(lease)
-    }
-    fn defer(&self, original: Option<(usize, u64)>, waker: &Waker) -> CoreResult<()> {
-        let control = {
-            let registry = self.registry.borrow();
-            let slots = original.map_or(&registry.slots[..], |(i, _)| &registry.slots[i..=i]);
-            slots.iter().find_map(|slot| match slot {
-                Slot::Reserved {
-                    sequence,
-                    control: Some(control),
-                } if original.is_none_or(|(_, s)| *sequence == s) => {
-                    control.recheck.set(true);
-                    Some(control.clone())
-                }
-                Slot::Ready(v)
-                    if original.is_some_and(|(_, s)| v.control.identity.sequence == s) =>
-                {
-                    Some(v.control.clone())
-                }
-                _ => None,
-            })
+        let reserved = Slot::Reserved {
+            sequence,
+            control: Some(invocation.control.clone()),
         };
-        if let Some(control) = control {
-            control.observer.register(waker)?;
-        }
-        Ok(())
+        let Slot::Ready(invocation) = core::mem::replace(entry, reserved) else {
+            unreachable!()
+        };
+        Some(Lease {
+            state: self,
+            slot,
+            sequence,
+            invocation: Some(invocation),
+        })
     }
     fn revoke(&self) {
         self.active.set(false);
@@ -522,7 +480,7 @@ impl State {
         }
     }
     fn close(&self) {
-        let _turn = ConsumerTurn::enter();
+        let _turn = ConsumerTurn::scope();
         self.revoke();
         let count = self.registry.borrow().slots.len();
         for i in 0..count {
@@ -552,15 +510,10 @@ impl Drop for Lease<'_> {
             let mut r = self.state.registry.borrow_mut();
             core::mem::replace(&mut r.slots[self.slot], replacement)
         };
-        let Slot::Reserved { sequence, control } = old else {
+        let Slot::Reserved { sequence, .. } = old else {
             unreachable!()
         };
         debug_assert_eq!(sequence, self.sequence);
-        if let Some(control) = control
-            && control.recheck.replace(false)
-        {
-            control.observer.wake();
-        }
     }
 }
 /// Bounded continuing Action execution capacity shared by independent Consumer
@@ -604,10 +557,12 @@ impl ConsumerActions {
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> Result<ConsumerActionHandle, BindingInputRejection<Option<Payload>>> {
-        let Some(_turn) = ConsumerTurn::enter() else {
-            return Err(reject(input, busy()));
+        let mut turn = match ConsumerTurn::enter() {
+            Ok(turn) => turn,
+            Err(error) => return Err(reject(input, error)),
         };
         let state = &self.state;
+        let mut input = input;
         let checked = (|| {
             let d = association.captured.clone();
             if !state.active.get() || !d.consumer.is_current() {
@@ -615,7 +570,7 @@ impl ConsumerActions {
             }
             d.check_dependencies()?;
             check_time(deadline, now)?;
-            let reserved = state.reserve_slot()?;
+            let mut reserved = state.reserve_slot(&mut turn)?;
             let control = Control::new(&d.consumer, reserved.sequence, &state.bank, deadline, now)?;
             reserved.attach(control.clone());
             let invoke = d.selected(0)?;
@@ -705,48 +660,38 @@ impl ConsumerActions {
             });
             let raw = invoke.op.mapping.start(input.as_ref(), None)?;
             invocation.exchange = Some(Exchange(Some(raw)));
-            Ok((reserved, invocation))
+            let slot = reserved.slot;
+            let sequence = reserved.sequence;
+            let control = invocation.control.clone();
+            invocation.input = input.take();
+            // A successful start may already own native effects, even if its
+            // callback closed this invocation. Retain the complete exchange.
+            invocation.fence(state);
+            reserved.invocation = Some(invocation);
+            Ok(ConsumerActionHandle {
+                state: self.state.clone(),
+                slot,
+                sequence,
+                control,
+            })
         })();
-        let (mut reserved, mut invocation) = match checked {
-            Ok(v) => v,
-            Err(e) => return Err(reject(input, e)),
-        };
-        let slot = reserved.slot;
-        let sequence = reserved.sequence;
-        let control = invocation.control.clone();
-        invocation.input = input;
-        // A successful start may own native effects already. Keep its complete
-        // returned exchange even if the callback closed this invocation.
-        invocation.fence(state);
-        reserved.invocation = Some(invocation);
-        drop(reserved);
-        Ok(ConsumerActionHandle {
-            state: self.state.clone(),
-            slot,
-            sequence,
-            control,
-        })
+        checked.map_err(|error| reject(input, error))
     }
     pub fn begin_close(&self) {
         self.state.close();
     }
-    /// Drive the invocation capacity. Retry safe delivery backpressure from
-    /// recursive wake registration on an independent turn.
+    /// Drive the invocation capacity from an independent application turn.
     pub fn step(
         &self,
         cx: &mut Context<'_>,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
-        let turn = ConsumerTurn::enter();
+        let mut turn = ConsumerTurn::enter()?;
         let (start, count) = {
             let mut r = self.state.registry.borrow_mut();
             for control in r.slots.iter().filter_map(Slot::control) {
                 control.observe_time(now);
-            }
-            if turn.is_none() {
-                drop(r);
-                return self.state.defer(None, cx.waker());
             }
             let count = r.slots.len();
             let start = r.next;
@@ -754,13 +699,8 @@ impl ConsumerActions {
             (start, count)
         };
         for i in 0..count {
-            let mut lease = match self
-                .state
-                .checkout((start + i) % count, None, Some(cx.waker()))
-            {
-                Ok(lease) => lease,
-                Err(CoreError::StaleHandle(_)) => continue,
-                Err(error) => return Err(error),
+            let Some(mut lease) = self.state.checkout(&mut turn, (start + i) % count, None) else {
+                continue;
             };
             let v = lease.invocation.as_mut().unwrap();
             v.step(&self.state, cx, budget);
@@ -803,6 +743,18 @@ impl ConsumerActionHandle {
         } else {
             Err(stale())
         }
+    }
+    fn checkout<'a>(
+        &'a self,
+        turn: &'a mut ConsumerTurn,
+        now: MonotonicInstant,
+    ) -> CoreResult<Lease<'a>> {
+        let lease = self
+            .state
+            .checkout(turn, self.slot, Some(self.sequence))
+            .ok_or_else(stale)?;
+        self.control.observe_time(now);
+        Ok(lease)
     }
     pub fn identity(&self) -> CoreResult<ConsumerActionIdentity> {
         self.live()?;
@@ -847,7 +799,7 @@ impl ConsumerActionHandle {
             .remote_cancel)
     }
     /// Explicit described control; neither call automatically queries/reinvokes.
-    /// A reentrant control of the checked-out original invocation is busy.
+    /// Mapped control requires an independent application turn.
     pub fn query(&self, now: MonotonicInstant, budget: &mut WorkBudget) -> CoreResult<()> {
         self.control(1, now, budget)
     }
@@ -860,10 +812,8 @@ impl ConsumerActionHandle {
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
-        self.live()?;
-        self.control.observe_time(now);
-        let _turn = ConsumerTurn::enter().ok_or_else(busy)?;
-        let mut lease = self.state.checkout(self.slot, Some(self.sequence), None)?;
+        let mut turn = ConsumerTurn::enter()?;
+        let mut lease = self.checkout(&mut turn, now)?;
         let v = lease.invocation.as_mut().unwrap();
         v.fence(&self.state);
         self.control.check(&self.state)?;
@@ -918,33 +868,22 @@ impl ConsumerActionHandle {
     /// Stops local work only. Does not send a hidden CancelAction or claim that
     /// a remote effect was undone. First cause and any late result are retained.
     pub fn cancel_local(&self) {
-        let _turn = ConsumerTurn::enter();
+        let _turn = ConsumerTurn::scope();
         if self.live().is_ok() {
             self.control.record(CoreError::Cancelled(context()));
             self.control.observer.wake();
         }
     }
-    /// Reentrant progress records time and the observer on this original
-    /// invocation, then returns Backpressure. A checked-out invocation signals
-    /// a retry on restoration. A ready sibling can signal cancellation or close.
-    /// Safe delivery backpressure returns an unregistered retry to the caller.
-    /// The accepted invocation stays available for its next independent turn.
+    /// Drive the original invocation. A callback attempting another drive
+    /// receives a lifecycle error before it can change the clock or waiter.
     pub fn progress(
         &self,
         cx: &mut Context<'_>,
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerActionState> {
-        self.live()?;
-        self.control.observe_time(now);
-        let Some(_turn) = ConsumerTurn::enter() else {
-            self.state
-                .defer(Some((self.slot, self.sequence)), cx.waker())?;
-            return Err(busy());
-        };
-        let mut lease = self
-            .state
-            .checkout(self.slot, Some(self.sequence), Some(cx.waker()))?;
+        let mut turn = ConsumerTurn::enter()?;
+        let mut lease = self.checkout(&mut turn, now)?;
         let v = lease.invocation.as_mut().unwrap();
         v.step(&self.state, cx, budget);
         Ok(v.progress.state)
@@ -956,10 +895,8 @@ impl ConsumerActionHandle {
         now: MonotonicInstant,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerActionSettlement> {
-        self.live()?;
-        self.control.observe_time(now);
-        let _turn = ConsumerTurn::enter().ok_or_else(busy)?;
-        let mut lease = self.state.checkout(self.slot, Some(self.sequence), None)?;
+        let mut turn = ConsumerTurn::enter()?;
+        let mut lease = self.checkout(&mut turn, now)?;
         let v = lease.invocation.as_mut().unwrap();
         v.fence(&self.state);
         if !v.progress.state.settlement_ready() || !pay(budget, W::CleanupItems, 1) {
@@ -1018,7 +955,7 @@ pub struct ConsumerActionSettlement {
 }
 impl Drop for ConsumerActionSettlement {
     fn drop(&mut self) {
-        let _turn = ConsumerTurn::enter();
+        let _turn = ConsumerTurn::scope();
         drop(self.invocation.take());
     }
 }
@@ -1165,6 +1102,7 @@ impl Invocation {
         Ok(())
     }
     fn step(&mut self, state: &State, cx: &mut Context<'_>, budget: &mut WorkBudget) {
+        self.control.observer.register(cx.waker());
         step_action(
             &mut HostActionDriver {
                 invocation: self,
