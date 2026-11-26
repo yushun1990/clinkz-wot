@@ -72,6 +72,7 @@ impl HttpSecurity {
         Self::conjunction(r, &mut bits)?;
         Ok(bits)
     }
+    #[cfg(feature = "prepare")]
     pub(crate) fn from_requirement(r: &SecurityRequirement) -> CoreResult<Self> {
         let mut mask = 0;
         for branch in r.alternatives()? {

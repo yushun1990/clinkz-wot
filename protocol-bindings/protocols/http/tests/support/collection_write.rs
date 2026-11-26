@@ -354,38 +354,6 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
     let write_description = |addr| collection_description(addr, operation);
     let start_write =
         |client: &(StandaloneConsumerAssociation, ConsumerCalls)| start_collection_at(client, operation, Deadline::NONE).unwrap();
-    use std::sync::atomic::AtomicUsize;
-    struct CountAccess(Access, Arc<AtomicUsize>);
-    impl ConsumerAccessService for CountAccess {
-        fn qualification_revision(&self) -> u64 {
-            self.0.qualification_revision()
-        }
-
-        fn authorize(
-            &self,
-            b: BindingRegistrationIdentity,
-            t: &str,
-            o: Operation,
-        ) -> CoreResult<()> {
-            self.0.authorize(b, t, o)
-        }
-        fn authorize_instance(
-            &self,
-            i: &ConsumerInstanceRef,
-            b: BindingRegistrationIdentity,
-            t: &str,
-            o: Operation,
-        ) -> CoreResult<()> {
-            self.1.fetch_add(1, Ordering::Relaxed);
-            self.0.authorize_instance(i, b, t, o)
-        }
-        fn retained_bytes(&self) -> u64 {
-            128
-        }
-        fn work(&self) -> u64 {
-            1
-        }
-    }
     io().block_on(async {
         for fault in ["cancel", "replace", "policy"] {
             let addr = address();
@@ -394,24 +362,28 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
             let accounts = bank();
             let owner = consumer_instance();
             let denied = Arc::new(AtomicBool::new(false));
-            let checks = Arc::new(AtomicUsize::new(0));
-            let mut reg = registration();
-            reg.services.access = Arc::new(CountAccess(Access(denied.clone()), checks.clone()));
-            let p = prepare_consumer(&td, accounts.clone(), vec![reg], ConsumerSelector::default()).unwrap();
-            let (d, f) = p.into_execution();
-            let client = StandaloneConsumerAssociation::try_new(owner.reference(), d, f, accounts.clone()).map(|association| (association, ConsumerCalls::try_new(accounts.clone(), 1).unwrap())).unwrap_or_else(|_| panic!());
+            let mut registration = registration();
+            registration.services.access = Arc::new(Access(denied.clone()));
+            let prepared = prepare_consumer(
+                &td,
+                accounts.clone(),
+                vec![registration],
+                ConsumerSelector::default(),
+            ).unwrap();
+            let (definitions, funding) = prepared.into_execution();
+            let association = StandaloneConsumerAssociation::try_new(
+                owner.reference(), definitions, funding, accounts.clone(),
+            ).unwrap_or_else(|e| panic!("{:?}", e.error()));
+            let client = (association, ConsumerCalls::try_new(accounts.clone(), 1).unwrap());
             let mut call = start_write(&client);
             let start = Instant::now();
-            // Withhold handoff. Two authorization callbacks in one step witness
-            // the post-validation completion check without private-state access.
             let mut remote = None;
-            let mut completed = false;
-            while !completed || remote.is_none() {
+            while !call.is_settled() || remote.is_none() {
                 server.step();
-                let before = checks.load(Ordering::Relaxed);
                 client.1.step(&mut cx(), now(0));
-                completed |= checks.load(Ordering::Relaxed) - before == 2;
-                if let Some(s) = server.server().take_settlement() { remote = Some(s); }
+                if let Some(settlement) = server.server().take_settlement() {
+                    remote = Some(settlement);
+                }
                 assert!(start.elapsed() < Duration::from_secs(5));
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }

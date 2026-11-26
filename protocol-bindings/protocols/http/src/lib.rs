@@ -6,6 +6,7 @@
 //! continuing Action POST/GET/DELETE through distinct preparation and manually
 //! progressed Servient ownership. See README.md for exact mapping/profile limits.
 use clinkz_wot_core::*;
+#[cfg(any(feature = "prepare", test))]
 use clinkz_wot_foundation::*;
 use std::{
     future::Future,
@@ -241,8 +242,8 @@ struct Call {
     handle: tokio::runtime::Handle,
     future: Option<Exchange>,
     allowance: Arc<AtomicUsize>,
-    // Only this exchange's occupancy. Retained results keep the Call and its
-    // funding, but must neither occupy nor later unlock a successor exchange.
+    // Take the original occupancy once at settlement or local disposal. A
+    // later drop cannot unlock a successor using the same endpoint.
     busy: Option<Arc<AtomicBool>>,
 }
 impl Drop for Call {
