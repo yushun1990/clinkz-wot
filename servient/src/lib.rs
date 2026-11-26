@@ -16,6 +16,8 @@ mod error;
 #[cfg(feature = "std")]
 pub mod host_accounts;
 #[cfg(feature = "std")]
+pub mod host_producer;
+#[cfg(feature = "std")]
 #[cfg(feature = "std")]
 pub mod producer;
 #[cfg(feature = "std")]

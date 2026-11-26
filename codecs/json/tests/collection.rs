@@ -211,3 +211,21 @@ fn maximal_selection_and_encoded_escaping_have_bounded_backing() {
     let s = schema(&names.iter().map(String::as_str).collect::<Vec<_>>());
     assert!(encode_property_selection(&s, s.all()).is_err());
 }
+
+#[test]
+fn selection_and_maps_preserve_backspace_and_bell_as_distinct_names() {
+    let s = schema(&["a\u{8}b", "a\u{7}b"]);
+    let backspace = s.select(&["a\u{8}b"]).unwrap();
+    for bytes in [br#"["a\bb"]"#.as_slice(), br#"["a\u0008b"]"#] {
+        assert_eq!(
+            decode_property_selection(&s, &Payload::new(bytes, "application/json")).unwrap(),
+            backspace
+        );
+    }
+    let encoded = encode_property_selection(&s, s.all()).unwrap();
+    assert_eq!(decode_property_selection(&s, &encoded).unwrap(), s.all());
+    assert!(check(&s, br#"{"a\bb":7,"a\u0007b":8}"#));
+    let duplicate = Payload::new(br#"["a\bb","a\u0008b"]"#.as_slice(), "application/json");
+    assert!(decode_property_selection(&s, &duplicate).is_err());
+    assert!(!check(&s, br#"{"a\bb":7,"a\u0008b":8}"#));
+}

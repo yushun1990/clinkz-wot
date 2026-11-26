@@ -24,11 +24,11 @@ reply rights and retained results each have their own release point. [ADR-0025](
 | Capability | What an application can exercise | Remaining foundation work |
 | --- | --- | --- |
 | Consumer choice and instance authority | A managed Host Consumer can retain named finite mappings and use a separate call pool. Continuing Actions choose a compatible Invoke/Query/Cancel tuple in Form order. Events can select either of two independent Bindings. Both continuing searches account for competing providers under one effective configuration. [Managed Consumer](servient/finite/src/consumer_managed.rs) · [HTTP Query Form orders](protocol-bindings/protocols/http/tests/action_consumer.rs) · [Event selection](tools/architecture-fixtures/open-consumer/tests/event_selection.rs) | Finite preparation can refuse a usable Read because two providers support a later Form. Continuing preparation filters some URI-variable, response and security meaning before actual providers can qualify it. [Finite selection](planning/src/open_consumer.rs) |
-| Producer publication | For a supplied final description, Host qualification checks all advertised operations, behaviors and eligible providers through one local commit with the ready native members. Changed coverage can refuse publication with ingress closed. One MQTT participant serves 33 funded Event mappings with the finite pool occupied. [Host publication](servient/src/producer_composition.rs) · [Coherent commit](protocol-bindings/protocols/http/tests/composed_thing/coherent.rs) · [Mapping capacity](protocol-bindings/protocols/mqtt/tests/support/notification_capacity.rs) | The managed caller assembles native participants. Coverage is saved before native setup. A lease that determines the final address needs funded acquisition, final qualification and rollback on the public path. [HTTP application](protocol-bindings/protocols/http/examples/serve_properties.rs) · [Mixed caller](protocol-bindings/protocols/mqtt/tests/collection_coexistence.rs) |
-| Finite Properties and collections | Both roles execute HTTP Read/Write and root ReadAll, ReadMultiple, WriteAll and WriteMultiple. Direct verified HTTPS supports selected data and security combinations. With shared Host capacity an expired, accepted HTTP PUT can release its connection while the same Thing and a sibling keep serving and the caller keeps its outcome. [Root ReadMultiple](protocol-bindings/protocols/http/tests/read_multiple_properties.rs) · [Root WriteMultiple](protocol-bindings/protocols/http/tests/write_multiple_properties.rs) · [Structured values](docs/evidence/structured-dataschema.md) · [Composed security](docs/evidence/security-composition.md) · [Retirement over HTTP](protocol-bindings/protocols/http/tests/support/accepted_timeout.rs) | Each finite Producer participant still drives one native exchange. Phase-specific cleanup, checked outgoing data and authorization through the actual credential use remain incomplete. |
+| Producer publication | An application supplies a TD, behaviors and policy. Linked finite services assemble the selected members. The Host qualifies the actual final address and every advertised operation before opening ingress. An assigned-endpoint loser releases its socket and returns the original handlers. [Public Host](servient/src/host_producer.rs) · [Wire and contention evidence](docs/evidence/finite-producer-publication.md) | Continuing Actions and MQTT still use the composed caller with explicitly assembled participants. [Mixed caller](protocol-bindings/protocols/mqtt/tests/collection_coexistence.rs) |
+| Finite Properties and collections | Both roles execute HTTP Read/Write and root ReadAll, ReadMultiple, WriteAll and WriteMultiple. Direct verified HTTPS supports selected data and security combinations. With shared Host capacity an expired, accepted HTTP PUT can release its connection while the same Thing and a sibling keep serving and the caller keeps its outcome. [Root ReadMultiple](protocol-bindings/protocols/http/tests/read_multiple_properties.rs) · [Root WriteMultiple](protocol-bindings/protocols/http/tests/write_multiple_properties.rs) · [Structured values](docs/evidence/structured-dataschema.md) · [Composed security](docs/evidence/security-composition.md) · [Retirement over HTTP](protocol-bindings/protocols/http/tests/support/accepted_timeout.rs) | HTTP serves one native exchange per finite participant. The caller-owned Read supports multiple active replies on one member. Per-effect credential and data-direction work continues. [Independent reply retirement](servient/finite/tests/borrowed_producer.rs) |
 | Continuing Actions | HTTP Invoke, Query and Cancel retain the original invocation across exchanges. QueryAllActions observes a root inventory with per-invocation identity, output and visibility. A source-free Consumer can drive an invocation with caller-owned storage. [HTTP root status](protocol-bindings/protocols/http/tests/query_all_actions.rs) · [Caller-owned Action](docs/evidence/continuing-action-runtime-independence.md) | Producer retention reads process time. The aggregate walk must bound handle construction as well as lookup. The Consumer close path still prepays access and validation work. |
 | Observations and Events | Both roles execute MQTT observe/unobserve, subscribe/unsubscribe and the corresponding root collections. One root conversation preserves member identity and schema. A completed QoS 0 packet releases the shared writer while its result is held. A downstream Consumer can reply to an occurrence. [Root Properties](protocol-bindings/protocols/mqtt/tests/observe_all_properties.rs) · [Root Events](protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs) · [Writer lifetime](protocol-bindings/protocols/mqtt/tests/producer_events.rs) · [Occurrence replies](tools/architecture-fixtures/open-consumer/tests/notification.rs) | A recoverable emission cleanup error revokes a healthy Thing. Application-controlled subscriptions also need setup acceptance, a returned control operand and per-delivery ownership in both roles. [Emission settlement](servient/finite/src/notification_publication.rs) |
-| Definition reuse and deployment | HTTP Read in both roles can skip actual invariant lowering when binding a compatible instance. Mixed Host turns drive both roles. Caller-owned finite Read and continuing Consumer Action execute with supplied storage and time. [Consumer costs](docs/evidence/consumer-execution-reuse.md#measured-costs-and-benefit) · [Producer reuse](docs/evidence/producer-preparation-reuse.md) · [Host turns](docs/evidence/host-execution-integration.md) · [Caller-owned Read](docs/evidence/constrained-finite-execution.md) | Continuing definitions can still specialize endpoints. A second mapping, costs on the normal deployment turn, and caller-owned Producer and notification lifetimes remain open. |
+| Definition reuse and deployment | Compatible HTTP Reads in both roles can reuse prepared instructions. Mixed Host turns drive both roles. Caller-owned Consumers execute Read and continuing Action. A caller-owned Producer serves a trusted final Read with supplied storage, time and manual progress. [Consumer reuse](docs/evidence/consumer-execution-reuse.md) · [Producer reuse](docs/evidence/producer-preparation-reuse.md) · [Finite deployments](docs/evidence/finite-producer-publication.md) | Continuing definitions can still specialize endpoints. Costs on the ordinary deployment turn, a second reusable mapping and caller-owned notification lifetimes remain open. |
 
 ## Engineering priorities and dependencies
 
@@ -39,41 +39,27 @@ application accepts a subscription that another application can control.
 
 ### Near-term capability growth and priority
 
-**Expose a finite Property through the ordinary Producer API, serve its
-advertised address and retire each accepted exchange independently.** This
-comes first because the Host application still assembles the installation and
-the finite driver owns one active reply per participant. Longer-lived Actions
-and subscriptions need a truthful publication and a way to release each request.
-[Installation interface](core/src/publication.rs) · [Finite driver](servient/finite/src/host.rs)
+**Extend coherent publication and independent delivery retirement to continuing
+interactions.** The public finite Host qualifies fixed or assigned endpoints
+through Binding-owned assembly. The source-free Producer can complete a second
+Read on the same member while the first reply retains a timeout and a cleanup
+error. An outstanding result keeps its original value and recipient across
+replacement. [Host application](protocol-bindings/protocols/http/examples/serve_properties.rs) ·
+[Finite publication and retirement](docs/evidence/finite-producer-publication.md)
 
-Start with the application that exposes the Thing. Deployment registers linked
-Bindings, services and capacity at startup. For each exposure the application
-supplies its TD, behaviors and policy. Each selected Binding assembles its own
-closed native participants. Servient publishes the final TD, exposes revocation
-and lets the application drive accepted work through its own handles. Migrate a
-real Host caller to this operation. Use the same application code with an
-existing Binding, an independently registered Binding and a TD whose Forms
-use both. Each adapter owns its concrete definitions and native assembly.
-[Host application](protocol-bindings/protocols/http/examples/serve_properties.rs) · [Mixed exposure](protocol-bindings/protocols/mqtt/tests/collection_coexistence.rs)
+Continuing Actions need their invocation, correlation and result capacity at
+acceptance. MQTT emissions need to distinguish a damaged delivery from loss of a
+required member. Two-ended subscriptions depend on those guarantees at both
+participants. [Servient scope](docs/work-packages/WP-400-servient.md#public-finite-publication-acceptance-and-retirement) ·
+[Binding scope](docs/work-packages/WP-600-protocol-bindings.md#finite-publication-on-host-and-caller-owned-deployments)
 
-The first successor joins ordinary Host exposure and source-free caller-owned
-execution on one finite Producer path. Stage two closed assigned endpoints for
-one available member, qualify the actual final TDs and retire the losing
-candidate with its inputs recoverable while the winner serves. On the caller-owned
-path, use a trusted final definition, supplied slots, clock and manual progress.
-Let two accepted exchanges on one participation finish out of order, and retain
-one result through replacement. Carry forward the real wire, independent Binding,
-ambiguity, rollback and failure cases from the assessed exposure prototype.
-[Finite integration scope](docs/work-packages/WP-600-protocol-bindings.md#finite-publication-on-host-and-caller-owned-deployments) ·
-[Servient ownership](docs/spec/runtime-safety.md#finite-producer-participation-and-work-capacity)
-
-Ordinary admission ships independently. When a deployment needs predictable
+When a deployment needs predictable
 availability, reserve actual capacity at its supplying owner and exercise the
 same publication and retirement path after other users exhaust the free pool.
 [Backing and quotas](docs/spec/foundation.md)
 
-Migrate bounded progress through each complete operation, first finite Read and
-continuing Action, including their public Host and manual drivers, Core step,
+Extend bounded progress from the finite Producer to the Consumer and continuing
+Action call chains, including their public Host and manual drivers, Core step,
 Binding, access and codec. TD and Planning move repeated traversal limits to
 the job. Discovery consumes its explicit progress and keeps its own session
 bounds. Preserve each retained shared ceiling across all callers as they
@@ -123,9 +109,8 @@ callback supplies its destination. [Data and security contracts](docs/spec/inter
   can retire the original exchange and preserve a late value for authorized,
   validated handoff. Use the supplied monotonic clock for Producer retention
   and bound the aggregate inventory walk, including handle construction. [Core driver](core/src/execution/action.rs) · [Producer store](servient/finite/src/action.rs)
-- **Failure isolation for deliveries.** Exercise isolated reply cleanup and
-  required-member loss in the finite Producer, then extend those cases to
-  MQTT emissions. Preserve each delivery's first cause, native effect, cleanup
+- **Failure isolation for deliveries.** Extend the finite Producer’s isolated
+  reply cleanup and required-member loss cases to MQTT emissions. Preserve each delivery's first cause, native effect, cleanup
   error and backing through physical retirement and result disposal. A peer can
   receive the Event, cleanup can fail and then recover, and the same healthy
   Thing must still emit. A failed subscription

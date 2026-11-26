@@ -12,7 +12,7 @@ use clinkz_wot_td::{
     semantic::{FormOwner, SemanticScope},
     validate::{Validate, ValidationLevel},
 };
-use std::{any::Any, boxed::Box, cell::Cell};
+use std::{any::Any, boxed::Box};
 
 fn work() -> WorkBudget {
     WorkClass::ALL
@@ -315,10 +315,11 @@ fn absent_ambiguous_and_unregistered_controls_refuse_purely() {
 
 struct SwitchProvider {
     enabled: std::cell::RefCell<PublicationState<bool>>,
-    preparations: Cell<usize>,
+    visits: std::cell::RefCell<Vec<&'static str>>,
 }
 impl ProducerCapability for SwitchProvider {
     fn observe_configuration(&self, facts: &mut PublicationObserver<'_>) -> CoreResult<()> {
+        self.visits.borrow_mut().push("observe");
         self.enabled.borrow().observe(facts)
     }
 
@@ -333,7 +334,7 @@ impl ProducerCapability for SwitchProvider {
         input: ProducerOperationInput<'_>,
         budget: &mut WorkBudget,
     ) -> clinkz_wot_core::CoreResult<Option<Box<dyn Any>>> {
-        self.preparations.set(self.preparations.get() + 1);
+        self.visits.borrow_mut().push("prepare");
         if *self.enabled.borrow().get() {
             Provider(5, "property").prepare(input, budget)
         } else {
@@ -345,6 +346,7 @@ impl ProducerCapability for SwitchProvider {
         input: ProducerOperationInput<'_>,
         budget: &mut WorkBudget,
     ) -> clinkz_wot_core::CoreResult<bool> {
+        self.visits.borrow_mut().push("supports");
         if *self.enabled.borrow().get() {
             Provider(5, "property").supports(input, budget)
         } else {
@@ -357,6 +359,7 @@ impl ProducerCapability for SwitchProvider {
         definition: &dyn Any,
         budget: &mut WorkBudget,
     ) -> clinkz_wot_core::CoreResult<bool> {
+        self.visits.borrow_mut().push("check_final");
         Provider(5, "property").check_final(input, definition, budget)
     }
 }
@@ -369,7 +372,7 @@ fn final_check_detects_new_ambiguity_and_changed_meaning_without_preparing() {
     let c = Provider(4, "collection");
     let candidate = SwitchProvider {
         enabled: std::cell::RefCell::new(PublicationState::new(false)),
-        preparations: Cell::new(0),
+        visits: Default::default(),
     };
     let providers: [&dyn ProducerCapability; 5] = [&p, &a, &e, &c, &candidate];
     let text = td();
@@ -382,7 +385,7 @@ fn final_check_detects_new_ambiguity_and_changed_meaning_without_preparing() {
         covered,
     )
     .unwrap();
-    let preparations = candidate.preparations.get();
+    assert!(candidate.visits.take().contains(&"prepare"));
     check_final_thing(
         &text,
         key(),
@@ -420,7 +423,7 @@ fn final_check_detects_new_ambiguity_and_changed_meaning_without_preparing() {
         )
         .is_err()
     );
-    assert_eq!(candidate.preparations.get(), preparations);
+    assert!(!candidate.visits.borrow().contains(&"prepare"));
 }
 
 #[test]
@@ -468,5 +471,73 @@ fn retained_affordance_requires_a_form_even_beside_a_supported_property() {
             )
             .is_err()
         );
+    }
+}
+
+#[test]
+fn selection_and_final_checks_charge_before_every_provider_visit() {
+    let description = serde_json::json!({
+        "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"two properties",
+        "security":"n", "securityDefinitions":{"n":{"scheme":"nosec"}},
+        "properties":{
+            "first":{"type":"number", "readOnly":true, "forms":[{"href":"http://example.org/first"}]},
+            "second":{"type":"number", "readOnly":true, "forms":[{"href":"http://example.org/second"}]}
+        }
+    }).to_string();
+    let [active, competitor] = [true, false].map(|enabled| SwitchProvider {
+        enabled: std::cell::RefCell::new(PublicationState::new(enabled)),
+        visits: Default::default(),
+    });
+    let providers: [&dyn ProducerCapability; 2] = [&active, &competitor];
+    let key = key();
+    let limits = GatewayDefaultV1::LIMITS;
+    let select = |budget: &mut WorkBudget| {
+        select_finite_thing(
+            &description,
+            key,
+            limits,
+            budget,
+            &providers,
+            covered,
+            &mut PublicationFacts::default(),
+        )
+    };
+    let prepared = select(&mut work()).unwrap();
+    let preparing = ["observe", "prepare", "prepare"];
+    let checking = ["observe", "check_final", "check_final"];
+    let competing = ["observe", "supports", "supports"];
+    for (final_pass, selected, other) in
+        [(false, preparing, preparing), (true, checking, competing)]
+    {
+        for allowance in 0usize..=6 {
+            active.visits.borrow_mut().clear();
+            competitor.visits.borrow_mut().clear();
+            let mut budget = work().with_remaining(WorkClass::ProviderProbes, allowance as u64);
+            let result = if final_pass {
+                check_final_thing(
+                    &description,
+                    key,
+                    limits,
+                    &mut budget,
+                    &providers,
+                    &prepared,
+                    covered,
+                )
+                .map(|_| ())
+            } else {
+                select(&mut budget).map(|_| ())
+            };
+            if allowance == 6 {
+                result.unwrap();
+            } else {
+                assert!(matches!(
+                    result,
+                    Err(clinkz_wot_core::CoreError::Backpressure(_))
+                ));
+            }
+            assert_eq!(active.visits.take(), selected[..allowance.div_ceil(2)]);
+            assert_eq!(competitor.visits.take(), other[..allowance / 2]);
+            assert_eq!(budget.remaining(WorkClass::ProviderProbes), 0);
+        }
     }
 }

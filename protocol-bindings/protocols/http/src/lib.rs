@@ -25,7 +25,7 @@ mod finite_preparation;
 mod finite_producer;
 pub use finite_listener::HttpFiniteListener;
 #[cfg(feature = "prepare")]
-pub use finite_preparation::HttpFiniteProducer;
+pub use finite_preparation::{HttpFiniteProducer, HttpProducerEndpoint};
 #[cfg(all(test, feature = "prepare"))]
 mod identity_tests;
 mod producer;
@@ -176,6 +176,9 @@ impl Target {
         Self::parse_for(text, false)
     }
     fn parse_for(text: &str, secure: bool) -> CoreResult<Self> {
+        Self::parse_port(text, secure, false)
+    }
+    fn parse_port(text: &str, secure: bool, draft_port: bool) -> CoreResult<Self> {
         if text.len() > 256
             || text
                 .bytes()
@@ -215,7 +218,7 @@ impl Target {
                 .and_then(|p| p.parse::<u16>().ok())
                 .ok_or_else(|| error(601, "invalid HTTP port"))?
         };
-        if port == 0 {
+        if port == 0 && !draft_port {
             return Err(error(601, "invalid HTTP port"));
         }
         Ok(Self {

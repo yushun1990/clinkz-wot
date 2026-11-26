@@ -45,30 +45,7 @@ pub struct RawFiniteReply<R> {
     pub operation: Option<Operation>,
 }
 
-/// Semantic-effect certainty, independent of the native reply outcome.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum FiniteEffect {
-    /// The handler was not entered; no application effect was attempted.
-    NotInvoked,
-    /// The handler was entered. Even an error or invalid/oversized result may
-    /// follow a committed write; implicit replay is not safe.
-    Unknown,
-    /// The Property or root collection write reported complete success and its result
-    /// passed validation. Does not imply atomic commit, rollback, per-member
-    /// receipts or native reply delivery. Errors after entry remain Unknown.
-    Completed,
-    /// A validated, incomplete per-member report is retained in the result.
-    Reported,
-}
-
-/// Whether the original result reached the Binding's declared delivery edge.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum FiniteDelivery {
-    Delivered,
-    NotDelivered,
-    Unknown,
-}
-
+pub use crate::execution::producer::{FiniteDelivery, FiniteEffect, ReplyRetirementError};
 /// One terminal native and semantic outcome, including the complete owned late
 /// result (even if delivery was refused or uncertain) and original mapping
 /// identity. This carrier does not prescribe execution capacity or result
@@ -85,6 +62,7 @@ pub struct RawFiniteSettlement {
     /// First local cause that interrupted this exchange. The handler result
     /// and native delivery evidence remain independently observable.
     pub first_cause: Option<crate::CoreError>,
+    pub cleanup_error: Option<crate::CoreError>,
     pub effect: FiniteEffect,
     pub delivery: FiniteDelivery,
     pub result: CoreResult<InteractionOutput>,
@@ -279,17 +257,16 @@ pub trait FiniteIngressBinding {
     /// Ready(Ok) certifies disposal of its native work and reports delivery at
     /// the same edge as `poll_close`. A partial write is Unknown. Preserve the
     /// installation and expose any independent ingress loss via `check_ingress`.
-    /// Pending keeps the whole reply with the caller. Err requires participation
-    /// close with that same reply. Whole-participation close must also accept
-    /// the original reply after a Pending retirement. The default requires
-    /// whole-participation close.
+    /// Pending and isolated errors keep the whole reply for a retry. A member
+    /// error requires participation close with that same reply, including
+    /// after a Pending retirement. The default requests participation close.
     fn poll_retire_reply(
         &mut self,
         _cx: &mut Context<'_>,
         _reply: &RawFiniteReply<Self::Reply>,
         cause: &crate::CoreError,
-    ) -> Poll<CoreResult<FiniteDelivery>> {
-        Poll::Ready(Err(cause.clone()))
+    ) -> Poll<Result<FiniteDelivery, ReplyRetirementError>> {
+        Poll::Ready(Err(ReplyRetirementError::Member(cause.clone())))
     }
     /// The borrowed unmatched ingress or accepted reply stays owned by Servient
     /// until terminal success. For an interrupted reply, `cause` describes

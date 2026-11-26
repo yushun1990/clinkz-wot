@@ -58,7 +58,8 @@ pub fn publish_prepared_thing(
         participants.len(),
         limits.get(K::CleanupWorkItemsPerStepMax).unwrap_or(0),
     )?;
-    let qualification = ProducerQualification::begin(providers, PublicationFacts::default())?;
+    let qualification =
+        ProducerQualification::begin(providers, PublicationFacts::default(), budget)?;
     pay_coverage(
         prepared,
         participants.len(),
@@ -335,7 +336,7 @@ fn reserve_slots(
     Ok(slots)
 }
 
-fn check_participant_coverage<'a>(
+pub(crate) fn check_participant_coverage<'a>(
     key: ProducerInstanceKey,
     prepared: &PreparedThing,
     participants: impl ExactSizeIterator<Item = &'a dyn ClosedProducerParticipation> + Clone,
@@ -514,7 +515,7 @@ impl ComposedProducerExposure {
                 return Err(CoreError::Validation(context()));
             }
             let providers: Vec<_> = registrations.iter().map(|p| p.as_ref()).collect();
-            let qualification = ProducerQualification::begin(&providers, coverage)?;
+            let qualification = ProducerQualification::begin(&providers, coverage, budget)?;
             let routes = capture_action_routes(
                 input.instance.key(),
                 &input.prepared,
@@ -527,7 +528,7 @@ impl ComposedProducerExposure {
             )?;
             let mut bytes = size_of::<Self>()
                 .checked_add(input.instance.backing_bytes().ok_or_else(busy)?)
-                .and_then(|n| n.checked_add(input.prepared.retained_bytes()))
+                .and_then(|n| n.checked_add(input.prepared.retained_bytes()?))
                 .and_then(|n| n.checked_add(ProducerPublication::staging_backing_for(members)))
                 .and_then(|n| n.checked_add(input.handler_backing_bytes))
                 .and_then(|n| {

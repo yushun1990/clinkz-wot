@@ -5,32 +5,70 @@ use clinkz_wot_core::{
     data_schema::{PreparedSchema, ValueType},
 };
 
+use clinkz_wot_core::data_schema::{NumberValue, SchemaViolation, ValueAccess};
 use clinkz_wot_core::{
     Payload,
     collection::{PropertyCollectionSchema, PropertySelection},
 };
-use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
+use justjson::{
+    JsonString,
+    parser::{ParseConfig, Parser, Token, Tokenizer},
+};
 
-struct MemberIndex<'a>(&'a PropertyCollectionSchema);
-impl<'de> DeserializeSeed<'de> for MemberIndex<'_> {
-    type Value = usize;
-    fn deserialize<D: serde::Deserializer<'de>>(self, d: D) -> Result<usize, D::Error> {
-        d.deserialize_str(self)
+// The tokenizer has validated escapes and surrogate pairs. Compare escaped
+// names in UTF-16 units so each \uXXXX consumes exactly one unit. justjson
+// 0.3's decoded string comparison maps the short backspace escape to U+0007.
+fn name_matches(token: &JsonString<'_>, name: &str) -> bool {
+    if let Some(plain) = token.as_str() {
+        return plain == name;
     }
+    let mut encoded = token.as_json_str().expect("escaped JSON token").as_str();
+    let mut expected = name.encode_utf16();
+    while let Some((literal, escape)) = encoded.split_once('\\') {
+        if !literal
+            .encode_utf16()
+            .all(|unit| expected.next() == Some(unit))
+        {
+            return false;
+        }
+        let (unit, tail) = match escape.split_at(1) {
+            ("u", tail) => {
+                let (digits, rest) = tail.split_at(4);
+                (
+                    u16::from_str_radix(digits, 16).expect("validated Unicode escape"),
+                    rest,
+                )
+            }
+            ("b", rest) => (0x08, rest),
+            ("f", rest) => (0x0c, rest),
+            ("n", rest) => (u16::from(b'\n'), rest),
+            ("r", rest) => (u16::from(b'\r'), rest),
+            ("t", rest) => (u16::from(b'\t'), rest),
+            (literal, rest) => (u16::from(literal.as_bytes()[0]), rest),
+        };
+        encoded = tail;
+        if expected.next() != Some(unit) {
+            return false;
+        }
+    }
+    expected.eq(encoded.encode_utf16())
 }
 
-impl Visitor<'_> for MemberIndex<'_> {
-    type Value = usize;
-    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("a described eligible Property name")
+fn member_bit(
+    schema: &PropertyCollectionSchema,
+    name: &JsonString<'_>,
+    seen: u32,
+) -> CoreResult<(usize, u32)> {
+    let index = schema
+        .members()
+        .iter()
+        .position(|member| name_matches(name, &member.name))
+        .ok_or_else(invalid)?;
+    let bit = 1u32 << index;
+    if seen & bit != 0 {
+        return Err(invalid());
     }
-    fn visit_str<E: serde::de::Error>(self, name: &str) -> Result<usize, E> {
-        self.0
-            .members()
-            .iter()
-            .position(|m| m.name.as_ref() == name)
-            .ok_or_else(|| E::custom("unexpected collection member"))
-    }
+    Ok((index, bit))
 }
 
 /// Default TD 1.1 request representation: an array of exact Property names.
@@ -41,34 +79,18 @@ pub fn decode_property_selection(
     payload: &Payload,
 ) -> CoreResult<PropertySelection> {
     validate_payload(&PreparedSchema::Type(ValueType::Array), payload)?;
-    struct Names<'a>(&'a PropertyCollectionSchema);
-    impl<'de> Visitor<'de> for Names<'_> {
-        type Value = PropertySelection;
-        fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str("a Property name array")
-        }
-        fn visit_seq<S: SeqAccess<'de>>(self, mut seq: S) -> Result<Self::Value, S::Error> {
-            use serde::de::Error;
-            let mut bits = 0;
-            let mut count = 0;
-            while let Some(index) = seq.next_element_seed(MemberIndex(self.0))? {
-                count += 1;
-                let bit = 1u32 << index;
-                if count > PropertyCollectionSchema::MAX_MEMBERS || bits & bit != 0 {
-                    return Err(S::Error::custom("invalid or duplicate selection"));
-                }
-                bits |= bit;
-            }
-            self.0
-                .selection_from_bits(bits)
-                .map_err(|_| S::Error::custom("invalid selection"))
+    let json = std::str::from_utf8(&payload.body).map_err(|_| invalid())?;
+    let mut bits = 0u32;
+    let mut tokens = Tokenizer::for_json(json);
+    tokens.next(); // validated root array
+    for token in tokens {
+        match token.map_err(|_| invalid())? {
+            Token::Comma | Token::ArrayEnd => {}
+            Token::String(name) => bits |= member_bit(schema, &name, bits)?.1,
+            _ => return Err(invalid()),
         }
     }
-    let mut decoder = serde_json::Deserializer::from_slice(&payload.body);
-    let selected =
-        serde::Deserializer::deserialize_seq(&mut decoder, Names(schema)).map_err(|_| invalid())?;
-    decoder.end().map_err(|_| invalid())?;
-    Ok(selected)
+    schema.selection_from_bits(bits)
 }
 
 /// Serialize the TD default name array under the existing 4096-byte envelope.
@@ -147,40 +169,21 @@ fn property_map(
         schema.selection_from_bits(selected.bits())?;
     }
     validate_payload(&PreparedSchema::Type(ValueType::Object), payload)?;
-    struct Members<'a>(&'a PropertyCollectionSchema, Option<PropertySelection>);
-    impl<'de> Visitor<'de> for Members<'_> {
-        type Value = PropertySelection;
-        fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str("a complete selected Property collection")
+    let json = std::str::from_utf8(&payload.body).map_err(|_| invalid())?;
+    let mut seen = 0u32;
+    fields(json, |name, value| {
+        let (i, bit) = member_bit(schema, &name, seen)?;
+        if selected.is_some_and(|s| !s.contains(i)) {
+            return Err(invalid());
         }
-        fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<Self::Value, M::Error> {
-            use serde::de::Error;
-            let mut seen = 0u32;
-            while let Some(i) = map.next_key_seed(MemberIndex(self.0))? {
-                let bit = 1u32 << i;
-                if seen & bit != 0 || self.1.is_some_and(|s| !s.contains(i)) {
-                    return Err(M::Error::custom(
-                        "duplicate or unrequested collection member",
-                    ));
-                }
-                let value: &serde_json::value::RawValue = map.next_value()?;
-                validate_json(&self.0.members()[i].schema, value.get().as_bytes())
-                    .map_err(|_| M::Error::custom("invalid collection member"))?;
-                seen |= bit;
-            }
-            if self.1.is_some_and(|s| seen != s.bits()) {
-                return Err(M::Error::custom("incomplete collection map"));
-            }
-            self.0
-                .selection_from_bits(seen)
-                .map_err(|_| M::Error::custom("invalid member set"))
-        }
+        JsonValues(value).validate(&schema.members()[i].schema)?;
+        seen |= bit;
+        Ok(())
+    })?;
+    if selected.is_some_and(|s| s.bits() != seen) {
+        return Err(invalid());
     }
-    let mut decoder = serde_json::Deserializer::from_slice(&payload.body);
-    let selected = serde::Deserializer::deserialize_map(&mut decoder, Members(schema, selected))
-        .map_err(|_| invalid())?;
-    decoder.end().map_err(|_| invalid())?;
-    Ok(selected)
+    schema.selection_from_bits(seen)
 }
 
 pub fn validate(schema: &PreparedSchema, output: &InteractionOutput) -> CoreResult<()> {
@@ -206,32 +209,30 @@ pub fn validate_json(schema: &PreparedSchema, body: &[u8]) -> CoreResult<()> {
         return Err(invalid());
     }
     let json = std::str::from_utf8(body).map_err(|_| invalid())?;
-    // Raw-value syntax checking does not decode every string. The check above
-    // covers UTF-8 throughout object keys and nested values.
-    let root: &serde_json::value::RawValue = serde_json::from_str(json).map_err(|_| invalid())?;
-    if !unicode_escapes(json.as_bytes()) || !bounded_depth(json.as_bytes()) {
-        return Err(invalid());
-    }
-    schema
-        .validate(&JsonValues { _source: json }, root)
-        .map_err(|_| invalid())
+    // Syntax, UTF-8, scalar escapes and nesting are checked before lending
+    // any subtree. The borrowed decoder uses bounded stack throughout,
+    // including escaped field names and length-constrained strings.
+    Parser::validate_json_with_config(json, ParseConfig::new().with_recursion_limit(32))
+        .map_err(|_| invalid())?;
+    JsonValues(json.trim()).validate(schema)
 }
 
-use clinkz_wot_core::data_schema::{NumberValue, SchemaViolation, ValueAccess};
-struct JsonValues<'a> {
-    _source: &'a str,
+struct JsonValues<'a>(&'a str);
+impl JsonValues<'_> {
+    fn validate(&self, schema: &PreparedSchema) -> CoreResult<()> {
+        schema.validate(self, self.0).map_err(|_| invalid())
+    }
 }
 impl<'a> ValueAccess for JsonValues<'a> {
-    type Node = &'a serde_json::value::RawValue;
+    type Node = &'a str;
     fn kind(&self, node: Self::Node) -> Result<ValueType, SchemaViolation> {
-        let token = node.get();
-        Ok(match token.as_bytes().first() {
+        Ok(match node.as_bytes().first() {
             Some(b'n') => ValueType::Null,
             Some(b't' | b'f') => ValueType::Boolean,
             Some(b'"') => ValueType::String,
             Some(b'{') => ValueType::Object,
             Some(b'[') => ValueType::Array,
-            Some(b'-' | b'0'..=b'9') if NumberValue::Decimal(token).is_integer() => {
+            Some(b'-' | b'0'..=b'9') if NumberValue::Decimal(node).is_integer() => {
                 ValueType::Integer
             }
             Some(b'-' | b'0'..=b'9') => ValueType::Number,
@@ -239,114 +240,62 @@ impl<'a> ValueAccess for JsonValues<'a> {
         })
     }
     fn number(&self, node: Self::Node) -> Result<NumberValue<'_>, SchemaViolation> {
-        Ok(NumberValue::Decimal(node.get()))
+        Ok(NumberValue::Decimal(node))
     }
     fn string_length(&self, node: Self::Node) -> Result<usize, SchemaViolation> {
-        let value: std::string::String =
-            serde_json::from_str(node.get()).map_err(|_| SchemaViolation::Value)?;
-        Ok(value.chars().count())
+        JsonString::from_json(node)
+            .map(|s| s.decoded().count())
+            .map_err(|_| SchemaViolation::Value)
     }
     fn property(
         &self,
         node: Self::Node,
         name: &str,
     ) -> Result<Option<Self::Node>, SchemaViolation> {
-        struct Find<'n>(&'n str);
-        impl<'de> Visitor<'de> for Find<'_> {
-            type Value = Option<&'de serde_json::value::RawValue>;
-            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str("an object")
+        let mut found = None;
+        fields(node, |key, value| {
+            if name_matches(&key, name) && found.replace(value).is_some() {
+                return Err(invalid());
             }
-            fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<Self::Value, M::Error> {
-                use serde::de::Error;
-                let mut found = None;
-                while let Some(key) = map.next_key::<std::borrow::Cow<'de, str>>()? {
-                    let value: &'de serde_json::value::RawValue = map.next_value()?;
-                    if key == self.0 {
-                        if found.is_some() {
-                            return Err(M::Error::custom("duplicate described field"));
-                        }
-                        found = Some(value);
-                    }
-                }
-                Ok(found)
-            }
-        }
-        let mut decoder = serde_json::Deserializer::from_str(node.get());
-        serde::Deserializer::deserialize_map(&mut decoder, Find(name))
-            .map_err(|_| SchemaViolation::Value)
+            Ok(())
+        })
+        .map_err(|_| SchemaViolation::Value)?;
+        Ok(found)
     }
 }
-// Each callback is atomic under a prepaid bound. Also bound ignored/unknown
-// subtrees: a shallow schema does not authorize unbounded encoded nesting.
-fn bounded_depth(bytes: &[u8]) -> bool {
-    let mut depth = 0usize;
-    let mut quoted = false;
-    let mut escaped = false;
-    for b in bytes {
-        if quoted {
-            if escaped {
-                escaped = false;
-            } else if *b == b'\\' {
-                escaped = true;
-            } else if *b == b'"' {
-                quoted = false;
-            }
-        } else {
-            match b {
-                b'"' => quoted = true,
-                b'{' | b'[' => {
-                    depth += 1;
-                    if depth > 32 {
-                        return false;
-                    }
-                }
-                b'}' | b']' => depth -= 1,
+
+// Walk the immediate fields of an already syntax-checked object. Values
+// remain slices of the original input, including exact decimal lexemes.
+fn fields<'a>(
+    object: &'a str,
+    mut visit: impl FnMut(JsonString<'a>, &'a str) -> CoreResult<()>,
+) -> CoreResult<()> {
+    let mut tokens = Tokenizer::for_json(object);
+    if tokens.next_or_eof().map_err(|_| invalid())? != Token::Object {
+        return Err(invalid());
+    }
+    loop {
+        let name = match tokens.next_or_eof().map_err(|_| invalid())? {
+            Token::ObjectEnd => return Ok(()),
+            Token::Comma => continue,
+            Token::String(name) => name,
+            _ => return Err(invalid()),
+        };
+        tokens.next_or_eof().map_err(|_| invalid())?; // colon
+        let start = tokens.offset();
+        let mut depth = 0;
+        loop {
+            match tokens.next_or_eof().map_err(|_| invalid())? {
+                Token::Object | Token::Array => depth += 1,
+                Token::ObjectEnd | Token::ArrayEnd => depth -= 1,
                 _ => {}
             }
-        }
-    }
-    true
-}
-
-// Raw-value syntax checking also skips surrogate-pair validation. Check scalar Unicode in
-// every string/key without decoding/copying the strings. JSON syntax was
-// checked above, so each escape and four-digit code unit is already present.
-fn unicode_escapes(mut bytes: &[u8]) -> bool {
-    while let Some(index) = bytes.iter().position(|b| *b == b'\\') {
-        bytes = &bytes[index + 1..];
-        if bytes[0] != b'u' {
-            bytes = &bytes[1..];
-            continue;
-        }
-        let unit = code_unit(&bytes[1..5]);
-        bytes = &bytes[5..];
-        if (0xDC00..=0xDFFF).contains(&unit) {
-            return false;
-        }
-        if (0xD800..=0xDBFF).contains(&unit) {
-            if bytes.len() < 6
-                || !bytes.starts_with(b"\\u")
-                || !(0xDC00..=0xDFFF).contains(&code_unit(&bytes[2..6]))
-            {
-                return false;
+            if depth == 0 {
+                break;
             }
-            bytes = &bytes[6..];
         }
+        visit(name, object[start..tokens.offset()].trim_start())?;
     }
-    true
-}
-
-fn code_unit(bytes: &[u8]) -> u16 {
-    bytes.iter().fold(0, |unit, byte| {
-        let digit = match byte {
-            b'0'..=b'9' => byte - b'0',
-            b'a'..=b'f' => byte - b'a' + 10,
-            b'A'..=b'F' => byte - b'A' + 10,
-            _ => unreachable!("JSON syntax checked"),
-        };
-        unit * 16 + u16::from(digit)
-    })
 }
 
 fn invalid() -> CoreError {

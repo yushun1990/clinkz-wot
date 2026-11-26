@@ -33,6 +33,7 @@ use alloc::{
     sync::Arc,
     vec::Vec,
 };
+use clinkz_wot_core::execution::producer::ReplyRetirement;
 use clinkz_wot_core::{
     AffordanceTarget, BindingGeneration, BindingId, BindingInputRejection, BindingOperationalError,
     CoreError, CoreResult, Deadline, ErrorContext, ErrorPhase, HandlerContext, InteractionOutput,
@@ -280,8 +281,12 @@ impl RawProducerInstance {
             .any(|b| b.name() == name && b.supports(operation))
     }
 
-    /// Source-independent retained description. Raw callers remain responsible
-    /// for qualification; the preparation facade supplies the checked value.
+    /// Recover the original application behaviors from an unpublished finite candidate.
+    pub fn into_finite_behaviors(self) -> Vec<RawFiniteBehavior> {
+        self.behaviors
+    }
+
+    /// Attach the source-independent description checked by the preparation facade.
     pub fn with_description(mut self, description: Arc<str>) -> Self {
         self.description = Some(description);
         self
@@ -584,6 +589,26 @@ impl RawProducerServient {
         budget: &mut WorkBudget,
         now: MonotonicInstant,
     ) -> CoreResult<Poll<RawFiniteState>> {
+        self.drive_finite(runtime, cx, Some(budget), now)
+    }
+
+    /// One native poll or one bounded dispatch on the caller's maintenance turn.
+    pub fn poll_finite<B: FiniteIngressBinding>(
+        &self,
+        runtime: &mut RawFiniteRuntime<B>,
+        cx: &mut Context<'_>,
+        now: MonotonicInstant,
+    ) -> CoreResult<Poll<RawFiniteState>> {
+        self.drive_finite(runtime, cx, None, now)
+    }
+
+    fn drive_finite<B: FiniteIngressBinding>(
+        &self,
+        runtime: &mut RawFiniteRuntime<B>,
+        cx: &mut Context<'_>,
+        mut budget: Option<&mut WorkBudget>,
+        now: MonotonicInstant,
+    ) -> CoreResult<Poll<RawFiniteState>> {
         if runtime.issuer.as_ptr() != Rc::as_ptr(&self.issuer) {
             return Err(CoreError::StaleHandle(context()));
         }
@@ -591,42 +616,44 @@ impl RawProducerServient {
         // request waits for handler credit. A newly received offer dispatches
         // on a later turn.
         let had_candidate = runtime.state == RawFiniteState::Dispatching;
-        let progress = runtime.step(cx, budget, now);
+        let progress = runtime.drive_native(cx, budget.as_deref_mut(), now);
         if !had_candidate || runtime.state != RawFiniteState::Dispatching {
             return Ok(progress);
         }
-        let mut units = (self.limits.instances
-            + self.limits.handler_limit() * (self.limits.target_name_bytes + 1)
-            + 1) as u64;
-        if runtime.validation == FiniteValidation::Required {
-            // Prepay the complete declared value/media traversal, before
-            // behavior entry or a codec callback. Linked validators still owe
-            // bounded cooperative work; this is not callback preemption.
-            let bytes = runtime
-                .limits
-                .output_media_capacity
+        if let Some(budget) = budget {
+            let mut units = (self.limits.instances
+                + self.limits.handler_limit() * (self.limits.target_name_bytes + 1)
+                + 1) as u64;
+            if runtime.validation == FiniteValidation::Required {
+                // Prepay the complete declared value/media traversal, before
+                // behavior entry or a codec callback. Linked validators still owe
+                // bounded cooperative work; this is not callback preemption.
+                let bytes = runtime
+                    .limits
+                    .output_media_capacity
+                    .checked_mul(2)
+                    .and_then(|media| runtime.limits.output_body_bytes.checked_add(media))
+                    .and_then(|n| n.checked_add(runtime.limits.input_body_bytes))
+                    .and_then(|n| u64::try_from(n).ok())
+                    .and_then(|n| n.checked_add(runtime.validation_work))
+                    .and_then(|n| units.checked_add(n));
+                let Some(total) = bytes else {
+                    runtime.fail(CoreError::Backpressure(context()));
+                    return Ok(Poll::Ready(runtime.state));
+                };
+                units = total;
+            }
+            let Some(units) = runtime
+                .security_work
                 .checked_mul(2)
-                .and_then(|media| runtime.limits.output_body_bytes.checked_add(media))
-                .and_then(|n| n.checked_add(runtime.limits.input_body_bytes))
-                .and_then(|n| u64::try_from(n).ok())
-                .and_then(|n| n.checked_add(runtime.validation_work))
-                .and_then(|n| units.checked_add(n));
-            let Some(total) = bytes else {
+                .and_then(|w| units.checked_add(w))
+            else {
                 runtime.fail(CoreError::Backpressure(context()));
                 return Ok(Poll::Ready(runtime.state));
             };
-            units = total;
-        }
-        let Some(units) = runtime
-            .security_work
-            .checked_mul(2)
-            .and_then(|w| units.checked_add(w))
-        else {
-            runtime.fail(CoreError::Backpressure(context()));
-            return Ok(Poll::Ready(runtime.state));
-        };
-        if budget.consume(WorkClass::HandlerSteps, units).is_err() {
-            return Ok(Poll::Pending);
+            if budget.consume(WorkClass::HandlerSteps, units).is_err() {
+                return Ok(Poll::Pending);
+            }
         }
         if let Err(error) = runtime.check_installed_ingress() {
             runtime.fail(error);
@@ -643,6 +670,14 @@ impl RawProducerServient {
         let mut retirement_cause = None;
         let result = self.resolve(&ingress, runtime.limits).and_then(|(i, b)| {
             let instance = &self.instances[i].instance;
+            if !self.instances[i]
+                .permission
+                .accepts_finite(&runtime.participation, runtime.raw_activation)
+                || (!runtime.raw_activation
+                    && !runtime.binding.prepared_for_instance(instance.key()))
+            {
+                return Err(CoreError::StaleHandle(context()));
+            }
             let behavior = &instance.behaviors[b];
             let security_revision = runtime.binding.security_revision();
             if runtime.security_work != 0 {
@@ -852,7 +887,7 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     ingress_gate: Rc<ProducerIngressGate>,
     first_cause: Option<CoreError>,
     // Moves into this reply's settlement even if participation later fails.
-    exchange_cause: Option<CoreError>,
+    retirement: ReplyRetirement,
     validation: FiniteValidation,
     validation_work: u64,
     security_work: u64,
@@ -862,10 +897,11 @@ pub struct RawFiniteRuntime<B: FiniteIngressBinding> {
     // Starting may retain partial native effects even when poll_start returned
     // Pending. State alone cannot distinguish timing admission from live work.
     native_started: bool,
+    raw_activation: bool,
     participation: ProducerParticipationId,
     retained_owner: Option<Rc<dyn core::any::Any>>,
     // Active input/result/cleanup funding outlives native driver/config disposal.
-    work: Option<Box<ProducerFiniteSettlement>>,
+    work: Option<ProducerFiniteSettlement>,
     capacity: Option<ProducerFiniteCapacity>,
 }
 
@@ -908,7 +944,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             state: RawFiniteState::Starting,
             ingress_gate: Rc::new(ProducerIngressGate::default()),
             first_cause: None,
-            exchange_cause: None,
+            retirement: ReplyRetirement::default(),
             settlement: None,
             validation,
             validation_work,
@@ -917,6 +953,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             io_deadline: Deadline::NONE,
             last_now: None,
             native_started: false,
+            raw_activation: false,
             participation: ProducerParticipationId::new(),
             retained_owner: None,
             capacity: None,
@@ -955,7 +992,12 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         self.first_cause.as_ref()
     }
 
-    /// A final qualification loan grants no native mutation or dispatch power.
+    /// The original interruption and any subsequent reply cleanup failure.
+    pub fn reply_retirement(&self) -> &ReplyRetirement {
+        &self.retirement
+    }
+
+    /// Lend a ready native member for final qualification.
     pub fn closed_binding(&self) -> Option<&B> {
         (self.state == RawFiniteState::InstalledClosed).then_some(&self.binding)
     }
@@ -980,7 +1022,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
     /// returned owner retains original result/instance/publication funding and
     /// its retained-work debit until disposal. Execution credit was already
     /// released at native settlement; taking this record grants no native right.
-    pub fn take_retained_settlement(&mut self) -> Option<Box<ProducerFiniteSettlement>> {
+    pub fn take_retained_settlement(&mut self) -> Option<ProducerFiniteSettlement> {
         ProducerFiniteSettlement::take(&mut self.completed)
     }
 
@@ -1004,6 +1046,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             self.fail(error.clone());
             return Err(error);
         }
+        self.raw_activation = true;
         self.state = RawFiniteState::Serving;
         self.ingress_gate.open();
         Ok(())
@@ -1024,7 +1067,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         self.ingress_gate.withdraw();
         if let Some(cause) = cause {
             if self.reply.is_some() {
-                self.exchange_cause.get_or_insert_with(|| cause.clone());
+                self.retirement.interrupt(cause.clone());
             }
             self.first_cause.get_or_insert(cause);
         }
@@ -1051,69 +1094,66 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         self.binding.check_ingress()
     }
 
+    fn timing_context(&self, phase: ErrorPhase) -> ErrorContext {
+        let phase = match self.state {
+            RawFiniteState::RetiringReply | RawFiniteState::Closing | RawFiniteState::Closed => {
+                ErrorPhase::Cleanup
+            }
+            _ if self.native_started => phase,
+            _ => ErrorPhase::Admission,
+        };
+        ErrorContext::new(phase, RetryClass::Never)
+    }
+
+    fn fence_clock(&mut self, phase: ErrorPhase) -> CoreError {
+        let context = self.timing_context(phase);
+        let error = if context.phase() == ErrorPhase::Admission {
+            CoreError::Validation(context)
+        } else {
+            CoreError::InternalInvariant(context)
+        };
+        if self.state != RawFiniteState::Closed {
+            self.fence(error.clone());
+        }
+        error
+    }
+
+    /// Fence a regression or clock-domain change observed by the enclosing
+    /// driver. Return this member’s phase-specific clock error. Any earlier
+    /// exchange cause stays with its original reply through retirement.
+    pub fn fence_progress_clock(&mut self) -> CoreError {
+        let phase = if self.deadline.instant().is_some() {
+            ErrorPhase::Handler
+        } else {
+            ErrorPhase::Binding
+        };
+        self.fence_clock(phase)
+    }
+
     fn check_time(&mut self, now: MonotonicInstant) {
         if self.state == RawFiniteState::Closed {
             return;
         }
-        let monotonic_failure = self
-            .last_now
-            .is_some_and(|last| now.checked_duration_since(last).is_none());
-        let cleanup = matches!(
-            self.state,
-            RawFiniteState::Closing | RawFiniteState::RetiringReply
-        );
-        let admitted = self.native_started || cleanup;
-        let interaction_phase = if cleanup {
-            ErrorPhase::Cleanup
-        } else {
-            ErrorPhase::Handler
-        };
-        let native_phase = if cleanup {
-            ErrorPhase::Cleanup
-        } else {
-            ErrorPhase::Binding
-        };
         let lifetime_elapsed = self.deadline.checked_is_elapsed_at(now);
         let request_elapsed = self.io_deadline.checked_is_elapsed_at(now);
-        let comparisons = [
-            (lifetime_elapsed, interaction_phase),
-            (request_elapsed, native_phase),
-        ];
-        // Check the actual deadline domains before the general progress clock.
-        // This preserves Handler versus Binding attribution when both fail.
-        let clock_phase = comparisons
-            .iter()
-            .find_map(|(elapsed, phase)| elapsed.is_none().then_some(*phase))
-            .or_else(|| {
-                monotonic_failure.then_some(if self.deadline.instant().is_some() {
-                    interaction_phase
-                } else {
-                    native_phase
-                })
-            });
-        let timing_context = |phase| {
-            ErrorContext::new(
-                if admitted {
-                    phase
-                } else {
-                    ErrorPhase::Admission
-                },
-                RetryClass::Never,
-            )
-        };
-        if let Some(phase) = clock_phase {
-            let context = timing_context(phase);
-            self.fail(if admitted {
-                CoreError::InternalInvariant(context)
-            } else {
-                CoreError::Validation(context)
-            });
+        // An incomparable deadline identifies the source of the clock fault.
+        if lifetime_elapsed.is_none() {
+            self.fence_clock(ErrorPhase::Handler);
+        } else if request_elapsed.is_none() {
+            self.fence_clock(ErrorPhase::Binding);
+        } else if self
+            .last_now
+            .is_some_and(|last| now.checked_duration_since(last).is_none())
+        {
+            self.fence_progress_clock();
         } else if lifetime_elapsed == Some(true) {
-            self.fail(CoreError::TimedOut(timing_context(interaction_phase)));
+            self.fail(CoreError::TimedOut(
+                self.timing_context(ErrorPhase::Handler),
+            ));
         } else if request_elapsed == Some(true) && self.state != RawFiniteState::RetiringReply {
-            let timeout = CoreError::TimedOut(timing_context(native_phase));
+            let timeout = CoreError::TimedOut(self.timing_context(ErrorPhase::Binding));
             if self.state == RawFiniteState::Delivering {
-                self.exchange_cause = Some(timeout);
+                self.retirement.interrupt(timeout);
                 self.state = RawFiniteState::RetiringReply;
             } else {
                 self.fail(timeout);
@@ -1136,7 +1176,8 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 }),
                 recipient: reply.recipient,
                 operation: reply.operation,
-                first_cause: self.exchange_cause.take(),
+                first_cause: self.retirement.first_cause.take(),
+                cleanup_error: self.retirement.cleanup_error.take(),
                 effect: reply.effect,
                 delivery,
                 result: reply.result,
@@ -1161,6 +1202,7 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 recipient: single.map(|c| c.instance),
                 operation: single.map(|c| c.operation),
                 first_cause: self.first_cause.clone(),
+                cleanup_error: self.retirement.cleanup_error.take(),
                 effect: FiniteEffect::NotInvoked,
                 delivery,
                 result: Err(self.first_cause.clone().expect("close has a first cause")),
@@ -1226,6 +1268,15 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         budget: &mut WorkBudget,
         now: MonotonicInstant,
     ) -> Poll<RawFiniteState> {
+        self.drive_native(cx, Some(budget), now)
+    }
+
+    fn drive_native(
+        &mut self,
+        cx: &mut Context<'_>,
+        mut budget: Option<&mut WorkBudget>,
+        now: MonotonicInstant,
+    ) -> Poll<RawFiniteState> {
         use RawFiniteState::*;
         if self.state == InstalledClosed && self.ingress_gate.is_open() {
             self.state = Serving;
@@ -1247,11 +1298,14 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             RetiringReply | Closing => WorkClass::CleanupItems,
             _ => WorkClass::BindingPolls,
         };
-        let poll_funded = budget.remaining(class) != 0;
+        let poll_funded = budget.as_ref().is_none_or(|b| b.remaining(class) != 0);
         // A pending reply still depends on its installed service after logical
         // withdrawal. Either a native turn or a cleanup turn can observe loss.
         let check_retiring = self.state == RetiringReply
-            && (poll_funded || budget.remaining(WorkClass::BindingPolls) != 0);
+            && (poll_funded
+                || budget
+                    .as_ref()
+                    .is_none_or(|b| b.remaining(WorkClass::BindingPolls) != 0));
         if (!poll_funded && !check_retiring)
             || (self.state == Serving && !self.ingress_gate.is_open())
         {
@@ -1301,12 +1355,17 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         } else {
             0
         };
-        if budget.remaining(WorkClass::QueueOperations) < queue_work {
+        if budget
+            .as_ref()
+            .is_some_and(|b| b.remaining(WorkClass::QueueOperations) < queue_work)
+        {
             return Poll::Pending;
         }
         match self.state {
             Starting => {
-                budget.consume(class, 1).expect("prechecked native poll");
+                if let Some(b) = &mut budget {
+                    b.consume(class, 1).expect("prechecked native poll");
+                }
                 // The first paid native invocation may create partial effects,
                 // independently of its readiness result.
                 self.native_started = true;
@@ -1333,7 +1392,9 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 }
                 // Capacity refusal performs no Binding poll and must leave a
                 // shared turn's native credit available to the releasing owner.
-                budget.consume(class, 1).expect("prechecked native poll");
+                if let Some(b) = &mut budget {
+                    b.consume(class, 1).expect("prechecked native poll");
+                }
                 let received = self.binding.poll_receive(cx, now);
                 self.io_deadline = self.binding.request_deadline();
                 match received {
@@ -1367,10 +1428,12 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
             Delivering => {
                 // Security-bearing exchanges recheck identity and application
                 // permission under a fresh complete allowance before each send.
-                if self.security_work != 0 && self.reply.as_ref().is_some_and(|r| r.result.is_ok())
+                if (self.security_work != 0 || budget.is_none())
+                    && self.reply.as_ref().is_some_and(|r| r.result.is_ok())
                 {
                     if !self.ingress_gate.is_open() {
-                        self.fail(CoreError::StaleHandle(context()));
+                        self.retirement.interrupt(CoreError::StaleHandle(context()));
+                        self.state = RetiringReply;
                         return Poll::Ready(self.state);
                     }
                     let Some(work) = self
@@ -1381,7 +1444,10 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                         self.fail(CoreError::Backpressure(context()));
                         return Poll::Ready(self.state);
                     };
-                    if budget.consume(WorkClass::HandlerSteps, work).is_err() {
+                    if budget
+                        .as_mut()
+                        .is_some_and(|b| b.consume(WorkClass::HandlerSteps, work).is_err())
+                    {
                         return Poll::Pending;
                     }
                     let reply = self.reply.as_ref().expect("reply retained");
@@ -1404,6 +1470,17 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                             return Err(CoreError::StaleHandle(context()));
                         }
                         let policy_revision = handler.authorization_revision();
+                        if budget.is_none() && self.validation == FiniteValidation::Required {
+                            let validator = self
+                                .binding
+                                .validator()
+                                .ok_or_else(|| CoreError::Validation(context()))?;
+                            validator.validate_output(
+                                &reply.ingress.candidates[0],
+                                &reply.ingress.input,
+                                reply.result.as_ref().unwrap(),
+                            )?;
+                        }
                         handler.authorize(&reply.ingress.input)?;
                         if !self.pair_is_current() {
                             return Err(CoreError::Validation(context()));
@@ -1429,31 +1506,57 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                                 context: context(),
                             });
                         }
+                        self.binding.check_ingress()?;
                         if !self.ingress_gate.is_open() || !accepted.permission.is_current() {
                             return Err(CoreError::StaleHandle(context()));
                         }
                         Ok(())
                     })();
                     if let Err(error) = checked {
-                        self.fail(error);
+                        if budget.is_none() {
+                            self.retirement.interrupt(error);
+                            self.state = RetiringReply;
+                        } else {
+                            self.fail(error);
+                        }
                         return Poll::Ready(self.state);
                     }
                 }
-                budget.consume(class, 1).expect("prechecked native poll");
-                match self
-                    .binding
-                    .poll_send(cx, self.reply.as_ref().expect("reply retained"))
-                {
+                if let Some(b) = &mut budget {
+                    b.consume(class, 1).expect("prechecked native poll");
+                }
+                let sent = self.retirement.poll(|_| {
+                    self.binding
+                        .poll_send(cx, self.reply.as_ref().expect("reply retained"))
+                        .map(|r| {
+                            r.map(|_| FiniteDelivery::Delivered).map_err(|e| {
+                                use clinkz_wot_core::finite::ReplyRetirementError;
+                                if self.raw_activation {
+                                    ReplyRetirementError::Member(e)
+                                } else {
+                                    ReplyRetirementError::Isolated(e)
+                                }
+                            })
+                        })
+                });
+                match sent {
+                    Poll::Pending if self.retirement.first_cause.is_some() => {
+                        // The original member determines whether this exchange can
+                        // retire independently. A send error alone cannot decide.
+                        self.state = RetiringReply;
+                        Poll::Ready(self.state)
+                    }
                     Poll::Pending => Poll::Pending,
                     Poll::Ready(Err(e)) => {
                         self.fail(e);
                         Poll::Ready(self.state)
                     }
-                    Poll::Ready(Ok(())) => {
-                        budget
-                            .consume(WorkClass::QueueOperations, queue_work)
-                            .expect("prechecked terminal handoff");
-                        self.settle_reply(FiniteDelivery::Delivered);
+                    Poll::Ready(Ok(delivery)) => {
+                        if let Some(b) = &mut budget {
+                            b.consume(WorkClass::QueueOperations, queue_work)
+                                .expect("prechecked terminal handoff");
+                        }
+                        self.settle_reply(delivery);
                         self.io_deadline = Deadline::NONE;
                         self.state = if self.first_cause.is_some() {
                             Closing
@@ -1465,14 +1568,22 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 }
             }
             RetiringReply | Closing => {
-                budget.consume(class, 1).expect("prechecked cleanup poll");
-                let cause = self.exchange_cause.as_ref().or(self.first_cause.as_ref());
+                if let Some(b) = &mut budget {
+                    b.consume(class, 1).expect("prechecked cleanup poll");
+                }
+                let cause = self
+                    .retirement
+                    .first_cause
+                    .as_ref()
+                    .or(self.first_cause.as_ref());
                 let retired = if self.state == RetiringReply {
-                    self.binding.poll_retire_reply(
-                        cx,
-                        self.reply.as_ref().expect("retiring original reply"),
-                        cause.expect("exchange retirement cause"),
-                    )
+                    self.retirement.poll(|cause| {
+                        self.binding.poll_retire_reply(
+                            cx,
+                            self.reply.as_ref().expect("retiring original reply"),
+                            cause.expect("exchange retirement cause"),
+                        )
+                    })
                 } else {
                     self.binding
                         .poll_close(cx, self.ingress.as_ref(), self.reply.as_ref(), cause)
@@ -1480,13 +1591,19 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
                 match retired {
                     Poll::Pending => Poll::Pending,
                     Poll::Ready(Err(e)) => {
+                        if self.ingress.is_some() || self.reply.is_some() {
+                            self.retirement
+                                .cleanup_error
+                                .get_or_insert_with(|| e.clone());
+                        }
                         self.fail(e);
                         Poll::Ready(Closing)
                     }
                     Poll::Ready(Ok(delivery)) => {
-                        budget
-                            .consume(WorkClass::QueueOperations, queue_work)
-                            .expect("prechecked terminal handoff");
+                        if let Some(b) = &mut budget {
+                            b.consume(WorkClass::QueueOperations, queue_work)
+                                .expect("prechecked terminal handoff");
+                        }
                         self.finish_retirement(delivery);
                         Poll::Ready(self.state)
                     }

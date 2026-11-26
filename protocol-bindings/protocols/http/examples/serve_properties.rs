@@ -3,18 +3,15 @@
 //! One completely qualified Thing, one native listener, and an application-owned
 //! combined value. No transactional or atomic snapshot guarantee is implied.
 use clinkz_wot_binding_http::*;
-use clinkz_wot_core::{finite::*, host_accounts::HostResourceAccounts, producer::*, *};
+use clinkz_wot_core::{finite::*, *};
 use clinkz_wot_foundation::*;
-use clinkz_wot_planning::producer_composition::*;
-use clinkz_wot_servient::producer_composition::*;
-use clinkz_wot_servient_finite::*;
-use clinkz_wot_td::ValidatedProducerScope;
+use clinkz_wot_servient::host_producer::*;
 use std::{
     cell::RefCell,
     net::SocketAddr,
     rc::Rc,
     sync::Arc,
-    task::{Context, Waker},
+    task::{Context, Poll, Waker},
     time::{Duration, Instant},
 };
 
@@ -74,11 +71,6 @@ impl RawFiniteHandler for Values {
         )))
     }
 }
-fn work() -> WorkBudget {
-    WorkClass::ALL
-        .into_iter()
-        .fold(WorkBudget::new(), |b, k| b.with_remaining(k, 1_000_000))
-}
 fn main() {
     let port: u16 = std::env::args()
         .nth(1)
@@ -93,26 +85,63 @@ fn main() {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let description: Arc<str> = Arc::from(serde_json::json!({
         "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"native finite collections",
-        "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
-        "forms":[{"op":"readallproperties", "href":format!("http://{addr}/properties")},
-            {"op":"readmultipleproperties", "href":format!("http://{addr}/properties"), "htv:methodName":"POST"},
-            {"op":"writeallproperties", "href":format!("http://{addr}/properties")}],
+        "base":format!("http://{addr}/"), "security":["n"], "securityDefinitions":{"n":{"scheme":"nosec"}},
+        "forms":[{"op":"readallproperties", "href":"properties"},
+            {"op":"readmultipleproperties", "href":"properties", "htv:methodName":"POST"},
+            {"op":"writeallproperties", "href":"properties"}],
         "properties":{
-            "level":{"type":"integer","forms":[{"href":format!("http://{addr}/level")}]},
-            "on":{"type":"boolean","forms":[{"href":format!("http://{addr}/on")}]}
+            "level":{"type":"integer","forms":[{"href":"level"}]},
+            "on":{"type":"boolean","forms":[{"href":"on"}]}
         }
     }).to_string());
-    let accounts = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
-    let mut owner = RawProducerServient::try_empty(RawProducerRegistryLimits {
-        instances: 1,
-        behaviors_per_instance: 7,
-        target_name_bytes: 256,
-    })
-    .unwrap();
-    let authority = ProducerInstanceAuthority::try_new(ThingSlotId::new(
-        SlotIndex::new(0),
-        Generation::INITIAL,
-    ))
+    let config = HostProducerLimits {
+        registry: RawProducerRegistryLimits {
+            instances: 1,
+            behaviors_per_instance: 7,
+            target_name_bytes: 256,
+        },
+        exchange: RawFiniteLimits {
+            candidates: 1,
+            input_body_bytes: 4096,
+            output_body_bytes: 4096,
+            output_media_capacity: 64,
+            output_retained_bytes: 8192,
+        },
+        active_exchanges: 1,
+        shared_handler_quota: None,
+        retained_results: 2,
+        candidates: 1,
+        members: 1,
+    };
+    let limits = GatewayDefaultV1::LIMITS.clone();
+    let id = BindingId::new(601);
+    let generation = BindingGeneration::INITIAL;
+    let mut producer = if port == 0 {
+        let draft =
+            HttpFiniteProducer::for_assigned_port(addr.ip(), id, generation, 5_000).unwrap();
+        HostProducer::with_assigned_base(
+            vec![FiniteProducerRegistration::at_base(
+                draft,
+                HttpFiniteProducer::at_endpoint,
+            )],
+            move || HttpProducerEndpoint::acquire(addr),
+            config,
+            limits,
+        )
+    } else {
+        let service = HttpFiniteProducer::try_new(
+            HttpProducerConfig::for_loopback(addr).unwrap(),
+            id,
+            generation,
+            5_000,
+        )
+        .unwrap();
+        HostProducer::new(
+            vec![FiniteProducerRegistration::fixed(service)],
+            config,
+            limits,
+        )
+    }
     .unwrap();
     let values = Rc::new(RefCell::new(serde_json::json!({"level":7,"on":true})));
     let mut behaviors = Vec::new();
@@ -136,114 +165,33 @@ fn main() {
             ));
         }
     }
-    let instance =
-        RawProducerInstance::new(authority, behaviors).with_description(description.clone());
-    drop(values);
-    let key = instance.key();
-    let listen = HttpProducerConfig::for_loopback(addr).unwrap();
-    let provider: Rc<dyn ProducerCapability> = Rc::new(
-        HttpFiniteProducer::try_new(
-            listen,
-            BindingId::new(601),
-            BindingGeneration::INITIAL,
-            5_000,
-        )
-        .unwrap(),
-    );
-    let prepared = prepare_thing(
-        &description,
-        key,
-        GatewayDefaultV1::LIMITS,
-        &mut work(),
-        &[provider.as_ref()],
-        |scope, op| match scope {
-            ValidatedProducerScope::Thing => instance.supports(&AffordanceTarget::Thing, op),
-            ValidatedProducerScope::Property(n) => instance.supports_property(n, op),
-            _ => false,
-        },
-    )
-    .unwrap();
-    let mappings = prepared
-        .operations()
-        .iter()
-        .map(|o| {
-            (
-                match &o.site {
-                    FormSite::Thing => AffordanceTarget::Thing,
-                    FormSite::Property(n) => AffordanceTarget::Property(Arc::from(n.as_str())),
-                    _ => unreachable!(),
-                },
-                o.definition::<HttpProducerProgram>().unwrap().clone(),
-            )
-        })
-        .collect();
-    let config = HttpFiniteConfig::try_from_mappings(listen, mappings, key, 5_000)
+    let mut exposure = producer
+        .expose(description, behaviors, ExposurePolicy::default())
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    let native = RawFiniteRuntime::try_new(
-        HttpFiniteBinding::new(
-            config.clone(),
-            BindingId::new(601),
-            BindingGeneration::INITIAL,
-        ),
-        config,
-        &owner,
-        RawFiniteLimits {
-            candidates: 1,
-            input_body_bytes: 4096,
-            output_body_bytes: 4096,
-            output_media_capacity: 64,
-            output_retained_bytes: 8192,
-        },
-        FiniteValidation::Required,
-        Deadline::NONE,
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    let mut exposure = ComposedProducerExposure::try_new(
-        &owner,
-        ComposedProducerInput {
-            instance,
-            prepared,
-            providers: ProducerRegistrations::new(vec![provider]),
-            participants: vec![OwnedProducerParticipation::finite(native)],
-            expected: None,
-            handler_backing_bytes: 8192,
-        },
-        Arc::new(GatewayDefaultV1::LIMITS.clone()),
-        accounts.clone(),
-        &mut work(),
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    type Native = RawFiniteRuntime<HttpFiniteBinding>;
+    let key = exposure.key();
     let mut cx = Context::from_waker(Waker::noop());
     let start = Instant::now();
     let now = || MonotonicInstant::new(ClockId::new(601), start.elapsed().as_millis() as u64);
-    exposure
-        .step(&mut owner, &mut cx, now(), |_, _| work())
-        .unwrap();
-    exposure.publish(&mut owner, &mut work()).unwrap();
-    println!("{}", owner.description(key).unwrap());
     loop {
-        if start.elapsed() >= Duration::from_secs(seconds) {
-            exposure.begin_close();
-        }
-        exposure
-            .step(&mut owner, &mut cx, now(), |_, _| work())
-            .unwrap();
-        let native = exposure.participant_mut::<Native>(0).unwrap();
-        if let Some(result) = native.take_settlement() {
-            eprintln!("Collection/Property settlement: {result:?}");
-        }
-        if native.state() == RawFiniteState::Closed {
+        if let Poll::Ready(result) = producer.poll_publish(&mut exposure, &mut cx, now()) {
+            result.unwrap();
             break;
         }
         std::thread::sleep(Duration::from_millis(1));
     }
-    exposure.retire(&mut owner, &mut work()).unwrap();
-    drop(exposure);
-    drop(owner);
-    assert!(
-        ResourceKind::ALL
-            .iter()
-            .all(|&k| accounts.account(k).used() == 0)
-    );
+    println!("{}", producer.description(key).unwrap());
+    loop {
+        if start.elapsed() >= Duration::from_secs(seconds) {
+            exposure.begin_close();
+        }
+        producer.step(&mut exposure, &mut cx, now()).unwrap();
+        if let Some(result) = exposure.take_finite_settlement() {
+            eprintln!("Collection/Property settlement: {result:?}");
+        }
+        if exposure.members_retired() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    producer.retire(&mut exposure).unwrap();
 }

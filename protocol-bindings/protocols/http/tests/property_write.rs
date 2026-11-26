@@ -228,7 +228,7 @@ impl FiniteIngressBinding for Native {
         cx: &mut Context<'_>,
         reply: &RawFiniteReply<Self::Reply>,
         cause: &CoreError,
-    ) -> Poll<CoreResult<FiniteDelivery>> {
+    ) -> Poll<Result<FiniteDelivery, ReplyRetirementError>> {
         if self.controls.hold_reply_retirement.get() {
             Poll::Pending
         } else {
@@ -1693,7 +1693,7 @@ fn shared_producer_capacity_preserves_write_effects_unread_failures_and_pending_
     let publication_bank = bank();
     let work_bank = bank();
     let capacity =
-        ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 1, 4, work_bank.clone())
+        ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 1, 4, Some(work_bank.clone()))
             .unwrap();
     let app = Rc::new(Application::default());
     let controls = Rc::new(Controls::default());

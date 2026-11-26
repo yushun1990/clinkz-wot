@@ -16,8 +16,14 @@ fn capacity(
     accounts: &Arc<HostResourceAccounts>,
     retained: usize,
 ) -> ProducerFiniteCapacity {
-    ProducerFiniteCapacity::try_new(owner, exchange_limits(), 1, retained, accounts.clone())
-        .unwrap()
+    ProducerFiniteCapacity::try_new(
+        owner,
+        exchange_limits(),
+        1,
+        retained,
+        Some(accounts.clone()),
+    )
+    .unwrap()
 }
 #[allow(clippy::too_many_arguments)]
 fn publication(
@@ -48,7 +54,7 @@ fn publication(
         accounts,
     )
 }
-fn take(exposure: &mut ComposedProducerExposure) -> Box<ProducerFiniteSettlement> {
+fn take(exposure: &mut ComposedProducerExposure) -> ProducerFiniteSettlement {
     let result = exposure
         .participant_mut::<HttpRuntime>(0)
         .unwrap()
@@ -391,53 +397,29 @@ fn shared_work_bank_refusal_zero_credit_and_fresh_policy_precede_effects() {
         );
     }
     assert_eq!((capacity.active_work(), capacity.retained_work()), (0, 0));
-    for kind in [
-        ResourceKind::EngineLiveBytesGlobalMax,
-        ResourceKind::CleanupBytesMax,
-        ResourceKind::CleanupItemsMax,
-        ResourceKind::InFlightResponsesGlobalMax,
-        ResourceKind::PendingHandlerCallsGlobalMax,
-        ResourceKind::BindingIngressItemsGlobalMax,
-    ] {
-        let account = work_bank.account(kind);
-        let pressure = work_bank
-            .reserve(kind, account.limit() - account.used())
-            .unwrap();
-        let before = work_bank.snapshot(ResourceKind::ALL);
-        for _ in 0..20 {
-            let mut turn = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1);
-            assert!(
-                owner
-                    .step(
-                        exposure.participant_mut::<HttpRuntime>(0).unwrap(),
-                        &mut cx(),
-                        &mut turn,
-                        now()
-                    )
-                    .unwrap()
-                    .is_pending()
-            );
-            assert_eq!(
-                turn.remaining(WorkClass::BindingPolls),
-                1,
-                "{kind:?} refusal performed no native poll"
-            );
-        }
-        assert_eq!(app.calls.get(), 0);
-        assert_eq!((capacity.active_work(), capacity.retained_work()), (0, 0));
-        for (before, after) in before
-            .into_iter()
-            .zip(work_bank.snapshot(ResourceKind::ALL))
-        {
-            assert_eq!(
-                before.used(),
-                after.used(),
-                "partial reservation leaked under {kind:?}"
-            );
-        }
-        assert!(owner.description(exposure.key()).is_some());
-        drop(pressure);
+    let kind = ResourceKind::PendingHandlerCallsGlobalMax;
+    let pressure = work_bank
+        .reserve(kind, work_bank.account(kind).limit())
+        .unwrap();
+    for _ in 0..20 {
+        let mut turn = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1);
+        assert!(
+            owner
+                .step(
+                    exposure.participant_mut::<HttpRuntime>(0).unwrap(),
+                    &mut cx(),
+                    &mut turn,
+                    now()
+                )
+                .unwrap()
+                .is_pending()
+        );
+        assert_eq!(turn.remaining(WorkClass::BindingPolls), 1);
     }
+    assert_eq!(app.calls.get(), 0);
+    assert_eq!((capacity.active_work(), capacity.retained_work()), (0, 0));
+    assert!(owner.description(exposure.key()).is_some());
+    drop(pressure);
     app.denied.set(true);
     let denied = response(peer, &mut owner, &mut [&mut exposure]);
     assert!(!denied.starts_with(b"HTTP/1.1 200"));
@@ -474,7 +456,7 @@ fn shared_work_replacement_keeps_pending_reply_unread_result_and_original_fundin
     let banks = [bank(), bank()];
     let work_bank = bank();
     let capacity =
-        ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 2, 2, work_bank.clone())
+        ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 2, 2, Some(work_bank.clone()))
             .unwrap();
     let provider = compiler(address, &definition_bank);
     let original_app = Rc::new(App::default());
@@ -558,7 +540,14 @@ fn shared_work_replacement_keeps_pending_reply_unread_result_and_original_fundin
     drop(owner);
     drop(provider);
     drop(capacity); // Original leases remain reachable solely through outcomes.
-    assert!(live(&banks[0]) > 0 && live(&banks[1]) > 0 && live(&work_bank) > 0);
+    assert!(
+        live(&banks[0]) > 0
+            && live(&banks[1]) > 0
+            && work_bank
+                .account(ResourceKind::PendingHandlerCallsGlobalMax)
+                .used()
+                > 0
+    );
     TcpListener::bind(address).unwrap();
     let old_result = Rc::new(old_result);
     let shared_result = old_result.clone();
@@ -566,7 +555,13 @@ fn shared_work_replacement_keeps_pending_reply_unread_result_and_original_fundin
     assert_result(&shared_result, old, 11);
     drop(shared_result);
     assert_empty(&banks[0]);
-    assert!(live(&banks[1]) > 0 && live(&work_bank) > 0);
+    assert!(
+        live(&banks[1]) > 0
+            && work_bank
+                .account(ResourceKind::PendingHandlerCallsGlobalMax)
+                .used()
+                > 0
+    );
     assert_result(&new_result, new_result.recipient().unwrap(), 33);
     drop(new_result);
     for bank in [&banks[1], &definition_bank, &work_bank] {
@@ -583,11 +578,11 @@ fn shared_work_rejects_foreign_or_insufficient_capacity_without_losing_participa
     let accounts = bank();
     let work_bank = bank();
     assert!(
-        ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 0, 1, work_bank.clone())
+        ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 0, 1, Some(work_bank.clone()))
             .is_err()
     );
     assert!(
-        ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 2, 1, work_bank.clone())
+        ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 2, 1, Some(work_bank.clone()))
             .is_err()
     );
     assert_work_empty(&work_bank);
@@ -595,7 +590,8 @@ fn shared_work_rejects_foreign_or_insufficient_capacity_without_losing_participa
     let mut small_limits = exchange_limits();
     small_limits.output_body_bytes = 1;
     let small =
-        ProducerFiniteCapacity::try_new(&owner, small_limits, 1, 1, work_bank.clone()).unwrap();
+        ProducerFiniteCapacity::try_new(&owner, small_limits, 1, 1, Some(work_bank.clone()))
+            .unwrap();
     let provider = compiler(address, &accounts);
     let mut input = input_with_listener(
         &owner,

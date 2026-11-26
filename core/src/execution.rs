@@ -2,6 +2,7 @@
 //! and native driving. Owners retain actual work/results and supply bounded
 //! callbacks; this kernel grants no TD support or logical authority by itself.
 pub mod action;
+pub mod producer;
 pub mod read;
 pub mod responses;
 

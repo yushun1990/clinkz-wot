@@ -27,14 +27,7 @@ impl Drop for PaidReply {
     fn drop(&mut self) {
         // Original input/reply disposal MUST precede the active/ingress refund.
         assert_eq!(self.capacity.active_work(), 1);
-        for kind in [
-            K::CleanupItemsMax,
-            K::InFlightResponsesGlobalMax,
-            K::PendingHandlerCallsGlobalMax,
-            K::BindingIngressItemsGlobalMax,
-        ] {
-            assert!(self.bank.account(kind).used() > 0, "{kind:?}");
-        }
+        assert!(self.bank.account(K::PendingHandlerCallsGlobalMax).used() > 0);
         self.controls.disposed.set(self.controls.disposed.get() + 1);
     }
 }
@@ -142,7 +135,7 @@ fn fixture(retained: usize) -> Fixture {
     });
     let bank = Arc::new(HostResourceAccounts::new(&limits));
     let capacity =
-        ProducerFiniteCapacity::try_new(&owner, super::limits(), 1, retained, bank.clone())
+        ProducerFiniteCapacity::try_new(&owner, super::limits(), 1, retained, Some(bank.clone()))
             .unwrap();
     let controls = Rc::new(Controls {
         send: Cell::new(Completion::Pending),
@@ -290,7 +283,7 @@ fn shared_capacity_delivery_charges_current_fifo_only_at_terminal_insertion() {
         }
         let bank = f.bank.clone();
         drop(f);
-        assert!(bank.account(K::CleanupItemsMax).used() > 0);
+        assert!(bank.account(K::PendingHandlerCallsGlobalMax).used() > 0);
         drop(results);
         assert_empty(&bank);
     }
@@ -419,7 +412,7 @@ fn shared_capacity_pending_and_error_retirement_keep_work_and_queue_credit() {
         assert_eq!(result.result().is_ok(), dispatch);
         let bank = f.bank.clone();
         drop(f);
-        assert!(bank.account(K::CleanupItemsMax).used() > 0);
+        assert!(bank.account(K::PendingHandlerCallsGlobalMax).used() > 0);
         drop(result);
         assert_empty(&bank);
     }

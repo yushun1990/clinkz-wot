@@ -38,7 +38,7 @@ fn wire(mut peer: TcpStream) -> Vec<u8> {
     bytes
 }
 
-fn take(exposure: &mut ComposedProducerExposure) -> Box<ProducerFiniteSettlement> {
+fn take(exposure: &mut ComposedProducerExposure) -> ProducerFiniteSettlement {
     exposure
         .participant_mut::<Server>(0)
         .unwrap()
@@ -164,7 +164,7 @@ fn listener_loss_after_revocation_closes_a_pending_reply_and_releases_its_slot()
     let mut owner = write_owner();
     let work_bank = bank();
     let capacity =
-        ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 1, 1, work_bank.clone())
+        ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 1, 1, Some(work_bank.clone()))
             .unwrap();
     let accounts = [bank(), bank()];
     let apps = Default::default();
@@ -260,9 +260,14 @@ fn accepted_write_timeout_preserves_both_publications_and_the_funded_original() 
         let addr = address();
         let mut owner = write_owner();
         let work_bank = bank();
-        let capacity =
-            ProducerFiniteCapacity::try_new(&owner, exchange_limits(), 1, 3, work_bank.clone())
-                .unwrap();
+        let capacity = ProducerFiniteCapacity::try_new(
+            &owner,
+            exchange_limits(),
+            1,
+            3,
+            Some(work_bank.clone()),
+        )
+        .unwrap();
         let accounts = [bank(), bank()];
         let apps = Default::default();
         let controls = Default::default();
@@ -353,7 +358,7 @@ fn accepted_write_timeout_preserves_both_publications_and_the_funded_original() 
         );
         assert_eq!(
             work_bank
-                .account(ResourceKind::InFlightResponsesGlobalMax)
+                .account(ResourceKind::PendingHandlerCallsGlobalMax)
                 .used(),
             1
         );

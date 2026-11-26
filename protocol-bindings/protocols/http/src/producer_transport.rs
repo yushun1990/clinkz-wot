@@ -1,13 +1,14 @@
 //! One retained native HTTP request/reply owner. Hyper frames the exchange;
 //! its service only marks a candidate and waits for the retained Engine result.
 use super::producer::HttpProducerProgram;
-use bytes::Bytes;
 use clinkz_wot_core::{
     CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionInput, InteractionOutput,
     Operation, Payload, RetryClass,
 };
 use http_body_util::{BodyExt, Full};
-use hyper::{Request, Response, body::Incoming, server::conn::http1, service::Service};
+use hyper::{
+    Request, Response, StatusCode, body::Incoming, header, server::conn::http1, service::Service,
+};
 use std::{
     convert::Infallible,
     future::Future,
@@ -18,7 +19,20 @@ use std::{
     task::{Context, Poll},
 };
 
-type Reply = Response<Full<Bytes>>;
+// Hyper consumes the same immutable payload that the settlement retains.
+enum ReplyBody {
+    Output(Arc<[u8]>),
+    Fixed(&'static [u8]),
+}
+impl AsRef<[u8]> for ReplyBody {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Output(bytes) => bytes,
+            Self::Fixed(bytes) => bytes,
+        }
+    }
+}
+type Reply = Response<Full<io::Cursor<ReplyBody>>>;
 #[derive(Default)]
 struct Bridge {
     candidate: bool,
@@ -63,7 +77,7 @@ impl Service<Request<Incoming>> for BridgeService {
                     _ => {
                         return Ok(Response::builder()
                             .status(400)
-                            .body(Full::new(Bytes::new()))
+                            .body(Full::new(io::Cursor::new(ReplyBody::Fixed(b""))))
                             .unwrap());
                     }
                 }
@@ -365,7 +379,7 @@ pub(super) struct NativeConnection {
     driver: Pin<Box<http1::Connection<Ingress, BridgeService>>>,
     bridge: Arc<Mutex<Bridge>>,
     offered: bool,
-    replied: bool,
+    response: Option<Response<()>>,
 }
 impl NativeConnection {
     pub(super) fn new(socket: TcpStream, program: &HttpProducerProgram) -> Self {
@@ -414,11 +428,14 @@ impl NativeConnection {
                 .writev(false)
                 .serve_connection(ingress, BridgeService(bridge.clone())),
         );
+        // All three possible headers have space before the request is offered.
+        let mut response = Response::new(());
+        response.headers_mut().reserve(3);
         Self {
             driver,
             bridge,
             offered: false,
-            replied: false,
+            response: Some(response),
         }
     }
     pub(super) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), hyper::Error>> {
@@ -453,7 +470,7 @@ impl NativeConnection {
         &mut self,
         result: Result<&InteractionOutput, &CoreError>,
     ) -> CoreResult<()> {
-        if self.replied {
+        if self.response.is_none() {
             return Ok(());
         }
         let invalid_output = || {
@@ -514,10 +531,9 @@ impl NativeConnection {
                 .media(o.metadata().response_selection())?,
             None => "application/json",
         };
-        self.replied = true;
         let (status, bytes) = match body {
-            Some(p) => (native.unwrap().0, Bytes::copy_from_slice(&p.body)),
-            None if write_success => (native.unwrap().0, Bytes::new()),
+            Some(p) => (native.unwrap().0, ReplyBody::Output(p.body.clone())),
+            None if write_success => (native.unwrap().0, ReplyBody::Fixed(b"")),
             None => (
                 match result.err().and_then(|e| e.security_reason()) {
                     Some(
@@ -527,20 +543,28 @@ impl NativeConnection {
                     Some(_) => 403,
                     None => 500,
                 },
-                Bytes::from_static(b"null"),
+                ReplyBody::Fixed(b"null"),
             ),
         };
-        let mut response = Response::builder().status(status);
+        let mut response = self.response.take().unwrap();
+        *response.status_mut() = StatusCode::from_u16(status).expect("qualified HTTP status");
+        let headers = response.headers_mut();
         if status == 401 {
-            response = response.header("www-authenticate", "Basic realm=\"wot\"");
+            headers.insert(
+                header::WWW_AUTHENTICATE,
+                header::HeaderValue::from_static("Basic realm=\"wot\""),
+            );
         }
-        self.bridge.lock().unwrap().reply = Some(
-            response
-                .header("content-type", media)
-                .header("connection", "close")
-                .body(Full::new(bytes))
-                .expect("fixed HTTP response"),
+        headers.insert(
+            header::CONTENT_TYPE,
+            header::HeaderValue::from_static(media),
         );
+        headers.insert(
+            header::CONNECTION,
+            header::HeaderValue::from_static("close"),
+        );
+        self.bridge.lock().unwrap().reply =
+            Some(response.map(|()| Full::new(io::Cursor::new(bytes))));
         Ok(())
     }
 }

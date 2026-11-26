@@ -189,7 +189,7 @@ impl Native {
                 finite_limits(),
                 1,
                 retained_calls,
-                work_bank.clone(),
+                Some(work_bank.clone()),
             )
             .unwrap(),
         }
@@ -389,7 +389,7 @@ fn read(peer: &mut TcpStream, bytes: &mut Vec<u8>) -> bool {
         Err(e) => panic!("{e}"),
     }
 }
-fn take(exposure: &mut ComposedProducerExposure) -> Box<ProducerFiniteSettlement> {
+fn take(exposure: &mut ComposedProducerExposure) -> ProducerFiniteSettlement {
     exposure
         .participant_mut::<Finite>(0)
         .unwrap()
@@ -785,7 +785,7 @@ fn host_turns_join_independent_publications_all_families_replacement_and_complet
         );
         assert!(
             work_bank
-                .account(ResourceKind::EngineLiveBytesGlobalMax)
+                .account(ResourceKind::PendingHandlerCallsGlobalMax)
                 .used()
                 > 0
         );

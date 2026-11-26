@@ -25,9 +25,9 @@ are outside this architecture migration.
 
 ## Finite publication on Host and caller-owned deployments
 
-Build the finite successor from master using the public Host exposure and a
-source-free caller-owned Producer with an independently registered Binding over
-real I/O. Use the [assessed prototype's wire cases](https://github.com/yushun1990/clinkz-wot/pull/308)
+The [finite deployment evidence](../evidence/finite-producer-publication.md)
+covers the public Host and caller-owned deployment against the following wire
+and ownership cases. Use the [assessed prototype's wire cases](https://github.com/yushun1990/clinkz-wot/pull/308)
 for assigned addresses, split final membership, ambiguity and unrelated
 registrations. Stage two closed endpoints for one remaining exact member slot.
 Serve the advertised Read at the winner's address. Recover the loser's inputs,

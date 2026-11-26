@@ -124,3 +124,21 @@ fn ignored_subtrees_and_schema_construction_have_explicit_depth_bounds() {
         .is_err()
     );
 }
+
+#[test]
+fn required_backspace_key_accepts_both_spellings_and_distinguishes_bell() {
+    let s = S::object(vec![field("a\u{8}b", true, integer(None, None))]).unwrap();
+    for valid in [
+        br#"{"a\bb":7}"#.as_slice(),
+        br#"{"a\u0008b":7}"#,
+        br#"{"a\bb":7,"a\u0007b":false}"#,
+    ] {
+        validate_json(&s, valid).unwrap();
+    }
+    for invalid in [
+        br#"{"a\u0007b":7}"#.as_slice(),
+        br#"{"a\u0008b":7,"a\bb":8}"#,
+    ] {
+        assert!(validate_json(&s, invalid).is_err());
+    }
+}
