@@ -28,8 +28,8 @@ pub(crate) fn work() -> WorkBudget {
         .into_iter()
         .fold(WorkBudget::new(), |b, k| b.with_remaining(k, 1_000_000))
 }
-pub(crate) fn now() -> MonotonicInstant {
-    MonotonicInstant::new(ClockId::new(771), 0)
+pub(crate) fn now(clock_origin: Instant) -> MonotonicInstant {
+    MonotonicInstant::new(ClockId::new(771), clock_origin.elapsed().as_millis() as u64)
 }
 
 /// Provisioned application policy: never derived from the Directory's TD.
@@ -155,13 +155,14 @@ pub(crate) fn prepare_read(
     .map_err(|e| e.error().error().clone())
 }
 
-pub(crate) async fn settle(call: &mut ConsumerCall) -> CoreResult<ConsumerSettlement> {
+pub(crate) async fn settle(
+    call: &mut ConsumerCall,
+    clock_origin: Instant,
+) -> CoreResult<ConsumerSettlement> {
     tokio::time::timeout(Duration::from_secs(5), async {
-        let start = Instant::now();
         loop {
-            let instant =
-                MonotonicInstant::new(ClockId::new(771), start.elapsed().as_millis() as u64);
-            if let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), instant)
+            if let Poll::Ready(result) =
+                call.poll(&mut Context::from_waker(Waker::noop()), now(clock_origin))
             {
                 return result;
             }
@@ -261,16 +262,18 @@ fn main() -> CoreResult<()> {
         )
         .unwrap();
         drop(selected);
+        let clock_origin = Instant::now();
+        let admitted_at = now(clock_origin);
         let mut call = runtime
             .0
             .read_property(
                 &runtime.1,
                 &args[4],
-                Deadline::at(now().checked_add_ticks(4_000).unwrap()),
-                now(),
+                Deadline::at(admitted_at.checked_add_ticks(4_000).unwrap()),
+                admitted_at,
             )
             .unwrap();
-        let result = settle(&mut call).await?;
+        let result = settle(&mut call, clock_origin).await?;
         let output = result.result().expect("Thing read refused");
         println!(
             "{}",
