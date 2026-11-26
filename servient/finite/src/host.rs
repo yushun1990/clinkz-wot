@@ -113,26 +113,28 @@ impl WakerInstallation {
             || CoreError::Backpressure(ErrorContext::new(ErrorPhase::Delivery, RetryClass::Safe));
         // Copying or delivering the retry can itself reenter. When its slot
         // is unavailable, return the retry to the caller without a vtable call.
-        RETRY_WAKER.with(|retry| {
-            let mut slot = retry.try_borrow_mut().map_err(|_| busy())?;
-            match slot.as_ref() {
-                Some(queued) if queued.will_wake(waker) => Ok(()),
-                Some(_) => Err(busy()),
-                None => {
-                    *slot = Some(waker.clone());
-                    Ok(())
+        RETRY_WAKER
+            .try_with(|retry| {
+                let mut slot = retry.try_borrow_mut().map_err(|_| busy())?;
+                match slot.as_ref() {
+                    Some(queued) if queued.will_wake(waker) => Ok(()),
+                    Some(_) => Err(busy()),
+                    None => {
+                        *slot = Some(waker.clone());
+                        Ok(())
+                    }
                 }
-            }
-        })
+            })
+            .map_err(|_| busy())?
     }
 }
 impl Drop for WakerInstallation {
     fn drop(&mut self) {
         WAKER_INSTALL_DEPTH.set(self.0);
         if self.0 == 0 {
-            // Both installations are free. The notified task can register a
-            // different observer while the Consumer turn still defers native I/O.
-            RETRY_WAKER.with(|retry| {
+            // Both installations are free for callbacks from the wake. A
+            // worker-local owner can outlive the retry slot during teardown.
+            let _ = RETRY_WAKER.try_with(|retry| {
                 if let Ok(mut slot) = retry.try_borrow_mut()
                     && let Some(waker) = slot.take()
                 {

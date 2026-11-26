@@ -1689,3 +1689,70 @@ fn selected_control_revision_fences_owned_exchange_and_retains_late_cleanup() {
         dispose(h);
     }
 }
+
+#[path = "support/worker_exit.rs"]
+mod worker_exit;
+
+#[test]
+fn worker_exit_retires_a_parked_action() {
+    worker_exit::check(
+        || {
+            let h = harness(1);
+            h.probe.pending.store(true, Ordering::Relaxed);
+            let call = start(&h);
+            (h, call)
+        },
+        |(_, call)| assert_eq!(progress(call), ConsumerActionState::Invoking),
+        |(h, call)| {
+            call.cancel_local();
+            assert_eq!(progress(&call), ConsumerActionState::Closed);
+            let report = call.take_settlement(at(1), &mut work()).unwrap();
+            assert!(matches!(report.result(), Err(CoreError::Cancelled(_))));
+            assert_eq!(h.probe.closes.load(Ordering::Relaxed), 1);
+            assert_eq!(h.probe.drops.load(Ordering::Relaxed), 1);
+            drop((report, call));
+            dispose(h);
+        },
+    );
+}
+
+// Linux destroys the later-initialized retry slot before this worker owner.
+#[cfg(target_os = "linux")]
+#[test]
+fn worker_exit_returns_safe_backpressure_for_a_nested_sibling_poll() {
+    worker_exit::check(
+        || {
+            let idle = harness(1);
+            let sibling = harness(3);
+            sibling.probe.pending.store(true, Ordering::Relaxed);
+            let handles = [start(&sibling), start(&sibling), start(&sibling)];
+            (idle, sibling, handles)
+        },
+        |(_, _, handles)| assert_eq!(progress(&handles[0]), ConsumerActionState::Invoking),
+        |(idle, sibling, [first, second, third])| {
+            let retry = third.clone();
+            hook(Edge::AccessDrop, move || {
+                hook(Edge::WakerClone, move || {
+                    hook(Edge::WakerClone, move || {
+                        let error = retry.progress(&mut cx(), at(1), &mut work()).unwrap_err();
+                        assert!(matches!(error, CoreError::Backpressure(_)));
+                        assert_eq!(error.context().phase(), ErrorPhase::Delivery);
+                        assert_eq!(error.retry_class(), RetryClass::Safe);
+                    });
+                    assert_progress_deferred(&second, &linked_waker());
+                });
+                assert_progress_deferred(&first, &linked_waker());
+            });
+            let TestClient { association, calls } = Rc::try_unwrap(idle.rt).ok().unwrap();
+            drop(association);
+            fired();
+            assert!(calls.is_idle());
+            assert_eq!(sibling.probe.polls.load(Ordering::Relaxed), 1);
+            assert_eq!(progress(&third), ConsumerActionState::Invoking);
+            assert_eq!(sibling.probe.polls.load(Ordering::Relaxed), 2);
+            drop((third, calls, idle.owner));
+            clean(&idle.bank);
+            dispose(sibling);
+        },
+    );
+}

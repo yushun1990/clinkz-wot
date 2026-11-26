@@ -1737,3 +1737,30 @@ fn indexed_replacement_is_committed_before_destructor_reentry_reorders_both_tabl
     clean(&bank);
     HOOK.with(|h| assert!(h.borrow().is_none()));
 }
+
+#[path = "../../../../servient/finite/tests/support/worker_exit.rs"]
+mod worker_exit;
+
+#[test]
+fn worker_exit_retires_a_parked_read() {
+    worker_exit::check(
+        || {
+            let h = harness(1, None);
+            h.probe.pending.store(true, Ordering::Relaxed);
+            let call = read(&h.rt).unwrap();
+            (h, call)
+        },
+        |(_, call)| assert!(call.progress(&mut cx(), now()).is_pending()),
+        |(h, mut call)| {
+            call.cancel();
+            assert!(matches!(
+                settle(&mut call).result(),
+                Err(CoreError::Cancelled(_))
+            ));
+            assert_eq!(h.probe.cancels.load(Ordering::Relaxed), 1);
+            assert_eq!(h.probe.drops.load(Ordering::Relaxed), 1);
+            drop(call);
+            dispose(h);
+        },
+    );
+}

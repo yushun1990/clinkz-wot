@@ -599,8 +599,9 @@ after both installations unwind, while the shared Consumer turn still defers
 native progress. A different task polled by the wake can register its own
 observer for its original call. Equivalent queued retries share one signal.
 
-If the retry slot is being copied or delivered, or already belongs to another
-task, a drive that also exhausts the two installation frames returns
+Worker-local owners can outlive the thread's retry slot and still retire their
+calls. If the slot has been destroyed, is being copied or delivered, or belongs
+to another task, a drive that also exhausts both installation frames returns
 `Backpressure` in the delivery phase with `RetryClass::Safe`. Its caller
 must schedule an independent drive of the same accepted work. Finite
 `progress` and `poll` return this as `Poll::Ready(Err(..))`. Collection
