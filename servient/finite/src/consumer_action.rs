@@ -1,6 +1,6 @@
 //! Continuing invocation authority, independent of each finite native exchange.
 //! No TD, native token interpretation, URL synthesis, retry or protocol cases.
-use super::ConsumerTurn;
+use super::{ConsumerObserver, ConsumerTurn};
 use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::{
     action::raw_action_output_shape, consumer::*, consumer_action::*, data_schema::PreparedSchema,
@@ -353,7 +353,7 @@ struct Control {
     deadline: Deadline,
     last_time: Cell<MonotonicInstant>,
     abandoned: Cell<bool>,
-    waker: RefCell<Option<Waker>>,
+    observer: ConsumerObserver,
     recheck: Cell<bool>,
     _funding: HostCapacityReservation,
 }
@@ -382,7 +382,7 @@ impl Control {
             deadline,
             last_time: Cell::new(now),
             abandoned: Cell::new(false),
-            waker: RefCell::new(None),
+            observer: ConsumerObserver::default(),
             recheck: Cell::new(false),
             _funding: funding,
         }))
@@ -412,17 +412,6 @@ impl Control {
             self.record(stale());
         }
         self.cause().map_or(Ok(()), Err)
-    }
-    fn register(&self, waker: &Waker) {
-        let next = waker.clone();
-        let old = self.waker.borrow_mut().replace(next);
-        drop(old);
-    }
-    fn wake(&self) {
-        let waker = self.waker.borrow_mut().take();
-        if let Some(waker) = waker {
-            waker.wake();
-        }
     }
 }
 /// An occupied slot is never temporarily vacant during callbacks or unwind.
@@ -491,24 +480,32 @@ impl State {
         // A waker's clone/drop/wake is also linked code. The lease already exists
         // so even unwinding registration restores the original occupied owner.
         if let Some(waker) = waker {
-            control.register(waker);
+            control.observer.register(waker);
         }
         Ok(lease)
     }
-    fn defer(&self, index: Option<usize>, waker: &Waker) {
+    fn defer(&self, original: Option<(usize, u64)>, waker: &Waker) {
         let control = {
             let registry = self.registry.borrow();
-            let slots = index.map_or(&registry.slots[..], |i| &registry.slots[i..=i]);
+            let slots = original.map_or(&registry.slots[..], |(i, _)| &registry.slots[i..=i]);
             slots.iter().find_map(|slot| match slot {
-                Slot::Reserved { control, .. } => control.clone(),
+                Slot::Reserved {
+                    sequence,
+                    control: Some(control),
+                } if original.is_none_or(|(_, s)| *sequence == s) => {
+                    control.recheck.set(true);
+                    Some(control.clone())
+                }
+                Slot::Ready(v)
+                    if original.is_some_and(|(_, s)| v.control.identity.sequence == s) =>
+                {
+                    Some(v.control.clone())
+                }
                 _ => None,
             })
         };
-        // Waker cloning can itself request progress. Record just one retry.
-        if let Some(control) = control
-            && !control.recheck.replace(true)
-        {
-            control.register(waker);
+        if let Some(control) = control {
+            control.observer.register(waker);
         }
     }
     fn revoke(&self) {
@@ -530,7 +527,7 @@ impl State {
         for i in 0..count {
             let control = self.registry.borrow().slots[i].control().cloned();
             if let Some(control) = control {
-                control.wake();
+                control.observer.wake();
             }
         }
     }
@@ -561,7 +558,7 @@ impl Drop for Lease<'_> {
         if let Some(control) = control
             && control.recheck.replace(false)
         {
-            control.wake();
+            control.observer.wake();
         }
     }
 }
@@ -913,11 +910,12 @@ impl ConsumerActionHandle {
         let _turn = ConsumerTurn::enter();
         if self.live().is_ok() {
             self.control.record(CoreError::Cancelled(context()));
-            self.control.wake();
+            self.control.observer.wake();
         }
     }
-    /// Reentrant progress records time and wake interest but cannot poll twice.
-    /// It returns Backpressure until the outer owner restores the slot.
+    /// Reentrant progress records time and the observer on this original
+    /// invocation, then returns Backpressure. A checked-out invocation signals
+    /// a retry on restoration. A ready sibling can signal cancellation or close.
     pub fn progress(
         &self,
         cx: &mut Context<'_>,
@@ -927,7 +925,8 @@ impl ConsumerActionHandle {
         self.live()?;
         self.control.observe_time(now);
         let Some(_turn) = ConsumerTurn::enter() else {
-            self.state.defer(Some(self.slot), cx.waker());
+            self.state
+                .defer(Some((self.slot, self.sequence)), cx.waker());
             return Err(busy());
         };
         let mut lease = self
@@ -955,7 +954,9 @@ impl ConsumerActionHandle {
         }
         v.refresh_access(&self.state, budget)?;
         v.fence(&self.state);
-        Ok(ConsumerActionSettlement(lease.take()))
+        Ok(ConsumerActionSettlement {
+            invocation: Some(lease.take()),
+        })
     }
 }
 impl Drop for ConsumerActionHandle {
@@ -999,37 +1000,50 @@ impl Drop for ConsumerActionHandle {
 ///     s.result().unwrap().data().unwrap().body
 /// }
 /// ```
-pub struct ConsumerActionSettlement(Box<Invocation>);
+pub struct ConsumerActionSettlement {
+    invocation: Option<Box<Invocation>>,
+}
+impl Drop for ConsumerActionSettlement {
+    fn drop(&mut self) {
+        let _turn = ConsumerTurn::enter();
+        drop(self.invocation.take());
+    }
+}
 impl ConsumerActionSettlement {
+    fn invocation(&self) -> &Invocation {
+        self.invocation
+            .as_deref()
+            .expect("settlement retains its invocation until disposal")
+    }
     pub fn input(&self) -> Option<PayloadView<'_>> {
-        self.0.input.as_ref().map(Payload::view)
+        self.invocation().input.as_ref().map(Payload::view)
     }
     pub fn identity(&self) -> &ConsumerActionIdentity {
-        &self.0.control.identity
+        &self.invocation().control.identity
     }
     pub fn effect(&self) -> ConsumerEffect {
-        self.0.effect
+        self.invocation().effect
     }
     pub fn state(&self) -> ConsumerActionState {
-        self.0.progress.state
+        self.invocation().progress.state
     }
     pub fn first_cause(&self) -> Option<&CoreError> {
-        self.0.progress.first_cause.as_ref()
+        self.invocation().progress.first_cause.as_ref()
     }
     pub fn cleanup_error(&self) -> Option<&CoreError> {
-        self.0.progress.cleanup_error.as_ref()
+        self.invocation().progress.cleanup_error.as_ref()
     }
     pub fn validation_error(&self) -> Option<&CoreError> {
-        self.0.progress.validation_error.as_ref()
+        self.invocation().progress.validation_error.as_ref()
     }
     pub fn accepted(&self) -> bool {
-        self.0.progress.accepted
+        self.invocation().progress.accepted
     }
     pub fn remote_cancellation(&self) -> ConsumerActionCancellation {
-        self.0.progress.remote_cancel
+        self.invocation().progress.remote_cancel
     }
     pub fn native_result(&self) -> Option<Result<InteractionOutputView<'_>, &CoreError>> {
-        self.0
+        self.invocation()
             .native_result
             .as_ref()
             .map(|r| r.as_ref().map(InteractionOutput::view))
@@ -1037,14 +1051,16 @@ impl ConsumerActionSettlement {
     /// Original poll failure, independent of a subsequently retained late output
     /// and of an earlier local cancellation or cleanup failure.
     pub fn native_error(&self) -> Option<&CoreError> {
-        self.0.native_error.as_ref()
+        self.invocation().native_error.as_ref()
     }
     pub fn result(&self) -> CoreResult<InteractionOutputView<'_>> {
-        if let Some(e) = &self.0.progress.first_cause {
+        if let Some(e) = &self.invocation().progress.first_cause {
             return Err(e.clone());
         }
-        match &self.0.native_result {
-            Some(Ok(o)) if self.0.progress.state == ConsumerActionState::Completed => Ok(o.view()),
+        match &self.invocation().native_result {
+            Some(Ok(o)) if self.invocation().progress.state == ConsumerActionState::Completed => {
+                Ok(o.view())
+            }
             Some(Err(e)) => Err(e.clone()),
             _ => Err(invalid()),
         }
@@ -1059,7 +1075,7 @@ impl ConsumerActionSettlement {
             Operation::CancelAction => 2,
             _ => return None,
         };
-        self.0.association.operations()[i].map(|s| (s.identity, s.form))
+        self.invocation().association.operations()[i].map(|s| (s.identity, s.form))
     }
 }
 impl Invocation {

@@ -1,6 +1,6 @@
 //! Manually driven finite Consumer calls. This module depends only on Core and
 //! Foundation. Notification establishment/data/stop has a separate owner/API.
-use super::ConsumerTurn;
+use super::{ConsumerObserver, ConsumerTurn};
 use alloc::{rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::execution::{FiniteCallDriver, FiniteCallState, NativeProgress};
 use clinkz_wot_core::thing::AffordanceSite;
@@ -409,7 +409,7 @@ struct CallControl {
     deadline: Deadline,
     last_time: Cell<MonotonicInstant>,
     abandoned: Cell<bool>,
-    waker: RefCell<Option<core::task::Waker>>,
+    observer: ConsumerObserver,
     recheck: Cell<bool>,
     _funding: HostCapacityReservation,
 }
@@ -430,7 +430,7 @@ impl CallControl {
             deadline,
             last_time: Cell::new(now),
             abandoned: Cell::new(false),
-            waker: RefCell::new(None),
+            observer: ConsumerObserver::default(),
             recheck: Cell::new(false),
             _funding: funding,
         }))
@@ -473,17 +473,6 @@ impl CallControl {
                 }
             }
             _ => self.record(clock_error()),
-        }
-    }
-    fn register(&self, waker: &core::task::Waker) {
-        let next = waker.clone();
-        let old = self.waker.borrow_mut().replace(next);
-        drop(old);
-    }
-    fn wake(&self) {
-        let waker = self.waker.borrow_mut().take();
-        if let Some(waker) = waker {
-            waker.wake();
         }
     }
 }
@@ -557,11 +546,9 @@ impl State {
         // Retain driver interest even when another stack frame owns this call.
         // Waker clone/drop may reenter; the slot is already reserved and a live
         // lease restores its original owner even if registration unwinds.
-        control.register(waker);
+        control.observer.register(waker);
         Some(lease)
     }
-    // Only the single in-progress slot may retain nested interest. Set the bit
-    // before cloning the waker, whose implementation can itself reenter.
     fn defer(&self, original: Option<(usize, u64)>, waker: &core::task::Waker) {
         let control = {
             let registry = self.registry.borrow();
@@ -569,15 +556,19 @@ impl State {
             slots.iter().find_map(|slot| match slot {
                 Slot::Reserved {
                     sequence,
-                    control: Some(c),
-                } if original.is_none_or(|(_, s)| *sequence == s) && !c.recheck.replace(true) => {
-                    Some(c.clone())
+                    control: Some(control),
+                } if original.is_none_or(|(_, s)| *sequence == s) => {
+                    control.recheck.set(true);
+                    Some(control.clone())
+                }
+                Slot::Ready(call) if original.is_some_and(|(_, s)| call.work.sequence == s) => {
+                    Some(call.work.control.clone())
                 }
                 _ => None,
             })
         };
         if let Some(control) = control {
-            control.register(waker);
+            control.observer.register(waker);
         }
     }
     fn revoke(&self) {
@@ -598,7 +589,7 @@ impl State {
         for index in 0..count {
             let control = self.registry.borrow().slots[index].control().cloned();
             if let Some(control) = control {
-                control.wake();
+                control.observer.wake();
             }
         }
     }
@@ -684,7 +675,7 @@ impl Drop for SlotLease<'_> {
             && let Some(control) = control
             && control.recheck.replace(false)
         {
-            control.wake();
+            control.observer.wake();
         }
         drop(aborted);
     }
@@ -1553,7 +1544,7 @@ impl ConsumerCall {
     pub fn cancel(&self) {
         let _turn = ConsumerTurn::enter();
         self.control.record(CoreError::Cancelled(context()));
-        self.control.wake();
+        self.control.observer.wake();
     }
     /// Observe native settlement without polling or entering a service. Handoff
     /// still checks original authority, dependencies and permission.
@@ -1563,6 +1554,7 @@ impl ConsumerCall {
     }
     /// Drive one bounded turn while retaining the result in its original slot.
     /// A ready observation grants no future permission to collect the value.
+    /// Deferred progress retains the waker for this call's cancellation or close.
     pub fn progress(&self, cx: &mut Context<'_>, now: MonotonicInstant) -> Poll<()> {
         self.drive(cx, now, |_| ())
     }
@@ -1573,7 +1565,9 @@ impl ConsumerCall {
         cx: &mut Context<'_>,
         now: MonotonicInstant,
     ) -> Poll<ConsumerSettlement> {
-        self.drive(cx, now, |lease| ConsumerSettlement { call: lease.take() })
+        self.drive(cx, now, |lease| ConsumerSettlement {
+            call: Some(lease.take()),
+        })
     }
     fn drive<T>(
         &self,
@@ -1654,7 +1648,13 @@ impl Drop for ConsumerCall {
 /// }
 /// ```
 pub struct ConsumerSettlement {
-    call: Call,
+    call: Option<Call>,
+}
+impl Drop for ConsumerSettlement {
+    fn drop(&mut self) {
+        let _turn = ConsumerTurn::enter();
+        drop(self.call.take());
+    }
 }
 
 /// Read-only original native outcome. A returned value may be late and does
@@ -1674,13 +1674,18 @@ pub enum ConsumerNativeOutcome<'a> {
 }
 
 impl ConsumerSettlement {
+    fn call(&self) -> &Call {
+        self.call
+            .as_ref()
+            .expect("settlement retains its call until disposal")
+    }
     /// Original resolved destination; it never follows a successor association.
     pub fn destination(&self) -> &str {
-        &self.call.work.destination
+        &self.call().work.destination
     }
     /// Original lexical operands, independent of caller storage and native retirement.
     pub fn uri_variables(&self) -> impl ExactSizeIterator<Item = (&str, &str)> {
-        self.call
+        self.call()
             .work
             .variables
             .iter()
@@ -1688,7 +1693,7 @@ impl ConsumerSettlement {
     }
     /// Original finite input, including an encoded member selection, as slices.
     pub fn input(&self) -> Option<PayloadView<'_>> {
-        self.call.work.input.as_ref().map(Payload::view)
+        self.call().work.input.as_ref().map(Payload::view)
     }
     /// Original writable meaning and invocation set, retained even after source
     /// destruction, replacement or native-report rejection. Report indices must
@@ -1700,14 +1705,14 @@ impl ConsumerSettlement {
         collection::PropertySelection,
     )> {
         match (
-            self.call
+            self.call()
                 .work
                 .definition
                 .input
                 .definition
                 .content()
                 .schemas(),
-            self.call.work.selection,
+            self.call().work.selection,
         ) {
             (
                 ConsumerFiniteSchemas::WriteAllProperties(schema)
@@ -1718,17 +1723,17 @@ impl ConsumerSettlement {
         }
     }
     pub fn effect(&self) -> ConsumerEffect {
-        self.call.work.effect
+        self.call().work.effect
     }
     pub fn consumer(&self) -> &ConsumerInstanceRef {
-        &self.call.work.consumer
+        &self.call().work.consumer
     }
     pub fn operation(&self) -> Operation {
-        self.call.work.definition.input.definition.operation()
+        self.call().work.definition.input.definition.operation()
     }
     /// Lends the original coordinate without exposing its shared name owner.
     pub fn affordance(&self) -> AffordanceSite<'_> {
-        match self.call.work.definition.input.definition.affordance() {
+        match self.call().work.definition.input.definition.affordance() {
             AffordanceTarget::Thing => AffordanceSite::Thing,
             AffordanceTarget::Property(name) => AffordanceSite::Property(name),
             AffordanceTarget::Action(name) => AffordanceSite::Action(name),
@@ -1736,25 +1741,25 @@ impl ConsumerSettlement {
         }
     }
     pub fn first_cause(&self) -> Option<&CoreError> {
-        self.call.progress.first_cause()
+        self.call().progress.first_cause()
     }
     /// Lends original native output rejected by captured result validation.
     pub fn rejected_output(&self) -> Option<InteractionOutputView<'_>> {
-        self.call
+        self.call()
             .work
             .rejected_output
             .as_ref()
             .map(InteractionOutput::view)
     }
     pub fn refused_transfer(&self) -> Option<&CleanupTransferRequest> {
-        self.call.work.refused_transfer.as_ref()
+        self.call().work.refused_transfer.as_ref()
     }
     pub fn cleanup_error(&self) -> Option<&CoreError> {
-        self.call.work.cleanup_error.as_ref()
+        self.call().work.cleanup_error.as_ref()
     }
     /// Lends the complete original outcome without exposing payload owners.
     pub fn native_outcome(&self) -> ConsumerNativeOutcome<'_> {
-        match self.call.work.outcome.as_ref().unwrap() {
+        match self.call().work.outcome.as_ref().unwrap() {
             BindingCallSettlement::Returned(result) => {
                 ConsumerNativeOutcome::Returned(result.as_ref().map(InteractionOutput::view))
             }
@@ -1770,7 +1775,7 @@ impl ConsumerSettlement {
     /// Authoritative application outcome. A retained late native success does
     /// not override cancellation, revocation, policy or validation failure.
     pub fn result(&self) -> CoreResult<InteractionOutputView<'_>> {
-        if let Some(error) = self.call.progress.first_cause() {
+        if let Some(error) = self.call().progress.first_cause() {
             return Err(error.clone());
         }
         match self.native_outcome() {
@@ -1785,7 +1790,7 @@ impl ConsumerSettlement {
         }
     }
     pub fn binding(&self) -> BindingRegistrationIdentity {
-        self.call.work.definition.binding()
+        self.call().work.definition.binding()
     }
 }
 impl Call {

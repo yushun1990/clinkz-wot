@@ -27,6 +27,7 @@ enum Edge {
     Dispose,
     TokenDrop,
     Wake,
+    WakerClone,
     WakerDrop,
 }
 type Hook = (Edge, Box<dyn FnOnce()>);
@@ -715,6 +716,220 @@ impl Drop for InlineWake {
 fn wake_counter() -> (Waker, Arc<AtomicUsize>) {
     let count = Arc::new(AtomicUsize::new(0));
     (Waker::from(Arc::new(InlineWake(count.clone()))), count)
+}
+
+fn assert_progress_deferred(handle: &ConsumerActionHandle, waker: &Waker) {
+    assert!(matches!(
+        handle.progress(&mut Context::from_waker(waker), at(1), &mut work()),
+        Err(CoreError::Backpressure(_))
+    ));
+}
+
+// The safe Wake adapter clones an Arc internally. A stateless raw waker also
+// lets the fixture exercise a callback from clone itself.
+fn linked_waker() -> Waker {
+    use std::task::{RawWaker, RawWakerVTable};
+    fn raw() -> RawWaker {
+        RawWaker::new(std::ptr::null(), &VTABLE)
+    }
+    static VTABLE: RawWakerVTable = RawWakerVTable::new(
+        |_| {
+            fire(Edge::WakerClone);
+            raw()
+        },
+        |_| fire(Edge::Wake),
+        |_| fire(Edge::Wake),
+        |_| {},
+    );
+    // SAFETY: the vtable is static, ignores its data pointer and uses only
+    // thread-local hooks. Every clone is independently valid on any thread.
+    unsafe { Waker::from_raw(raw()) }
+}
+
+#[test]
+fn registration_from_waker_clone_wins_even_if_the_older_clone_returns_last() {
+    let h = harness(1);
+    h.probe.pending.store(true, Ordering::Relaxed);
+    let call = start(&h);
+    let during_clone = call.clone();
+    let rt = h.rt.clone();
+    let (waker, latest) = wake_counter();
+    let observed = latest.clone();
+    hook(Edge::Poll, move || {
+        hook(Edge::WakerClone, move || {
+            assert_progress_deferred(&during_clone, &waker);
+        });
+        rt.calls.step(
+            &mut Context::from_waker(&linked_waker()),
+            at(1),
+            &mut work(),
+        );
+        assert_eq!(observed.load(Ordering::Relaxed), 0);
+    });
+    assert_eq!(progress(&call), ConsumerActionState::Invoking);
+    fired();
+    assert_eq!(latest.load(Ordering::Relaxed), 1);
+    assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
+    drop(call);
+    dispose(h);
+}
+
+#[test]
+fn cancellation_during_observer_clone_signals_the_new_observer() {
+    let outer = harness(1);
+    let trigger = start(&outer);
+    let sibling = harness(1);
+    let call = start(&sibling);
+    let nested = call.clone();
+    let cancel = call.clone();
+    let notified = Rc::new(Cell::new(false));
+    let seen = notified.clone();
+    hook(Edge::Poll, move || {
+        hook(Edge::WakerClone, move || {
+            cancel.cancel_local();
+            hook(Edge::Wake, move || seen.set(true));
+        });
+        assert_progress_deferred(&nested, &linked_waker());
+    });
+    assert_eq!(progress(&trigger), ConsumerActionState::Pending);
+    fired();
+    assert!(notified.get());
+    assert_eq!(sibling.probe.polls.load(Ordering::Relaxed), 0);
+    assert_eq!(progress(&call), ConsumerActionState::Closed);
+    assert!(matches!(
+        call.take_settlement(at(1), &mut work()).unwrap().result(),
+        Err(CoreError::Cancelled(_))
+    ));
+    drop((trigger, call));
+    dispose(outer);
+    dispose(sibling);
+}
+
+#[test]
+fn replacing_a_waker_can_register_a_ready_sibling_with_bounded_vtable_reentry() {
+    let outer = harness(1);
+    outer.probe.pending.store(true, Ordering::Relaxed);
+    let trigger = start(&outer);
+    let (old, _) = wake_counter();
+    trigger
+        .progress(&mut Context::from_waker(&old), at(1), &mut work())
+        .unwrap();
+    drop(old);
+
+    let sibling = harness(1);
+    let call = start(&sibling);
+    let from_drop = call.clone();
+    let from_clone = call.clone();
+    let from_wake = call.clone();
+    let (retry, count) = wake_counter();
+    let inline_retry = retry.clone();
+    hook(Edge::WakerDrop, move || {
+        hook(Edge::WakerClone, move || {
+            hook(Edge::Wake, move || {
+                assert_progress_deferred(&from_wake, &inline_retry);
+            });
+            assert_progress_deferred(&from_clone, &retry);
+        });
+        assert_progress_deferred(&from_drop, &linked_waker());
+    });
+    assert_eq!(progress(&trigger), ConsumerActionState::Invoking);
+    fired();
+    assert_eq!(count.load(Ordering::Relaxed), 1);
+    assert_eq!(sibling.probe.polls.load(Ordering::Relaxed), 0);
+    hook(Edge::Wake, || {});
+    sibling.rt.calls.begin_close();
+    fired();
+    drop((trigger, call));
+    dispose(outer);
+    dispose(sibling);
+}
+
+#[test]
+fn collected_action_guards_its_continuation_destructor() {
+    let original = harness(1);
+    let call = start(&original);
+    assert_eq!(progress(&call), ConsumerActionState::Pending);
+    call.query(at(1), &mut work()).unwrap();
+    assert_eq!(progress(&call), ConsumerActionState::Completed);
+    let result = call.take_settlement(at(1), &mut work()).unwrap();
+    drop((call, original.rt, original.owner));
+
+    let sibling = harness(1);
+    let next = start(&sibling);
+    let rt = sibling.rt.clone();
+    hook(Edge::TokenDrop, move || {
+        rt.calls.step(&mut cx(), at(1), &mut work())
+    });
+    drop(result);
+    fired();
+    assert_eq!(sibling.probe.polls.load(Ordering::Relaxed), 0);
+    clean(&original.bank);
+    assert_eq!(progress(&next), ConsumerActionState::Pending);
+    drop(next);
+    dispose(sibling);
+}
+
+#[test]
+fn checked_out_action_wakes_only_its_latest_observer_on_restoration() {
+    let h = harness(1);
+    h.probe.pending.store(true, Ordering::Relaxed);
+    let call = start(&h);
+    let nested = call.clone();
+    let rt = h.rt.clone();
+    let (first_waker, first) = wake_counter();
+    let (latest_waker, latest) = wake_counter();
+    hook(Edge::Poll, move || {
+        rt.calls
+            .step(&mut Context::from_waker(&first_waker), at(1), &mut work());
+        assert_progress_deferred(&nested, &latest_waker);
+        assert_progress_deferred(&nested, &latest_waker);
+    });
+    assert_eq!(progress(&call), ConsumerActionState::Invoking);
+    fired();
+    assert_eq!(first.load(Ordering::Relaxed), 0);
+    assert_eq!(latest.load(Ordering::Relaxed), 1);
+    assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
+    drop(call);
+    dispose(h);
+}
+
+#[test]
+fn deferred_ready_action_registers_only_its_live_handle_for_close_or_cancel() {
+    for close in [true, false] {
+        let outer = harness(1);
+        let trigger = start(&outer);
+        let sibling = harness(1);
+        sibling.probe.complete_invoke.store(true, Ordering::Relaxed);
+        let retired = start(&sibling);
+        assert_eq!(progress(&retired), ConsumerActionState::Completed);
+        drop(retired.take_settlement(at(1), &mut work()).unwrap());
+        let call = start(&sibling);
+        sibling.probe.pending.store(true, Ordering::Relaxed);
+        assert_eq!(progress(&call), ConsumerActionState::Invoking);
+        let polls = sibling.probe.polls.load(Ordering::Relaxed);
+        let (waker, latest) = wake_counter();
+        let nested = call.clone();
+        hook(Edge::Poll, move || {
+            assert_progress_deferred(&nested, &waker);
+            assert!(matches!(
+                retired.progress(&mut cx(), at(1), &mut work()),
+                Err(CoreError::StaleHandle(_))
+            ));
+        });
+        assert_eq!(progress(&trigger), ConsumerActionState::Pending);
+        fired();
+        assert_eq!(sibling.probe.polls.load(Ordering::Relaxed), polls);
+        assert_eq!(latest.load(Ordering::Relaxed), 0);
+        if close {
+            sibling.rt.calls.begin_close();
+        } else {
+            call.cancel_local();
+        }
+        assert_eq!(latest.load(Ordering::Relaxed), 1);
+        drop((trigger, call));
+        dispose(outer);
+        dispose(sibling);
+    }
 }
 
 #[test]

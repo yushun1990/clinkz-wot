@@ -1051,6 +1051,93 @@ impl Drop for WakeProbe {
 }
 
 #[test]
+fn collected_read_guards_its_last_service_destructor() {
+    let original = harness(1, None);
+    let mut call = read(&original.rt).unwrap();
+    let result = settle(&mut call);
+    assert_eq!(result.result().unwrap().data().unwrap().body, b"7");
+    drop((call, original.rt, original.owner));
+
+    let sibling = harness(1, None);
+    let mut next = read(&sibling.rt).unwrap();
+    let rt = sibling.rt.clone();
+    hook(Edge::ServiceDrop, move || rt.1.step(&mut cx(), now()));
+    drop(result);
+    HOOK.with(|h| assert!(h.borrow().is_none()));
+    assert_eq!(sibling.probe.polls.load(Ordering::Relaxed), 0);
+    clean(&original.bank);
+    assert_eq!(
+        settle(&mut next).result().unwrap().data().unwrap().body,
+        b"7"
+    );
+    drop(next);
+    dispose(sibling);
+}
+
+#[test]
+fn checked_out_read_wakes_only_its_latest_observer_on_restoration() {
+    let h = harness(1, None);
+    h.probe.pending.store(true, Ordering::Relaxed);
+    let call = Rc::new(read(&h.rt).unwrap());
+    let nested = call.clone();
+    let rt = h.rt.clone();
+    let first = Arc::new(WakeProbe(AtomicUsize::new(0)));
+    let latest = Arc::new(WakeProbe(AtomicUsize::new(0)));
+    let first_waker = Waker::from(first.clone());
+    let latest_waker = Waker::from(latest.clone());
+    hook(Edge::Poll, move || {
+        rt.1.step(&mut Context::from_waker(&first_waker), now());
+        let mut cx = Context::from_waker(&latest_waker);
+        assert!(nested.progress(&mut cx, now()).is_pending());
+        assert!(nested.progress(&mut cx, now()).is_pending());
+    });
+    assert!(call.progress(&mut cx(), now()).is_pending());
+    assert_eq!(first.0.load(Ordering::Relaxed), 0);
+    assert_eq!(latest.0.load(Ordering::Relaxed), 1);
+    assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
+    drop(call);
+    dispose(h);
+}
+
+#[test]
+fn deferred_ready_read_registers_only_its_live_handle_for_close_or_cancel() {
+    for close in [true, false] {
+        let outer = harness(1, None);
+        let trigger = read(&outer.rt).unwrap();
+        let sibling = harness(1, None);
+        let mut retired = read(&sibling.rt).unwrap();
+        drop(settle(&mut retired));
+        let call = Rc::new(read(&sibling.rt).unwrap());
+        sibling.probe.pending.store(true, Ordering::Relaxed);
+        assert!(call.progress(&mut cx(), now()).is_pending());
+        let polls = sibling.probe.polls.load(Ordering::Relaxed);
+        let latest = Arc::new(WakeProbe(AtomicUsize::new(0)));
+        let waker = Waker::from(latest.clone());
+        let nested = call.clone();
+        hook(Edge::Poll, move || {
+            assert!(
+                nested
+                    .progress(&mut Context::from_waker(&waker), now())
+                    .is_pending()
+            );
+            assert!(retired.progress(&mut cx(), now()).is_pending());
+        });
+        assert!(trigger.progress(&mut cx(), now()).is_ready());
+        assert_eq!(sibling.probe.polls.load(Ordering::Relaxed), polls);
+        assert_eq!(latest.0.load(Ordering::Relaxed), 0);
+        if close {
+            sibling.rt.1.begin_close();
+        } else {
+            call.cancel();
+        }
+        assert_eq!(latest.0.load(Ordering::Relaxed), 1);
+        drop((trigger, call));
+        dispose(outer);
+        dispose(sibling);
+    }
+}
+
+#[test]
 fn nested_poll_registers_interest_and_wakes_after_the_call_is_restored() {
     let h = harness(1, None);
     let handle = Rc::new(RefCell::new(Some(read(&h.rt).unwrap())));

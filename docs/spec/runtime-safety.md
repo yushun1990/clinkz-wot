@@ -583,9 +583,12 @@ sweep's earlier timestamp. Genuine caller time regressions and clock-domain
 changes still record an invariant failure. Deadline fences use that latest
 observation after callbacks and before native effects or successful handoff.
 Runtime drivers and direct call polls both retain wake interest when the original
-slot is checked out. Busy entry requests a retry on restoration; waker registration
-and the restoration wake occur outside registry borrows, including when an inline
-cancellation wake reenters a pending call's driver.
+slot is checked out. Restoration signals one retry to the latest registered
+observer. A direct poll deferred on a ready sibling also registers its waker
+for explicit cancellation or close on that original slot generation. Waker
+registration and notification occur outside registry borrows. A waker's clone
+or destructor can replace an observer. Further recursive copying requests an
+independent retry and coalesces inline reentry into that signal.
 
 Slot restoration on unwind retains the original owner; it grants no guarantee
 that arbitrary panicking linked code can resume execution. The independent
@@ -737,8 +740,10 @@ callback that attempts admission or progress, including through a handle on a
 different capacity, must retry in an independent turn. Passive time observations
 and local cancellation still reach the original work. A retained finite handle
 can drive without taking its result, test for settlement passively and collect
-under fresh permission. The native call owner retires at acknowledgement. The result
-and its share of any outstanding quota survive until disposal.
+under fresh permission. The native call owner retires at acknowledgement. The
+result and its share of any outstanding quota survive until disposal. Dropping a
+collected finite or continuing Action settlement holds the shared Host turn
+through destruction of its linked services, data and continuation.
 
 The deployment supplies turns for native readiness, passive lifecycle changes,
 deadlines and transitions that are locally runnable. A timer, command loop or
