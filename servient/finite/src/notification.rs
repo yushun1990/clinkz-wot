@@ -1,6 +1,7 @@
 //! Caller-driven raw Host notification capacity. Each admitted conversation
 //! retains its original logical association. Native infrastructure, persistent
 //! association count and execution capacity have independent lifetimes.
+use super::ConsumerTurn;
 use alloc::{collections::VecDeque, rc::Rc, vec::Vec};
 use clinkz_wot_core::consumer::ConsumerInstanceRef;
 use clinkz_wot_core::thing::AffordanceSite;
@@ -309,6 +310,14 @@ pub struct RawNotificationServient<B: ConsumerNotificationBinding, A: Notificati
     cleanup_cursor: usize,
     retained: usize,
 }
+impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Drop
+    for RawNotificationServient<B, A>
+{
+    fn drop(&mut self) {
+        let _turn = ConsumerTurn::enter();
+        self.slots.clear();
+    }
+}
 
 /// Source-free admission context, retained by the original work. Construction
 /// allocates no conversation slots and establishes no native subscription.
@@ -339,6 +348,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationC
             Option<Rc<dyn NotificationValidation>>,
         )>,
     > {
+        let _turn = ConsumerTurn::enter();
         if !consumer.is_current() || binding.configuration() != &configuration {
             return Err(reject(
                 (binding, configuration, authorizer, validation),
@@ -491,6 +501,27 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
     #[allow(clippy::type_complexity)]
     pub fn subscribe(
         &mut self,
+        request: RawNotificationRequest,
+        program: B::Program,
+        context: RawNotificationContext<B, A>,
+        budget: &mut WorkBudget,
+    ) -> Result<
+        NotificationCursor,
+        BindingInputRejection<(
+            RawNotificationRequest,
+            B::Program,
+            RawNotificationContext<B, A>,
+        )>,
+    > {
+        let Some(turn) = ConsumerTurn::enter() else {
+            return Err(reject((request, program, context), capacity()));
+        };
+        self.subscribe_in_turn(&turn, request, program, context, budget)
+    }
+    #[allow(clippy::type_complexity)]
+    pub(super) fn subscribe_in_turn(
+        &mut self,
+        _turn: &ConsumerTurn,
         request: RawNotificationRequest,
         program: B::Program,
         mut context: RawNotificationContext<B, A>,
@@ -779,6 +810,9 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
     /// This is one explicit turn, not a scheduler: arrange turns after passive
     /// authority/stop changes and replenished credit independently of native wakes.
     pub fn step(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) {
+        let Some(_turn) = ConsumerTurn::enter() else {
+            return;
+        };
         let count = self.slots.len();
         if count == 0 {
             return;
@@ -793,16 +827,13 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             let identity = entry.identity.clone();
             // Errors are already retained on this original entry; insufficient
             // work leaves it runnable. Neither can fail the whole capacity turn.
-            let _ = self.progress(&identity, cx, budget);
+            let _ = self.progress_entry(&identity, cx, budget);
             let entry = self.slots[i].entry.as_ref().unwrap();
             if entry.state == NotificationState::Closed
                 && entry.control.abandoned.get()
                 && debit(budget, WorkClass::CleanupItems, 1).is_ok()
             {
-                drop(
-                    self.take_settlement(&identity)
-                        .expect("original closed entry"),
-                );
+                drop(self.take_closed(&identity).expect("original closed entry"));
             }
         }
     }
@@ -815,6 +846,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         cx: &mut Context<'_>,
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<NotificationSettlement>> {
+        let _turn = ConsumerTurn::enter().ok_or_else(capacity)?;
         if self.slots.is_empty() {
             return Ok(None);
         }
@@ -834,8 +866,8 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             return Ok(None);
         }
         let identity = e.identity.clone();
-        if self.progress(&identity, cx, budget)? == NotificationState::Closed {
-            self.take_settlement(&identity).map(Some)
+        if self.progress_entry(&identity, cx, budget)? == NotificationState::Closed {
+            self.take_closed(&identity).map(Some)
         } else {
             Ok(None)
         }
@@ -858,6 +890,9 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         if cancellation.is_none() {
             return Ok(());
         }
+        let Some(_turn) = ConsumerTurn::enter() else {
+            return Err(reject(cancellation, capacity()));
+        };
         let result = (|| {
             if e.state == NotificationState::Closed || e.close_started || e.cancellation.is_some() {
                 return Err(invalid());
@@ -936,6 +971,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         cursor: &mut NotificationCursor,
         budget: &mut WorkBudget,
     ) -> CoreResult<Option<RawNotificationView<'_>>> {
+        let _turn = ConsumerTurn::enter().ok_or_else(capacity)?;
         let i = self.index(cursor.identity())?;
         let paired = self.current;
         let e = self.slots[i].entry.as_mut().unwrap();
@@ -979,6 +1015,9 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         input: EventDataResponse,
         budget: &mut WorkBudget,
     ) -> Result<(), BindingInputRejection<EventDataResponse>> {
+        let Some(_turn) = ConsumerTurn::enter() else {
+            return Err(reject(input, capacity()));
+        };
         let result = (|| {
             let i = self.index(cursor.identity())?;
             let paired = self.current;
@@ -1037,6 +1076,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         cursor: &mut NotificationCursor,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
+        let _turn = ConsumerTurn::enter().ok_or_else(capacity)?;
         let i = self.index(cursor.identity())?;
         let e = self.slots[i].entry.as_mut().unwrap();
         e.sync_stop();
@@ -1065,6 +1105,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         cursor: &mut NotificationCursor,
         budget: &mut WorkBudget,
     ) -> CoreResult<()> {
+        let _turn = ConsumerTurn::enter().ok_or_else(capacity)?;
         let i = self.index(cursor.identity())?;
         let paired = self.current;
         let e = self.slots[i].entry.as_mut().unwrap();
@@ -1087,6 +1128,15 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
     /// registry lock or consume a sibling's progress lane. Zero work is passive
     /// except for the allocation-free local stop fence.
     pub fn progress(
+        &mut self,
+        identity: &NotificationIdentity,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<NotificationState> {
+        let _turn = ConsumerTurn::enter().ok_or_else(capacity)?;
+        self.progress_entry(identity, cx, budget)
+    }
+    fn progress_entry(
         &mut self,
         identity: &NotificationIdentity,
         cx: &mut Context<'_>,
@@ -1583,6 +1633,13 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
     /// The numeric/native identity alone cannot receive data or acknowledge live
     /// cleanup. No slot/capacity is recycled before this terminal boundary.
     pub fn take_settlement(
+        &mut self,
+        identity: &NotificationIdentity,
+    ) -> CoreResult<NotificationSettlement> {
+        let _turn = ConsumerTurn::enter().ok_or_else(capacity)?;
+        self.take_closed(identity)
+    }
+    fn take_closed(
         &mut self,
         identity: &NotificationIdentity,
     ) -> CoreResult<NotificationSettlement> {

@@ -553,18 +553,21 @@ fn abandoned_token_destruction_runs_outside_registry() {
 }
 
 #[test]
-fn nested_admission_owns_a_distinct_slot_and_cannot_overwrite_the_outer_invocation() {
+fn callback_admission_returns_its_input_and_the_next_turn_can_use_the_free_slot() {
     let h = harness(2);
     h.probe.complete_invoke.store(true, Ordering::Relaxed);
-    let sibling = Rc::new(RefCell::new(None));
-    let save = sibling.clone();
     let rt = h.rt.clone();
     hook(Edge::Start, move || {
-        *save.borrow_mut() = Some(invoke(&rt).ok().unwrap());
+        let (input, error) = invoke(&rt).err().unwrap().into_parts();
+        assert!(matches!(error.error(), CoreError::Backpressure(_)));
+        assert_eq!(input.unwrap().body.as_ref(), b"12");
         rt.calls.step(&mut cx(), at(1), &mut work());
     });
     let call = start(&h);
-    let sibling = sibling.borrow_mut().take().unwrap();
+    fired();
+    assert_eq!(h.probe.starts.load(Ordering::Relaxed), 1);
+    assert_eq!(h.probe.polls.load(Ordering::Relaxed), 0);
+    let sibling = start(&h);
     assert_ne!(call.identity().unwrap(), sibling.identity().unwrap());
     assert_ne!(
         call.identity().unwrap().sequence(),
@@ -572,6 +575,7 @@ fn nested_admission_owns_a_distinct_slot_and_cannot_overwrite_the_outer_invocati
     );
     assert!(invoke(&h.rt).is_err());
     assert_eq!(progress(&call), ConsumerActionState::Completed);
+    assert_eq!(progress(&sibling), ConsumerActionState::Completed);
     let s = call.take_settlement(at(1), &mut work()).unwrap();
     let other = sibling.take_settlement(at(1), &mut work()).unwrap();
     assert!(s.result().is_ok());
@@ -1132,9 +1136,11 @@ fn native_inline_wake_cannot_repoll_and_preserves_driver_retry_interest() {
         rt.calls
             .step(&mut Context::from_waker(&nested_waker), at(1), &mut work());
         hook(Edge::Wake, move || {
-            // The restoration wake can execute synchronously too. A second
-            // poll is legal only after the original owner has been restored.
-            assert_eq!(progress(&nested), ConsumerActionState::Invoking);
+            // The slot has been restored, but its outer turn is still active.
+            assert!(matches!(
+                nested.progress(&mut cx(), at(1), &mut work()),
+                Err(CoreError::Backpressure(_))
+            ));
             seen.set(true);
         });
     });
@@ -1143,6 +1149,8 @@ fn native_inline_wake_cannot_repoll_and_preserves_driver_retry_interest() {
     fired();
     assert!(restored.get());
     assert_eq!(count.load(Ordering::Relaxed), 2);
+    assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
+    assert_eq!(progress(&call), ConsumerActionState::Invoking);
     assert_eq!(h.probe.polls.load(Ordering::Relaxed), 2);
     call.cancel_local();
     progress(&call);

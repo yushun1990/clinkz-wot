@@ -1,5 +1,6 @@
 //! TD-prepared notification services over the existing raw conversation owner.
 //! No TD, compiler, protocol matching or native distribution lives here.
+use super::ConsumerTurn;
 use crate::notification::*;
 use alloc::{rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::host_accounts::{HostCapacityReservation, HostResourceAccounts};
@@ -259,6 +260,12 @@ impl<B: ConsumerNotificationBinding> ConsumerNotificationAssociation<B> {
             Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>,
         )>,
     > {
+        let Some(_turn) = ConsumerTurn::enter() else {
+            return Err(BindingInputRejection::new(
+                (definition, access),
+                BindingOperationalError::new(busy()),
+            ));
+        };
         let access_work = access.work();
         let security_revision = access.qualification_revision();
         let build = (|| {
@@ -383,6 +390,12 @@ where
         overflow: NotificationOverflow,
         budget: &mut WorkBudget,
     ) -> Result<NotificationCursor, BindingInputRejection<SubscriptionInput>> {
+        let Some(turn) = ConsumerTurn::enter() else {
+            return Err(BindingInputRejection::new(
+                input,
+                BindingOperationalError::new(busy()),
+            ));
+        };
         let captured = &association.captured;
         let build = (|| {
             captured.check_dependencies()?;
@@ -426,7 +439,8 @@ where
         };
         let definition = captured.definition.input();
         self.root
-            .subscribe(
+            .subscribe_in_turn(
+                &turn,
                 RawNotificationRequest {
                     target: definition.target.clone(),
                     kind: definition.schemas.kind(),

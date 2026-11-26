@@ -978,14 +978,13 @@ fn one_consumer_fences_calls_and_notifications_without_retargeting_replacement_o
     }
     observation_peer.send_to(b"0:17", local).unwrap();
     deliver(&mut first, &mut a);
-    let peer = std::thread::spawn(move || exchange(&peer, b"7"));
     let mut call =
         rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
     let mut cx = Context::from_waker(Waker::noop());
     assert!(!rt.1.is_idle());
     assert!(call.poll(&mut cx, now()).is_pending());
-    peer.join().unwrap();
+    exchange(&peer, b"7");
     drop(owner); // sole logical authority; all retained references now fence
     assert!(first.front(&mut a, &mut WorkBudget::new()).is_err());
     let late = poll(&mut call);
@@ -1149,13 +1148,11 @@ impl ConsumerNotificationPreparation for Observe {
         Ok(Some(()))
     }
 }
-#[test]
-fn downstream_property_preparation_uses_real_datagrams_after_source_and_registry_drop() {
-    use composed_fixture::NotificationFixture;
-    let peer = UdpSocket::bind("127.0.0.1:0").unwrap();
-    peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
-    let hub = hub(peer.local_addr().unwrap());
-    let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+fn prepared_observations(
+    owner: &ConsumerInstance,
+    hub: &Rc<Hub>,
+    bank: &Arc<HostResourceAccounts>,
+) -> composed_fixture::NotificationFixture<Observe> {
     let definition = {
         let mut td = serde_json::to_value(source(
             json!([{"href":format!("testobserve://{}",hub.peer),"op":"observeproperty"}]),
@@ -1171,7 +1168,7 @@ fn downstream_property_preparation_uses_real_datagrams_after_source_and_registry
                     access: Arc::new(ObserveAccess),
                 },
             }],
-            &bank,
+            bank,
         )
         .unwrap();
         registry
@@ -1186,8 +1183,7 @@ fn downstream_property_preparation_uses_real_datagrams_after_source_and_registry
             )
             .unwrap()
     };
-    let owner = instance();
-    let mut root = NotificationFixture::try_new(
+    composed_fixture::NotificationFixture::try_new(
         owner.reference(),
         definition,
         Arc::new(ObserveAccess),
@@ -1201,7 +1197,83 @@ fn downstream_property_preparation_uses_real_datagrams_after_source_and_registry
             engine_bytes: 32768,
         },
     )
-    .unwrap_or_else(|_| panic!());
+    .unwrap_or_else(|e| panic!("{e:?}"))
+}
+
+#[test]
+fn notification_callbacks_defer_finite_handle_and_capacity_io_until_an_independent_turn() {
+    let notify_peer = UdpSocket::bind("127.0.0.1:0").unwrap();
+    let hub = hub(notify_peer.local_addr().unwrap());
+    let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+    let owner = instance();
+    let mut root = prepared_observations(&owner, &hub, &bank);
+    let cursor = root
+        .subscribe(
+            SubscriptionInput(None),
+            ResponseRequirement::None,
+            NotificationOverflow::Terminate,
+            &mut work(),
+        )
+        .unwrap_or_else(|e| panic!("{:?}", e.error()));
+    let mut cx = Context::from_waker(Waker::noop());
+    assert_eq!(
+        root.progress(cursor.identity(), &mut cx, &mut work())
+            .unwrap(),
+        NotificationState::Active
+    );
+
+    let (peer, target) = udp();
+    let registrations = registry(vec![registration(1, Arc::new(Probe::default()))]);
+    let td = source(json!([{"href":target}]));
+    let (association, calls) = finite(
+        &owner,
+        prepare(&registrations, &td, bank.clone()),
+        bank.clone(),
+    );
+    let calls = Rc::new(calls);
+    for capacity_turn in [false, true] {
+        let call = Rc::new(
+            association
+                .read_property(&calls, "a", Deadline::NONE, now())
+                .unwrap(),
+        );
+        let nested = call.clone();
+        let nested_calls = calls.clone();
+        *hub.hook.borrow_mut() = Some(Box::new(move || {
+            let mut cx = Context::from_waker(Waker::noop());
+            assert!(nested.progress(&mut cx, now()).is_pending());
+            nested_calls.step(&mut cx, now());
+        }));
+        if capacity_turn {
+            root.step(&mut cx, &mut work());
+        } else {
+            root.progress(cursor.identity(), &mut cx, &mut work())
+                .unwrap();
+        }
+        assert!(hub.hook.borrow().is_none());
+        peer.set_nonblocking(true).unwrap();
+        assert_eq!(
+            peer.peek_from(&mut [0; 64]).unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        peer.set_nonblocking(false).unwrap();
+        let mut call = Rc::try_unwrap(call).ok().unwrap();
+        assert!(call.progress(&mut cx, now()).is_pending());
+        exchange(&peer, b"7");
+        assert_eq!(poll(&mut call).result().unwrap().data().unwrap().body, b"7");
+    }
+    drop((cursor, root, association, calls, registrations));
+    clean(&bank);
+}
+
+#[test]
+fn downstream_property_preparation_uses_real_datagrams_after_source_and_registry_drop() {
+    let peer = UdpSocket::bind("127.0.0.1:0").unwrap();
+    peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+    let hub = hub(peer.local_addr().unwrap());
+    let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+    let owner = instance();
+    let mut root = prepared_observations(&owner, &hub, &bank);
     let mut cursor = root
         .subscribe(
             SubscriptionInput(None),

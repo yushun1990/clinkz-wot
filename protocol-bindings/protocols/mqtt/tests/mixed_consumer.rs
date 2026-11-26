@@ -21,6 +21,10 @@ use std::{
 };
 use support::*;
 
+thread_local! {
+    static ON_INSTANCE_ACCESS: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = const { std::cell::RefCell::new(None) };
+}
+
 struct Access {
     original: ConsumerInstanceRef,
     denied: AtomicBool,
@@ -69,6 +73,9 @@ impl ConsumerAccessService for Access {
         assert_eq!(instance, &self.original);
         assert!(instance.is_current());
         self.calls.fetch_add(1, Ordering::Relaxed);
+        if let Some(callback) = ON_INSTANCE_ACCESS.take() {
+            callback();
+        }
         if self.denied.load(Ordering::Relaxed) {
             Err(CoreError::Security {
                 reason: SecurityFailureReason::AuthorizationDenied,
@@ -415,6 +422,75 @@ fn clean(bank: &HostResourceAccounts) {
     for kind in ResourceKind::ALL {
         assert_eq!(bank.account(kind).used(), 0, "{kind:?}");
     }
+}
+
+#[test]
+fn finite_and_continuing_handles_defer_each_others_authorization_callbacks() {
+    runtime().block_on(async {
+        let broker = Broker::start();
+        let peer = HttpPeer::new();
+        let bank = bank();
+        let mut e = Engine::new(&peer, &broker, bank.clone());
+        let original = e.register("urn:mixed:callbacks");
+        let read = Rc::new(e.read(&original).unwrap());
+        let action = Rc::new(e.invoke(&original));
+        let mut cx = Context::from_waker(std::task::Waker::noop());
+        let now = e.now();
+
+        let finite_probes = original.access[0].calls.load(Ordering::Relaxed);
+        let nested = read.clone();
+        ON_INSTANCE_ACCESS.set(Some(Box::new(move || {
+            assert!(
+                nested
+                    .progress(&mut Context::from_waker(std::task::Waker::noop()), now)
+                    .is_pending()
+            );
+        })));
+        action.progress(&mut cx, now, &mut budget()).unwrap();
+        assert!(ON_INSTANCE_ACCESS.take().is_none());
+        assert_eq!(
+            original.access[0].calls.load(Ordering::Relaxed),
+            finite_probes
+        );
+
+        let nested = action.clone();
+        ON_INSTANCE_ACCESS.set(Some(Box::new(move || {
+            assert!(matches!(
+                nested.progress(
+                    &mut Context::from_waker(std::task::Waker::noop()),
+                    now,
+                    &mut budget()
+                ),
+                Err(CoreError::Backpressure(_))
+            ));
+        })));
+        let _ = read.progress(&mut cx, now);
+        assert!(ON_INSTANCE_ACCESS.take().is_none());
+        e.until(true, |_, _| {
+            read.is_settled() && action.state().unwrap() == ConsumerActionState::Pending
+        })
+        .await;
+        let mut read = Rc::try_unwrap(read).ok().unwrap();
+        assert_eq!(
+            poll_fn(|cx| read.poll(cx, e.now()))
+                .await
+                .result()
+                .unwrap()
+                .data()
+                .unwrap()
+                .body,
+            b"7"
+        );
+        action.query(e.now(), &mut budget()).unwrap();
+        e.until(true, |_, _| {
+            action.state().unwrap() == ConsumerActionState::Completed
+        })
+        .await;
+        let result = action.take_settlement(e.now(), &mut budget()).unwrap();
+        assert_eq!(result.result().unwrap().data().unwrap().body, b"24");
+        drop((result, read, action, original, e));
+        clean(&bank);
+    });
 }
 
 #[test]

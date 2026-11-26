@@ -1,5 +1,6 @@
 //! Manually driven finite Consumer calls. This module depends only on Core and
 //! Foundation. Notification establishment/data/stop has a separate owner/API.
+use super::ConsumerTurn;
 use alloc::{rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::execution::{FiniteCallDriver, FiniteCallState, NativeProgress};
 use clinkz_wot_core::thing::AffordanceSite;
@@ -10,26 +11,6 @@ use core::{
     cmp::Ordering,
     task::{Context, Poll},
 };
-
-std::thread_local! { static DRIVING: Cell<bool> = const { Cell::new(false) }; }
-
-/// Native, codec and access callbacks may reenter another capacity on this
-/// thread. The application's independent turns retry deferred work.
-struct FiniteTurn;
-impl FiniteTurn {
-    fn enter() -> Option<Self> {
-        if DRIVING.replace(true) {
-            None
-        } else {
-            Some(Self)
-        }
-    }
-}
-impl Drop for FiniteTurn {
-    fn drop(&mut self) {
-        DRIVING.set(false);
-    }
-}
 
 const MAX_CALLS: usize = 32;
 
@@ -219,7 +200,7 @@ impl Definition {
         BindingInputRejection<Option<Payload>>,
     > {
         let current = control
-            .check_admission(deadline)
+            .check_admission()
             .and_then(|()| self.check_dependencies());
         if let Err(error) = current {
             return Err(BindingInputRejection::new(
@@ -257,7 +238,7 @@ impl Definition {
         // control time as well as invalidate credentials/services. Refuse while
         // the complete original request is recoverable, before native acceptance.
         let current = control
-            .check_admission(deadline)
+            .check_admission()
             .and_then(|()| self.check_dependencies());
         if let Err(error) = current {
             return Err(BindingInputRejection::new(
@@ -425,6 +406,7 @@ impl Slot {
 struct CallControl {
     association: Rc<AssociationAuthority>,
     cause: RefCell<Option<CoreError>>,
+    deadline: Deadline,
     last_time: Cell<MonotonicInstant>,
     abandoned: Cell<bool>,
     waker: RefCell<Option<core::task::Waker>>,
@@ -435,6 +417,7 @@ impl CallControl {
     fn new(
         bank: &Arc<HostResourceAccounts>,
         association: Rc<AssociationAuthority>,
+        deadline: Deadline,
         now: MonotonicInstant,
     ) -> CoreResult<Rc<Self>> {
         let bytes = (core::mem::size_of::<Self>() + 2 * core::mem::size_of::<usize>()) as u64;
@@ -444,6 +427,7 @@ impl CallControl {
         Ok(Rc::new(Self {
             association,
             cause: RefCell::new(None),
+            deadline,
             last_time: Cell::new(now),
             abandoned: Cell::new(false),
             waker: RefCell::new(None),
@@ -464,7 +448,7 @@ impl CallControl {
     fn cause(&self) -> Option<CoreError> {
         self.cause.borrow().clone()
     }
-    fn check_admission(&self, deadline: Option<Deadline>) -> CoreResult<()> {
+    fn check_admission(&self) -> CoreResult<()> {
         // Work-owner close records every original control, including a reserved
         // admission, before notifying callbacks. Preserve that first cause and
         // nested time observations; the parent alone cannot fence this facet.
@@ -474,20 +458,20 @@ impl CallControl {
         if !self.association.current() {
             return Err(stale());
         }
-        match deadline
-            .unwrap_or(Deadline::NONE)
-            .checked_is_elapsed_at(self.last_time.get())
-        {
-            Some(false) => Ok(()),
-            Some(true) => Err(CoreError::TimedOut(context())),
-            None => Err(clock_error()),
-        }
+        Ok(())
     }
     // Only public API entry observes caller time. A resumed sweep consumes this
     // latest observation instead of replaying its pre-callback timestamp.
     fn observe_time(&self, now: MonotonicInstant) {
         match now.checked_cmp(self.last_time.get()) {
-            Some(Ordering::Equal | Ordering::Greater) => self.last_time.set(now),
+            Some(Ordering::Equal | Ordering::Greater) => {
+                self.last_time.set(now);
+                match self.deadline.checked_is_elapsed_at(now) {
+                    Some(true) => self.record(CoreError::TimedOut(context())),
+                    None => self.record(clock_error()),
+                    Some(false) => {}
+                }
+            }
             _ => self.record(clock_error()),
         }
     }
@@ -608,6 +592,7 @@ impl State {
         }
     }
     fn close(&self) {
+        let _turn = ConsumerTurn::enter();
         self.revoke();
         let count = self.registry.borrow().slots.len();
         for index in 0..count {
@@ -721,7 +706,6 @@ struct CallWork {
     cleanup_error: Option<CoreError>,
     refused_transfer: Option<CleanupTransferRequest>,
     selection: Option<collection::PropertySelection>,
-    deadline: Deadline,
     destination: OutboundDestination,
     variables: Vec<(alloc::boxed::Box<str>, alloc::boxed::Box<str>)>,
     input: Option<Payload>,
@@ -1012,7 +996,7 @@ impl ConsumerAssociation {
     /// the actual Binding under funded scratch; dynamic templates stay dynamic.
     /// This performs no native I/O, credential issuance or permission grant.
     pub fn bind_property_read(&self, property: &str) -> CoreResult<ConsumerPropertyRead> {
-        let _turn = FiniteTurn::enter().ok_or_else(busy)?;
+        let _turn = ConsumerTurn::enter().ok_or_else(busy)?;
         let (definition, bank) =
             self.select(AffordanceSite::Property(property), Operation::ReadProperty)?;
         definition.check_dependencies()?;
@@ -1090,7 +1074,7 @@ impl ConsumerAssociation {
             CallInput::Value(input) => (input, None),
             CallInput::Members(members) => (None, Some(members)),
         };
-        let Some(_turn) = FiniteTurn::enter() else {
+        let Some(_turn) = ConsumerTurn::enter() else {
             return Err(reject(input, busy()));
         };
         let operation = definition.input.definition.operation();
@@ -1102,7 +1086,7 @@ impl ConsumerAssociation {
             Ok(reserved) => reserved,
             Err(error) => return Err(reject(input, error)),
         };
-        let control = match CallControl::new(&state.bank, authority.clone(), now) {
+        let control = match CallControl::new(&state.bank, authority.clone(), deadline, now) {
             Ok(control) => control,
             Err(error) => return Err(reject(input, error)),
         };
@@ -1278,17 +1262,7 @@ impl ConsumerAssociation {
                     &destination,
                 )?;
             }
-            if !state.current() || !authority.current() {
-                return Err(stale());
-            }
-            if let Some(cause) = control.cause() {
-                return Err(cause);
-            }
-            match deadline.checked_is_elapsed_at(control.last_time.get()) {
-                Some(false) => {}
-                Some(true) => return Err(CoreError::TimedOut(context())),
-                None => return Err(invalid()),
-            }
+            control.check_admission()?;
             Ok((
                 definition,
                 funding,
@@ -1338,7 +1312,6 @@ impl ConsumerAssociation {
                 cleanup_error: None,
                 refused_transfer: None,
                 selection,
-                deadline,
                 destination,
                 variables: retained_variables,
                 input: retained_input,
@@ -1368,6 +1341,7 @@ impl ConsumerAssociation {
         self.state.authority.active.set(false);
     }
     fn close(&self) {
+        let _turn = ConsumerTurn::enter();
         self.fence();
         // End the borrow before linked service/artifact destructors can reenter.
         let mappings = self.state.mappings.borrow_mut().take();
@@ -1522,7 +1496,7 @@ impl ConsumerCalls {
     /// Visit one slot in rotation. The application supplies independent turns
     /// for deadlines, runnable transitions, blocked retirement and lost handles.
     pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant) {
-        let turn = FiniteTurn::enter();
+        let turn = ConsumerTurn::enter();
         let index = {
             let mut registry = self.state.registry.borrow_mut();
             // Even a nested entry observes time for checked-out calls. This
@@ -1558,6 +1532,7 @@ impl ConsumerCalls {
 }
 impl Drop for ConsumerCalls {
     fn drop(&mut self) {
+        let _turn = ConsumerTurn::enter();
         self.state.controller_present.set(false);
         self.state.revoke();
         self.state.abort_abandoned();
@@ -1576,6 +1551,7 @@ impl ConsumerCall {
     /// Record cancellation and notify the currently registered driver, if any.
     /// The notification requests a poll; it performs no native cleanup itself.
     pub fn cancel(&self) {
+        let _turn = ConsumerTurn::enter();
         self.control.record(CoreError::Cancelled(context()));
         self.control.wake();
     }
@@ -1606,7 +1582,7 @@ impl ConsumerCall {
         ready: impl FnOnce(SlotLease<'_>) -> T,
     ) -> Poll<T> {
         self.control.observe_time(now);
-        let Some(_turn) = FiniteTurn::enter() else {
+        let Some(_turn) = ConsumerTurn::enter() else {
             self.state
                 .defer(Some((self.slot, self.sequence)), cx.waker());
             return Poll::Pending;
@@ -1631,6 +1607,7 @@ impl ConsumerCall {
 }
 impl Drop for ConsumerCall {
     fn drop(&mut self) {
+        let _turn = ConsumerTurn::enter();
         self.control.abandoned.set(true);
         self.control.record(CoreError::Cancelled(context()));
         self.state.abort_slot(self.slot, Some(self.sequence));
@@ -1845,14 +1822,6 @@ impl Call {
 }
 impl CallWork {
     fn fence(&mut self, state: &State) -> Option<CoreError> {
-        match self
-            .deadline
-            .checked_is_elapsed_at(self.control.last_time.get())
-        {
-            Some(false) => {}
-            Some(true) => self.control.record(CoreError::TimedOut(context())),
-            None => self.control.record(clock_error()),
-        }
         if !state.current() || !self.control.association.current() {
             self.control.record(stale());
         }

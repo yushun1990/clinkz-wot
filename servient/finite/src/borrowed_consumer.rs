@@ -127,6 +127,7 @@ struct ReadWork<'a, B: ReadBinding> {
     owner: ReadOwner<'a, B>,
 }
 struct ReadOwner<'a, B: ReadBinding> {
+    driving: &'a RefCell<()>,
     definition: &'a ReadDefinition<'a, B>,
     consumer: LocalConsumerRef<'a>,
     access: &'a dyn ReadAccess,
@@ -184,6 +185,7 @@ impl<'a, B: ReadBinding> ReadRuntime<'a, B> {
             .binding
             .start(self.definition.program, deadline)?;
         let mut owner = ReadOwner {
+            driving: self.driving,
             definition: self.definition,
             consumer: self.consumer,
             access: self.access,
@@ -244,6 +246,7 @@ impl<'a, B: ReadBinding> ReadRuntime<'a, B> {
             _ => call.owner.record(clock_error()),
         }
         let Ok(_turn) = self.driving.try_borrow_mut() else {
+            call.owner.fence();
             return Poll::Pending;
         };
         let progress = call.progress.step(&mut call.owner, cx);
@@ -267,7 +270,6 @@ impl<'a, B: ReadBinding> ReadRuntime<'a, B> {
         }
         Poll::Ready(Ok(ReadSettlement {
             owner: self.call.take().unwrap().owner,
-            driving: self.driving,
         }))
     }
 }
@@ -283,7 +285,6 @@ impl<'a, B: ReadBinding> ReadRuntime<'a, B> {
 /// }
 /// ```
 pub struct ReadSettlement<'a, B: ReadBinding> {
-    driving: &'a RefCell<()>,
     owner: ReadOwner<'a, B>,
 }
 impl<B: ReadBinding> ReadSettlement<'_, B> {
@@ -295,7 +296,7 @@ impl<B: ReadBinding> ReadSettlement<'_, B> {
     }
     /// Inspect the original native record, including an unvalidated late value.
     pub fn native_output(&self) -> CoreResult<Option<InteractionOutputView<'_>>> {
-        let _turn = self.driving.try_borrow_mut().map_err(|_| busy())?;
+        let _turn = self.owner.driving.try_borrow_mut().map_err(|_| busy())?;
         Ok(match self.owner.outcome.as_ref() {
             Some(ReadNativeSettlement::Returned(Ok(output))) => Some(output.view()),
             _ => None,
@@ -309,7 +310,7 @@ impl<B: ReadBinding> ReadSettlement<'_, B> {
         if let Some(error) = &owner.first_cause {
             return Err(error.clone());
         }
-        let _turn = self.driving.try_borrow_mut().map_err(|_| busy())?;
+        let _turn = owner.driving.try_borrow_mut().map_err(|_| busy())?;
         let checked = (|| {
             let current = || {
                 check_current(
@@ -356,7 +357,10 @@ impl<B: ReadBinding> ReadSettlement<'_, B> {
 
 impl<B: ReadBinding> Drop for ReadOwner<'_, B> {
     fn drop(&mut self) {
-        self.outcome.take();
+        // A surrounding turn may already hold the cell. In either case it stays
+        // held while both linked destructors run, including during unwinding.
+        let _turn = self.driving.try_borrow_mut().ok();
+        drop((self.native.take(), self.outcome.take()));
     }
 }
 

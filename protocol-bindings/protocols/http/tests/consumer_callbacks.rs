@@ -781,6 +781,32 @@ fn genuine_caller_clock_regressions_and_domain_changes_still_fence_success() {
 }
 
 #[test]
+fn expiry_observed_on_a_sibling_wins_over_later_cancel_or_close() {
+    for close in [false, true] {
+        let h = harness(2, None);
+        let first = read(&h.rt).unwrap();
+        let mut second =
+            h.rt.0
+                .read_property(&h.rt.1, "level", Deadline::at(at(2)), at(1))
+                .unwrap();
+        h.rt.1.step(&mut cx(), at(2));
+        assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
+        if close {
+            h.rt.1.begin_close();
+        } else {
+            second.cancel();
+        }
+        let Poll::Ready(result) = second.poll(&mut cx(), at(3)) else {
+            panic!("original local cleanup")
+        };
+        assert!(matches!(result.first_cause(), Some(CoreError::TimedOut(_))));
+        assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
+        drop((result, second, first));
+        dispose(h);
+    }
+}
+
+#[test]
 fn nested_time_advancement_expires_checked_out_work_before_effects_or_handoff() {
     for edge in [Edge::Access, Edge::Poll, Edge::Validate] {
         let h = harness(1, None);

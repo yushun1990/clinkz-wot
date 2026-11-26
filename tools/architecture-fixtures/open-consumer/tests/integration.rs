@@ -334,6 +334,78 @@ fn exact_pair_refusal_recovers_compiler_and_executor_before_io() {
     assert_eq!(p.starts.load(Ordering::Relaxed), 0);
 }
 #[test]
+fn fixed_form_preparation_charges_both_destination_authorizations() {
+    struct MeteredAccess {
+        costs: [u64; 2],
+        calls: std::sync::atomic::AtomicUsize,
+    }
+    impl consumer::ConsumerAccessService for MeteredAccess {
+        fn qualification_revision(&self) -> u64 {
+            0
+        }
+        fn authorize_instance(
+            &self,
+            _: &consumer::ConsumerInstanceRef,
+            _: BindingRegistrationIdentity,
+            _: &str,
+            _: Operation,
+        ) -> CoreResult<()> {
+            panic!("preparation cannot authorize an instance")
+        }
+        fn retained_bytes(&self) -> u64 {
+            std::mem::size_of::<Self>() as u64
+        }
+        fn work(&self) -> u64 {
+            self.costs[self.calls.load(Ordering::Relaxed).min(1)]
+        }
+        fn authorize(
+            &self,
+            _: BindingRegistrationIdentity,
+            _: &str,
+            _: Operation,
+        ) -> CoreResult<()> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            Ok(())
+        }
+    }
+    let (_peer, target) = udp();
+    let td = source(json!([{"href":target}]));
+    for (costs, credit, expected_calls, accepted) in [
+        ([0, 0], 1, 0, false),
+        ([2, 0], 5, 1, false),
+        ([2, 2], 2, 0, false),
+        ([2, 2], 4, 1, false),
+        ([2, 2], 5, 2, true),
+    ] {
+        let access = Arc::new(MeteredAccess {
+            costs,
+            calls: Default::default(),
+        });
+        let mut registration = registration(1, Arc::new(Probe::default()));
+        registration.services.access = access.clone();
+        let registry = registry(vec![registration]);
+        let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
+        let mut budget = work().with_remaining(WorkClass::ProviderProbes, credit);
+        let result = registry.prepare(
+            &td,
+            &GatewayDefaultV1::LIMITS,
+            bank.clone(),
+            ConsumerSelector::default(),
+            &mut budget,
+            drive,
+        );
+        assert_eq!(
+            access.calls.load(Ordering::Relaxed),
+            expected_calls,
+            "{costs:?}, {credit}"
+        );
+        assert_eq!(result.is_ok(), accepted, "{costs:?}, {credit}");
+        drop(result);
+        clean(&bank);
+    }
+}
+
+#[test]
 fn unpaid_cancelled_failed_and_capacity_refused_preparation_releases_every_owner() {
     let p = Arc::new(Probe::default());
     let (_peer, target) = udp();

@@ -589,6 +589,67 @@ fn last_owner_drop_disposes_native_io_locally_without_claiming_cleanup_ack() {
 }
 
 #[test]
+fn dropping_active_or_taken_work_defers_a_sibling_datagram() {
+    for (taken, in_turn) in [(false, false), (true, false), (false, true), (true, true)] {
+        let driving = RefCell::new(());
+        let issuer = authority();
+        let access = Permission::default();
+        let codec = NumberCodec::ready();
+        let sibling_peer = Peer::new();
+        let open_sibling = || sibling_peer.open();
+        let sibling_stats = Statistics::default();
+        let sibling_binding = TestBinding {
+            open: &open_sibling,
+            stats: &sibling_stats,
+            configuration: 7,
+        };
+        let sibling_definition = definition(&sibling_binding, &codec);
+        let sibling_slot = ReadResultSlot::new();
+        let sibling = RefCell::new(
+            ReadRuntime::bind(&driving, issuer.reference(), &sibling_definition, &access).unwrap(),
+        );
+        let sibling_handle = sibling
+            .borrow_mut()
+            .read(&sibling_slot, Deadline::NONE, now(0))
+            .unwrap();
+        let callback = || {
+            let mut cx = Context::from_waker(core::task::Waker::noop());
+            assert!(sibling.borrow_mut().step(&mut cx, now(1)).is_pending());
+        };
+        let peer = Peer::new();
+        let open = || peer.open();
+        let stats = Statistics::default();
+        let binding = TestBinding {
+            open: &open,
+            stats: &stats,
+            configuration: 7,
+        };
+        let definition = definition(&binding, &codec);
+        let slot = ReadResultSlot::new();
+        let mut runtime =
+            ReadRuntime::bind(&driving, issuer.reference(), &definition, &access).unwrap();
+        let handle = runtime.read(&slot, Deadline::NONE, now(0)).unwrap();
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        assert!(runtime.step(&mut cx, now(1)).is_pending());
+        let settlement = taken.then(|| {
+            peer.respond(0, b"42");
+            completed(runtime.poll(handle, &mut cx, now(1)))
+        });
+        let outer_turn = in_turn.then(|| driving.borrow_mut());
+        stats.on_drop.set(Some(&callback));
+        drop((runtime, settlement));
+        drop(outer_turn);
+        assert!(stats.on_drop.get().is_none());
+        assert_eq!(sibling_stats.polls.get(), 0, "native I/O inside disposal");
+        peer.assert_released();
+        assert!(sibling.borrow_mut().step(&mut cx, now(2)).is_pending());
+        sibling_peer.respond(0, b"9");
+        let mut result = completed(sibling.borrow_mut().poll(sibling_handle, &mut cx, now(2)));
+        assert_eq!(result.result().unwrap().data().unwrap().body, b"9");
+    }
+}
+
+#[test]
 fn held_result_excludes_the_same_backing_until_disposal() {
     let peer = Peer::new();
     let open = || peer.open();

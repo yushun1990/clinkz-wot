@@ -50,6 +50,26 @@ use core::{
     task::{Context, Poll},
 };
 
+std::thread_local! { static DRIVING_CONSUMER: Cell<bool> = const { Cell::new(false) }; }
+
+/// Native, codec and access callbacks may reenter another capacity on this
+/// thread. The application's independent turns retry deferred work.
+struct ConsumerTurn;
+impl ConsumerTurn {
+    fn enter() -> Option<Self> {
+        if DRIVING_CONSUMER.replace(true) {
+            None
+        } else {
+            Some(Self)
+        }
+    }
+}
+impl Drop for ConsumerTurn {
+    fn drop(&mut self) {
+        DRIVING_CONSUMER.set(false);
+    }
+}
+
 // Bounded atomic lookup envelope for this manually driven Host facet. The
 // registry is externally built before native setup; larger applications need
 // a different indexed/resumable owner, not one unbounded HandlerSteps charge.

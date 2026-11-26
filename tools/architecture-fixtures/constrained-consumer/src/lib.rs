@@ -22,7 +22,8 @@ pub trait TestDatagrams {
     fn receive(&mut self, buffer: &mut [u8]) -> CoreResult<Option<usize>>;
 }
 #[derive(Default)]
-pub struct Statistics {
+pub struct Statistics<'a> {
+    pub on_drop: Cell<Option<&'a dyn Fn()>>,
     pub starts: Cell<usize>,
     pub polls: Cell<usize>,
     pub cancel_starts: Cell<usize>,
@@ -42,7 +43,7 @@ pub struct Program<'a> {
 }
 pub struct TestBinding<'a, S> {
     pub open: &'a dyn Fn() -> CoreResult<S>,
-    pub stats: &'a Statistics,
+    pub stats: &'a Statistics<'a>,
     pub configuration: u32,
 }
 impl<'a, S: TestDatagrams> ReadBinding for TestBinding<'a, S> {
@@ -76,13 +77,16 @@ impl<'a, S: TestDatagrams> ReadBinding for TestBinding<'a, S> {
 }
 pub struct TestCall<'a, S> {
     socket: Option<S>,
-    stats: &'a Statistics,
+    stats: &'a Statistics<'a>,
     sent: bool,
     mapping: (BindingId, BindingGeneration, PlanId),
 }
 impl<S> Drop for TestCall<'_, S> {
     fn drop(&mut self) {
         bump(&self.stats.calls_dropped);
+        if let Some(callback) = self.stats.on_drop.take() {
+            callback();
+        }
     }
 }
 pub struct InlineOutput<'a> {
@@ -91,11 +95,14 @@ pub struct InlineOutput<'a> {
     flags: u8,
     viewed: Cell<bool>,
     metadata: InteractionOutputMetadata,
-    stats: &'a Statistics,
+    stats: &'a Statistics<'a>,
 }
 impl Drop for InlineOutput<'_> {
     fn drop(&mut self) {
         bump(&self.stats.outputs_dropped);
+        if let Some(callback) = self.stats.on_drop.take() {
+            callback();
+        }
     }
 }
 impl ReadOutput for InlineOutput<'_> {

@@ -565,13 +565,10 @@ impl ConsumerRegistry {
                                                 {
                                                     return Err(invalid());
                                                 }
-                                                if !pay(
+                                                charge_access(
                                                     budget,
-                                                    W::ProviderProbes,
-                                                    registration.access.work(),
-                                                ) {
-                                                    return Err(busy());
-                                                }
+                                                    registration.access.service(),
+                                                )?;
                                                 if !content.uri_variables().is_dynamic()
                                                     && registration
                                                         .access
@@ -729,13 +726,10 @@ impl ConsumerRegistry {
                                                     )
                                                     .map_err(|e| e.error().error().clone())?,
                                                 );
-                                                if !pay(
+                                                charge_access(
                                                     budget,
-                                                    W::ProviderProbes,
-                                                    registration.access.work(),
-                                                ) {
-                                                    return Err(busy());
-                                                }
+                                                    registration.access.service(),
+                                                )?;
                                                 chosen = Some(
                                                     definition
                                                         .bind(
@@ -1445,6 +1439,14 @@ fn site_target(site: &FormSite) -> Option<AffordanceTarget> {
         _ => None,
     }
 }
+fn charge_access(budget: &mut WorkBudget, access: &dyn ConsumerAccessService) -> CoreResult<()> {
+    let cost = access.work();
+    if cost == 0 {
+        return Err(invalid());
+    }
+    debit(budget, W::ProviderProbes, cost)
+}
+
 fn debit(budget: &mut WorkBudget, class: W, count: u64) -> CoreResult<()> {
     budget.consume(class, count).map_err(|_| busy())
 }

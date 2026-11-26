@@ -729,12 +729,15 @@ notification associations are explicitly bound, not looked up through a new
 universal configuration registry. Removing/replacing a parent or dropping its
 owner fences every original facet without retargeting work. Closing a capacity
 still fences only that capacity. The deployment calls each capacity directly.
-One finite capacity step visits one slot in rotation. A Host finite admission
-or drive entered from a linked callback defers native work until an independent
-turn, including when the callback names a different capacity. Time observations
-and cancellation still reach the original call. A retained handle can drive
-without taking its result, test for settlement passively and collect under
-fresh permission. The native call owner retires at acknowledgement. The result
+One finite capacity step observes deadlines for all its original calls and
+visits one slot in rotation for native progress. Cancellation and close preserve
+any expiry already recorded as the first cause. Finite, continuing Action
+and notification drivers on the same Host thread share a turn guard. A linked
+callback that attempts admission or progress, including through a handle on a
+different capacity, must retry in an independent turn. Passive time observations
+and local cancellation still reach the original work. A retained finite handle
+can drive without taking its result, test for settlement passively and collect
+under fresh permission. The native call owner retires at acknowledgement. The result
 and its share of any outstanding quota survive until disposal.
 
 The deployment supplies turns for native readiness, passive lifecycle changes,
@@ -831,10 +834,12 @@ The [existing downstream fixture](../evidence/constrained-finite-execution.md)
 exercises issuer identity, real datagrams and inline result retention, and
 compiles for a target without pointer atomics. Admission borrows the caller's
 `ReadResultSlot` exclusively through result disposal. Runtimes reachable from
-one another's callbacks share a caller-owned drive cell. A nested poll defers
-to the next independent turn. Each validated loan checks the exact native view
-returned and rechecks permission after validation. Once a cause is known, local
-close can retain a racing raw output without entering an access or codec service.
+one another's callbacks share a caller-owned drive cell. The cell stays held
+while disposing an active native call or a taken output. A poll entered from
+either destructor defers to an independent turn. Each validated loan checks the
+exact native view returned and rechecks permission after validation. Once a cause
+is known, local close can retain a racing raw output without entering an access
+or codec service.
 Host execution shares the finite kernel and uses an Rc registry, reentrant
 controls, a Host account bank and boxed native calls.
 
