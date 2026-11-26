@@ -733,7 +733,7 @@ fn rejected_complete_object_transfer_and_sibling_installation_preserve_ownership
     let subject = CleanupSlotId::new(SlotIndex::new(1), Generation::INITIAL);
     let destination = CleanupSlotId::new(SlotIndex::new(2), Generation::INITIAL);
     let request = CleanupPhaseContext::bind_with_transfer_owner(
-        CleanupReservation::new(subject, BindingLifetimeFootprint::new(1, 8192), 1, work(8)),
+        CleanupReservation::new(subject, BindingLifetimeFootprint::new(1, 8192), 1),
         destination,
         CleanupOperation::CancelProcess,
         first.first_cause().unwrap().clone(),

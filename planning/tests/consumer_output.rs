@@ -545,7 +545,7 @@ fn public_output_and_partially_paid_rollback_cross_threads() {
             .unwrap();
         let Poll::Ready(Ok(result)) = call
             .as_pin_mut()
-            .poll_result(&mut Context::from_waker(Waker::noop()), &mut budget(1))
+            .poll_result(&mut Context::from_waker(Waker::noop()))
         else {
             panic!("Host call")
         };
@@ -1041,8 +1041,7 @@ fn host_client_only_aggregate_executes_after_source_destruction_and_explicitly_r
             .unwrap();
         let footprint = call.as_pin_mut().lifetime_footprint();
         assert_eq!(footprint.retained_items(), 4);
-        let Poll::Ready(Ok(output)) = call.as_pin_mut().poll_result(&mut cx(), &mut budget(1))
-        else {
+        let Poll::Ready(Ok(output)) = call.as_pin_mut().poll_result(&mut cx()) else {
             panic!("result")
         };
         assert_eq!(

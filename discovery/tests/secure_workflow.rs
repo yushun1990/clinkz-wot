@@ -231,7 +231,6 @@ fn read(runtime: &(StandaloneConsumerAssociation, ConsumerCalls)) -> ConsumerCal
             "level",
             Deadline::at(now().checked_add_ticks(4_000).unwrap()),
             now(),
-            &mut work(),
         )
         .unwrap()
 }
@@ -240,7 +239,7 @@ async fn until_request(runtime: &(StandaloneConsumerAssociation, ConsumerCalls),
         loop {
             runtime
                 .1
-                .step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+                .step(&mut Context::from_waker(Waker::noop()), now());
             if !peer.requests.lock().unwrap().is_empty() {
                 break;
             }
@@ -273,7 +272,7 @@ async fn authenticated_directory_to_exact_basic_https_form_validates_structured_
     assert!(
         runtime
             .0
-            .read_property(&runtime.1, "mirror", Deadline::NONE, now(), &mut work())
+            .read_property(&runtime.1, "mirror", Deadline::NONE, now())
             .is_err()
     );
     let mut call = read(&runtime);
@@ -422,7 +421,7 @@ async fn discovery_does_not_supply_missing_credentials_policy_or_instance_author
         assert!(
             runtime
                 .0
-                .read_property(&runtime.1, "level", Deadline::NONE, now(), &mut work())
+                .read_property(&runtime.1, "level", Deadline::NONE, now())
                 .is_err(),
             "case {case}"
         );
@@ -572,7 +571,7 @@ async fn in_flight_cancellation_revocation_rotation_and_abandonment_release_the_
         // Engine deadline must not impersonate cancellation or revocation.
         let mut call = runtime
             .0
-            .read_property(&runtime.1, "level", Deadline::NONE, now(), &mut work())
+            .read_property(&runtime.1, "level", Deadline::NONE, now())
             .unwrap();
         until_request(&runtime, &thing).await;
         match case {
@@ -646,7 +645,7 @@ async fn validated_unread_success_is_fenced_by_changed_policy_or_original_instan
             while validations.load(Ordering::Acquire) == 0 {
                 runtime
                     .1
-                    .step(&mut Context::from_waker(Waker::noop()), now(), &mut work());
+                    .step(&mut Context::from_waker(Waker::noop()), now());
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
         })

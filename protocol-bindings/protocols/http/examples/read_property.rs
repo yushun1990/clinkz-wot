@@ -55,7 +55,7 @@ fn main() {
     // This move-only startup input is transferred into the managed owner. It
     // is not an application-owned registered lifetime or a retained handle table.
     let standalone = StandaloneConsumerAssociation::try_new(
-        owner.instance(&thing_id, &mut work()).unwrap().consumer(),
+        owner.instance(&thing_id).unwrap().consumer(),
         definitions,
         funding,
         bank.clone(),
@@ -69,9 +69,9 @@ fn main() {
     // Retain the selected operation for repeated use without another name
     // lookup or fixed-target resolution. Each read still checks live permission.
     let read = owner
-        .association(&thing_id, "default", &mut work())
+        .association(&thing_id, "default")
         .unwrap()
-        .bind_property_read(&args[2], &mut work())
+        .bind_property_read(&args[2])
         .unwrap();
     let calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
     let clock = Instant::now();
@@ -82,13 +82,9 @@ fn main() {
         .build()
         .unwrap();
     io.block_on(async {
-        let mut call = read
-            .read(&calls, Deadline::NONE, now(), &mut work())
-            .unwrap();
+        let mut call = read.read(&calls, Deadline::NONE, now()).unwrap();
         let result = loop {
-            if let Poll::Ready(result) =
-                call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
-            {
+            if let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), now()) {
                 break result;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;

@@ -465,10 +465,6 @@ impl AdmissionReservations {
         let cleanup_total = cleanup_bytes
             .checked_mul(cleanups)
             .ok_or_else(|| validation_error(thing_slot))?;
-        let cleanup_steps = limits
-            .get(ResourceKind::CleanupWorkItemsPerStepMax)
-            .filter(|value| *value != 0)
-            .ok_or_else(|| validation_error(thing_slot))?;
         let mut charges = Vec::new();
         for (kind, amount) in [
             (ResourceKind::PlanSetsPerThingMax, 1),
@@ -600,7 +596,6 @@ impl AdmissionReservations {
                 CleanupSlotId::new(SlotIndex::new(slot), thing_slot.generation()),
                 BindingLifetimeFootprint::new(cleanup_items, cleanup_bytes),
                 1,
-                WorkBudget::new().with_remaining(WorkClass::CleanupItems, cleanup_steps),
             )
         };
         Ok(Self {

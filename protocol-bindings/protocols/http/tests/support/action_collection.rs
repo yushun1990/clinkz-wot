@@ -142,7 +142,7 @@ impl Server {
     async fn exchange(&mut self,call:&mut ConsumerCall)->(ConsumerSettlement,HttpActionDelivery) {
         let end=Instant::now()+Duration::from_secs(5);let mut delivered=None;
         loop {
-            if let Poll::Ready(result)=call.poll(&mut cx(),now(),&mut work()) { return(result,delivered.unwrap()); }
+            if let Poll::Ready(result)=call.poll(&mut cx(),now()) { return(result,delivered.unwrap()); }
             let native=self.exposure.participant_mut::<HttpActionRuntime>(0).unwrap();let _ = self.owner.step_actions(native, &mut work()).unwrap();
             if let Some(d)=native.take_delivery(){assert!(delivered.replace(d).is_none());}
             assert!(Instant::now()<end);tokio::time::sleep(Duration::from_millis(1)).await;
@@ -205,5 +205,5 @@ fn consumer(td:&Value,bank:Arc<HostResourceAccounts>,instance:&ConsumerInstance,
     assert!(p.support().iter().any(|s|s.operation==Operation::QueryAllActions&&s.selected));
     let(d,f)=p.into_execution();StandaloneConsumerAssociation::try_new(instance.reference(), d, f, bank.clone()).map(|association| (association, ConsumerCalls::try_new(bank, 1).unwrap())).ok().unwrap()
 }
-fn query(client:&(StandaloneConsumerAssociation, ConsumerCalls))->ConsumerCall{client.0.query_all_actions(&client.1, Deadline::NONE,now(),&mut work()).unwrap()}
+fn query(client:&(StandaloneConsumerAssociation, ConsumerCalls))->ConsumerCall{client.0.query_all_actions(&client.1, Deadline::NONE,now()).unwrap()}
 fn values(result:&ConsumerSettlement)->Value{serde_json::from_slice(result.result().unwrap().data().unwrap().body).unwrap()}

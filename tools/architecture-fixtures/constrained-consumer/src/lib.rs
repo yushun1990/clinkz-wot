@@ -10,7 +10,6 @@ use clinkz_wot_core::{
     data_schema::{NumberValue, PreparedSchema, SchemaViolation, ValueAccess, ValueType},
     execution::{ValueExecution, ValueValidator, read::*},
 };
-use clinkz_wot_foundation::{WorkBudget, WorkClass};
 use core::{
     cell::Cell,
     task::{Context, Poll},
@@ -64,9 +63,6 @@ impl<'a, S: TestDatagrams> ReadBinding for TestBinding<'a, S> {
     fn supports(&self, _: &Self::Program, meaning: ValueExecution<'_>, media: &str) -> bool {
         meaning.operation() == Operation::ReadProperty && media == "application/x-test-number"
     }
-    fn backing_bytes(&self) -> u64 {
-        0
-    } // Entire Engine-visible state/output is inline.
     fn start(&self, p: &Self::Program, _: Deadline) -> CoreResult<Self::Call> {
         let socket = (self.open)()?;
         bump(&self.stats.starts);
@@ -93,6 +89,7 @@ pub struct InlineOutput<'a> {
     body: [u8; 64],
     len: usize,
     flags: u8,
+    viewed: Cell<bool>,
     metadata: InteractionOutputMetadata,
     stats: &'a Statistics,
 }
@@ -105,7 +102,12 @@ impl ReadOutput for InlineOutput<'_> {
     fn view(&self) -> InteractionOutputView<'_> {
         InteractionOutputView::new(
             (self.flags != 4).then_some(PayloadView {
-                body: &self.body[..self.len],
+                // A hostile output can lend a different value on a second view.
+                body: if self.flags == 7 && self.viewed.replace(true) {
+                    b"999"
+                } else {
+                    &self.body[..self.len]
+                },
                 content_type: if self.flags == 3 {
                     "wrong/media"
                 } else {
@@ -121,19 +123,6 @@ impl ReadOutput for InlineOutput<'_> {
             &self.metadata,
         )
     }
-}
-fn native_credit(b: &mut WorkBudget) {
-    for class in WorkClass::ALL {
-        assert_eq!(
-            b.remaining(class),
-            if class == WorkClass::BindingPolls {
-                1
-            } else {
-                0
-            }
-        );
-    }
-    b.consume(WorkClass::BindingPolls, 1).unwrap();
 }
 impl<'a, S: TestDatagrams> TestCall<'a, S> {
     fn receive(&mut self) -> Poll<CoreResult<InlineOutput<'a>>> {
@@ -165,6 +154,7 @@ impl<'a, S: TestDatagrams> TestCall<'a, S> {
             body,
             len: length - 1,
             flags,
+            viewed: Cell::new(false),
             metadata,
             stats: self.stats,
         }))
@@ -172,12 +162,7 @@ impl<'a, S: TestDatagrams> TestCall<'a, S> {
 }
 impl<'a, S: TestDatagrams> ReadNativeCall for TestCall<'a, S> {
     type Output = InlineOutput<'a>;
-    fn poll_result(
-        &mut self,
-        _: &mut Context<'_>,
-        b: &mut WorkBudget,
-    ) -> Poll<CoreResult<Self::Output>> {
-        native_credit(b);
+    fn poll_result(&mut self, _: &mut Context<'_>) -> Poll<CoreResult<Self::Output>> {
         bump(&self.stats.polls);
         if !self.sent {
             if self.socket.as_mut().unwrap().send(b"read-value").is_err() {
@@ -191,18 +176,14 @@ impl<'a, S: TestDatagrams> ReadNativeCall for TestCall<'a, S> {
         &mut self,
         _: &CoreError,
         _: &mut Context<'_>,
-        b: &mut WorkBudget,
     ) -> CoreResult<Poll<ReadNativeSettlement<Self::Output>>> {
-        native_credit(b);
         bump(&self.stats.cancel_starts);
         Ok(Poll::Pending)
     }
     fn poll_cancel(
         &mut self,
         _: &mut Context<'_>,
-        b: &mut WorkBudget,
     ) -> Poll<CoreResult<ReadNativeSettlement<Self::Output>>> {
-        native_credit(b);
         bump(&self.stats.cancel_polls);
         if self.stats.cleanup_error.replace(false) {
             return Poll::Ready(Err(failed()));
@@ -298,9 +279,6 @@ pub struct Permission<'a> {
 impl ReadAccess for Permission<'_> {
     fn revision(&self) -> u64 {
         self.revision.get()
-    }
-    fn work(&self) -> u64 {
-        1
     }
     fn authorize(&self, _: LocalConsumerRef<'_>, _: ReadMapping<'_>) -> CoreResult<()> {
         bump(&self.checks);

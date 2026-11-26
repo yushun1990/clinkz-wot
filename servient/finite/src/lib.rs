@@ -2,6 +2,8 @@
 //! owners choose their own storage, authority, native facets and driving.
 #![no_std]
 extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
 
 pub mod borrowed_action;
 pub mod borrowed_consumer;

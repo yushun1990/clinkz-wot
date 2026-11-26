@@ -79,7 +79,6 @@ fn write(rt: &(StandaloneConsumerAssociation, ConsumerCalls), bytes: &[u8]) -> C
         Payload::new(bytes, "application/json"),
         Deadline::NONE,
         now(),
-        &mut work(),
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
@@ -291,7 +290,7 @@ fn real_datagram_group_preserves_member_status_atomicity_and_late_evidence_in_bo
         ))
         .unwrap();
         let key = authority.key();
-        let mut producer = RawProducerServient::try_new(
+        let producer = RawProducerServient::try_new(
             vec![RawProducerInstance::new(
                 authority,
                 vec![RawFiniteBehavior::new(
@@ -363,7 +362,7 @@ fn real_datagram_group_preserves_member_status_atomicity_and_late_evidence_in_bo
                 )
                 .unwrap();
             assert!(
-                call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+                call.poll(&mut Context::from_waker(Waker::noop()), now())
                     .is_pending()
             );
             if app.calls.get() == 1 {
@@ -379,14 +378,7 @@ fn real_datagram_group_preserves_member_status_atomicity_and_late_evidence_in_bo
                 owner.revoke();
             }
             let retained = ResourceKind::ALL.map(|k| bank.account(k).used());
-            assert!(
-                call.poll(
-                    &mut Context::from_waker(Waker::noop()),
-                    now(),
-                    &mut WorkBudget::new()
-                )
-                .is_pending()
-            );
+            assert!(!rt.1.is_idle());
             assert_eq!(retained, ResourceKind::ALL.map(|k| bank.account(k).used()));
             hold.set(false);
         }
@@ -402,9 +394,7 @@ fn real_datagram_group_preserves_member_status_atomicity_and_late_evidence_in_bo
             if let Some(s) = native.take_settlement() {
                 remote = Some(s);
             }
-            if let Poll::Ready(s) =
-                call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
-            {
+            if let Poll::Ready(s) = call.poll(&mut Context::from_waker(Waker::noop()), now()) {
                 break s;
             }
             assert!(start.elapsed() < Duration::from_secs(3));
@@ -459,7 +449,7 @@ fn real_datagram_group_preserves_member_status_atomicity_and_late_evidence_in_bo
         drop(rt);
         drop(call);
         assert!(bank.account(ResourceKind::CleanupBytesMax).used() > 0);
-        assert!(UdpSocket::bind(port).is_err());
+        drop(UdpSocket::bind(port).expect("socket released while result is held"));
         drop(local);
         clean(&bank);
         drop(UdpSocket::bind(port).unwrap());
@@ -479,7 +469,7 @@ fn unrequested_native_member_report_is_retained_as_rejected_output() {
     let rt = client_for(&target, probe.clone(), bank.clone(), &owner);
     let mut call = write(&rt, br#"{"a":true}"#);
     assert!(
-        call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+        call.poll(&mut Context::from_waker(Waker::noop()), now())
             .is_pending()
     );
     let mut bytes = [0; 1024];

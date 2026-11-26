@@ -73,12 +73,10 @@ fn main() {
         .unwrap();
     io.block_on(async {
         let mut call = association
-            .write_all_properties(&calls, input, Deadline::NONE, now(), &mut work())
+            .write_all_properties(&calls, input, Deadline::NONE, now())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let result = loop {
-            if let Poll::Ready(result) =
-                call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
-            {
+            if let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), now()) {
                 break result;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;

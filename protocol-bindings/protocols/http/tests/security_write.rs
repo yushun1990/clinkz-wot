@@ -30,14 +30,7 @@ fn producer(keys: &Keys, verifier: Arc<Verifier>) -> SecureFixture {
 fn write(client: &(StandaloneConsumerAssociation, ConsumerCalls), value: &[u8]) -> ConsumerCall {
     client
         .0
-        .write_property(
-            &client.1,
-            "on",
-            payload(value),
-            Deadline::NONE,
-            now(0),
-            &mut work(),
-        )
+        .write_property(&client.1, "on", payload(value), Deadline::NONE, now(0))
         .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 fn target(td: &Value) -> &str {
@@ -213,7 +206,7 @@ fn invalid_structured_values_refuse_both_engine_admission_and_independent_tls_in
             let ptr = input.body.as_ptr();
             let rejection = client
                 .0
-                .write_property(&client.1, "on", input, Deadline::NONE, now(0), &mut work())
+                .write_property(&client.1, "on", input, Deadline::NONE, now(0))
                 .err()
                 .expect("invalid value admitted");
             let (returned, _) = rejection.into_parts();
@@ -280,14 +273,7 @@ fn authentication_application_policy_and_destination_trust_refuse_before_behavio
                 assert!(
                     client
                         .0
-                        .write_property(
-                            &client.1,
-                            "on",
-                            payload(VALUE),
-                            Deadline::NONE,
-                            now(0),
-                            &mut work()
-                        )
+                        .write_property(&client.1, "on", payload(VALUE), Deadline::NONE, now(0))
                         .is_err()
                 );
                 assert_eq!(verifier.calls.load(Ordering::Relaxed), 0);
@@ -375,7 +361,7 @@ fn forbidden_destination_refuses_preparation_and_current_policy_returns_original
                 let ptr = input.body.as_ptr();
                 let rejection = client
                     .0
-                    .write_property(&client.1, "on", input, Deadline::NONE, now(0), &mut work())
+                    .write_property(&client.1, "on", input, Deadline::NONE, now(0))
                     .err()
                     .unwrap();
                 assert_eq!(rejection.into_parts().0.body.as_ptr(), ptr);
@@ -522,7 +508,7 @@ fn effects_and_original_identity_survive_lost_delivery_and_callback_revocation()
             assert_eq!(remote.delivery, FiniteDelivery::NotDelivered);
             assert!(remote.result.is_ok());
             for _ in 0..5 {
-                client.1.step(&mut cx(), now(0), &mut work());
+                client.1.step(&mut cx(), now(0));
             }
             assert_eq!(server.app.writes.get(), 1, "never replay uncertain writes");
             drop((result, remote, call, client, content, instance));
@@ -666,12 +652,12 @@ fn reentrant_policy_cancellation_fences_native_start_and_preserves_completed_unr
                     || server.server().state() != RawFiniteState::Serving
                 {
                     server.step();
-                    client.1.step(&mut cx(), now(0), &mut work());
+                    client.1.step(&mut cx(), now(0));
                     assert!(start.elapsed() < Duration::from_secs(5));
                     tokio::time::sleep(Duration::from_millis(1)).await;
                 }
                 for _ in 0..10 {
-                    client.1.step(&mut cx(), now(0), &mut work());
+                    client.1.step(&mut cx(), now(0));
                     tokio::time::sleep(Duration::from_millis(1)).await;
                 }
             }
@@ -687,11 +673,11 @@ fn reentrant_policy_cancellation_fences_native_start_and_preserves_completed_unr
                     }
                     // The checked-out original slot remains occupied. No RefCell
                     // registry borrow surrounds the access callback.
-                    nested_client.1.step(&mut cx(), now(0), &mut work());
+                    nested_client.1.step(&mut cx(), now(0));
                     assert!(!nested_client.1.is_idle());
                 }))
             });
-            client.1.step(&mut cx(), now(0), &mut work());
+            client.1.step(&mut cx(), now(0));
             let mut call = Rc::try_unwrap(call).ok().unwrap().into_inner();
             let result = server.exchange(&mut call).await;
             assert!(result.result().is_err());
@@ -786,7 +772,7 @@ fn independent_tls_server_requires_complete_write_evidence_and_never_receives_a_
             let mut call = write(&client, VALUE);
             let start = Instant::now();
             let result = loop {
-                if let Poll::Ready(result) = call.poll(&mut cx(), now(0), &mut work()) {
+                if let Poll::Ready(result) = call.poll(&mut cx(), now(0)) {
                     break result;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -803,7 +789,7 @@ fn independent_tls_server_requires_complete_write_evidence_and_never_receives_a_
                 }
             );
             for _ in 0..10 {
-                client.1.step(&mut cx(), now(0), &mut work());
+                client.1.step(&mut cx(), now(0));
             }
             let listener = peer.join().unwrap();
             listener.set_nonblocking(true).unwrap();
@@ -988,14 +974,7 @@ fn write_content_reuse_keeps_credentials_policy_and_authority_with_each_instance
         assert!(
             client_a
                 .0
-                .write_property(
-                    &client_a.1,
-                    "on",
-                    payload(VALUE),
-                    Deadline::NONE,
-                    now(0),
-                    &mut work()
-                )
+                .write_property(&client_a.1, "on", payload(VALUE), Deadline::NONE, now(0))
                 .is_err()
         );
         drop((result_b, call_b));
@@ -1107,20 +1086,21 @@ fn secure_write_prepays_input_admission_and_verification_before_effects() {
         let (client, content) = consumer(&server, &keys, &instance, &accounts);
         let input = payload(VALUE);
         let ptr = input.body.as_ptr();
+        let quota = accounts.account(ResourceKind::PendingHandlerCallsGlobalMax);
+        let occupied = accounts
+            .reserve(
+                ResourceKind::PendingHandlerCallsGlobalMax,
+                quota.limit() - quota.used(),
+            )
+            .unwrap();
         let rejected = client
             .0
-            .write_property(
-                &client.1,
-                "on",
-                input,
-                Deadline::NONE,
-                now(0),
-                &mut WorkBudget::new(),
-            )
+            .write_property(&client.1, "on", input, Deadline::NONE, now(0))
             .err()
             .unwrap();
         assert_eq!(rejected.into_parts().0.body.as_ptr(), ptr);
         assert_eq!(verifier.calls.load(Ordering::Relaxed), 0);
+        drop(occupied);
         let mut call = write(&client, VALUE);
         until(&mut server, &mut call, RawFiniteState::Dispatching).await;
         let mut unpaid = work();

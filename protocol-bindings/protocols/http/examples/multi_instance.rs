@@ -340,7 +340,6 @@ struct InstanceCosts {
     permission: meter::Cost,
     binding: meter::Cost,
     runtime: meter::Cost,
-    work: [u64; WorkClass::ALL.len()],
 }
 fn permission(
     definition: &Arc<ConsumerDefinition>,
@@ -363,12 +362,11 @@ fn bound(
     owner: &ConsumerInstance,
     account: &Arc<HostResourceAccounts>,
     denied: Arc<AtomicBool>,
-    budget: &mut WorkBudget,
 ) -> ConsumerBinding {
     let access = permission(definition, owner, account, denied);
     definition
         .clone()
-        .bind(access, account.clone(), budget)
+        .bind(access, account.clone())
         .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 impl Instance {
@@ -393,12 +391,10 @@ impl Instance {
         cost.permission.add(before, start.elapsed().as_nanos());
         let before = meter::read();
         let start = Instant::now();
-        let mut budget = work();
         let binding = definition
             .clone()
-            .bind(access, account.clone(), &mut budget)
+            .bind(access, account.clone())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
-        add_work(&mut cost.work, &budget);
         cost.binding.add(before, start.elapsed().as_nanos());
         let before = meter::read();
         let start = Instant::now();
@@ -422,9 +418,9 @@ impl Instance {
             denied,
         }
     }
-    fn start(&self, budget: &mut WorkBudget) -> CoreResult<ConsumerCall> {
+    fn start(&self) -> CoreResult<ConsumerCall> {
         let (association, calls) = self.runtime.as_ref().unwrap();
-        association.read_all_properties(calls, Deadline::NONE, now(), budget)
+        association.read_all_properties(calls, Deadline::NONE, now())
     }
 }
 fn hard_limits(definition: &Arc<ConsumerDefinition>) {
@@ -443,7 +439,6 @@ fn hard_limits(definition: &Arc<ConsumerDefinition>) {
             &owner,
             &account,
             Arc::new(AtomicBool::new(false)),
-            &mut work(),
         );
         let association = StandaloneConsumerAssociation::try_new(
             owner.reference(),
@@ -494,14 +489,9 @@ impl ResultOwner {
     }
 }
 impl Handle {
-    fn start(
-        o: &Options,
-        instance: &Instance,
-        definition: &ConsumerDefinition,
-        budget: &mut WorkBudget,
-    ) -> Self {
+    fn start(o: &Options, instance: &Instance, definition: &ConsumerDefinition) -> Self {
         if o.driver == "engine" {
-            Self::Engine(instance.start(budget).unwrap())
+            Self::Engine(instance.start().unwrap())
         } else {
             let request = OutboundRequest::finite(
                 BindingArtifactRef::new(definition.artifact().identity(), SlotIndex::new(0)),
@@ -519,12 +509,12 @@ impl Handle {
             )
         }
     }
-    fn poll(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) -> Poll<ResultOwner> {
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<ResultOwner> {
         match self {
-            Self::Engine(c) => c.poll(cx, now(), budget).map(ResultOwner::Engine),
+            Self::Engine(c) => c.poll(cx, now()).map(ResultOwner::Engine),
             Self::Binding(c) => c
                 .as_pin_mut()
-                .poll_result(cx, budget)
+                .poll_result(cx)
                 .map(|r| ResultOwner::Binding(r.unwrap())),
         }
     }
@@ -535,8 +525,8 @@ struct Flight {
     started: Instant,
 }
 async fn one(instance: &Instance) -> ConsumerSettlement {
-    let mut call = instance.start(&mut work()).unwrap();
-    poll_fn(|cx| call.poll(cx, now(), &mut work())).await
+    let mut call = instance.start().unwrap();
+    poll_fn(|cx| call.poll(cx, now())).await
 }
 fn summary(values: &mut [u64]) -> Value {
     values.sort_unstable();
@@ -560,7 +550,6 @@ async fn load(
     let mut service = Vec::with_capacity(o.active * o.rounds);
     let mut queued = Vec::with_capacity(o.active * o.rounds);
     let mut busy = vec![false; o.lanes];
-    let mut credits = [0; WorkClass::ALL.len()];
     let (mut admission_ns, mut progress_ns, mut polls) = (0u128, 0u128, 0u64);
     report(storage.finish("load_driver_storage"), banks, physical);
     let phase = meter::Phase::begin();
@@ -575,12 +564,9 @@ async fn load(
                 if busy[lane] {
                     break;
                 }
-                let mut budget = work();
                 let start = Instant::now();
-                let handle =
-                    Handle::start(o, &instances[i], &definitions[o.mapping(i)], &mut budget);
+                let handle = Handle::start(o, &instances[i], &definitions[o.mapping(i)]);
                 admission_ns += start.elapsed().as_nanos();
-                add_work(&mut credits, &budget);
                 flights.push(Flight {
                     handle,
                     index: i,
@@ -592,12 +578,10 @@ async fn load(
             let mut completed = false;
             let mut j = 0;
             while j < flights.len() {
-                let mut budget = work();
                 let start = Instant::now();
                 polls += 1;
-                let result = flights[j].handle.poll(cx, &mut budget);
+                let result = flights[j].handle.poll(cx);
                 progress_ns += start.elapsed().as_nanos();
-                add_work(&mut credits, &budget);
                 if let Poll::Ready(result) = result {
                     let f = flights.swap_remove(j);
                     service.push(f.started.elapsed().as_nanos() as u64);
@@ -631,7 +615,6 @@ async fn load(
     measured["synchronous_admission_ns"] = json!(admission_ns);
     measured["synchronous_progress_ns"] = json!(progress_ns);
     measured["polls"] = json!(polls);
-    measured["work"] = work_json(&credits);
     report(measured, banks, physical);
 }
 async fn lifecycle(
@@ -646,7 +629,7 @@ async fn lifecycle(
     let sibling = Instance::new(&definitions[0], account, 1, o.population, &mut costs);
     instances[0].denied.store(true, Relaxed);
     let requests = peer.stats()["requests"].as_u64().unwrap();
-    assert!(instances[0].start(&mut work()).is_err());
+    assert!(instances[0].start().is_err());
     let sibling_result = one(&sibling).await;
     sibling_result.result().unwrap();
     drop(sibling_result);
@@ -658,10 +641,10 @@ async fn lifecycle(
     let native_before = peer.stats();
     let charge_before = used(account);
     let started = Instant::now();
-    let attempt = sibling.start(&mut work());
+    let attempt = sibling.start();
     let held_result_blocks_sibling = attempt.is_err();
     if let Ok(mut c) = attempt {
-        let result = poll_fn(|cx| c.poll(cx, now(), &mut work())).await;
+        let result = poll_fn(|cx| c.poll(cx, now())).await;
         result.result().unwrap();
         drop(result);
         drop(c);
@@ -671,23 +654,15 @@ async fn lifecycle(
     drop(retained);
 
     // Cancellation after actual request receipt, with the original settlement.
-    let mut cancelled = instances[0].start(&mut work()).unwrap();
+    let mut cancelled = instances[0].start().unwrap();
     let before = peer.stats()["requests"].as_u64().unwrap();
     while peer.stats()["requests"].as_u64().unwrap() == before {
-        assert!(
-            poll_fn(|cx| Poll::Ready(cancelled.poll(
-                cx,
-                now(),
-                &mut work().with_remaining(WorkClass::CodecInputBytes, 0)
-            )))
-            .await
-            .is_pending()
-        );
+        let _ = poll_fn(|cx| Poll::Ready(cancelled.progress(cx, now()))).await;
         tokio::time::sleep(Duration::from_micros(100)).await;
     }
     let start = Instant::now();
     cancelled.cancel();
-    let result = poll_fn(|cx| cancelled.poll(cx, now(), &mut work())).await;
+    let result = poll_fn(|cx| cancelled.poll(cx, now())).await;
     let cancellation_ns = start.elapsed().as_nanos();
     assert!(matches!(
         result.first_cause(),
@@ -700,46 +675,16 @@ async fn lifecycle(
     other.result().unwrap();
     drop(other);
 
-    // Let real native output arrive, but withhold validation credit. Replacement
-    // must preserve its original identity/funding, never deliver it to the new one.
-    let mut late = instances[0].start(&mut work()).unwrap();
-    let before = peer.stats()["requests"].as_u64().unwrap();
-    for _ in 0..1000 {
-        assert!(
-            poll_fn(|cx| Poll::Ready(late.poll(
-                cx,
-                now(),
-                &mut work().with_remaining(WorkClass::CodecInputBytes, 0)
-            )))
-            .await
-            .is_pending()
-        );
-        let stats = peer.stats();
-        if stats["requests"].as_u64().unwrap() > before && stats["active"] == 0 {
-            break;
-        }
-        tokio::time::sleep(Duration::from_micros(100)).await;
-    }
-    // Drive the completed socket through Hyper under zero codec credit.
-    for _ in 0..4 {
-        assert!(
-            poll_fn(|cx| Poll::Ready(late.poll(
-                cx,
-                now(),
-                &mut work().with_remaining(WorkClass::CodecInputBytes, 0)
-            )))
-            .await
-            .is_pending()
-        );
-        tokio::task::yield_now().await;
-    }
+    // Keep a settled reply unread across replacement of its original instance.
+    let mut late = instances[0].start().unwrap();
+    poll_fn(|cx| late.progress(cx, now())).await;
     let original = instances[0].owner.as_ref().unwrap().reference();
     drop(instances[0].owner.take());
     drop(instances[0].runtime.take());
     let start = Instant::now();
     instances[0] = Instance::new(&definitions[0], account, o.slots, 0, &mut costs);
     assert_ne!(original, instances[0].owner.as_ref().unwrap().reference());
-    let result = poll_fn(|cx| late.poll(cx, now(), &mut work())).await;
+    let result = poll_fn(|cx| late.poll(cx, now())).await;
     assert_eq!(result.consumer(), &original);
     assert!(result.result().is_err());
     assert!(matches!(
@@ -899,7 +844,6 @@ async fn run(o: Options) {
         ));
     }
     let mut measured = phase.finish("idle_instances");
-    measured["work"] = work_json(&costs.work);
     measured["authority_and_flag"] = costs.authority.json();
     measured["permission_service"] = costs.permission.json();
     measured["definition_bind"] = costs.binding.json();
@@ -912,8 +856,8 @@ async fn run(o: Options) {
     }
     // Warm the same real lanes for both drivers before measuring sustained work.
     for i in 0..o.lanes {
-        let mut handle = Handle::start(&o, &instances[i], &definitions[o.mapping(i)], &mut work());
-        let result = poll_fn(|cx| handle.poll(cx, &mut work())).await;
+        let mut handle = Handle::start(&o, &instances[i], &definitions[o.mapping(i)]);
+        let result = poll_fn(|cx| handle.poll(cx)).await;
         result.check(&expected[o.mapping(i)]);
         drop(result);
         drop(handle);
@@ -925,12 +869,12 @@ async fn run(o: Options) {
         // Actual caller-owned result carriers belong to active storage too.
         retained.reserve_exact(o.lanes);
         let mut calls: Vec<_> = (0..o.lanes)
-            .map(|i| instances[i].start(&mut work()).unwrap())
+            .map(|i| instances[i].start().unwrap())
             .collect();
         report(phase.finish("admitted_calls"), &banks, &physical);
         let phase = meter::Phase::begin();
         for (i, call) in calls.iter_mut().enumerate() {
-            let result = poll_fn(|cx| call.poll(cx, now(), &mut work())).await;
+            let result = poll_fn(|cx| call.poll(cx, now())).await;
             assert_eq!(
                 result.result().unwrap().data().unwrap().body,
                 &expected[o.mapping(i)]

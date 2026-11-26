@@ -191,7 +191,7 @@ fn prepared_http_program_executes_after_all_preparation_owners_are_dropped() {
             drop(program);
             let output = tokio::time::timeout(
                 Duration::from_secs(5),
-                std::future::poll_fn(|cx| call.as_pin_mut().poll_result(cx, &mut work())),
+                std::future::poll_fn(|cx| call.as_pin_mut().poll_result(cx)),
             )
             .await
             .expect("source-free native call stalled")

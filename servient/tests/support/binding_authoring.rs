@@ -63,15 +63,8 @@ where
         self.footprint
     }
 
-    fn poll_result(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
-    ) -> Poll<T> {
+    fn poll_result(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
         if self.pending_polls != 0 {
-            if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-                return Poll::Pending;
-            }
             self.pending_polls -= 1;
             cx.waker().wake_by_ref();
             return Poll::Pending;
@@ -87,7 +80,6 @@ where
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
         _cleanup: CleanupPhaseContext,
-        _budget: &mut WorkBudget,
     ) -> clinkz_wot_core::CoreResult<clinkz_wot_core::StartStatus<BindingCallSettlement<T, C>>>
     {
         Ok(clinkz_wot_core::StartStatus::Pending)
@@ -96,7 +88,6 @@ where
     fn poll_cancel(
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
-        _budget: &mut WorkBudget,
     ) -> Poll<clinkz_wot_core::CoreResult<BindingCallSettlement<T, C>>> {
         Poll::Ready(Ok(BindingCallSettlement::Returned(
             self.value.take().expect("cancel polled after completion"),
@@ -131,14 +122,7 @@ where
         BindingLifetimeFootprint::new(1, 64)
     }
 
-    fn poll_result(
-        mut self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
-    ) -> Poll<RouteCleanupOutcome> {
-        if budget.consume(WorkClass::CleanupItems, 1).is_err() {
-            return Poll::Pending;
-        }
+    fn poll_result(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<RouteCleanupOutcome> {
         drop(self.input.take().expect("cleanup polled after completion"));
         Poll::Ready(RouteCleanupOutcome::Complete)
     }
@@ -147,7 +131,6 @@ where
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
         _cleanup: CleanupPhaseContext,
-        _budget: &mut WorkBudget,
     ) -> clinkz_wot_core::CoreResult<
         clinkz_wot_core::StartStatus<
             BindingCallSettlement<RouteCleanupOutcome, HostRouteCleanupSuccessor>,
@@ -159,7 +142,6 @@ where
     fn poll_cancel(
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
-        _budget: &mut WorkBudget,
     ) -> Poll<
         clinkz_wot_core::CoreResult<
             BindingCallSettlement<RouteCleanupOutcome, HostRouteCleanupSuccessor>,

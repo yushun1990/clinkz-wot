@@ -190,18 +190,16 @@ async fn application_selects_then_separately_authorizes_and_executes_engine_read
     assert!(
         runtime
             .0
-            .read_property(&runtime.1, "level", Deadline::NONE, now(), &mut work())
+            .read_property(&runtime.1, "level", Deadline::NONE, now())
             .is_err()
     );
     permission.store(true, Ordering::Release);
     let mut call = runtime
         .0
-        .read_property(&runtime.1, "level", Deadline::NONE, now(), &mut work())
+        .read_property(&runtime.1, "level", Deadline::NONE, now())
         .unwrap();
     let result = loop {
-        if let Poll::Ready(result) =
-            call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
-        {
+        if let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), now()) {
             break result;
         }
         tokio::time::sleep(Duration::from_millis(1)).await;

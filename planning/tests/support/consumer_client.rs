@@ -183,22 +183,14 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for State {
     fn poll_result(
         mut self: core::pin::Pin<&mut Self>,
         _: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
         Poll::Ready(Ok(self.output.take().unwrap()))
     }
     fn start_cancel(
         mut self: core::pin::Pin<&mut Self>,
         _: &mut Context<'_>,
         _: CleanupPhaseContext,
-        budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Ok(StartStatus::Pending);
-        }
         Ok(StartStatus::Ready(BindingCallSettlement::Returned(Ok(
             self.output.take().unwrap(),
         ))))
@@ -206,11 +198,7 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for State {
     fn poll_cancel(
         mut self: core::pin::Pin<&mut Self>,
         _: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
         Poll::Ready(Ok(BindingCallSettlement::Returned(Ok(self
             .output
             .take()

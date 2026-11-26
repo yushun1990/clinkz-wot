@@ -7,8 +7,6 @@
 pub mod consumer;
 #[path = "consumer_action.rs"]
 pub mod consumer_action;
-#[path = "consumer_execution.rs"]
-pub mod consumer_execution;
 #[path = "consumer_notification.rs"]
 pub mod consumer_notification;
 #[path = "notification.rs"]

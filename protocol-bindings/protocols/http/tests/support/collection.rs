@@ -565,7 +565,7 @@ impl Fixture {
         let result = loop {
             assert!(start.elapsed() < Duration::from_secs(5), "exchange stalled");
             self.step();
-            if let Poll::Ready(s) = call.poll(&mut cx(), now(0), &mut work()) {
+            if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) {
                 break s;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;
@@ -691,7 +691,7 @@ fn prepare_consumer(
 }
 
 fn start_read(client: &(StandaloneConsumerAssociation, ConsumerCalls)) -> ConsumerCall {
-    client.0.read_all_properties(&client.1, Deadline::NONE, now(0), &mut work())
+    client.0.read_all_properties(&client.1, Deadline::NONE, now(0))
         .unwrap()
 }
 fn registration() -> ConsumerRegistrationInput {
@@ -725,13 +725,12 @@ fn start_collection_at(
     deadline: Deadline,
 ) -> CoreResult<ConsumerCall> {
     if operation == Operation::ReadMultipleProperties {
-        client.0.read_multiple_properties(&client.1, &["on"], deadline, now(0), &mut work())
+        client.0.read_multiple_properties(&client.1, &["on"], deadline, now(0))
     } else if operation == Operation::WriteAllProperties {
         client.0.write_all_properties(&client.1,
                 payload(br#"{"on":false,"secret":"updated"}"#),
                 deadline,
                 now(0),
-                &mut work(),
             )
             .map_err(|e| e.error().error().clone())
     } else if operation == Operation::WriteMultipleProperties {
@@ -739,11 +738,10 @@ fn start_collection_at(
                 payload(br#"{"on":false,"secret":"updated"}"#),
                 deadline,
                 now(0),
-                &mut work(),
             )
             .map_err(|e| e.error().error().clone())
     } else {
-        client.0.read_all_properties(&client.1, deadline, now(0), &mut work())
+        client.0.read_all_properties(&client.1, deadline, now(0))
     }
 }
 
@@ -766,7 +764,7 @@ fn verify_collection_lifecycle(operation: Operation) {
                 assert!(
                     call.as_mut()
                         .unwrap()
-                        .poll(&mut cx(), now(0), &mut work())
+                        .poll(&mut cx(), now(0))
                         .is_pending()
                 );
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -783,21 +781,14 @@ fn verify_collection_lifecycle(operation: Operation) {
             }
             let instant = now(if fault == "timeout" { 10 } else { 0 });
             let retained = ResourceKind::ALL.map(|k| accounts.account(k).used());
-            if let Some(c) = &mut call {
-                assert!(
-                    c.poll(&mut cx(), instant, &mut WorkBudget::new())
-                        .is_pending()
-                );
-            } else {
-                client.1.step(&mut cx(), instant, &mut WorkBudget::new());
-            }
+            assert!(!client.1.is_idle());
             assert_eq!(
                 retained,
                 ResourceKind::ALL.map(|k| accounts.account(k).used())
             );
             if let Some(c) = &mut call {
                 let result = loop {
-                    if let Poll::Ready(s) = c.poll(&mut cx(), instant, &mut work()) {
+                    if let Poll::Ready(s) = c.poll(&mut cx(), instant) {
                         break s;
                     }
                     assert!(start.elapsed() < Duration::from_secs(5));
@@ -813,7 +804,7 @@ fn verify_collection_lifecycle(operation: Operation) {
                 drop(result);
             } else {
                 while !client.1.is_idle() {
-                    client.1.step(&mut cx(), instant, &mut work());
+                    client.1.step(&mut cx(), instant);
                     assert!(start.elapsed() < Duration::from_secs(5));
                 }
             }
@@ -876,7 +867,7 @@ fn verify_collection_replacement(operation: Operation) {
             let start = Instant::now();
             loop {
                 server.step();
-                assert!(call.poll(&mut cx(), now(0), &mut work()).is_pending());
+                assert!(call.poll(&mut cx(), now(0)).is_pending());
                 if server.server().state()
                     == if accepted {
                         RawFiniteState::Delivering
@@ -1025,7 +1016,7 @@ fn verify_collection_publication(operation: Operation) {
         let mut call = start_collection_at(&client, operation, Deadline::NONE).unwrap();
         while server.server().state() != RawFiniteState::Dispatching {
             server.step();
-            assert!(call.poll(&mut cx(), now(0), &mut work()).is_pending());
+            assert!(call.poll(&mut cx(), now(0)).is_pending());
             assert!(start.elapsed() < Duration::from_secs(5));
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
@@ -1047,7 +1038,7 @@ fn verify_collection_publication(operation: Operation) {
         assert!(remote.result.is_err());
         assert_eq!(remote.effect, FiniteEffect::NotInvoked);
         let result = loop {
-            if let Poll::Ready(s) = call.poll(&mut cx(), now(0), &mut work()) {
+            if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) {
                 break s;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;

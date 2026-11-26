@@ -1,6 +1,7 @@
 //! Managed Consumer identity and finite configurations. Internal slots are private.
 use super::*;
 use alloc::boxed::Box;
+use clinkz_wot_foundation::{WorkBudget, WorkClass as W};
 #[path = "consumer_tree.rs"]
 mod tree;
 use tree::Tree;
@@ -240,26 +241,20 @@ impl ConsumerOwner {
         }
         Ok(ConsumerInstanceHandle { identity })
     }
-    pub fn instance(
-        &self,
-        thing_id: &str,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<ConsumerInstanceHandle> {
+    pub fn instance(&self, thing_id: &str) -> CoreResult<ConsumerInstanceHandle> {
         let registry = self.registry.borrow();
         Ok(ConsumerInstanceHandle {
-            identity: self.find(&registry, thing_id, budget)?.identity.clone(),
+            identity: self.find(&registry, thing_id)?.identity.clone(),
         })
     }
     pub fn association(
         &self,
         thing_id: &str,
         configuration: &str,
-        budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerAssociation> {
         Self::check_name(configuration, MAX_CONFIGURATION_NAME_BYTES)?;
         let registry = self.registry.borrow();
-        let entry = self.find(&registry, thing_id, budget)?;
-        entry.configurations.lookup_work(configuration, budget)?;
+        let entry = self.find(&registry, thing_id)?;
         entry
             .configurations
             .get(configuration)
@@ -300,7 +295,7 @@ impl ConsumerOwner {
         let checked = (|| {
             Self::check_name(configuration, MAX_CONFIGURATION_NAME_BYTES)?;
             let registry = self.registry.borrow();
-            let entry = self.find(&registry, thing_id, budget)?;
+            let entry = self.find_for_update(&registry, thing_id, None, budget)?;
             if !association.is_current() || association.consumer() != entry.identity.consumer {
                 return Err(invalid());
             }
@@ -389,7 +384,7 @@ impl ConsumerOwner {
         let current = {
             Self::check_name(configuration, MAX_CONFIGURATION_NAME_BYTES)?;
             let registry = self.registry.borrow();
-            let entry = self.find(&registry, thing_id, budget)?;
+            let entry = self.find_for_update(&registry, thing_id, None, budget)?;
             entry.configurations.lookup_work(configuration, budget)?;
             let current = entry
                 .configurations
@@ -441,7 +436,7 @@ impl ConsumerOwner {
     ) -> CoreResult<()> {
         {
             let registry = self.registry.borrow();
-            let entry = self.find_expected(&registry, thing_id, expected, budget)?;
+            let entry = self.find_for_update(&registry, thing_id, expected, budget)?;
             registry.instances.mutation_work(thing_id, budget)?;
             registry.instances.lookup_work(thing_id, budget)?;
             charge(budget, 8)?;
@@ -464,8 +459,7 @@ impl ConsumerOwner {
         thing_id: &str,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerInstanceHandle> {
-        let expected = self.instance(thing_id, budget)?;
-        self.replace_instance(&expected, budget)
+        self.replace(thing_id, None, budget)
     }
     /// Owner-generated replacement, optionally conditioned on an original snapshot.
     /// The internal generation advances without asking the caller for coordinates.
@@ -474,10 +468,17 @@ impl ConsumerOwner {
         expected: &ConsumerInstanceHandle,
         budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerInstanceHandle> {
-        let thing_id = expected.thing_id();
+        self.replace(expected.thing_id(), Some(expected), budget)
+    }
+    fn replace(
+        &self,
+        thing_id: &str,
+        expected: Option<&ConsumerInstanceHandle>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ConsumerInstanceHandle> {
         let (name, next) = {
             let registry = self.registry.borrow();
-            let entry = self.find_expected(&registry, thing_id, Some(expected), budget)?;
+            let entry = self.find_for_update(&registry, thing_id, expected, budget)?;
             let old = entry.identity.consumer.slot();
             let next = old.generation().checked_next().ok_or_else(invalid)?;
             registry.instances.lookup_work(thing_id, budget)?;
@@ -535,7 +536,6 @@ impl ConsumerOwner {
         property: &str,
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
         self.read_property_with_variables(
             thing_id,
@@ -545,7 +545,6 @@ impl ConsumerOwner {
             &[],
             deadline,
             now,
-            budget,
         )
     }
 
@@ -559,32 +558,32 @@ impl ConsumerOwner {
         variables: &[(&str, &str)],
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> CoreResult<ConsumerCall> {
         // Snapshot and end the registry borrow before policy/credential/native
         // callbacks. If it is removed in a callback, admission must refuse;
         // it cannot retry lookup and accidentally use a successor.
-        self.association(thing_id, configuration, budget)?
-            .read_property_with_variables(calls, property, variables, deadline, now, budget)
+        self.association(thing_id, configuration)?
+            .read_property_with_variables(calls, property, variables, deadline, now)
     }
 
+    fn check_id(&self, id: &str) -> CoreResult<()> {
+        if !self.active.get() {
+            return Err(stale());
+        }
+        Self::check_name(id, MAX_THING_ID_BYTES)
+    }
     fn find<'a>(
         &self,
         registry: &'a ManagedRegistry,
         id: &str,
-        budget: &mut WorkBudget,
     ) -> CoreResult<&'a RegisteredInstance> {
-        if !self.active.get() {
-            return Err(stale());
-        }
-        Self::check_name(id, MAX_THING_ID_BYTES)?;
-        registry.instances.lookup_work(id, budget)?;
+        self.check_id(id)?;
         registry
             .instances
             .get(id)
             .ok_or_else(|| CoreError::NotFound(context()))
     }
-    fn find_expected<'a>(
+    fn find_for_update<'a>(
         &self,
         registry: &'a ManagedRegistry,
         id: &str,
@@ -594,11 +593,13 @@ impl ConsumerOwner {
         if expected.is_some_and(|e| !e.is_current()) {
             return Err(stale());
         }
-        let entry = self.find(registry, id, budget).map_err(|e| {
-            if expected.is_some() && matches!(e, CoreError::NotFound(_)) {
+        self.check_id(id)?;
+        registry.instances.lookup_work(id, budget)?;
+        let entry = registry.instances.get(id).ok_or_else(|| {
+            if expected.is_some() {
                 stale()
             } else {
-                e
+                CoreError::NotFound(context())
             }
         })?;
         if expected.is_some_and(|e| !Rc::ptr_eq(&e.identity, &entry.identity)) {

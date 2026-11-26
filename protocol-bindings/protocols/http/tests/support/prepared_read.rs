@@ -56,17 +56,15 @@ fn fixed_bound_http_reads_keep_live_permission_and_original_results_after_owner_
         let denied = Arc::new(AtomicBool::new(false));
         let client = bind_dynamic(definition, &owner, &accounts,
             vec![format!("http://{}/level",peer.address)], denied.clone());
-        let read = client.0.bind_property_read("level", &mut work()).unwrap();
+        let read = client.0.bind_property_read("level").unwrap();
         drop(td);
         denied.store(true, Ordering::Release);
-        assert!(read.read(&client.1, Deadline::NONE, now(0), &mut work()).is_err());
+        assert!(read.read(&client.1, Deadline::NONE, now(0)).is_err());
         assert_eq!(peer.count(), 0);
         denied.store(false, Ordering::Release);
         let mut last = None;
         for _ in 0..2 {
-            let mut budget = work().with_remaining(WorkClass::PlanningItems, 0)
-                .with_remaining(WorkClass::BindingPolls, 1);
-            let mut call = read.read(&client.1, Deadline::NONE, now(0), &mut budget).unwrap();
+            let mut call = read.read(&client.1, Deadline::NONE, now(0)).unwrap();
             let result = finish(&mut call).await;
             assert_eq!(result.result().unwrap().data().unwrap().body, b"7");
             assert_eq!(result.destination(), format!("http://{}/level",peer.address));
@@ -77,7 +75,7 @@ fn fixed_bound_http_reads_keep_live_permission_and_original_results_after_owner_
         assert_eq!(peer.count(), 2);
         // A passive bound view does not keep its removed association usable.
         client.0.begin_close();
-        assert!(matches!(read.read(&client.1, Deadline::NONE, now(0), &mut work()), Err(CoreError::StaleHandle(_))));
+        assert!(matches!(read.read(&client.1, Deadline::NONE, now(0)), Err(CoreError::StaleHandle(_))));
         drop((read, client, owner));
         assert!(accounts.account(ResourceKind::CleanupBytesMax).used() > 0);
         assert!(backing.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
@@ -106,13 +104,7 @@ fn bound_variable_mapping_resolves_each_actual_destination_and_checks_each_opera
             ],
             denied.clone(),
         );
-        let read = client
-            .0
-            .bind_property_read(
-                "level",
-                &mut work().with_remaining(WorkClass::BindingPolls, 0),
-            )
-            .unwrap();
+        let read = client.0.bind_property_read("level").unwrap();
         for peer in [&a, &b] {
             let port = peer.address.port().to_string();
             assert!(
@@ -120,8 +112,7 @@ fn bound_variable_mapping_resolves_each_actual_destination_and_checks_each_opera
                     &client.1,
                     &[("port", &port), ("item", ""), ("q", "q")],
                     Deadline::NONE,
-                    now(0),
-                    &mut work()
+                    now(0)
                 )
                 .is_err()
             );
@@ -131,7 +122,6 @@ fn bound_variable_mapping_resolves_each_actual_destination_and_checks_each_opera
                     &[("port", &port), ("item", "x"), ("q", "q")],
                     Deadline::NONE,
                     now(0),
-                    &mut work(),
                 )
                 .unwrap();
             let result = finish(&mut call).await;
@@ -149,8 +139,7 @@ fn bound_variable_mapping_resolves_each_actual_destination_and_checks_each_opera
                 &client.1,
                 &[("port", &port), ("item", "x"), ("q", "q")],
                 Deadline::NONE,
-                now(0),
-                &mut work()
+                now(0)
             )
             .is_err()
         );

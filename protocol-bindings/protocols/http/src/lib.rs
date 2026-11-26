@@ -494,11 +494,7 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
     fn poll_result(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
         if let Some(grant) = self
             .request
             .as_ref()
@@ -586,21 +582,13 @@ impl HostBindingCall<CoreResult<InteractionOutput>> for Call {
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
         _: CleanupPhaseContext,
-        budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Ok(StartStatus::Pending);
-        }
         Ok(StartStatus::Ready(self.cancelled()))
     }
     fn poll_cancel(
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
         Poll::Ready(Ok(self.cancelled()))
     }
 }

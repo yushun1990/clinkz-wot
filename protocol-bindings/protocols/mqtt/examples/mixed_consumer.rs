@@ -8,8 +8,7 @@ use clinkz_wot_core::{consumer::*, host_accounts::HostResourceAccounts, notifica
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::open_consumer::*;
 use clinkz_wot_servient_finite::{
-    consumer::*, consumer_action::*, consumer_execution::step_consumers, consumer_notification::*,
-    notification::RawNotificationLimits,
+    consumer::*, consumer_action::*, consumer_notification::*, notification::RawNotificationLimits,
 };
 use std::{
     future::{Future, poll_fn},
@@ -220,8 +219,8 @@ fn main() {
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
     drop((thing, registry, services));
 
-    let mut calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
-    let mut actions = ConsumerActions::try_new(1, bank.clone()).unwrap();
+    let calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
+    let actions = ConsumerActions::try_new(1, bank.clone()).unwrap();
     let mut notifications = ConsumerNotifications::try_new(
         RawNotificationLimits {
             subscriptions: 1,
@@ -252,7 +251,6 @@ fn main() {
                     &args[3],
                     deadline,
                     now(),
-                    &mut work(),
                 )
                 .unwrap(),
         );
@@ -291,22 +289,19 @@ fn main() {
                     .reset(tokio::time::Instant::now() + Duration::from_millis(10));
                 let _ = pulse.as_mut().poll(cx);
             }
-            let idle = step_consumers(
-                &mut [&mut calls, &mut actions, &mut notifications],
-                cx,
-                now(),
-                |_| work(),
-            );
+            let instant = now();
+            calls.step(cx, instant);
+            actions.step(cx, instant, &mut work());
+            notifications.step(cx, &mut work());
+            let idle =
+                calls.is_idle() && actions.is_idle() && notifications.retained_subscriptions() == 0;
             if closing {
                 return if idle { Poll::Ready(()) } else { Poll::Pending };
             }
             // Application results/decisions share this Host task with progress.
             if let Some(call) = read.as_mut()
-                && let Poll::Ready(result) = call.poll(
-                    cx,
-                    now(),
-                    &mut work().with_remaining(WorkClass::BindingPolls, 0),
-                )
+                && call.is_settled()
+                && let Poll::Ready(result) = call.poll(cx, now())
             {
                 eprintln!("Property: {:?}", result.result());
                 read = None;

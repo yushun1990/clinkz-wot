@@ -546,10 +546,10 @@ mod live {
             // the Producer's independently retained Action inventory.
             let mut query = finite
                 .0
-                .query_all_actions(&finite.1, Deadline::NONE, now(), &mut budget())
+                .query_all_actions(&finite.1, Deadline::NONE, now())
                 .unwrap();
             let result = loop {
-                if let Poll::Ready(result) = query.poll(&mut cx(), now(), &mut budget()) {
+                if let Poll::Ready(result) = query.poll(&mut cx(), now()) {
                     break result;
                 }
                 let http = exposure.participant_mut::<HttpActionRuntime>(1).unwrap();

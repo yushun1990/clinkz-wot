@@ -1170,9 +1170,6 @@ impl Kernel {
                 policy.call_bytes().expect("checked policy"),
             ),
             1,
-            WorkBudget::new()
-                .with_remaining(W::BindingPolls, policy.work[4])
-                .with_remaining(W::CleanupItems, 1),
         );
         let cause = self.call_first.expect("cancellation committed").error();
         let deadline = self.cancel_deadline.unwrap_or(Deadline::at(self.last_now));

@@ -47,10 +47,11 @@ final release with ordinary admission for the same admitted inputs. A Binding
 unable to supply this promise can serve ordinarily and must refuse that guarantee
 before acquiring its endpoint. This trial is conditional on a deployment need.
 
-Replace the credit factories on `step_consumers` and `ComposedProducerExposure::step`
-with bounded turns through their existing owners. Migrate `ConsumerProgress::step`
-and the custom `OwnedProducerParticipation::new` turn signature with them, and
-remove the `ProducerWork` credit selector. Drive ready siblings and local drains
+The Host deployment now steps the actual Consumer capacities directly. Finite
+calls and the caller-owned Read use bounded native polls. Complete the migration
+on continuing Consumer progress, `ComposedProducerExposure::step` and the custom
+`OwnedProducerParticipation::new` turn. Remove the remaining `ProducerWork`
+credit selector with its callers. Drive ready siblings and local drains
 while admission is saturated. Hold the only result slot with a second request
 waiting. Taking the result still holds the slot. Its final disposal alone must enable exactly one dispatch via a pool
 wake or promised maintenance turn, including release during waiter registration.
@@ -66,7 +67,7 @@ Use the owner and release oracles above for each migrated entry.
 
 The additional [caller-owned finite Read](../spec/runtime-safety.md#caller-owned-finite-read)
 uses the modern common finite kernel with borrowed prepared meaning/services,
-lifetime-bound local authority and caller-funded active work/results. Its
+lifetime-bound local authority, inline work and an exclusively borrowed result cell. Its
 [downstream datagram fixture](../evidence/constrained-finite-execution.md) checks
 bounded progress, first cause, stale references, late/invalid output and final
 physical release without making the Host registry representation mandatory.
@@ -440,7 +441,7 @@ resolution, permission, native construction and retained results. Required SPI
 revision adoption is checked by compile-fail cases and the mutable-support
 counterexamples in `qualification_adoption.rs`.
 `cargo test --locked -p clinkz-wot-binding-http --test consumer_callbacks --test uri_variables`
-includes fixed/variable real HTTP, zero lookup credit, support/resolution
+includes fixed/variable real HTTP, indexed and bound lookup, support/resolution
 counters, original revision/bound changes, callback revocation, binding refusal,
 late/unread ownership and final account release. The external
 `cargo test --locked --manifest-path tools/architecture-fixtures/open-consumer/Cargo.toml --test integration`
@@ -459,7 +460,7 @@ native/services and complete result/cleanup obligations.
 constructor directly. Associations retain no vacant Call Slots; an explicitly
 chosen work owner can serve many instances, and each association can use several
 owners. The existing `FiniteCallState`, reserved-slot checkout, independent
-controls, late-result validation and finite native disposal remain. Original
+controls, raw late evidence and finite native disposal preserve the original call. Original
 binding wrapper backing now survives selected settlement retention independently
 of the association's unselected mappings. Exact scopes and account ownership are
 specified in [Runtime Safety](../spec/runtime-safety.md) and
@@ -476,8 +477,8 @@ remain applicable after direct caller migration.
 
 The [managed HTTP regressions](../../protocol-bindings/protocols/http/tests/support/managed_capacity.rs)
 extend that command with non-revoking handle loss, explicit facet/instance
-removal and replacement, owner shutdown, silent-peer retention with zero credit
-then funded cleanup, and abandoned A with active or settled B in both loss orders.
+removal and replacement, owner shutdown, silent-peer retention until the next maintenance
+turn, and abandoned A with active or settled B in both loss orders.
 `ConsumerOwner` creates unique instance authority and consumes named standalone association authority, then
 returns non-revoking handles/views. Registration metadata and call capacity have
 separate limits and funding. Original identity/tombstone funding survives stale
@@ -508,7 +509,7 @@ public lifecycle workload steps at each of 64 and 4096 initial instances with th
 refusal, removal/recreation and replacement. Private tree tests inspect ordering,
 balance, stored heights and counts throughout 20,000 mixed mutations.
 
-The managed HTTP fixture retains its 1024-credit admission cases and adds repeated
+The managed HTTP fixture exercises indexed admission and repeated
 removal/recreation and configuration changes among 2048 Things while original
 calls/results retain identity, sockets, quotas and cleanup. Refusal sweeps verify
 partial node-acquisition refunds and preservation of a reusable ticket. Reentrant

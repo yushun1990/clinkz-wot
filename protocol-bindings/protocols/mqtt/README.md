@@ -264,8 +264,9 @@ reports. Aggregate driving disposes abandoned reports after complete local
 retirement; retain the cursor for a required report, or use the manual
 `progress`/`step_cleanup` path to collect reports after cursor loss.
 
-The optional `consumer_execution::step_consumers` borrows existing finite, Action
-and notification capacity owners with independent caller-selected work credit.
+A deployment drives finite calls, Actions and notifications through their
+respective capacity owners. The finite owner visits one slot per turn.
+The continuing capacities still take independent work budgets.
 Start with managed `ConsumerOwner` registration and bind continuing associations
 to that original passive reference. Removing/replacing the parent fences all its
 original work; capacity size and native connection count remain independent of
@@ -274,8 +275,8 @@ Thing count. No scheduler, new work owner or native task registry is added.
 The deployment supplies native Wakers and independent maintenance turns covering
 passive lifecycle/stop changes, deadlines, credit and the next native phase.
 Observe application results in the same Host task/loop. Query, Cancel, advance,
-response and mapped stop remain explicit decisions; the helper drives admitted
-progress and cleanup. Idle capacities do not imply final disposal of separately
+response and mapped stop remain explicit decisions. Each capacity drives its
+admitted progress and cleanup. Idle capacities do not imply final disposal of separately
 retained results or physical owners. See the
 [progress contract](../../../docs/spec/runtime-safety.md#host-consumer-execution-turns).
 

@@ -159,15 +159,11 @@ fn withdrawn_support(dependency: &str) {
             bank.clone(),
         )
         .unwrap_or_else(|_| panic!());
-        let read = association
-            .bind_property_read("level", &mut work())
-            .unwrap();
+        let read = association.bind_property_read("level").unwrap();
         let calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
         if unread {
-            let mut call = read
-                .read(&calls, Deadline::NONE, now(), &mut work())
-                .unwrap();
-            calls.step(&mut cx(), now(), &mut work());
+            let mut call = read.read(&calls, Deadline::NONE, now()).unwrap();
+            calls.step(&mut cx(), now());
             revision.fetch_add(1, Ordering::AcqRel);
             let result = settle(&mut call);
             assert!(
@@ -178,8 +174,7 @@ fn withdrawn_support(dependency: &str) {
         } else {
             revision.fetch_add(1, Ordering::AcqRel);
             assert!(
-                read.read(&calls, Deadline::NONE, now(), &mut work())
-                    .is_err(),
+                read.read(&calls, Deadline::NONE, now()).is_err(),
                 "withdrawn {dependency} support admitted native work"
             );
             assert_eq!(probe.starts.load(Ordering::Relaxed), 0);

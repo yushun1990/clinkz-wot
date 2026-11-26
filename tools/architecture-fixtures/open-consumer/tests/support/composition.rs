@@ -50,10 +50,10 @@ fn downstream_write_uses_its_own_native_completion_and_retains_late_success_with
         let owner = instance();
         let rt = finite(&owner, prepared, bank.clone());
         let mut read =
-            rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
                 .unwrap();
         assert!(
-            read.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+            read.poll(&mut Context::from_waker(Waker::noop()), now())
                 .is_pending()
         );
         exchange(&peer, b"11");
@@ -66,11 +66,10 @@ fn downstream_write_uses_its_own_native_completion_and_retains_late_success_with
                 Payload::new(b"7".as_slice(), "application/json"),
                 Deadline::NONE,
                 now(),
-                &mut work(),
             )
             .unwrap_or_else(|_| panic!());
         assert!(
-            call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
+            call.poll(&mut Context::from_waker(Waker::noop()), now())
                 .is_pending()
         );
         let mut bytes = [0; 256];
@@ -136,7 +135,7 @@ fn same_named_property_and_action_have_distinct_definitions_inputs_results_and_w
     let owner = instance();
     let rt = finite(&owner, prepared, bank.clone());
     let mut read =
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
     let result = poll(&mut read);
     assert_eq!(result.operation(), Operation::ReadProperty);
@@ -147,7 +146,7 @@ fn same_named_property_and_action_have_distinct_definitions_inputs_results_and_w
     drop(result);
     for n in ["7", "8"] {
         let mut call =
-            rt.0.invoke_action(&rt.1, "a", integer(n), Deadline::NONE, now(), &mut work())
+            rt.0.invoke_action(&rt.1, "a", integer(n), Deadline::NONE, now())
                 .unwrap_or_else(|e| panic!("{:?}", e));
         let result = poll(&mut call);
         assert_eq!(result.consumer(), &owner.reference());
@@ -166,8 +165,7 @@ fn same_named_property_and_action_have_distinct_definitions_inputs_results_and_w
 }
 
 #[test]
-fn action_roles_refuse_missing_invalid_oversize_unpaid_input_and_unsupported_continuations_before_io()
- {
+fn action_roles_refuse_missing_invalid_oversize_input_and_unsupported_continuations_before_io() {
     let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
     let p = Arc::new(Probe::default());
     let (_peer, target) = udp();
@@ -202,7 +200,7 @@ fn action_roles_refuse_missing_invalid_oversize_unpaid_input_and_unsupported_con
     for input in [None, integer("false"), integer(&"7".repeat(1025))] {
         let original = input.clone();
         let error =
-            rt.0.invoke_action(&rt.1, "a", input, Deadline::NONE, now(), &mut work())
+            rt.0.invoke_action(&rt.1, "a", input, Deadline::NONE, now())
                 .err()
                 .unwrap();
         assert_eq!(error.into_input(), original);
@@ -211,22 +209,9 @@ fn action_roles_refuse_missing_invalid_oversize_unpaid_input_and_unsupported_con
             baseline
         );
     }
-    let mut short = work();
-    short.set_remaining(WorkClass::CodecInputBytes, 4095);
     assert!(
-        rt.0.invoke_action(&rt.1, "a", integer("7"), Deadline::NONE, now(), &mut short)
+        rt.0.invoke_action(&rt.1, "continuing", integer("7"), Deadline::NONE, now())
             .is_err()
-    );
-    assert!(
-        rt.0.invoke_action(
-            &rt.1,
-            "continuing",
-            integer("7"),
-            Deadline::NONE,
-            now(),
-            &mut work()
-        )
-        .is_err()
     );
     assert_eq!(p.native.load(Ordering::Relaxed), 0);
     drop(rt);
@@ -266,22 +251,17 @@ fn action_absent_data_roles_allow_empty_success_but_reject_unexpected_output() {
                     bank.clone(),
                 );
                 let mut call =
-                    rt.0.invoke_action(&rt.1, "a", None, Deadline::NONE, now(), &mut work())
+                    rt.0.invoke_action(&rt.1, "a", None, Deadline::NONE, now())
                         .unwrap_or_else(|_| panic!());
                 let mut cx = Context::from_waker(Waker::noop());
-                let no_codec = || {
-                    let mut budget = work();
-                    budget.set_remaining(WorkClass::CodecInputBytes, 0);
-                    budget
-                };
-                assert!(call.poll(&mut cx, now(), &mut no_codec()).is_pending());
+                assert!(call.poll(&mut cx, now()).is_pending());
                 let mut bytes = [0; 256];
                 let (n, from) = peer.recv_from(&mut bytes).unwrap();
                 assert_eq!(&bytes[..n], b"INVOKE /temperature\n");
                 peer.send_to(reply, from).unwrap();
                 let mut result = None;
                 for _ in 0..100 {
-                    if let Poll::Ready(settlement) = call.poll(&mut cx, now(), &mut no_codec()) {
+                    if let Poll::Ready(settlement) = call.poll(&mut cx, now()) {
                         result = Some(settlement);
                         break;
                     }
@@ -332,7 +312,7 @@ fn action_without_output_declines_unqualified_different_response_media_before_na
         let owner = instance();
         let rt = finite(&owner, prepared, bank.clone());
         assert!(
-            rt.0.invoke_action(&rt.1, "a", integer("7"), Deadline::NONE, now(), &mut work())
+            rt.0.invoke_action(&rt.1, "a", integer("7"), Deadline::NONE, now())
                 .is_err()
         );
         assert_eq!(p.native.load(Ordering::Relaxed), 0);
@@ -342,7 +322,7 @@ fn action_without_output_declines_unqualified_different_response_media_before_na
 }
 
 #[test]
-fn validated_result_resumes_with_one_authorization_quantum_and_rechecks_between_phases() {
+fn unread_validated_result_rechecks_permission_without_repeating_decoding() {
     for change in [
         "none",
         "revoke",
@@ -368,18 +348,13 @@ fn validated_result_resumes_with_one_authorization_quantum_and_rechecks_between_
             bank.clone(),
         );
         let mut call =
-            rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+            rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
                 .unwrap();
         let mut cx = Context::from_waker(Waker::noop());
-        let quantum = || {
-            let mut budget = work();
-            budget.set_remaining(WorkClass::ProviderProbes, 2);
-            budget
-        };
-        assert!(call.poll(&mut cx, now(), &mut quantum()).is_pending());
+        let _ = call.progress(&mut cx, now());
         exchange(&peer, b"7");
         for _ in 0..100 {
-            assert!(call.poll(&mut cx, now(), &mut quantum()).is_pending());
+            let _ = call.progress(&mut cx, now());
             if p.validates.load(Ordering::Relaxed) != 0 {
                 break;
             }
@@ -404,25 +379,10 @@ fn validated_result_resumes_with_one_authorization_quantum_and_rechecks_between_
             .iter()
             .map(|&kind| bank.account(kind).used())
             .collect();
-        for credit in [0, 1] {
-            let mut budget = WorkBudget::new().with_remaining(WorkClass::ProviderProbes, credit);
-            assert!(call.poll(&mut cx, now(), &mut budget).is_pending());
-            assert!(!rt.1.is_idle());
-            assert_eq!(p.calls.load(Ordering::Relaxed), 0);
-            assert_eq!(p.validates.load(Ordering::Relaxed), 1);
-            assert_eq!(
-                charged,
-                ResourceKind::ALL
-                    .iter()
-                    .map(|&kind| bank.account(kind).used())
-                    .collect::<Vec<_>>()
-            );
-        }
-        // Only the remaining authorization callback has credit. Completed
-        // decoding must not be repeated, including when authority/services changed.
-        let mut budget = WorkBudget::new().with_remaining(WorkClass::ProviderProbes, 2);
-        let Poll::Ready(result) = call.poll(&mut cx, now(), &mut budget) else {
-            panic!("{change}: validated result must resume with one authorization quantum");
+        assert!(!rt.1.is_idle());
+        // Collection checks current permission for the retained original value.
+        let Poll::Ready(result) = call.poll(&mut cx, now()) else {
+            panic!("{change}: unread result must settle");
         };
         assert_eq!(result.consumer(), &original);
         match change {
@@ -436,7 +396,7 @@ fn validated_result_resumes_with_one_authorization_quantum_and_rechecks_between_
             ConsumerNativeOutcome::Returned(Ok(_))
         ));
         assert_eq!(p.validates.load(Ordering::Relaxed), 1);
-        assert_eq!(p.calls.load(Ordering::Relaxed), 0);
+        assert_eq!(p.calls.load(Ordering::Relaxed), 1);
         assert_eq!(
             charged,
             ResourceKind::ALL
@@ -523,11 +483,11 @@ fn instance_and_operation_policy_and_callback_revocation_are_checked_before_effe
     assert!(
         other
             .0
-            .read_property(&other.1, "a", Deadline::NONE, now(), &mut work())
+            .read_property(&other.1, "a", Deadline::NONE, now())
             .is_err()
     );
     assert_eq!(
-        rt.0.invoke_action(&rt.1, "a", integer("7"), Deadline::NONE, now(), &mut work())
+        rt.0.invoke_action(&rt.1, "a", integer("7"), Deadline::NONE, now())
             .err()
             .unwrap()
             .into_input(),
@@ -535,8 +495,7 @@ fn instance_and_operation_policy_and_callback_revocation_are_checked_before_effe
     );
     policy.revoke.store(true, Ordering::Relaxed);
     assert!(matches!(
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
-            .err(),
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now()).err(),
         Some(CoreError::StaleHandle(_))
     ));
     assert_eq!(p.native.load(Ordering::Relaxed), 0);
@@ -601,7 +560,7 @@ fn input_and_result_codec_callbacks_recheck_both_authority_and_changed_policy() 
         );
         if input_callback {
             let rejected =
-                rt.0.invoke_action(&rt.1, "a", integer("7"), Deadline::NONE, now(), &mut work())
+                rt.0.invoke_action(&rt.1, "a", integer("7"), Deadline::NONE, now())
                     .err()
                     .unwrap();
             assert_eq!(
@@ -613,7 +572,7 @@ fn input_and_result_codec_callbacks_recheck_both_authority_and_changed_policy() 
         } else {
             let peer = std::thread::spawn(move || exchange(&peer, b"7"));
             let mut call =
-                rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+                rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
                     .unwrap();
             let result = poll(&mut call);
             assert!(result.result().is_err());
@@ -633,8 +592,7 @@ fn input_and_result_codec_callbacks_recheck_both_authority_and_changed_policy() 
 }
 
 #[test]
-fn cancelled_action_retains_original_input_late_result_native_socket_and_charges_until_acknowledged()
- {
+fn cancelled_action_releases_its_socket_and_retains_the_original_input_result_and_quota() {
     let bank = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
     let p = Arc::new(Probe::default());
     p.late_on_cancel.store(true, Ordering::Relaxed);
@@ -648,17 +606,11 @@ fn cancelled_action_retains_original_input_late_result_native_socket_and_charges
     );
     let baseline = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
     let mut call =
-        rt.0.invoke_action(&rt.1, "a", integer("7"), Deadline::NONE, now(), &mut work())
+        rt.0.invoke_action(&rt.1, "a", integer("7"), Deadline::NONE, now())
             .unwrap_or_else(|_| panic!());
-    let mut native_only = work();
-    native_only.set_remaining(WorkClass::CodecInputBytes, 0);
     assert!(
-        call.poll(
-            &mut Context::from_waker(Waker::noop()),
-            now(),
-            &mut native_only
-        )
-        .is_pending()
+        call.poll(&mut Context::from_waker(Waker::noop()), now())
+            .is_pending()
     );
     let mut bytes = [0; 256];
     let (n, from) = peer.recv_from(&mut bytes).unwrap();
@@ -674,14 +626,10 @@ fn cancelled_action_retains_original_input_late_result_native_socket_and_charges
         ConsumerNativeOutcome::Returned(Ok(_))
     ));
     assert!(bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > baseline);
-    assert_eq!(
-        p.calls.load(Ordering::Relaxed),
-        0,
-        "settlement owns original native work"
-    );
+    assert_eq!(p.calls.load(Ordering::Relaxed), 1);
+    drop(UdpSocket::bind(from).expect("acknowledged exchange released its socket"));
     drop(late);
     assert_eq!(p.calls.load(Ordering::Relaxed), 1);
-    drop(UdpSocket::bind(from).expect("original socket physically released"));
     drop(call);
     drop(rt);
     clean(&bank);
@@ -1032,16 +980,11 @@ fn one_consumer_fences_calls_and_notifications_without_retargeting_replacement_o
     deliver(&mut first, &mut a);
     let peer = std::thread::spawn(move || exchange(&peer, b"7"));
     let mut call =
-        rt.0.read_property(&rt.1, "a", Deadline::NONE, now(), &mut work())
+        rt.0.read_property(&rt.1, "a", Deadline::NONE, now())
             .unwrap();
     let mut cx = Context::from_waker(Waker::noop());
-    assert!(
-        call.poll(&mut cx, now(), &mut WorkBudget::new())
-            .is_pending()
-    );
-    let mut native_only = work();
-    native_only.set_remaining(WorkClass::CodecInputBytes, 0);
-    assert!(call.poll(&mut cx, now(), &mut native_only).is_pending());
+    assert!(!rt.1.is_idle());
+    assert!(call.poll(&mut cx, now()).is_pending());
     peer.join().unwrap();
     drop(owner); // sole logical authority; all retained references now fence
     assert!(first.front(&mut a, &mut WorkBudget::new()).is_err());

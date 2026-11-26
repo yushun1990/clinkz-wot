@@ -10,8 +10,7 @@ use clinkz_wot_binding_http::{HttpActionConsumer, HttpConsumerConfig, try_consum
 use clinkz_wot_core::{consumer::*, consumer_action::ConsumerActionDefinition, notification::*};
 use clinkz_wot_planning::open_consumer::*;
 use clinkz_wot_servient_finite::{
-    consumer::*, consumer_action::*, consumer_execution::*, consumer_notification::*,
-    notification::*,
+    consumer::*, consumer_action::*, consumer_notification::*, notification::*,
 };
 use http_peer::*;
 use std::{
@@ -276,7 +275,7 @@ impl Engine {
         let binding = self
             .finite
             .clone()
-            .bind(owners[0].clone(), self.bank.clone(), &mut budget())
+            .bind(owners[0].clone(), self.bank.clone())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let association = StandaloneConsumerAssociation::try_new(
             instance.consumer(),
@@ -320,18 +319,20 @@ impl Engine {
     fn now(&self) -> MonotonicInstant {
         MonotonicInstant::new(ClockId::new(55), self.clock.elapsed().as_millis() as u64)
     }
-    fn turn(&mut self, cx: &mut Context<'_>, credit: &mut impl FnMut(usize) -> WorkBudget) -> bool {
+    fn turn(&mut self, cx: &mut Context<'_>, drive_finite: bool) -> bool {
         let now = self.now();
-        step_consumers(
-            &mut [&mut self.calls, &mut self.actions, &mut self.notifications],
-            cx,
-            now,
-            credit,
-        )
+        if drive_finite {
+            self.calls.step(cx, now);
+        }
+        self.actions.step(cx, now, &mut budget());
+        self.notifications.step(cx, &mut budget());
+        self.calls.is_idle()
+            && self.actions.is_idle()
+            && self.notifications.retained_subscriptions() == 0
     }
     async fn until(
         &mut self,
-        mut credit: impl FnMut(usize) -> WorkBudget,
+        drive_finite: bool,
         mut observe: impl FnMut(&mut Self, &mut Context<'_>) -> bool,
     ) {
         let mut pulse = Box::pin(tokio::time::sleep(Duration::from_millis(5)));
@@ -353,7 +354,7 @@ impl Engine {
                     }))
                 });
                 let mut native = Context::from_waker(waker);
-                self.turn(&mut native, &mut credit);
+                self.turn(&mut native, drive_finite);
                 if observe(self, &mut native) {
                     Poll::Ready(())
                 } else {
@@ -383,7 +384,6 @@ impl Engine {
             "level",
             Deadline::NONE,
             self.now(),
-            &mut budget(),
         )
     }
     fn invoke(&self, consumer: &Managed) -> ConsumerActionHandle {
@@ -411,16 +411,6 @@ impl Wake for NativeWake {
         self.parent.wake_by_ref();
     }
 }
-fn full(_: usize) -> WorkBudget {
-    budget()
-}
-fn no_finite(index: usize) -> WorkBudget {
-    if index == 0 {
-        WorkBudget::new()
-    } else {
-        budget()
-    }
-}
 fn clean(bank: &HostResourceAccounts) {
     for kind in ResourceKind::ALL {
         assert_eq!(bank.account(kind).used(), 0, "{kind:?}");
@@ -428,7 +418,76 @@ fn clean(bank: &HostResourceAccounts) {
 }
 
 #[test]
-fn managed_mixed_turns_keep_authorization_credit_controls_and_reports_independent() {
+fn finite_and_continuing_results_contend_for_one_outstanding_unit_through_disposal() {
+    runtime().block_on(async {
+        let broker = Broker::start();
+        let peer = HttpPeer::new();
+        let kind = ResourceKind::PendingHandlerCallsGlobalMax;
+        let mut limits = GatewayDefaultV1::LIMITS.clone();
+        assert!(limits.set(kind, Some(1)));
+        let bank = Arc::new(HostResourceAccounts::new(&limits));
+        let mut e = Engine::new(&peer, &broker, bank.clone());
+        let original = e.register("urn:mixed:quota");
+        let mut read = e.read(&original).unwrap();
+        e.until(true, |_, _| read.is_settled()).await;
+        let finite = poll_fn(|cx| read.poll(cx, e.now())).await;
+        assert_eq!(finite.result().unwrap().data().unwrap().body, b"7");
+        drop(read);
+        assert!(e.calls.is_idle());
+        let input = Payload::new(b"12".as_slice(), "application/json");
+        let refused = e
+            .actions
+            .invoke_action(
+                &original.action,
+                Some(input.clone()),
+                Deadline::NONE,
+                e.now(),
+                &mut budget(),
+            )
+            .err()
+            .unwrap();
+        assert!(Arc::ptr_eq(
+            &refused.into_input().unwrap().body,
+            &input.body
+        ));
+        assert_eq!(bank.account(kind).used(), 1);
+        drop(finite);
+
+        let action = e.invoke(&original);
+        e.until(true, |_, _| {
+            action.state().unwrap() == ConsumerActionState::Pending
+        })
+        .await;
+        action.query(e.now(), &mut budget()).unwrap();
+        e.until(true, |_, _| {
+            action.state().unwrap() == ConsumerActionState::Completed
+        })
+        .await;
+        let result = action.take_settlement(e.now(), &mut budget()).unwrap();
+        assert_eq!(result.result().unwrap().data().unwrap().body, b"24");
+        drop(action);
+        assert!(e.read(&original).is_err());
+        assert_eq!(bank.account(kind).used(), 1);
+        drop(result);
+
+        let mut next = e.read(&original).unwrap();
+        assert_eq!(
+            poll_fn(|cx| next.poll(cx, e.now()))
+                .await
+                .result()
+                .unwrap()
+                .data()
+                .unwrap()
+                .body,
+            b"7"
+        );
+        drop((next, original, e));
+        clean(&bank);
+    });
+}
+
+#[test]
+fn managed_mixed_turns_keep_authorization_progress_and_reports_independent() {
     runtime().block_on(async {
         let broker = Broker::start();
         let peer = HttpPeer::new();
@@ -449,7 +508,7 @@ fn managed_mixed_turns_keep_authorization_credit_controls_and_reports_independen
         let action = e.invoke(&a);
         let mut ca = e.subscribe(&a);
         let mut cb = e.subscribe(&b);
-        e.until(no_finite, |e, _| {
+        e.until(false, |e, _| {
             action.state().unwrap() == ConsumerActionState::Pending
                 && [ca.identity(), cb.identity()].into_iter().all(|id| {
                     e.notifications.status(id).unwrap().state == NotificationState::Active
@@ -459,11 +518,11 @@ fn managed_mixed_turns_keep_authorization_credit_controls_and_reports_independen
         assert_eq!(
             peer.observed.reads.load(Ordering::Acquire),
             0,
-            "short finite credit cannot borrow Action credit"
+            "other families cannot drive the finite call"
         );
         let mut publisher = Peer::new(&broker);
         publisher.publish_raw("mixed/alarm", b"7", false);
-        e.until(no_finite, |e, _| {
+        e.until(false, |e, _| {
             [ca.identity(), cb.identity()]
                 .into_iter()
                 .all(|id| e.notifications.status(id).unwrap().queued_items == 1)
@@ -487,13 +546,11 @@ fn managed_mixed_turns_keep_authorization_credit_controls_and_reports_independen
             e.notifications.advance(cursor, &mut budget()).unwrap();
         }
         let mut finite_result = None;
-        e.until(full, |e, cx| {
+        e.until(true, |e, cx| {
             // Result observation cannot do native I/O: only the composed turn can.
-            if let Poll::Ready(result) = read.poll(
-                cx,
-                e.now(),
-                &mut budget().with_remaining(WorkClass::BindingPolls, 0),
-            ) {
+            if read.is_settled()
+                && let Poll::Ready(result) = read.poll(cx, e.now())
+            {
                 finite_result = Some(result);
                 true
             } else {
@@ -505,7 +562,7 @@ fn managed_mixed_turns_keep_authorization_credit_controls_and_reports_independen
         assert_eq!(finite_result.consumer(), &b.instance.consumer());
         assert_eq!(finite_result.result().unwrap().data().unwrap().body, b"7");
         action.query(e.now(), &mut budget()).unwrap();
-        e.until(full, |_, _| {
+        e.until(true, |_, _| {
             action.state().unwrap() == ConsumerActionState::Completed
         })
         .await;
@@ -515,12 +572,12 @@ fn managed_mixed_turns_keep_authorization_credit_controls_and_reports_independen
         assert!(action_result.first_cause().is_none());
 
         let cancel = e.invoke(&b);
-        e.until(full, |_, _| {
+        e.until(true, |_, _| {
             cancel.state().unwrap() == ConsumerActionState::Pending
         })
         .await;
         cancel.request_cancel(e.now(), &mut budget()).unwrap();
-        e.until(full, |_, _| {
+        e.until(true, |_, _| {
             cancel.remote_cancellation().unwrap() == ConsumerActionCancellation::Requested
         })
         .await;
@@ -530,7 +587,7 @@ fn managed_mixed_turns_keep_authorization_credit_controls_and_reports_independen
             "cancel acknowledgement is not completion"
         );
         cancel.query(e.now(), &mut budget()).unwrap();
-        e.until(full, |_, _| {
+        e.until(true, |_, _| {
             cancel.state().unwrap() == ConsumerActionState::Completed
         })
         .await;
@@ -545,7 +602,7 @@ fn managed_mixed_turns_keep_authorization_credit_controls_and_reports_independen
         e.notifications
             .stop(&ca, Some(CancellationInput(None)), &mut budget())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
-        e.until(full, |e, _| {
+        e.until(true, |e, _| {
             e.notifications.status(ca.identity()).unwrap().state == NotificationState::Closed
         })
         .await;
@@ -560,7 +617,7 @@ fn managed_mixed_turns_keep_authorization_credit_controls_and_reports_independen
             "sibling retains the actual MQTT connection"
         );
         publisher.publish_raw("mixed/alarm", b"8", false);
-        e.until(full, |e, _| {
+        e.until(true, |e, _| {
             e.notifications.status(cb.identity()).unwrap().queued_items == 1
         })
         .await;
@@ -576,7 +633,7 @@ fn managed_mixed_turns_keep_authorization_credit_controls_and_reports_independen
         );
         e.notifications.advance(&mut cb, &mut budget()).unwrap();
         e.owner.begin_close();
-        e.until(full, |e, _| {
+        e.until(true, |e, _| {
             e.notifications.status(cb.identity()).unwrap().state == NotificationState::Closed
         })
         .await;
@@ -586,7 +643,7 @@ fn managed_mixed_turns_keep_authorization_credit_controls_and_reports_independen
             Some(CoreError::StaleHandle(_))
         ));
         assert!(!e.mqtt.connected());
-        assert!(e.turn(&mut cx(), &mut full));
+        assert!(e.turn(&mut cx(), true));
         drop((report, a, b, idle, read, action, cancel, ca, cb, e));
         assert!(
             bank.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0,
@@ -611,7 +668,7 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
         let action = e.invoke(&a);
         let ca = e.subscribe(&a);
         let mut cb = e.subscribe(&b);
-        e.until(full, |e, _| {
+        e.until(true, |e, _| {
             action.state().unwrap() == ConsumerActionState::Pending
                 && [ca.identity(), cb.identity()].into_iter().all(|id| {
                     e.notifications.status(id).unwrap().state == NotificationState::Active
@@ -621,7 +678,7 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
         let mut publisher = Peer::new(&broker);
         publisher.publish_raw("mixed/alarm", b"9", false);
         action.query(e.now(), &mut budget()).unwrap();
-        e.until(full, |e, _| {
+        e.until(true, |e, _| {
             action.state().unwrap() == ConsumerActionState::Completed
                 && peer.observed.closed.load(Ordering::Acquire) == 3
                 && [ca.identity(), cb.identity()]
@@ -652,7 +709,8 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
             a.notification.definition(),
             successor.notification.definition()
         ));
-        e.turn(&mut cx(), &mut |_| WorkBudget::new());
+        e.actions.step(&mut cx(), e.now(), &mut WorkBudget::new());
+        e.notifications.step(&mut cx(), &mut WorkBudget::new());
         assert_eq!(action.state().unwrap(), ConsumerActionState::Closed);
         assert!(matches!(
             action.query(e.now(), &mut budget()),
@@ -676,13 +734,10 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
         );
         assert!(action_result.result().is_err());
         let mut finite_result = None;
-        e.until(full, |e, cx| {
+        e.until(true, |e, cx| {
             if finite_result.is_none()
-                && let Poll::Ready(result) = read.poll(
-                    cx,
-                    e.now(),
-                    &mut budget().with_remaining(WorkClass::BindingPolls, 0),
-                )
+                && read.is_settled()
+                && let Poll::Ready(result) = read.poll(cx, e.now())
             {
                 finite_result = Some(result);
             }
@@ -721,7 +776,7 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
 
         let replacement_action = e.invoke(&successor);
         let replacement_cursor = e.subscribe(&successor);
-        e.until(full, |e, _| {
+        e.until(true, |e, _| {
             replacement_action.state().unwrap() == ConsumerActionState::Pending
                 && e.notifications
                     .status(replacement_cursor.identity())
@@ -736,7 +791,7 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
             e.wakes.load(Ordering::Relaxed) > before,
             "explicit cancellation notifies the registered Host driver"
         );
-        e.until(full, |_, _| {
+        e.until(true, |_, _| {
             replacement_action.state().unwrap() == ConsumerActionState::Closed
         })
         .await;
@@ -754,10 +809,10 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
         );
         e.owner.begin_close();
         drop((cb, replacement_cursor));
-        e.until(full, |e, _| e.notifications.retained_subscriptions() == 0)
+        e.until(true, |e, _| e.notifications.retained_subscriptions() == 0)
             .await;
         assert!(!e.mqtt.connected());
-        assert!(e.turn(&mut cx(), &mut full));
+        assert!(e.turn(&mut cx(), true));
         drop((
             report,
             a,
@@ -791,7 +846,7 @@ fn host_maintenance_retires_abandoned_mixed_work_and_passive_owner_loss() {
         let ca = e.subscribe(&a);
         let mut cb = e.subscribe(&b);
         let stop_view = ca.stop_handle();
-        e.until(full, |e, _| {
+        e.until(true, |e, _| {
             peer.observed.reads.load(Ordering::Acquire) == 1
                 && action.state().unwrap() == ConsumerActionState::Pending
                 && [ca.identity(), cb.identity()].into_iter().all(|id| {
@@ -800,7 +855,7 @@ fn host_maintenance_retires_abandoned_mixed_work_and_passive_owner_loss() {
         })
         .await;
         drop((read, action, ca));
-        e.until(full, |e, _| {
+        e.until(true, |e, _| {
             e.calls.is_idle()
                 && e.actions.is_idle()
                 && e.notifications.retained_subscriptions() == 1
@@ -811,7 +866,7 @@ fn host_maintenance_retires_abandoned_mixed_work_and_passive_owner_loss() {
         assert!(a.instance.is_current() && b.instance.is_current());
         let mut publisher = Peer::new(&broker);
         publisher.publish_raw("mixed/alarm", b"10", false);
-        e.until(full, |e, _| {
+        e.until(true, |e, _| {
             e.notifications.status(cb.identity()).unwrap().queued_items == 1
         })
         .await;
@@ -831,7 +886,7 @@ fn host_maintenance_retires_abandoned_mixed_work_and_passive_owner_loss() {
         // delayed management command and subsequent original cleanup turns.
         let command_at = e.clock.elapsed() + Duration::from_millis(20);
         let mut removed = false;
-        e.until(full, |e, _| {
+        e.until(true, |e, _| {
             if !removed && e.clock.elapsed() >= command_at {
                 let wakes = e.wakes.load(Ordering::Relaxed);
                 let original = std::mem::replace(
@@ -858,7 +913,7 @@ fn host_maintenance_retires_abandoned_mixed_work_and_passive_owner_loss() {
         ));
         assert!(!e.mqtt.connected());
         stop_view.request_stop();
-        assert!(e.turn(&mut cx(), &mut full));
+        assert!(e.turn(&mut cx(), true));
         drop((report, a, b, cb, stop_view, e));
         clean(&bank);
     });
@@ -884,7 +939,6 @@ fn deployment_timer_observes_finite_and_action_deadlines_while_mqtt_stays_usable
                 "level",
                 deadline,
                 e.now(),
-                &mut budget(),
             )
             .unwrap();
         let action = e
@@ -898,7 +952,7 @@ fn deployment_timer_observes_finite_and_action_deadlines_while_mqtt_stays_usable
             )
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let mut cursor = e.subscribe(&b);
-        e.until(full, |e, _| {
+        e.until(true, |e, _| {
             peer.observed.reads.load(Ordering::Acquire) == 1
                 && action.state().unwrap() == ConsumerActionState::Pending
                 && e.notifications.status(cursor.identity()).unwrap().state
@@ -906,13 +960,10 @@ fn deployment_timer_observes_finite_and_action_deadlines_while_mqtt_stays_usable
         })
         .await;
         let mut result = None;
-        e.until(full, |e, cx| {
+        e.until(true, |e, cx| {
             if result.is_none()
-                && let Poll::Ready(settlement) = read.poll(
-                    cx,
-                    e.now(),
-                    &mut budget().with_remaining(WorkClass::BindingPolls, 0),
-                )
+                && read.is_settled()
+                && let Poll::Ready(settlement) = read.poll(cx, e.now())
             {
                 result = Some(settlement);
             }
@@ -933,7 +984,7 @@ fn deployment_timer_observes_finite_and_action_deadlines_while_mqtt_stays_usable
         assert_eq!(peer.observed.cancels.load(Ordering::Acquire), 0);
         let mut publisher = Peer::new(&broker);
         publisher.publish_raw("mixed/alarm", b"11", false);
-        e.until(full, |e, _| {
+        e.until(true, |e, _| {
             e.notifications
                 .status(cursor.identity())
                 .unwrap()
@@ -953,9 +1004,9 @@ fn deployment_timer_observes_finite_and_action_deadlines_while_mqtt_stays_usable
         );
         e.notifications.advance(&mut cursor, &mut budget()).unwrap();
         drop(cursor);
-        e.until(full, |e, _| e.notifications.retained_subscriptions() == 0)
+        e.until(true, |e, _| e.notifications.retained_subscriptions() == 0)
             .await;
-        assert!(e.turn(&mut cx(), &mut full));
+        assert!(e.turn(&mut cx(), true));
         drop((a, b, read, action, action_result, result, e));
         clean(&bank);
     });

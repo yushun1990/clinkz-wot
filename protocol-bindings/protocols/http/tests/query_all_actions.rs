@@ -65,25 +65,12 @@ fn consumer_late_native_views_retain_original_funding_after_cancellation_or_revo
             let policy = Arc::new(ConsumerPolicy::default());
             let client = consumer(&server.td, bank.clone(), &instance, policy.clone());
             let mut call = query(&client);
-            let access_work = HttpConsumerConfig::for_cleartext_ip()
-                .unwrap()
-                .consumer_services()
-                .access
-                .work()
-                + 1;
             let end = Instant::now() + Duration::from_secs(5);
             // Pay the progress check and native/validation work, but withhold
             // the final authorization quantum. The observer proves that the
             // original HTTP body was accepted before cancellation/revocation.
             while policy.last_body.lock().unwrap().is_none() {
-                assert!(
-                    call.poll(
-                        &mut cx(),
-                        now(),
-                        &mut work().with_remaining(WorkClass::ProviderProbes, access_work)
-                    )
-                    .is_pending()
-                );
+                let _ = call.progress(&mut cx(), now());
                 let native = server
                     .exposure
                     .participant_mut::<HttpActionRuntime>(0)
@@ -101,7 +88,7 @@ fn consumer_late_native_views_retain_original_funding_after_cancellation_or_revo
             } else {
                 call.cancel();
             }
-            let Poll::Ready(result) = call.poll(&mut cx(), now(), &mut work()) else {
+            let Poll::Ready(result) = call.poll(&mut cx(), now()) else {
                 panic!("the validated native result requires only the final current check");
             };
             if revoke {
@@ -201,7 +188,7 @@ fn engine_query_keeps_concurrent_instances_independent_without_leaf_queries() {
         assert!(
             client
                 .0
-                .query_all_actions(&client.1, Deadline::NONE, now(), &mut work())
+                .query_all_actions(&client.1, Deadline::NONE, now())
                 .is_err()
         );
         drop(result);
@@ -419,7 +406,7 @@ fn consumer_rejects_malformed_or_misattributed_status_evidence_and_keeps_native_
             let bank=accounts();let instance=ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(2),Generation::INITIAL));
             let policy=Arc::new(ConsumerPolicy::default());
             let client=consumer(&description(addr),bank.clone(),&instance,policy.clone());let mut call=query(&client);let end=Instant::now()+Duration::from_secs(5);
-            let result=loop{if let Poll::Ready(r)=call.poll(&mut cx(),now(),&mut work()){break r;}assert!(Instant::now()<end);tokio::time::sleep(Duration::from_millis(1)).await;};
+            let result=loop{if let Poll::Ready(r)=call.poll(&mut cx(),now()){break r;}assert!(Instant::now()<end);tokio::time::sleep(Duration::from_millis(1)).await;};
             assert_eq!(result.result().is_ok(),valid,"{body}");
             if !valid && status == 200 {
                 let original = policy.last_body.lock().unwrap().take().unwrap();
@@ -472,14 +459,7 @@ fn source_free_validation_service_and_fresh_authority_remain_required_through_ha
             let end = Instant::now() + Duration::from_secs(5);
             let mut delivery = None;
             while delivery.is_none() {
-                assert!(
-                    call.poll(
-                        &mut cx(),
-                        now(),
-                        &mut work().with_remaining(WorkClass::CodecInputBytes, 0)
-                    )
-                    .is_pending()
-                );
+                let _ = call.progress(&mut cx(), now());
                 let native = server
                     .exposure
                     .participant_mut::<HttpActionRuntime>(0)
@@ -497,12 +477,9 @@ fn source_free_validation_service_and_fresh_authority_remain_required_through_ha
                 "callback" => policy.lose_on_validate.store(true, Ordering::Relaxed),
                 _ => {}
             }
-            assert!(
-                call.poll(&mut cx(), now(), &mut WorkBudget::new())
-                    .is_pending()
-            );
+            assert!(!client.1.is_idle());
             let result = loop {
-                if let Poll::Ready(r) = call.poll(&mut cx(), now(), &mut work()) {
+                if let Poll::Ready(r) = call.poll(&mut cx(), now()) {
                     break r;
                 }
                 assert!(Instant::now() < end);
@@ -513,9 +490,7 @@ fn source_free_validation_service_and_fresh_authority_remain_required_through_ha
             assert_eq!(result.operation(), Operation::QueryAllActions);
             assert_eq!(server.app.invoked.get(), 1);
             assert_eq!(server.app.cancelled.get(), 0);
-            let next = client
-                .0
-                .query_all_actions(&client.1, Deadline::NONE, now(), &mut work());
+            let next = client.0.query_all_actions(&client.1, Deadline::NONE, now());
             assert_eq!(
                 next.is_ok(),
                 matches!(mode, "cancel" | "short-credit"),
@@ -544,7 +519,7 @@ fn pre_effect_consumer_cancellation_and_policy_refusal_create_no_root_or_member_
         assert!(
             client
                 .0
-                .query_all_actions(&client.1, Deadline::NONE, now(), &mut work())
+                .query_all_actions(&client.1, Deadline::NONE, now())
                 .is_err()
         );
         policy.denied.store(false, Ordering::Relaxed);
@@ -552,7 +527,7 @@ fn pre_effect_consumer_cancellation_and_policy_refusal_create_no_root_or_member_
         call.cancel();
         let end = Instant::now() + Duration::from_secs(5);
         let result = loop {
-            if let Poll::Ready(r) = call.poll(&mut cx(), now(), &mut work()) {
+            if let Poll::Ready(r) = call.poll(&mut cx(), now()) {
                 break r;
             }
             assert!(Instant::now() < end);
@@ -1226,7 +1201,7 @@ fn native_response_loss_reports_failure_and_disposes_the_original_connection_wit
             socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 99\r\nConnection: close\r\n\r\n{\"run\":[").unwrap();drop(socket);
             listener.set_nonblocking(true).unwrap();listener});
         let bank=accounts();let instance=ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(2),Generation::INITIAL));let client=consumer(&description(addr),bank.clone(),&instance,Arc::new(ConsumerPolicy::default()));let mut call=query(&client);let end=Instant::now()+Duration::from_secs(5);
-        let result=loop{if let Poll::Ready(r)=call.poll(&mut cx(),now(),&mut work()){break r;}assert!(Instant::now()<end);tokio::time::sleep(Duration::from_millis(1)).await;};
+        let result=loop{if let Poll::Ready(r)=call.poll(&mut cx(),now()){break r;}assert!(Instant::now()<end);tokio::time::sleep(Duration::from_millis(1)).await;};
         assert!(result.result().is_err());assert_eq!(result.operation(),Operation::QueryAllActions);drop(result);drop(call);drop(client);clean(&bank);
         let listener=peer.join().unwrap();assert!(matches!(listener.accept(),Err(e) if e.kind()==std::io::ErrorKind::WouldBlock));
     });

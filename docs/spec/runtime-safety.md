@@ -728,8 +728,14 @@ The existing finite named-configuration registry stays finite; Action and
 notification associations are explicitly bound, not looked up through a new
 universal configuration registry. Removing/replacing a parent or dropping its
 owner fences every original facet without retargeting work. Closing a capacity
-still fences only that capacity. The progress helper accepts no new authority,
-definition, service or configuration override and changes no admission rules.
+still fences only that capacity. The deployment calls each capacity directly.
+One finite capacity step visits one slot in rotation. A Host finite admission
+or drive entered from a linked callback defers native work until an independent
+turn, including when the callback names a different capacity. Time observations
+and cancellation still reach the original call. A retained handle can drive
+without taking its result, test for settlement passively and collect under
+fresh permission. The native call owner retires at acknowledgement. The result
+and its share of any outstanding quota survive until disposal.
 
 The deployment supplies turns for native readiness, passive lifecycle changes,
 deadlines and transitions that are locally runnable. A timer, command loop or
@@ -823,11 +829,14 @@ the slot owner can close/step or perform local disposal.
 
 The [existing downstream fixture](../evidence/constrained-finite-execution.md)
 exercises issuer identity, real datagrams and inline result retention, and
-compiles for a target without pointer atomics. Its Read entry still takes a
-reservation and work credits. The successor must exercise those cases with
-the typed slot as backing. Host execution currently shares the finite kernel
-and uses an Rc registry, reentrant controls, a Host account bank and boxed
-native calls.
+compiles for a target without pointer atomics. Admission borrows the caller's
+`ReadResultSlot` exclusively through result disposal. Runtimes reachable from
+one another's callbacks share a caller-owned drive cell. A nested poll defers
+to the next independent turn. Each validated loan checks the exact native view
+returned and rechecks permission after validation. Once a cause is known, local
+close can retain a racing raw output without entering an access or codec service.
+Host execution shares the finite kernel and uses an Rc registry, reentrant
+controls, a Host account bank and boxed native calls.
 
 ### Caller-owned continuing Action
 

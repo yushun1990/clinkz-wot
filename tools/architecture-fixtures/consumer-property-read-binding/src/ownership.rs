@@ -240,7 +240,10 @@ impl PollClientBinding for SecondClient {
         slot: &mut ClientRequestSlot<State>,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<InteractionOutput>> {
-        slot.state_mut().poll(budget)
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return Poll::Pending;
+        }
+        slot.state_mut().poll()
     }
     fn start_cancel_request(
         &mut self,
@@ -249,7 +252,10 @@ impl PollClientBinding for SecondClient {
         slot: &mut ClientRequestSlot<State>,
         budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        slot.state_mut().cancel(cleanup, budget, false)
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return Ok(StartStatus::Pending);
+        }
+        slot.state_mut().cancel(cleanup, false)
     }
     fn poll_cancel_request(
         &mut self,
@@ -257,7 +263,10 @@ impl PollClientBinding for SecondClient {
         slot: &mut ClientRequestSlot<State>,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        slot.state_mut().poll_cancel(budget)
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return Poll::Pending;
+        }
+        slot.state_mut().poll_cancel()
     }
     fn acknowledge_request(&mut self, _: &mut ClientRequestSlot<State>) -> CoreResult<()> {
         self.stats.acknowledgements.fetch_add(1, Ordering::SeqCst);

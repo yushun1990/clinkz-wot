@@ -182,7 +182,10 @@ fn independent_https_composition(reuse_native: bool) {
         if reuse_native {
             let compilers = native_compilers.borrow();
             assert_eq!(
-                compilers.iter().map(|c| c.native_compilations()).collect::<Vec<_>>(),
+                compilers
+                    .iter()
+                    .map(|c| c.native_compilations())
+                    .collect::<Vec<_>>(),
                 [1, 0]
             );
             assert_eq!(compilers[1].instance_bindings(), 1);
@@ -225,7 +228,7 @@ fn independent_https_composition(reuse_native: bool) {
         assert!(
             client_a
                 .0
-                .read_property(&client_a.1, "on", Deadline::NONE, now(0), &mut work())
+                .read_property(&client_a.1, "on", Deadline::NONE, now(0))
                 .is_err()
         );
         drop((call_b, result_b));
@@ -242,7 +245,7 @@ fn independent_https_composition(reuse_native: bool) {
         assert!(
             client_b
                 .0
-                .read_property(&client_b.1, "on", Deadline::NONE, now(0), &mut work())
+                .read_property(&client_b.1, "on", Deadline::NONE, now(0))
                 .is_err()
         );
         assert_eq!(access_a.qualification_revision(), revision_a);
@@ -294,7 +297,7 @@ fn actual_support_refuses_complete_unsupported_expressions_and_incompatible_reus
     assert!(
         definition
             .clone()
-            .bind(denied_service, accounts.clone(), &mut work())
+            .bind(denied_service, accounts.clone())
             .is_err(),
         "NoSec-only service cannot bind Basic meaning"
     );
@@ -446,7 +449,7 @@ fn missing_credentials_and_wrong_instance_refuse_before_network_and_rotation_fen
         assert!(
             client
                 .0
-                .read_property(&client.1, "on", Deadline::NONE, now(0), &mut work())
+                .read_property(&client.1, "on", Deadline::NONE, now(0))
                 .is_err()
         );
         assert_eq!(verify.calls.load(Ordering::Relaxed), 0);
@@ -466,7 +469,7 @@ fn missing_credentials_and_wrong_instance_refuse_before_network_and_rotation_fen
         let start = Instant::now();
         loop {
             server.step();
-            client.1.step(&mut cx(), now(0), &mut work());
+            client.1.step(&mut cx(), now(0));
             if server.server().take_settlement().is_some() {
                 break;
             }
@@ -476,7 +479,7 @@ fn missing_credentials_and_wrong_instance_refuse_before_network_and_rotation_fen
         missing.replace_credentials(None).unwrap();
         let result = loop {
             server.step();
-            if let Poll::Ready(r) = call.poll(&mut cx(), now(0), &mut work()) {
+            if let Poll::Ready(r) = call.poll(&mut cx(), now(0)) {
                 break r;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;
@@ -499,7 +502,7 @@ fn missing_credentials_and_wrong_instance_refuse_before_network_and_rotation_fen
         assert!(
             wrong
                 .0
-                .read_property(&wrong.1, "on", Deadline::NONE, now(0), &mut work())
+                .read_property(&wrong.1, "on", Deadline::NONE, now(0))
                 .is_err()
         );
         drop(wrong);
@@ -912,7 +915,7 @@ fn delivery_permission_callback_cannot_revoke_authority_or_publication_and_still
                     &mut work(),
                     now(0),
                 );
-                if let Poll::Ready(result) = call.poll(&mut cx(), now(0), &mut work()) {
+                if let Poll::Ready(result) = call.poll(&mut cx(), now(0)) {
                     break result;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -1005,7 +1008,7 @@ impl ConsumerAccessService for ReviewPolicy {
 }
 
 #[test]
-fn basic_credential_issuance_prepays_its_own_complete_callback_work() {
+fn basic_credential_issuance_checks_the_actual_service_before_native_io() {
     io().block_on(async {
         let keys = Keys::for_name("127.0.0.1");
         let verify = verifier();
@@ -1024,40 +1027,14 @@ fn basic_credential_issuance_prepays_its_own_complete_callback_work() {
             )
             .unwrap(),
         );
-        let callback_work = access.work();
         let (client, content) =
             secure_client(&server.td, &keys, &instance, access, &accounts, None);
-        let baseline: Vec<_> = ResourceKind::ALL.map(|k| accounts.account(k).used()).into();
-        for credit in [callback_work, 2 * callback_work - 1] {
-            policy.calls.store(0, Ordering::Relaxed);
-            let mut budget = work().with_remaining(WorkClass::ProviderProbes, credit);
-            assert!(
-                client
-                    .0
-                    .read_property(&client.1, "on", Deadline::NONE, now(0), &mut budget)
-                    .is_err(),
-                "one permission payment cannot also fund credential issuance"
-            );
-            assert_eq!(policy.calls.load(Ordering::Relaxed), 2);
-            assert_eq!(
-                budget.remaining(WorkClass::ProviderProbes),
-                credit - callback_work
-            );
-            assert_eq!(
-                ResourceKind::ALL
-                    .map(|k| accounts.account(k).used())
-                    .as_slice(),
-                baseline
-            );
-            assert_eq!(verify.calls.load(Ordering::Relaxed), 0);
-        }
         policy.calls.store(0, Ordering::Relaxed);
-        let mut budget = work().with_remaining(WorkClass::ProviderProbes, 2 * callback_work);
         let mut call = client
             .0
-            .read_property(&client.1, "on", Deadline::NONE, now(0), &mut budget)
+            .read_property(&client.1, "on", Deadline::NONE, now(0))
             .unwrap();
-        assert_eq!(budget.remaining(WorkClass::ProviderProbes), 0);
+        assert_eq!(verify.calls.load(Ordering::Relaxed), 0);
         assert_eq!(policy.calls.load(Ordering::Relaxed), 4);
         let result = server.exchange(&mut call).await;
         assert!(result.result().is_ok());
@@ -1153,7 +1130,7 @@ fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fres
         let start = Instant::now();
         while validations.load(Ordering::Acquire) == 0 {
             server.step();
-            client.1.step(&mut cx(), now(0), &mut work());
+            client.1.step(&mut cx(), now(0));
             assert!(start.elapsed() < Duration::from_secs(5));
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
@@ -1176,7 +1153,7 @@ fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fres
         assert!(
             client
                 .0
-                .read_property(&client.1, "on", Deadline::NONE, now(0), &mut work())
+                .read_property(&client.1, "on", Deadline::NONE, now(0))
                 .is_err()
         );
         assert_eq!(
@@ -1188,7 +1165,7 @@ fn wrapped_policy_revision_fences_a_validated_unread_tls_result_and_rebinds_fres
         let owner = ConsumerServiceOwner::retain_access(access.clone(), &accounts)
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let binding = definition
-            .bind(owner, accounts.clone(), &mut work())
+            .bind(owner, accounts.clone())
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let client = StandaloneConsumerAssociation::try_new(
             instance.reference(),

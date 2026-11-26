@@ -71,7 +71,7 @@ fn shared_failure_before_during_and_after_application_never_implies_rollback_or_
             );
             for _ in 0..10 {
                 server.step();
-                client.1.step(&mut cx(), now(0), &mut work());
+                client.1.step(&mut cx(), now(0));
             }
             assert_eq!(server.controls.requests.get(), 1);
             assert_eq!(server.app.roots.get(), 1);
@@ -135,7 +135,7 @@ fn shared_ambiguous_or_partial_native_completion_never_confirms_or_replays_the_g
             let mut call = start_write(&client);
             let start = Instant::now();
             let result = loop {
-                if let Poll::Ready(s) = call.poll(&mut cx(), now(0), &mut work()) {
+                if let Poll::Ready(s) = call.poll(&mut cx(), now(0)) {
                     break s;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -152,7 +152,7 @@ fn shared_ambiguous_or_partial_native_completion_never_confirms_or_replays_the_g
                 }
             );
             for _ in 0..10 {
-                client.1.step(&mut cx(), now(0), &mut work());
+                client.1.step(&mut cx(), now(0));
             }
             drop(result);
             drop(call);
@@ -294,7 +294,7 @@ fn shared_valid_head_without_eof_is_not_completion_and_retains_funding_until_set
             let mut call = start_collection_at(&client, operation, Deadline::at(now(10))).unwrap();
             let start = Instant::now();
             loop {
-                assert!(call.poll(&mut cx(), now(0), &mut work()).is_pending());
+                assert!(call.poll(&mut cx(), now(0)).is_pending());
                 if received.try_recv().is_ok() {
                     break;
                 }
@@ -304,7 +304,7 @@ fn shared_valid_head_without_eof_is_not_completion_and_retains_funding_until_set
             let retained = ResourceKind::ALL.map(|k| accounts.account(k).used());
             for _ in 0..10 {
                 assert!(
-                    call.poll(&mut cx(), now(0), &mut work()).is_pending(),
+                    call.poll(&mut cx(), now(0)).is_pending(),
                     "head alone cannot confirm a write"
                 );
                 tokio::time::sleep(Duration::from_millis(1)).await;
@@ -319,12 +319,9 @@ fn shared_valid_head_without_eof_is_not_completion_and_retains_funding_until_set
             }
             release.send(()).unwrap();
             let instant = now(if fault == "timeout" { 10 } else { 0 });
-            assert!(
-                call.poll(&mut cx(), instant, &mut WorkBudget::new())
-                    .is_pending()
-            );
+            assert!(!client.1.is_idle());
             let result = loop {
-                if let Poll::Ready(s) = call.poll(&mut cx(), instant, &mut work()) {
+                if let Poll::Ready(s) = call.poll(&mut cx(), instant) {
                     break s;
                 }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -412,7 +409,7 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
             while !completed || remote.is_none() {
                 server.step();
                 let before = checks.load(Ordering::Relaxed);
-                client.1.step(&mut cx(), now(0), &mut work());
+                client.1.step(&mut cx(), now(0));
                 completed |= checks.load(Ordering::Relaxed) - before == 2;
                 if let Some(s) = server.server().take_settlement() { remote = Some(s); }
                 assert!(start.elapsed() < Duration::from_secs(5));
@@ -422,8 +419,8 @@ fn shared_unread_confirmed_completion_keeps_original_evidence_when_local_handoff
             assert!(start_collection_at(&client, operation, Deadline::NONE).is_err(), "unread Engine slot retains original call capacity");
             match fault { "cancel" => call.cancel(), "replace" => owner.revoke(), _ => denied.store(true, Ordering::Relaxed) }
             let retained = ResourceKind::ALL.map(|k| accounts.account(k).used());
-            assert!(call.poll(&mut cx(), now(0), &mut WorkBudget::new()).is_pending());
-            let Poll::Ready(local) = call.poll(&mut cx(), now(0), &mut work()) else { panic!("original completed result retained") };
+            assert!(!client.1.is_idle());
+            let Poll::Ready(local) = call.poll(&mut cx(), now(0)) else { panic!("original completed result retained") };
             assert!(local.result().is_err());
             assert_eq!(local.effect(), ConsumerEffect::Completed);
             assert!(matches!(local.native_outcome(), ConsumerNativeOutcome::Returned(Ok(o)) if o.data().is_none()));

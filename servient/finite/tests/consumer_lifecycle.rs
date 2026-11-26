@@ -107,11 +107,11 @@ fn id_lookup_recovers_management_and_distinguishes_current_from_conditional_remo
     );
     drop(a.register_thing("urn:pump", &mut work()).unwrap());
     drop(b.register_thing("urn:pump", &mut work()).unwrap());
-    let current = a.instance("urn:pump", &mut work()).unwrap();
+    let current = a.instance("urn:pump").unwrap();
     assert_eq!(current.thing_id(), "urn:pump");
     assert_ne!(
         current.consumer(),
-        b.instance("urn:pump", &mut work()).unwrap().consumer()
+        b.instance("urn:pump").unwrap().consumer()
     );
     let before = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
     assert!(matches!(
@@ -134,7 +134,7 @@ fn id_lookup_recovers_management_and_distinguishes_current_from_conditional_remo
     let replaced = a.replace_instance(&current, &mut work()).unwrap();
     assert!(!current.is_current());
     assert_eq!(
-        a.instance("urn:pump", &mut work()).unwrap().consumer(),
+        a.instance("urn:pump").unwrap().consumer(),
         replaced.consumer()
     );
     a.remove_thing("urn:pump", &mut work()).unwrap();
@@ -147,7 +147,7 @@ fn id_lookup_recovers_management_and_distinguishes_current_from_conditional_remo
     // ID removal deliberately targets the current registration, unlike removal
     // conditioned on the stale snapshot. No generation guesses command intent.
     a.remove_thing("urn:pump", &mut work()).unwrap();
-    assert!(b.instance("urn:pump", &mut work()).unwrap().is_current());
+    assert!(b.instance("urn:pump").unwrap().is_current());
     drop((a, b, current, replaced));
     clean(&bank);
 }
@@ -234,12 +234,10 @@ fn long_common_prefix_ids_stay_indexed_through_out_of_order_insert_remove_and_re
         );
     }
     for i in [0, 1, COUNT / 2, COUNT - 2, COUNT - 1] {
-        let mut small = WorkBudget::new().with_remaining(WorkClass::QueueOperations, 1024);
-        let handle = owner.instance(&key(i), &mut small).unwrap();
+        let handle = owner.instance(&key(i)).unwrap();
         assert_eq!(handle.thing_id(), key(i).as_str());
-        assert!(small.remaining(WorkClass::QueueOperations) > 0);
     }
-    let stale = owner.instance(&key(17), &mut work()).unwrap();
+    let stale = owner.instance(&key(17)).unwrap();
     let before = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
     assert!(matches!(
         owner.register_thing(&key(17), &mut work()),
@@ -260,8 +258,7 @@ fn long_common_prefix_ids_stay_indexed_through_out_of_order_insert_remove_and_re
         Err(CoreError::StaleHandle(_))
     ));
     for i in 0..COUNT {
-        let mut small = WorkBudget::new().with_remaining(WorkClass::QueueOperations, 1024);
-        assert!(owner.instance(&key(i), &mut small).unwrap().is_current());
+        assert!(owner.instance(&key(i)).unwrap().is_current());
     }
     drop((stale, owner));
     clean(&bank);
@@ -364,17 +361,13 @@ fn mixed_public_lifecycle_has_the_same_fixed_credit_at_small_and_large_populatio
                         ));
                     }
                 }
-                2 => {
-                    let mut credit =
-                        WorkBudget::new().with_remaining(WorkClass::QueueOperations, 1024);
-                    match (model.get(&id), owner.instance(&id, &mut credit)) {
-                        (Some(expected), Ok(actual)) => {
-                            assert_eq!(expected.consumer(), actual.consumer())
-                        }
-                        (None, Err(CoreError::NotFound(_))) => {}
-                        _ => panic!("model disagrees with lookup"),
+                2 => match (model.get(&id), owner.instance(&id)) {
+                    (Some(expected), Ok(actual)) => {
+                        assert_eq!(expected.consumer(), actual.consumer())
                     }
-                }
+                    (None, Err(CoreError::NotFound(_))) => {}
+                    _ => panic!("model disagrees with lookup"),
+                },
                 _ => {
                     if let Some(old) = model.get(&id) {
                         assert!(matches!(

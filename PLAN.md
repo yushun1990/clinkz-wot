@@ -32,41 +32,57 @@ reply rights and retained results each have their own release point. [ADR-0025](
 
 ## Engineering priorities and dependencies
 
-Public Producer exposure, Consumer choice and delivery failure isolation can
-advance on existing paths. Callback subscriptions bring them together when one
-application accepts a subscription that another application can control.
-[Dependencies of the selected design](workspace/0132-engine-lifecycle-design.md#convergence-by-dependency)
+### Retire the superseded resource architecture
 
-### Near-term capability growth and priority
+Complete the ownership and bounded-progress migration before expanding interaction
+coverage. The finite Producer already demonstrates closed acquisition, rollback
+and individually retired replies. Its Host preparation and composed participants
+still use legacy accounting. The remaining dependencies determine the order.
+[Accepted migration](workspace/0133-resource-management-proposal.md#disposition-of-308-and-the-roadmap) · [Owner and progress contracts](docs/spec/foundation.md)
 
-**Extend coherent publication and independent delivery retirement to continuing
-interactions.** The public finite Host qualifies fixed or assigned endpoints
-through Binding-owned assembly. The source-free Producer can complete a second
-Read on the same member while the first reply retains a timeout and a cleanup
-error. An outstanding result keeps its original value and recipient across
-replacement. [Host application](protocol-bindings/protocols/http/examples/serve_properties.rs) ·
-[Finite publication and retirement](docs/evidence/finite-producer-publication.md)
+1. **Finite Consumer execution.** The composed Host path now drives named,
+   bound and collection operations through one bounded native poll in Core.
+   The caller-owned Read holds a typed result slot through disposal. Both can
+   retire the original exchange under cancellation while its result remains
+   held. The Host still shares outstanding-call, response, scratch and cleanup
+   accounts with other families. Native registration still reports footprints
+   to the restricted Host Read. Migrate that Read and its source-enabled and
+   prepared-only Host/static callers, façade exports, fixtures and workload
+   drivers. Retire the restricted Read policy with that façade. The Producer
+   and preparation paths below also consume plan-set and route-stage artifacts.
+   Their last use releases the shared adapters and frozen schema-2 checks.
+   [Host execution](servient/finite/src/consumer.rs) · [Caller-owned evidence](docs/evidence/constrained-finite-execution.md)
+2. **Continuing and published work.** Migrate Consumer Invoke/Query/Cancel and
+   notification conversations, then Producer candidate, invocation, delivery and
+   reply owners with their Bindings and deployment loops. Secure real continuation,
+   correlation, reply and handoff storage before effects. Drive local retirement
+   under saturation and distinguish isolated cleanup failure from lost ingress.
+   The shared validator and access work declarations still serve continuing
+   Actions, notifications or preparation. Delete them with their last consuming
+   chain, along with the remaining per-family credit factories.
+3. **Preparation and Discovery.** Move TD traversal, Planning search and Discovery
+   retrieval to the jobs that repeat visits, delegate, rewind or retry. Bound
+   per-turn visits and cumulative work through exhaustion. Preserve page, byte,
+   deadline and input ownership limits. This also releases dependencies of the
+   finite Producer staging and Consumer registration paths.
+4. **Shared quotas and final removal.** At each cutover identify the promised
+   participants, unit and last holder. Conserve any retained aggregate across
+   old and new participants, including taken results, through their final
+   release. Where availability is promised in advance, hold actual supply at
+   its owner and exercise the same path with the remaining pool exhausted. Retire obsolete ceilings at their last caller. Remove the flat
+   resource profiles, global work classes and budgets, generic reservations,
+   footprint declarations, generators, overlays and digest checks as their
+   consumers disappear. [Quota cutover](docs/spec/foundation.md) · [Package dependencies](docs/work-packages/index.toml)
 
-Continuing Actions need their invocation, correlation and result capacity at
-acceptance. MQTT emissions need to distinguish a damaged delivery from loss of a
-required member. Two-ended subscriptions depend on those guarantees at both
-participants. [Servient scope](docs/work-packages/WP-400-servient.md#public-finite-publication-acceptance-and-retirement) ·
-[Binding scope](docs/work-packages/WP-600-protocol-bindings.md#finite-publication-on-host-and-caller-owned-deployments)
-
-When a deployment needs predictable
-availability, reserve actual capacity at its supplying owner and exercise the
-same publication and retirement path after other users exhaust the free pool.
-[Backing and quotas](docs/spec/foundation.md)
-
-Extend bounded progress from the finite Producer to the Consumer and continuing
-Action call chains, including their public Host and manual drivers, Core step,
-Binding, access and codec. TD and Planning move repeated traversal limits to
-the job. Discovery consumes its explicit progress and keeps its own session
-bounds. Preserve each retained shared ceiling across all callers as they
-move, including old results held through disposal. Remove obsolete ceilings,
-receipts and factories with their last user. Consumer selection, per-effect
-security and bounded Discovery can proceed on their own dependencies.
-[Package dependencies](docs/work-packages/index.toml)
+**Retirement is complete** when supported public paths, examples, fixtures,
+benchmarks, build features and CI compile and run without the superseded APIs,
+generated tables or work factories. Current specifications and public inventories
+must describe the enforcing owners. Verify real Host and independent Binding I/O,
+caller-owned execution and the no-pointer-atomics build, bounded callback/reentry
+and job exhaustion, first cause and late evidence, and reuse after final release.
+For each continuing shared ceiling, test last-unit contention with a held result.
+Review that evidence and the execution-only dependency graph at one revision.
+[Runtime safety](docs/spec/runtime-safety.md) · [Integration obligations](docs/work-packages/WP-700-integration.md)
 
 ### Qualify the interaction through its first effect
 
@@ -150,20 +166,12 @@ one and many instances. Hold active work fixed while varying idle Things.
 Use the comparison to decide where specialized mappings or indexes pay for
 themselves. [Measured HTTP baseline](docs/evidence/consumer-execution-reuse.md#measured-costs-and-benefit) · [Scale criteria](workspace/0132-engine-lifecycle-design.md#compilation-reuse-and-the-cost-of-scale)
 
-Extend the public paths as each interaction becomes usable. A retained or bound
-Consumer Read uses the same checked association as a named operation and draws
-from separately supplied call capacity. Migrate source-enabled and prepared-only
-Host/static Read callers, re-exports, examples, benchmarks and fixtures. Delete
-their Read façade, Plan-Set and route-stage adapters, then the flat profiles,
-overlay, generator and frozen checks with the last reader. Keep raw layers used
-by composition. Foundation completion requires the joined
-public paths, consistent domain contracts, representative Host and caller-owned
-execution, and independent review at one revision. This includes the
+Foundation completion includes joined public paths, consistent domain contracts,
+representative Host and caller-owned execution, and independent review of the
 execution-only dependency graph and the supported no-pointer-atomics build.
 [Public caller census](docs/reviews/review-11-engine-architecture-audit.md#public-api-and-caller-census) · [Foundation completion criteria](workspace/0132-engine-lifecycle-design.md#foundation-completion-and-product-development) · [Work-package dependencies](docs/work-packages/index.toml)
 
-Bounded trusted Discovery/Directory retrieval and disjoint Host HTTPS work can
-advance on their own dependencies. Product webhook hosting, proxy support,
+After resource retirement, product webhook hosting, proxy support,
 authenticated notification profiles, strict ingestion and sustained workload
 qualification require evidence for the advertised deployment. The selected
 baseline permits a service gap for an exclusive route that must close before

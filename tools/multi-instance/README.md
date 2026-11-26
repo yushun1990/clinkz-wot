@@ -57,8 +57,9 @@ permission service. Independent accounts include a real bank per instance.
 Shared accounts compare a common quota domain; they preserve independent
 permission but do **not** provide per-instance quotas. Physical data/access
 services are adopted once and imported into actual native registrations. The
-unmodified Gateway profile and per-entry work budget of 1,000,000 credits per
-class remain explicit. No production limits are raised.
+Gateway profile supplies shared quotas. Preparation records its work budget of
+1,000,000 credits per class. Finite admission and progress measure elapsed time
+and actual polls.
 
 The current-thread runtime drives at most one call per selected native lane.
 The workload's explicit queue exists only in this executable, outside the Engine;

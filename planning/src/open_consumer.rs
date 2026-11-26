@@ -729,12 +729,18 @@ impl ConsumerRegistry {
                                                     )
                                                     .map_err(|e| e.error().error().clone())?,
                                                 );
+                                                if !pay(
+                                                    budget,
+                                                    W::ProviderProbes,
+                                                    registration.access.work(),
+                                                ) {
+                                                    return Err(busy());
+                                                }
                                                 chosen = Some(
                                                     definition
                                                         .bind(
                                                             registration.access.clone(),
                                                             bank.clone(),
-                                                            budget,
                                                         )
                                                         .map_err(|e| e.error().error().clone())?,
                                                 );

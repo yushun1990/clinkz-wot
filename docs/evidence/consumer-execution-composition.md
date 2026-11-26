@@ -21,9 +21,8 @@ not an application execution-composition boundary.
 Finite and continuing Action capacity owners already aggregate their retained
 work. Notification capacity needed a corresponding turn for active conversations
 and abandoned cleanup. Its existing slab, validation/policy and native retirement
-transitions suffice. The new `ConsumerProgress` interface and `step_consumers`
-only borrow those capacity owners with separate work credit. They store no
-execution state or authority, allocate no registry and prescribe no runtime.
+transitions suffice. The deployment now calls each capacity directly. It can
+omit a finite turn while continuing Action and notification work progresses.
 Definitions, original associations, live work and physical resources keep their
 established owners; Review 10 F1/F2/F3 are preserved, not reinterpreted.
 
@@ -39,14 +38,15 @@ relationship: eight managed identities coexist with one finite call slot, one
 Action invocation slot and two notification conversation slots.
 
 One Host task supplies native Wakers, a real maintenance timer, monotonic time
-and independent budgets. It observes application results in that same task.
-Finite result observation has zero BindingPolls credit, so the composed capacity
-turn alone performs finite native progress. Tests exercise:
+and independent turns. It collects finite results in that same task after
+passively observing native settlement. The fixture exercises the following cases.
 
 - Refused finite permission on one Consumer leaves the sibling finite call,
-  continuing Action and MQTT subscriptions usable. Zero finite credit cannot
-  borrow Action credit or prevent Action acceptance and MQTT delivery; restored
-  credit completes the original finite call.
+  continuing Action and MQTT subscriptions usable. Omitting the finite turn
+  still permits Action acceptance and MQTT delivery. Driving the finite capacity
+  completes its original call.
+- With one outstanding unit shared by finite and continuing calls, holding either
+  taken result refuses the other family. Disposal permits its next admission.
 - Invoke/Query complete with original Consumer identity and validated output.
   Explicit mapped Cancel reports Requested while the Action remains pending;
   a later explicit Query completes. Local cancellation wakes the registered Host

@@ -170,13 +170,10 @@ fn main() {
                 &args[4],
                 Deadline::at(now().checked_add_ticks(10_000).unwrap()),
                 now(),
-                &mut work(),
             )
             .unwrap();
         let result = loop {
-            if let Poll::Ready(result) =
-                call.poll(&mut Context::from_waker(Waker::noop()), now(), &mut work())
-            {
+            if let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), now()) {
                 break result;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;

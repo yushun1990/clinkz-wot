@@ -161,11 +161,8 @@ pub(crate) async fn settle(call: &mut ConsumerCall) -> ConsumerSettlement {
         loop {
             let instant =
                 MonotonicInstant::new(ClockId::new(771), start.elapsed().as_millis() as u64);
-            if let Poll::Ready(result) = call.poll(
-                &mut Context::from_waker(Waker::noop()),
-                instant,
-                &mut work(),
-            ) {
+            if let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), instant)
+            {
                 return result;
             }
             tokio::time::sleep(Duration::from_millis(1)).await;
@@ -271,7 +268,6 @@ fn main() {
                 &args[4],
                 Deadline::at(now().checked_add_ticks(4_000).unwrap()),
                 now(),
-                &mut work(),
             )
             .unwrap();
         let result = settle(&mut call).await;
