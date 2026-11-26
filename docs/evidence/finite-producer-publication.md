@@ -12,7 +12,11 @@ opens the ready members together. A refused candidate releases partial native
 setup and returns its original inputs. [Host implementation](../../servient/src/host_producer.rs) ·
 [HTTP application](../../protocol-bindings/protocols/http/examples/serve_properties.rs)
 
-A periodic Host turn visits one member. Taking an outcome transfers its original
+A periodic Host turn visits one member. Each exposure carries the last accepted
+clock observation from publication through serving and retirement. A backwards
+tick or clock-domain change fences that exposure before dispatch or delivery.
+Each interrupted reply keeps its original result and any earlier cause.
+Taking an outcome transfers its original
 record and data. Disposing it frees a record for the next admission. A deployment
 can share its outstanding-handler quota across compatible existing callers by
 supplying the same bank in `HostProducerLimits::shared_handler_quota`. The HTTP participant owns one active connection per

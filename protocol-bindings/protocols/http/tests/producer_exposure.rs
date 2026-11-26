@@ -150,13 +150,15 @@ fn expose(
     )
     .map_err(|e| e.into_parts().1.into_parts().1)
 }
+fn now(ticks: u64) -> MonotonicInstant {
+    MonotonicInstant::new(ClockId::new(1), ticks)
+}
+fn step_at(host: &mut HostProducer, exposure: &mut HostExposure, time: MonotonicInstant) {
+    host.step(exposure, &mut Context::from_waker(Waker::noop()), time)
+        .unwrap();
+}
 fn step(host: &mut HostProducer, exposure: &mut HostExposure) {
-    host.step(
-        exposure,
-        &mut Context::from_waker(Waker::noop()),
-        MonotonicInstant::new(ClockId::new(1), 0),
-    )
-    .unwrap();
+    step_at(host, exposure, now(0));
 }
 fn publish(host: &mut HostProducer, exposure: &mut HostExposure) {
     publication_result(host, exposure).unwrap();
@@ -230,9 +232,16 @@ fn read_udp(host: &mut HostProducer, exposure: &mut HostExposure, address: Socke
     serde_json::from_slice(&bytes[..len]).unwrap()
 }
 fn outcome(host: &mut HostProducer, exposure: &mut HostExposure) -> ProducerFiniteSettlement {
+    outcome_at(host, exposure, now(0))
+}
+fn outcome_at(
+    host: &mut HostProducer,
+    exposure: &mut HostExposure,
+    time: MonotonicInstant,
+) -> ProducerFiniteSettlement {
     let end = Instant::now() + Duration::from_secs(2);
     loop {
-        step(host, exposure);
+        step_at(host, exposure, time);
         if let Some(result) = exposure.take_finite_settlement() {
             return result;
         }
@@ -1098,4 +1107,209 @@ fn two_host_deployments_share_one_handler_permit_through_result_disposal() {
     assert_eq!(wire.split_once("\r\n\r\n").unwrap().1, "2");
     drop(second_result);
     assert_eq!(bank.account(kind).used(), 0);
+}
+
+#[test]
+fn exposure_clock_fences_a_late_http_reply_across_member_turns() {
+    let binding = ErrorContext::new(ErrorPhase::Binding, RetryClass::Never);
+    for (next_udp, next_http, cause) in [
+        (now(150), now(3), CoreError::InternalInvariant(binding)),
+        (
+            now(150),
+            MonotonicInstant::new(ClockId::new(2), 151),
+            CoreError::InternalInvariant(binding),
+        ),
+        (now(1), now(3), CoreError::InternalInvariant(binding)),
+        (now(150), now(151), CoreError::TimedOut(binding)),
+    ] {
+        let udp = udp::Datagram::new();
+        let acquired = Acquired::default();
+        let mut host = deployment(udp.clone(), &[20], 2, acquired.clone());
+        let calls = Rc::new(Cell::new(0));
+        let mut thing = expose(
+            &mut host,
+            &source(true, Some(udp.address())),
+            &["relative", "absolute"],
+            7,
+            &calls,
+            None,
+        )
+        .unwrap();
+        publish(&mut host, &mut thing);
+        let address = acquired.borrow()[0];
+        let mut peer = TcpStream::connect(address).unwrap();
+        write!(
+            peer,
+            "GET /level HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n"
+        )
+        .unwrap();
+        let end = Instant::now() + Duration::from_secs(2);
+        while calls.get() == 0 {
+            step_at(&mut host, &mut thing, now(2));
+            assert!(Instant::now() < end);
+        }
+        // The HTTP result is ready with a request deadline of 102. UDP gets the next turn.
+        step_at(&mut host, &mut thing, next_udp);
+        assert!(thing.take_finite_settlement().is_none());
+        step_at(&mut host, &mut thing, next_http);
+
+        let observed = thing.publication_failure().cloned();
+        let withdrawn = host.description(thing.key()).is_none();
+        let held = outcome_at(&mut host, &mut thing, next_http);
+        peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let mut wire = String::new();
+        peer.read_to_string(&mut wire).unwrap();
+        assert!(wire.is_empty(), "unexpected HTTP response {wire:?}");
+        let clock_fault = matches!(cause, CoreError::InternalInvariant(_));
+        assert_eq!(observed.as_ref(), clock_fault.then_some(&cause));
+        assert_eq!(withdrawn, clock_fault);
+        assert_eq!(held.first_cause(), Some(&cause));
+        assert!(held.cleanup_error().is_none());
+        assert_eq!(held.effect(), FiniteEffect::Unknown);
+        assert_eq!(held.delivery(), FiniteDelivery::NotDelivered);
+        assert_eq!(held.recipient(), Some(thing.key()));
+        assert_eq!(held.result().unwrap().data().unwrap().body, b"7");
+        assert_eq!(calls.get(), 1);
+        thing.begin_close();
+        while !thing.members_retired() {
+            step_at(&mut host, &mut thing, next_http);
+            assert!(Instant::now() < end);
+        }
+        host.retire(&mut thing).unwrap();
+        TcpListener::bind(address).unwrap();
+    }
+}
+
+#[test]
+fn first_serving_turn_keeps_the_commit_clock() {
+    let udp = udp::Datagram::new();
+    let mut host = deployment(udp.clone(), &[20], 1, Acquired::default());
+    let calls = Rc::new(Cell::new(0));
+    let mut thing = expose(
+        &mut host,
+        &source(false, Some(udp.address())),
+        &["absolute"],
+        7,
+        &calls,
+        None,
+    )
+    .unwrap();
+    while udp.starts.get() == 0 {
+        assert!(tick(&mut host, &mut thing).is_pending());
+    }
+    assert_eq!(
+        host.poll_publish(
+            &mut thing,
+            &mut Context::from_waker(Waker::noop()),
+            now(100)
+        ),
+        Poll::Ready(Ok(()))
+    );
+    let peer = UdpSocket::bind(zero()).unwrap();
+    peer.send_to(b"READ", udp.address()).unwrap();
+    step_at(&mut host, &mut thing, now(2));
+    let error =
+        CoreError::InternalInvariant(ErrorContext::new(ErrorPhase::Binding, RetryClass::Never));
+    assert_eq!(thing.publication_failure(), Some(&error));
+    assert!(host.description(thing.key()).is_none());
+    step_at(&mut host, &mut thing, now(101));
+    assert!(thing.take_finite_settlement().is_none());
+    assert_eq!(calls.get(), 0);
+    host.retire(&mut thing).unwrap();
+    // Another exposure on this Host starts its own clock at zero.
+    let mut fresh = expose(
+        &mut host,
+        &source(true, None),
+        &["relative"],
+        8,
+        &calls,
+        None,
+    )
+    .unwrap();
+    publish(&mut host, &mut fresh);
+    assert_eq!(read_http(&mut host, &mut fresh).0, "8");
+}
+
+#[test]
+fn clock_fault_during_retirement_preserves_the_original_exchange_errors() {
+    let udp = udp::Datagram::new();
+    let address = udp.address();
+    let mut host = deployment(udp.clone(), &[20], 2, Acquired::default());
+    let calls = Rc::new(Cell::new(0));
+    let mut thing = expose(
+        &mut host,
+        &source(true, Some(address)),
+        &["absolute", "relative"],
+        9,
+        &calls,
+        None,
+    )
+    .unwrap();
+    publish(&mut host, &mut thing);
+    udp.fail_send.set(true);
+    let peer = UdpSocket::bind(zero()).unwrap();
+    peer.send_to(b"READ", address).unwrap();
+    let end = Instant::now() + Duration::from_secs(2);
+    while udp.retire_attempts.get() == 0 {
+        step_at(&mut host, &mut thing, now(2));
+        assert!(Instant::now() < end);
+    }
+    step_at(&mut host, &mut thing, now(150)); // HTTP
+    step_at(&mut host, &mut thing, now(3)); // UDP cleanup
+    let error =
+        CoreError::InternalInvariant(ErrorContext::new(ErrorPhase::Cleanup, RetryClass::Never));
+    assert_eq!(thing.publication_failure(), Some(&error));
+    let held = outcome_at(&mut host, &mut thing, now(3));
+    assert!(matches!(
+        held.first_cause(),
+        Some(CoreError::UnsupportedOperation(_))
+    ));
+    assert!(matches!(
+        held.cleanup_error(),
+        Some(CoreError::Backpressure(_))
+    ));
+    assert_eq!(held.delivery(), FiniteDelivery::NotDelivered);
+    assert_eq!(held.result().unwrap().data().unwrap().body, b"9");
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn staged_clock_fault_rolls_back_before_and_after_the_first_native_start() {
+    let udp = udp::Datagram::new();
+    let acquired = Acquired::default();
+    let mut host = deployment(udp.clone(), &[20], 2, acquired.clone());
+    let calls = Rc::new(Cell::new(0));
+    for start_udp in [false, true] {
+        let mut thing = expose(
+            &mut host,
+            &source(true, Some(udp.address())),
+            &["absolute", "relative"],
+            4,
+            &calls,
+            None,
+        )
+        .unwrap();
+        let mut cx = Context::from_waker(Waker::noop());
+        let end = Instant::now() + Duration::from_secs(2);
+        loop {
+            assert!(host.poll_publish(&mut thing, &mut cx, now(8)).is_pending());
+            if !start_udp || udp.starts.get() == 1 {
+                break;
+            }
+            assert!(Instant::now() < end);
+        }
+        let error = if start_udp {
+            CoreError::InternalInvariant(ErrorContext::new(ErrorPhase::Binding, RetryClass::Never))
+        } else {
+            CoreError::Validation(ErrorContext::new(ErrorPhase::Admission, RetryClass::Never))
+        };
+        assert_eq!(
+            host.poll_publish(&mut thing, &mut cx, now(7)),
+            Poll::Ready(Err(error.clone()))
+        );
+        assert_eq!(thing.publication_failure(), Some(&error));
+        assert_eq!(thing.into_input().ok().unwrap().behaviors.len(), 2);
+        TcpListener::bind(*acquired.borrow().last().unwrap()).unwrap();
+        assert_eq!(calls.get(), 0);
+    }
 }

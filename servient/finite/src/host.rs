@@ -1094,67 +1094,64 @@ impl<B: FiniteIngressBinding> RawFiniteRuntime<B> {
         self.binding.check_ingress()
     }
 
+    fn timing_context(&self, phase: ErrorPhase) -> ErrorContext {
+        let phase = match self.state {
+            RawFiniteState::RetiringReply | RawFiniteState::Closing | RawFiniteState::Closed => {
+                ErrorPhase::Cleanup
+            }
+            _ if self.native_started => phase,
+            _ => ErrorPhase::Admission,
+        };
+        ErrorContext::new(phase, RetryClass::Never)
+    }
+
+    fn fence_clock(&mut self, phase: ErrorPhase) -> CoreError {
+        let context = self.timing_context(phase);
+        let error = if context.phase() == ErrorPhase::Admission {
+            CoreError::Validation(context)
+        } else {
+            CoreError::InternalInvariant(context)
+        };
+        if self.state != RawFiniteState::Closed {
+            self.fence(error.clone());
+        }
+        error
+    }
+
+    /// Fence a regression or clock-domain change observed by the enclosing
+    /// driver. Return this member’s phase-specific clock error. Any earlier
+    /// exchange cause stays with its original reply through retirement.
+    pub fn fence_progress_clock(&mut self) -> CoreError {
+        let phase = if self.deadline.instant().is_some() {
+            ErrorPhase::Handler
+        } else {
+            ErrorPhase::Binding
+        };
+        self.fence_clock(phase)
+    }
+
     fn check_time(&mut self, now: MonotonicInstant) {
         if self.state == RawFiniteState::Closed {
             return;
         }
-        let monotonic_failure = self
-            .last_now
-            .is_some_and(|last| now.checked_duration_since(last).is_none());
-        let cleanup = matches!(
-            self.state,
-            RawFiniteState::Closing | RawFiniteState::RetiringReply
-        );
-        let admitted = self.native_started || cleanup;
-        let interaction_phase = if cleanup {
-            ErrorPhase::Cleanup
-        } else {
-            ErrorPhase::Handler
-        };
-        let native_phase = if cleanup {
-            ErrorPhase::Cleanup
-        } else {
-            ErrorPhase::Binding
-        };
         let lifetime_elapsed = self.deadline.checked_is_elapsed_at(now);
         let request_elapsed = self.io_deadline.checked_is_elapsed_at(now);
-        let comparisons = [
-            (lifetime_elapsed, interaction_phase),
-            (request_elapsed, native_phase),
-        ];
-        // Check the actual deadline domains before the general progress clock.
-        // This preserves Handler versus Binding attribution when both fail.
-        let clock_phase = comparisons
-            .iter()
-            .find_map(|(elapsed, phase)| elapsed.is_none().then_some(*phase))
-            .or_else(|| {
-                monotonic_failure.then_some(if self.deadline.instant().is_some() {
-                    interaction_phase
-                } else {
-                    native_phase
-                })
-            });
-        let timing_context = |phase| {
-            ErrorContext::new(
-                if admitted {
-                    phase
-                } else {
-                    ErrorPhase::Admission
-                },
-                RetryClass::Never,
-            )
-        };
-        if let Some(phase) = clock_phase {
-            let context = timing_context(phase);
-            self.fail(if admitted {
-                CoreError::InternalInvariant(context)
-            } else {
-                CoreError::Validation(context)
-            });
+        // An incomparable deadline identifies the source of the clock fault.
+        if lifetime_elapsed.is_none() {
+            self.fence_clock(ErrorPhase::Handler);
+        } else if request_elapsed.is_none() {
+            self.fence_clock(ErrorPhase::Binding);
+        } else if self
+            .last_now
+            .is_some_and(|last| now.checked_duration_since(last).is_none())
+        {
+            self.fence_progress_clock();
         } else if lifetime_elapsed == Some(true) {
-            self.fail(CoreError::TimedOut(timing_context(interaction_phase)));
+            self.fail(CoreError::TimedOut(
+                self.timing_context(ErrorPhase::Handler),
+            ));
         } else if request_elapsed == Some(true) && self.state != RawFiniteState::RetiringReply {
-            let timeout = CoreError::TimedOut(timing_context(native_phase));
+            let timeout = CoreError::TimedOut(self.timing_context(ErrorPhase::Binding));
             if self.state == RawFiniteState::Delivering {
                 self.retirement.interrupt(timeout);
                 self.state = RawFiniteState::RetiringReply;

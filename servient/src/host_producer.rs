@@ -68,6 +68,7 @@ pub struct ExposureInput {
 }
 
 trait HostedMember: ClosedProducerParticipation {
+    fn fence_progress_clock(&mut self) -> CoreError;
     fn poll_one(
         &mut self,
         owner: &RawProducerServient,
@@ -77,6 +78,9 @@ trait HostedMember: ClosedProducerParticipation {
     fn take_result(&mut self) -> Option<ProducerFiniteSettlement>;
 }
 impl<B: FiniteIngressBinding + 'static> HostedMember for RawFiniteRuntime<B> {
+    fn fence_progress_clock(&mut self) -> CoreError {
+        RawFiniteRuntime::fence_progress_clock(self)
+    }
     fn poll_one(
         &mut self,
         owner: &RawProducerServient,
@@ -244,7 +248,6 @@ struct Stage {
     // The existing TD and Planning jobs still meter traversal. All passes and
     // retries of this candidate spend the same nonrenewable allowance.
     work: WorkBudget,
-    last_now: Option<MonotonicInstant>,
 }
 
 /// Sole owner of the original application, endpoint and native memberships.
@@ -255,6 +258,7 @@ pub struct HostExposure {
     original: Option<ExposureInputSource>,
     members: Vec<Member>,
     stage: Option<Stage>,
+    last_now: Option<MonotonicInstant>,
     failure: Option<CoreError>,
     next: usize,
 }
@@ -265,6 +269,32 @@ struct ExposureInputSource {
 impl HostExposure {
     pub fn key(&self) -> ProducerInstanceKey {
         self.publication.key()
+    }
+    fn observe_time(&mut self, now: MonotonicInstant) -> CoreResult<()> {
+        if self
+            .last_now
+            .is_none_or(|last| now.checked_duration_since(last).is_some())
+        {
+            self.last_now = Some(now);
+            return Ok(());
+        }
+        self.publication.revoke();
+        // Start with the member whose turn observed the fault. During installation,
+        // a sibling may already have started while this member is still unadmitted.
+        let (before, from_next) = self.members.split_at(self.next);
+        let mut cause = invalid();
+        for member in from_next.iter().chain(before) {
+            let error = member
+                .cell()
+                .borrow_mut()
+                .as_mut()
+                .unwrap()
+                .fence_progress_clock();
+            if matches!(cause, CoreError::Validation(_)) {
+                cause = error;
+            }
+        }
+        Err(cause)
     }
     /// First cause observed during publication or while driving a committed member.
     pub fn publication_failure(&self) -> Option<&CoreError> {
@@ -494,8 +524,8 @@ impl HostProducer {
                 prepared: None,
                 facts: PublicationFacts::default(),
                 work: preparation_budget(),
-                last_now: None,
             }),
+            last_now: None,
             failure: None,
             original: Some(ExposureInputSource {
                 description,
@@ -553,16 +583,10 @@ impl HostProducer {
         cx: &mut Context<'_>,
         now: MonotonicInstant,
     ) -> CoreResult<bool> {
+        thing.observe_time(now)?;
         let key = thing.key();
         let stage = thing.stage.as_mut().unwrap();
         let source = thing.original.as_ref().unwrap();
-        if stage
-            .last_now
-            .is_some_and(|t| now.checked_duration_since(t).is_none())
-        {
-            return Err(invalid());
-        }
-        stage.last_now = Some(now);
         if source
             .policy
             .deadline
@@ -768,6 +792,9 @@ impl HostProducer {
         let Some(_turn) = Driving::enter() else {
             return Ok(());
         };
+        if let Err(error) = thing.observe_time(now) {
+            thing.failure.get_or_insert(error);
+        }
         let mut loan = thing.members[thing.next].cell().borrow_mut();
         thing.next = (thing.next + 1) % thing.members.len();
         let member = loan.as_deref_mut().unwrap();
