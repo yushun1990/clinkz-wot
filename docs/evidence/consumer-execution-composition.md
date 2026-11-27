@@ -79,6 +79,21 @@ all original results/associations/definitions are disposed. Returned settlements
 deliberately retain original funding beyond controller loss. These are lifecycle
 and reservation assertions, not process-RAM, performance or arbitrary SDK claims.
 
+## Finite Read paths
+
+The Host HTTP Read, semantic compilation, parser and pressure workloads now
+submit through `ConsumerCalls`. They retain the result while driving native
+retirement, exercise last-unit refusal on the shared outstanding account and
+check reuse after disposal. The prepared-only case runs the same application
+entry with the HTTP preparation feature disabled and checks stale Binding
+generation and changed configuration before admission. Local file descriptor
+and allocation probes observe the migrated execution path.
+
+```sh
+cargo test --locked -p clinkz-wot-binding-http --test repeated_reads --test lifecycle_races --test fd_pressure --test allocation_trace --test producer_serving
+cargo test --locked -p clinkz-wot-binding-http --no-default-features --lib --test execution_only
+```
+
 ## Notification aggregation and retained regression evidence
 
 The [notification owner tests](../../servient/finite/tests/notification.rs) add

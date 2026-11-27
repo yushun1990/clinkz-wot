@@ -8,8 +8,6 @@ docs/spec/interaction-core.md,interaction-core-specification,normative-specifica
 docs/spec/runtime-safety.md,runtime-safety-specification,normative-specification,6.0,1,docs/spec/runtime-safety.md
 docs/spec/planning.md,planning-specification,normative-specification,6.0,1,docs/spec/planning.md
 docs/spec/binding-spi.md,binding-spi-specification,normative-specification,6.0,1,docs/spec/binding-spi.md
-docs/spec/consumer-resource-ownership.md,existing-read-policy-contract,restricted-implementation,5.1,1,docs/spec/foundation.md
-docs/resource-contracts/consumer-ownership-v2.toml,existing-read-policy-encoding,restricted-implementation,5.1,2,docs/spec/consumer-resource-ownership.md
 docs/spec/v5-authority-reset.toml,historical-authority-tombstone,historical,5.1,1,docs/spec/authority.toml
 docs/ADRs,accepted-decision-set,decisions-with-explicit-status,6.0,1,docs/design.md
 docs/amendments,active-normative-amendments,restricted-except-registered-time-owner,5.1,1,docs/design.md

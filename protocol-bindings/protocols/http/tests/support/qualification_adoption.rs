@@ -126,10 +126,8 @@ fn withdrawn_support(dependency: &str) {
         let execution =
             HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
                 runtime.identity(),
-                runtime.execution(),
                 Box::new(client),
                 runtime.resources(),
-                runtime.status(),
             ))
             .unwrap_or_else(|_| panic!());
         input.preparation = HostConsumerBindingPreparation::try_pair(execution, compiler)

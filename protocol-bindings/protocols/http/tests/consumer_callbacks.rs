@@ -376,10 +376,8 @@ fn association_harness(
         let local =
             HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
                 runtime.identity(),
-                runtime.execution(),
                 Box::new(native),
                 runtime.resources(),
-                runtime.status(),
             ))
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         input.preparation = HostConsumerBindingPreparation::try_pair(local, compiler)

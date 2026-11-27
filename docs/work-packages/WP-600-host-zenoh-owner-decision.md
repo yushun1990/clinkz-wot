@@ -76,7 +76,7 @@ execution, synchronous transport and unqualified allocation. The original
 and its K-credit epoch discriminator distinguish receiver completion from
 session timer retirement. They do not qualify shutdown or SDK physical maxima.
 
-Current [ConsumerPropertyReadRuntime::shutdown](../../servient/src/consumer_property_read/host.rs)
+Current [ConsumerPropertyReadRuntime::shutdown](https://github.com/yushun1990/clinkz-wot/blob/51abb0c57e724e6ee4c6ef86939c5455ee2cd820/servient/src/consumer_property_read/host.rs)
 destroys the moved registration
 after call/generation reclamation; last-root Drop reports residual before finite,
 allocation-free local discard. There is no asynchronous registration-retirement

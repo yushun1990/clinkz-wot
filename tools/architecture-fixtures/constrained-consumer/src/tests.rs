@@ -110,7 +110,7 @@ fn completed<'a, B: ReadBinding>(
 #[test]
 fn native_read_bounded_turn_unread_result_and_exact_final_release() {
     let peer = Peer::new();
-    let open = || peer.open();
+    let open = |_: &str| peer.open();
     let stats = Statistics::default();
     let b = TestBinding {
         open: &open,
@@ -172,8 +172,8 @@ fn validation_lends_the_checked_view_and_refuses_a_sibling_native_drive() {
     let access = Permission::default();
     let peer = Peer::new();
     let sibling_peer = Peer::new();
-    let open = || peer.open();
-    let sibling_open = || sibling_peer.open();
+    let open = |_: &str| peer.open();
+    let sibling_open = |_: &str| sibling_peer.open();
     let stats = Statistics::default();
     let sibling_stats = Statistics::default();
     let binding = TestBinding {
@@ -245,7 +245,7 @@ fn validation_lends_the_checked_view_and_refuses_a_sibling_native_drive() {
 #[test]
 fn cancellation_keeps_failed_cleanup_and_raw_late_output_without_replay() {
     let peer = Peer::new();
-    let open = || peer.open();
+    let open = |_: &str| peer.open();
     let stats = Statistics::default();
     stats.late.set(true);
     stats.cleanup_error.set(true);
@@ -307,7 +307,7 @@ fn every_untrusted_shape_media_bound_and_schema_failure_retains_original_output(
         (0, &b"garbage"[..], 1),
     ] {
         let peer = Peer::new();
-        let open = || peer.open();
+        let open = |_: &str| peer.open();
         let stats = Statistics::default();
         let b = TestBinding {
             open: &open,
@@ -344,7 +344,7 @@ fn every_untrusted_shape_media_bound_and_schema_failure_retains_original_output(
 #[test]
 fn same_slot_foreign_authority_and_reused_call_tokens_cannot_redirect_work() {
     let peer = Peer::new();
-    let open = || peer.open();
+    let open = |_: &str| peer.open();
     let stats = Statistics::default();
     let b = TestBinding {
         open: &open,
@@ -405,7 +405,7 @@ fn same_slot_foreign_authority_and_reused_call_tokens_cannot_redirect_work() {
 #[test]
 fn unread_success_rechecks_live_permission_without_redecoding() {
     let peer = Peer::new();
-    let open = || peer.open();
+    let open = |_: &str| peer.open();
     let stats = Statistics::default();
     let b = TestBinding {
         open: &open,
@@ -439,7 +439,7 @@ fn unread_success_rechecks_live_permission_without_redecoding() {
 #[test]
 fn callback_revocation_and_policy_rotation_fence_before_io_and_after_validation() {
     let peer = Peer::new();
-    let open = || peer.open();
+    let open = |_: &str| peer.open();
     let stats = Statistics::default();
     let b = TestBinding {
         open: &open,
@@ -485,7 +485,7 @@ fn callback_revocation_and_policy_rotation_fence_before_io_and_after_validation(
 fn time_fencing_and_cleanup_acknowledgement_preserve_first_cause() {
     for observation in [now(10), now(0), MonotonicInstant::new(ClockId::new(2), 2)] {
         let peer = Peer::new();
-        let open = || peer.open();
+        let open = |_: &str| peer.open();
         let stats = Statistics::default();
         let b = TestBinding {
             open: &open,
@@ -522,7 +522,7 @@ fn time_fencing_and_cleanup_acknowledgement_preserve_first_cause() {
 #[test]
 fn capacity_pairing_required_meaning_and_permission_refuse_without_native_effects() {
     let peer = Peer::new();
-    let open = || peer.open();
+    let open = |_: &str| peer.open();
     let stats = Statistics::default();
     let b = TestBinding {
         open: &open,
@@ -585,7 +585,7 @@ fn capacity_pairing_required_meaning_and_permission_refuse_without_native_effect
 #[test]
 fn last_owner_drop_disposes_native_io_locally_without_claiming_cleanup_ack() {
     let peer = Peer::new();
-    let open = || peer.open();
+    let open = |_: &str| peer.open();
     let stats = Statistics::default();
     let b = TestBinding {
         open: &open,
@@ -615,7 +615,7 @@ fn dropping_active_or_taken_work_refuses_a_sibling_datagram() {
         let access = Permission::default();
         let codec = NumberCodec::ready();
         let sibling_peer = Peer::new();
-        let open_sibling = || sibling_peer.open();
+        let open_sibling = |_: &str| sibling_peer.open();
         let sibling_stats = Statistics::default();
         let sibling_binding = TestBinding {
             open: &open_sibling,
@@ -639,7 +639,7 @@ fn dropping_active_or_taken_work_refuses_a_sibling_datagram() {
             ));
         };
         let peer = Peer::new();
-        let open = || peer.open();
+        let open = |_: &str| peer.open();
         let stats = Statistics::default();
         let binding = TestBinding {
             open: &open,
@@ -674,7 +674,7 @@ fn dropping_active_or_taken_work_refuses_a_sibling_datagram() {
 #[test]
 fn held_result_excludes_the_same_backing_until_disposal() {
     let peer = Peer::new();
-    let open = || peer.open();
+    let open = |_: &str| peer.open();
     let stats = Statistics::default();
     let b = TestBinding {
         open: &open,
@@ -717,7 +717,7 @@ fn held_result_excludes_the_same_backing_until_disposal() {
 #[test]
 fn unavailable_original_validator_retains_late_data_without_entering_callback() {
     let peer = Peer::new();
-    let open = || peer.open();
+    let open = |_: &str| peer.open();
     let stats = Statistics::default();
     stats.late.set(true);
     let b = TestBinding {
@@ -753,7 +753,7 @@ fn unavailable_original_validator_retains_late_data_without_entering_callback() 
 fn native_construction_cannot_grant_progress_after_callback_revocation() {
     let peer = Peer::new();
     let instance = authority();
-    let open = || {
+    let open = |_: &str| {
         instance.revoke();
         peer.open()
     };
@@ -800,7 +800,7 @@ fn modern_host_prepared_content_lends_identical_meaning_to_caller_owned_executio
     };
     assert!(core::ptr::eq(shared.schemas(), values));
     let peer = Peer::new();
-    let open = || peer.open();
+    let open = |_: &str| peer.open();
     let stats = Statistics::default();
     let b = TestBinding {
         open: &open,
@@ -843,7 +843,7 @@ fn caller_owned_primary_read_refuses_lent_additional_response_meaning_before_nat
     )
     .unwrap();
     let peer = Peer::new();
-    let open = || peer.open();
+    let open = |_: &str| peer.open();
     let stats = Statistics::default();
     let binding = TestBinding {
         open: &open,
@@ -854,4 +854,65 @@ fn caller_owned_primary_read_refuses_lent_additional_response_meaning_before_nat
     let loan = meaning().with_responses(Some(&responses));
     assert!(core::ptr::eq(loan.responses().unwrap(), &responses));
     assert!(ReadDefinition::try_new(loan, &binding, &PROGRAM, 7, &codec).is_err());
+}
+
+#[cfg(feature = "prepare")]
+#[test]
+fn selected_source_forms_execute_in_typed_slots_after_the_td_is_dropped() {
+    let thing: clinkz_wot_td::thing::Thing = serde_json::from_str(
+        r#"{
+        "@context":"https://www.w3.org/2022/wot/td/v1.1",
+        "title":"datagrams","id":"urn:source-read",
+        "security":["none"],"securityDefinitions":{"none":{"scheme":"nosec"}},
+        "properties":{
+            "a":{"type":"integer","minimum":10,"forms":[
+                {"href":"test-datagram:unused","op":"writeproperty"},
+                {"href":"test-datagram:a","contentType":"application/x-test-number"}]},
+            "温度":{"type":"integer","maximum":30,"forms":[
+                {"href":"test-datagram:unused","op":[]},
+                {"href":"test-datagram:b","contentType":"application/x-test-number"}]}
+        }
+    }"#,
+    )
+    .unwrap();
+    let plan = |n| PlanId::new(SlotIndex::new(n), Generation::INITIAL);
+    assert!(preparation::prepare(&thing, "a", 0, plan(0)).is_err());
+    let a = preparation::prepare(&thing, "a", 1, plan(1)).unwrap();
+    let b = preparation::prepare(&thing, "温度", 1, plan(2)).unwrap();
+    drop(thing);
+
+    let peers = [Peer::new(), Peer::new()];
+    let open = |target: &str| match target {
+        "test-datagram:a" => peers[0].open(),
+        "test-datagram:b" => peers[1].open(),
+        _ => panic!("did not compile the selected Form"),
+    };
+    let stats = Statistics::default();
+    let binding = TestBinding {
+        open: &open,
+        stats: &stats,
+        configuration: 7,
+    };
+    let codec = NumberCodec::ready();
+    let instance = authority();
+    let access = Permission::default();
+    let driving = RefCell::new(());
+    let slot = ReadResultSlot::new();
+    let mut cx = Context::from_waker(core::task::Waker::noop());
+    for (index, prepared) in [&a, &b].into_iter().enumerate() {
+        let program = prepared.program();
+        let definition =
+            ReadDefinition::try_new(prepared.meaning(), &binding, &program, 7, &codec).unwrap();
+        let mut runtime =
+            ReadRuntime::bind(&driving, instance.reference(), &definition, &access).unwrap();
+        let handle = runtime.read(&slot, Deadline::NONE, now(0)).unwrap();
+        assert!(runtime.poll(handle, &mut cx, now(0)).is_pending());
+        let expected = [b"17", b"29"][index];
+        peers[index].respond(0, expected);
+        let mut result = completed(runtime.poll(handle, &mut cx, now(0)));
+        assert_eq!(result.mapping().plan, plan(index as u32 + 1));
+        assert_eq!(result.result().unwrap().data().unwrap().body, expected);
+        peers[index].assert_released();
+    }
+    assert_eq!(stats.starts.get(), 2);
 }

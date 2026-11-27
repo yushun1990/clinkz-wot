@@ -1026,8 +1026,11 @@ impl ConsumerDefinition {
                 BindingOperationalError::new(error),
             ));
         }
-        self.execution()
-            .start_prepared_finite(request, self.artifact())
+        self.execution().start_prepared_finite(
+            request,
+            self.artifact(),
+            self.configuration().result_limits(),
+        )
     }
     /// Source-free instance dependency binding. No TD/compiler lookup or native
     /// retargeting is possible here. Logical authority is attached by the execution association.

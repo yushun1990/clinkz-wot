@@ -14,9 +14,9 @@ chosen slice under ADR-0013. No new runtime tranche is admitted by this migratio
 
 An independently authored facet supplies closed participation, a moved reply
 or exclusive loan, its own bounded native progress and retirement. Refuse before
-acceptance with the original offer and deadline. Retire registration-wide
-`BindingResourceDeclarations`, StrictV1/schema-2 modes, generic lifetime and
-transient footprints and `BindingStateLayout` with their users. Keep concrete
+acceptance with the original offer and deadline. Retire the remaining
+`BindingResourceDeclarations`, generic lifetime and transient footprints and
+`BindingStateLayout` with their users. Keep concrete
 wire and ingress bounds. Retire numeric cleanup funding. A facet handing off
 surviving work must transfer the whole owner to an available destination,
 returning it intact on rejection.
@@ -91,8 +91,8 @@ owner/input recovery on refusal and immutable compiler/executor pairing.
 Runtime-only registration remains compiler-free; HTTP's existing
 `try_consumer_execution` already supplies that half of the boundary.
 
-Reuse `PollClientBinding` / Host `ClientBinding` only for the working finite
-facet. Reuse [ConsumerNotificationBinding](../../core/src/notification.rs) and
+Host finite Consumers use `ClientBinding`. Caller-owned Read uses the typed
+`ReadBinding` facet. Reuse [ConsumerNotificationBinding](../../core/src/notification.rs) and
 `NotificationParticipation` for continuing conversations; their owned `Program`
 already has no `Copy` bound. Common selection/preparation hands off to these
 distinct controls, never to a universal call/session. Discovery remains an

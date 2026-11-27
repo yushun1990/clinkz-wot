@@ -11,6 +11,9 @@ record constrains the successor SPI. Exact schema/resource encodings still used
 by retained adapters keep their original meaning. Any new source scope must use
 the successor requirements and applicable review, not inherit this admission.
 
+The fixture paths and commands below refer to the retired Consumer Read architecture.
+The last revision with those entry points is [the #312 merge](https://github.com/yushun1990/clinkz-wot/tree/51abb0c57e724e6ee4c6ef86939c5455ee2cd820).
+
 ## Preserved predecessor record (non-authoritative for the general architecture)
 
 # Consumer Property Read Architecture Gate

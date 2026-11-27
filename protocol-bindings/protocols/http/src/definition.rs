@@ -56,7 +56,7 @@ pub(crate) fn instructions(
         program.target_len = bound.target_len;
         Some(program)
     } else {
-        // The measured inline adapter remains a supported specialized mapping.
+        // Ordinary preparation can specialize the instructions to one destination.
         envelope
             .artifact()
             .try_payload::<HttpArtifact>(COMPATIBILITY)

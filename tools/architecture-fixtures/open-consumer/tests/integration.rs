@@ -317,7 +317,7 @@ fn exact_pair_refusal_recovers_compiler_and_executor_before_io() {
     let other = ConsumerBindingConfiguration::for_semantic_host(
         256,
         BindingConfigurationDigest::new([180; 32]),
-        configuration().native_compatibility().unwrap(),
+        configuration().native_compatibility(),
         1024,
         16,
     )
@@ -857,71 +857,6 @@ fn replacement_and_unread_results_never_gain_the_new_incarnations_authority() {
 }
 
 #[test]
-fn independently_typed_static_pair_accepts_owned_compiler_without_name_admission() {
-    use clinkz_wot_planning::*;
-    let probe = Arc::new(Probe::default());
-    let config = configuration();
-    let (_peer, target) = udp();
-    let host = execution(1, probe.clone());
-    let id = host.identity();
-    let resources = host.resources();
-    let status = host.status();
-    let raw = StaticConsumerBindingRegistration::new(StaticConsumerBindingRegistrationInput::new(
-        id,
-        BindingExecutionSupport::application_static(),
-        StaticClient {
-            probe: probe.clone(),
-        },
-        resources,
-        status,
-    ))
-    .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    let compiler = StaticBindingCompilerRegistration::new(Compiler {
-        probe: probe.clone(),
-        config,
-        oversized_work: false,
-    });
-    let pair = StaticConsumerBindingPreparation::try_pair(raw, compiler)
-        .unwrap_or_else(|e| panic!("{:?}", e.error()));
-    assert_eq!(pair.consumer_contract().unwrap().max_steps, 256);
-    let plan = LogicalInteractionPlan::try_property_read(
-        PlanId::new(SlotIndex::new(0), Generation::INITIAL),
-        ThingId::from("urn:adapter-metadata"),
-        "a".into(),
-        0,
-        target.into(),
-        Some("application/json".into()),
-        None,
-    )
-    .unwrap();
-    let input = BindingCompilerInput::new(
-        &plan,
-        BindingCandidate::new(
-            id.binding_id(),
-            id.binding_generation(),
-            id.configuration(),
-            id.artifact_compatibility(),
-            0,
-            0,
-        ),
-        BindingArtifactRole::ConsumerCall,
-    );
-    let compiler = pair.compiler().compiler();
-    let mut cursor = compiler.start(&input).unwrap();
-    let output = loop {
-        match compiler.step(&input, cursor, &mut work()) {
-            BindingCompilerStep::Pending(next) => cursor = next,
-            BindingCompilerStep::Complete(out) => break out,
-            BindingCompilerStep::Failed(_) => panic!(),
-        }
-    };
-    drop(pair);
-    drop(plan);
-    drop(output);
-    assert_eq!(probe.programs.load(Ordering::Relaxed), 1);
-}
-
-#[test]
 fn unsupported_semantic_alternative_keeps_the_supported_form_executable() {
     let p = Arc::new(Probe::default());
     let (peer, target) = udp();
@@ -1013,21 +948,22 @@ fn unread_native_failure_wins_over_later_cancel_and_fabricated_transfer_stays_ow
     clean(&bank);
 }
 #[test]
-fn restricted_inline_registration_cannot_misstate_general_callback_costs() {
-    let config = clinkz_wot_binding_http::HttpConsumerConfig::for_cleartext_ip().unwrap();
-    let inline = clinkz_wot_binding_http::try_inline_consumer_registration(
-        config,
-        BindingId::new(1),
-        BindingGeneration::INITIAL,
-        1,
-    )
-    .unwrap();
-    let input = ConsumerRegistrationInput {
-        preparation: inline.into_registration(),
-        services: config.consumer_services(),
-    };
-    let services = Arc::new(HostResourceAccounts::new(&GatewayDefaultV1::LIMITS));
-    assert!(ConsumerRegistry::try_new(vec![input], &services).is_err());
+fn plain_compiler_erasure_cannot_supply_consumer_qualification() {
+    use clinkz_wot_planning::{HostBindingCompilerRegistration, HostConsumerBindingPreparation};
+    let probe = Arc::new(Probe::default());
+    let runtime = execution(1, probe.clone());
+    let identity = runtime.identity();
+    let compiler = HostBindingCompilerRegistration::new(Compiler {
+        probe,
+        config: configuration(),
+        oversized_work: false,
+    });
+    let rejected = HostConsumerBindingPreparation::try_pair(runtime, compiler)
+        .err()
+        .expect("Consumer compiler contract is required");
+    let (runtime, compiler) = rejected.into_input();
+    assert_eq!(runtime.identity(), identity);
+    assert!(compiler.consumer_metadata().is_none());
 }
 
 #[test]

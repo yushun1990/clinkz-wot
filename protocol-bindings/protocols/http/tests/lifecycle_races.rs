@@ -2,29 +2,17 @@
 //! Deterministic clock/peer ordering over the actual SDK and public Runtime.
 #![allow(dead_code)] // The shared application also supplies wall-clock helpers.
 include!("support/application.rs");
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    mpsc,
-};
-
-struct TestClock(AtomicU64);
-impl RuntimeClock for TestClock {
-    fn now(&self) -> MonotonicInstant {
-        MonotonicInstant::new(ClockId::new(600), self.0.load(Ordering::SeqCst))
-    }
-    fn ticks_per_second(&self) -> NonZeroU64 {
-        NonZeroU64::new(1000).unwrap()
-    }
-}
+use std::sync::mpsc;
 
 #[test]
-fn real_transport_result_cancel_deadline_and_short_credit_orders() {
+fn real_transport_handoff_cancellation_deadline_and_late_native_outcome() {
     for framing in ["fixed", "chunked", "close", "invalid-trailer"] {
         for order in [
             "result-first",
             "cancel-first",
             "deadline-first",
             "cancel-then-deadline",
+            "native-first-deadline-before-handoff",
         ] {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let port = listener.local_addr().unwrap().port();
@@ -59,184 +47,136 @@ fn real_transport_result_cancel_deadline_and_short_credit_orders() {
                 assert_retired(&mut socket);
             });
             recipe().block_on(async {
-                let clock = Arc::new(TestClock(AtomicU64::new(0)));
-                let (runtime, handle, observer, parent) = engine_with_clock(
-                    format!("http://127.0.0.1:{port}/a?x=1"),
-                    format!("http://127.0.0.1:{port}/b"),
-                    clock.clone(),
-                );
-                let baseline: Vec<_> = parent
-                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                    .iter()
-                    .map(|a| a.used())
-                    .collect();
+                let (owner, handle, calls, bank) = engine(port);
+                let baseline = usage(&bank);
+                let instant = |tick| MonotonicInstant::new(ClockId::new(600), tick);
                 let mut call = handle
-                    .read_property(
-                        "a",
-                        InteractionOptions::new().with_timeout(Duration::from_millis(100)),
-                        &mut work(),
-                    )
+                    .read_property(&calls, "a", Deadline::at(instant(100)), instant(0))
                     .unwrap();
-                assert_ne!(
-                    parent
-                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                        .iter()
-                        .map(|a| a.used())
-                        .collect::<Vec<_>>(),
-                    baseline
-                );
-                // Model an unrelated engine owner consuming every remaining
-                // parent unit after acceptance, including cleanup accounts.
-                // The admitted call must use its already backed destinations.
-                let pressure: Vec<_> = parent
-                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                    .iter()
-                    .map(|account| {
-                        parent
-                            .reserve(account.kind(), account.limit() - account.used())
+                assert_ne!(usage(&bank), baseline);
+                let pressure: Vec<_> = ResourceKind::ALL
+                    .into_iter()
+                    .map(|kind| {
+                        let account = bank.account(kind);
+                        bank.reserve(kind, account.limit() - account.used())
                             .unwrap()
                     })
                     .collect();
-                let held: Vec<_> = parent
-                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                    .iter()
-                    .map(|a| a.used())
-                    .collect();
+                let held = usage(&bank);
+                let mut cx = Context::from_waker(Waker::noop());
                 let end = Instant::now() + Duration::from_secs(5);
                 loop {
-                    call.step(&mut Context::from_waker(Waker::noop()), &mut work());
+                    assert!(call.progress(&mut cx, instant(0)).is_pending());
                     if received.try_recv().is_ok() {
                         break;
                     }
                     assert!(Instant::now() < end);
                     tokio::time::sleep(Duration::from_millis(1)).await;
                 }
-                // Permit actual decoder progress, then withhold the final byte /
-                // trailer / EOF. Neither zero nor short callback/cleanup credit
-                // can dispose the original owner or make the slot reusable.
+                // Let the decoder reach the deliberately incomplete frame.
                 for _ in 0..3 {
                     tokio::time::sleep(Duration::from_millis(1)).await;
-                    call.step(&mut Context::from_waker(Waker::noop()), &mut work());
-                    for credit in [0, 1, 63] {
-                        call.step(
-                            &mut Context::from_waker(Waker::noop()),
-                            &mut work()
-                                .with_remaining(WorkClass::BindingPolls, credit)
-                                .with_remaining(WorkClass::CleanupItems, 0),
-                        );
-                        assert!(call.try_take(&mut WorkBudget::new()).unwrap().is_none());
-                    }
-                    assert_eq!(
-                        parent
-                            .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                            .iter()
-                            .map(|a| a.used())
-                            .collect::<Vec<_>>(),
-                        held
-                    );
+                    assert!(call.progress(&mut cx, instant(1)).is_pending());
+                    assert!(!call.is_settled());
+                    assert_eq!(usage(&bank), held);
                     assert!(retirement.try_recv().is_err());
                 }
                 finish.send(()).unwrap();
                 received.recv_timeout(Duration::from_secs(5)).unwrap();
-                match order {
-                    "result-first" => {
-                        // Observe actual socket retirement before result taking;
-                        // retain the funded terminal result under cleanup pressure.
-                        loop {
-                            call.step(&mut Context::from_waker(Waker::noop()), &mut work());
-                            if retirement.try_recv().is_ok() {
-                                break;
-                            }
+                let tick = match order {
+                    "result-first" | "native-first-deadline-before-handoff" => {
+                        while call.progress(&mut cx, instant(2)).is_pending() {
                             assert!(Instant::now() < end);
                             tokio::time::sleep(Duration::from_millis(1)).await;
                         }
-                        assert!(
-                            call.try_take(&mut work().with_remaining(WorkClass::CleanupItems, 0))
-                                .unwrap()
-                                .is_none()
-                        );
-                        assert_eq!(
-                            parent
-                                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                                .iter()
-                                .map(|a| a.used())
-                                .collect::<Vec<_>>(),
-                            held
-                        );
-                        clock.0.store(100, Ordering::SeqCst);
-                        call.cancel().unwrap();
+                        assert!(call.is_settled());
+                        assert_eq!(usage(&bank), held);
+                        if order == "result-first" { 2 } else { 100 }
                     }
                     "deadline-first" => {
-                        clock.0.store(100, Ordering::SeqCst);
-                        // Clock expiry commits even with no progress credit.
-                        call.step(
-                            &mut Context::from_waker(Waker::noop()),
-                            &mut WorkBudget::new(),
-                        );
-                        call.cancel().unwrap();
+                        assert!(matches!(
+                            call.progress(&mut cx, instant(100)),
+                            Poll::Ready(Ok(()))
+                        ));
+                        call.cancel();
+                        100
+                    }
+                    "cancel-then-deadline" => {
+                        call.cancel();
+                        100
                     }
                     _ => {
-                        call.cancel().unwrap();
-                        if order == "cancel-then-deadline" {
-                            clock.0.store(100, Ordering::SeqCst);
-                        }
+                        call.cancel();
+                        2
                     }
-                }
-                let result = take(&mut call).await;
+                };
+                let Poll::Ready(Ok(result)) = call.poll(&mut cx, instant(tick)) else {
+                    panic!("bounded native retirement did not settle");
+                };
+                retirement.recv_timeout(Duration::from_secs(5)).unwrap();
+                // The handoff and old handle have independent lifetimes.
+                call.cancel();
+                drop(call);
                 match order {
-                    "result-first" if framing == "invalid-trailer" => {
-                        let error = result.unwrap_err();
+                    "result-first" | "native-first-deadline-before-handoff"
+                        if framing == "invalid-trailer" =>
+                    {
+                        let error = result.result().unwrap_err();
                         assert!(matches!(error, CoreError::Binding(_)), "{error:?}");
                         assert_eq!(
                             error.context().resource_failure().unwrap().1,
                             ResourceFailureDomain::BindingPolicy
                         );
-                        assert!(error.context().plan().is_some());
                     }
                     "result-first" => {
-                        let output = result.unwrap();
-                        assert_eq!(&*output.data().unwrap().body, b"12");
+                        let output = result.result().unwrap();
+                        assert_eq!(output.data().unwrap().body, b"12");
                         let response = output.metadata().binding_response().unwrap();
                         assert_eq!(response.status_code().unwrap(), 200);
                         assert_eq!(response.binding_id(), BindingId::new(600));
                     }
-                    "deadline-first" => {
-                        assert!(matches!(result, Err(CoreError::TimedOut(_))), "{result:?}")
+                    "native-first-deadline-before-handoff" => {
+                        assert!(matches!(result.result(), Err(CoreError::TimedOut(_))));
+                        let clinkz_wot_servient_finite::consumer::ConsumerNativeOutcome::Returned(
+                            Ok(native),
+                        ) = result.native_outcome()
+                        else {
+                            panic!("late native value was lost");
+                        };
+                        assert_eq!(native.data().unwrap().body, b"12");
                     }
-                    _ => assert!(matches!(result, Err(CoreError::Cancelled(_))), "{result:?}"),
+                    "deadline-first" => {
+                        assert!(matches!(result.result(), Err(CoreError::TimedOut(_))))
+                    }
+                    _ => assert!(matches!(result.result(), Err(CoreError::Cancelled(_)))),
                 }
-                if order != "result-first" {
-                    retirement.recv_timeout(Duration::from_secs(5)).unwrap();
-                }
-                drop(call);
+                // Other owners may give their quotas back before this result.
+                // The outstanding unit remains owned until disposal.
                 drop(pressure);
-                assert_eq!(
-                    parent
-                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                        .iter()
-                        .map(|a| a.used())
-                        .collect::<Vec<_>>(),
-                    baseline
-                );
-                let mut retry = handle
-                    .read_property("b", InteractionOptions::new(), &mut work())
+                let outstanding = ResourceKind::PendingHandlerCallsGlobalMax;
+                assert_eq!(bank.account(outstanding).used(), 1);
+                let holder = bank
+                    .reserve(outstanding, bank.account(outstanding).limit() - 1)
                     .unwrap();
-                assert_eq!(
-                    &*take(&mut retry).await.unwrap().data().unwrap().body,
-                    b"29"
-                );
-                drop(retry);
-                drop(handle);
-                shutdown(&runtime);
-                drop(runtime);
-                assert!(observer().0.unwrap().is_complete());
-                drop(observer);
-                assert!(
-                    parent
-                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                        .iter()
-                        .all(|a| a.used() == 0)
-                );
+                assert!(matches!(
+                    handle.read_property(&calls, "b", Deadline::NONE, instant(tick)),
+                    Err(CoreError::LimitExceeded { resource, .. }) if resource == outstanding
+                ));
+                drop(result);
+                let mut retry = handle
+                    .read_property(&calls, "b", Deadline::NONE, instant(tick))
+                    .unwrap();
+                let reply = tokio::time::timeout(
+                    Duration::from_secs(5),
+                    std::future::poll_fn(|cx| retry.poll(cx, instant(tick))),
+                )
+                .await
+                .unwrap()
+                .unwrap();
+                assert_eq!(reply.result().unwrap().data().unwrap().body, b"29");
+                drop((reply, retry, holder));
+                assert_eq!(usage(&bank), baseline);
+                release((owner, handle, calls, bank));
             });
             peer.join().unwrap();
         }

@@ -1,12 +1,14 @@
 //! Core-owned validation of untrusted binding-origin interaction output.
 
-use crate::Operation;
+#[cfg(feature = "std")]
+use crate::BindingArtifactRef;
 #[cfg(test)]
 use crate::{BindingGeneration, BindingId, PlanId};
+#[cfg(any(test, feature = "std"))]
+use crate::{CoreError, ErrorContext, ErrorPhase, Operation, RetryClass};
 
 use crate::{
-    BindingArtifactRef, CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionOutput,
-    InteractionStatus, OutboundRequest, ResponsePayloadRole, RetryClass,
+    CoreResult, InteractionOutput, InteractionStatus, OutboundRequest, ResponsePayloadRole,
 };
 
 /// Validates untrusted binding output against one live selected request.
@@ -34,11 +36,12 @@ pub fn validate_untrusted_binding_output(
 /// than a clone of [`OutboundRequest`]. Complete binding registrations create
 /// it immediately before transferring the request and never expose it to a
 /// binding author or runtime caller.
+#[cfg(feature = "std")]
 pub(crate) struct ConsumerResultSeal {
     artifact: BindingArtifactRef,
     operation: Operation,
     responses: crate::execution::responses::FiniteResponseShape,
-    result_limits: Option<(u64, u64)>,
+    result_limits: (u64, u64),
 }
 
 // Arc<[u8]> owns two atomic counters followed by the complete byte slice.
@@ -59,11 +62,9 @@ pub fn consumer_result_backing(body: u64, media: u64) -> Option<u64> {
     (arc.size() as u64).checked_add(media.checked_mul(2)?)
 }
 
+#[cfg(feature = "std")]
 impl ConsumerResultSeal {
-    pub(crate) const fn from_request(
-        request: &OutboundRequest,
-        result_limits: Option<(u64, u64)>,
-    ) -> Self {
+    pub(crate) const fn from_request(request: &OutboundRequest, result_limits: (u64, u64)) -> Self {
         Self {
             artifact: request.artifact(),
             operation: request.operation(),
@@ -72,27 +73,20 @@ impl ConsumerResultSeal {
         }
     }
 
-    pub(crate) fn matches_request(&self, request: &OutboundRequest) -> bool {
-        self.artifact == request.artifact()
-            && self.operation == request.operation()
-            && self.responses == request.responses()
-    }
-
     pub(crate) fn validate(self, output: InteractionOutput) -> CoreResult<InteractionOutput> {
-        if let Some((body, media)) = self.result_limits {
-            let fits = output.data().is_none_or(|payload| {
-                payload.body.len() as u64 <= body
-                    && payload.content_type.capacity() as u64 <= media
-                    && payload
-                        .content_coding
-                        .as_ref()
-                        .is_none_or(|s| s.capacity() as u64 <= media)
-            });
-            if !fits {
-                return Err(
-                    self.validation_error(327, "Consumer result exceeds complete backing bound")
-                );
-            }
+        let (body, media) = self.result_limits;
+        let fits = output.data().is_none_or(|payload| {
+            payload.body.len() as u64 <= body
+                && payload.content_type.capacity() as u64 <= media
+                && payload
+                    .content_coding
+                    .as_ref()
+                    .is_none_or(|s| s.capacity() as u64 <= media)
+        });
+        if !fits {
+            return Err(
+                self.validation_error(327, "Consumer result exceeds complete backing bound")
+            );
         }
         let identity = self.artifact.identity();
         crate::execution::validate_finite_response(
@@ -104,18 +98,6 @@ impl ConsumerResultSeal {
             output.view(),
         )?;
         Ok(output)
-    }
-
-    pub(crate) fn validate_against_request(
-        self,
-        request: &OutboundRequest,
-        output: InteractionOutput,
-    ) -> CoreResult<InteractionOutput> {
-        if self.matches_request(request) {
-            self.validate(output)
-        } else {
-            Err(self.validation_error(320, "accepted request identity changed"))
-        }
     }
 
     pub(crate) fn validation_error(&self, code: u16, cause: &str) -> CoreError {

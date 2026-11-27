@@ -1,6 +1,8 @@
 #![cfg(feature = "prepare")]
 //! Public joined v6 path with independent real TCP/HTTP peers. Controlled
 //! wrappers retain the real native owner; they do not replace socket execution.
+#[path = "support/consumer_read.rs"]
+mod consumer_read;
 use clinkz_wot_binding_http::*;
 use clinkz_wot_core::publication::{PublicationObserver, PublicationState};
 use clinkz_wot_core::{finite::*, producer::*, *};
@@ -1425,16 +1427,7 @@ fn real_partial_write_then_cancel_reports_uncertainty_with_complete_original_val
 
 #[test]
 fn public_consumer_uses_exact_published_description_and_real_native_peer() {
-    use clinkz_wot_servient::consumer_property_read::*;
-    struct Clock;
-    impl RuntimeClock for Clock {
-        fn now(&self) -> MonotonicInstant {
-            now(0)
-        }
-        fn ticks_per_second(&self) -> std::num::NonZeroU64 {
-            std::num::NonZeroU64::new(1000).unwrap()
-        }
-    }
+    use clinkz_wot_servient_finite::consumer::ConsumerCalls;
     tokio::runtime::Builder::new_current_thread()
         .enable_io()
         .enable_time()
@@ -1449,91 +1442,50 @@ fn public_consumer_uses_exact_published_description_and_real_native_peer() {
             let mut exposure =
                 prepare(&server, value, authority(), application.clone(), None).unwrap();
             publish(&mut server, &mut exposure);
-            let policy = ConsumerPropertyReadPolicy::try_new_owned(
-                BindingResourceContract::ConsumerOwnedHostV2,
-                ResourceProfileId::GATEWAY_DEFAULT_V1,
-                GatewayDefaultV1::LIMITS.clone(),
-                BindingLifetimeFootprint::new(8, 8192),
-                BindingLifetimeFootprint::new(8, 4096),
-                [1, 64, 64, 64],
-                [4096, 32],
-                [2, 2, 1, 1, 1, 1, 1],
-                [30_000, 1000],
-                65536,
-            )
-            .unwrap();
-            let bank = Arc::new(
-                HostResourceAccounts::try_from_accounts(policy.parent_accounts()).unwrap(),
-            );
-            let registration = try_inline_consumer_registration(
-                HttpConsumerConfig::for_cleartext_ip().unwrap(),
-                BindingId::new(2),
-                BindingGeneration::INITIAL,
-                0,
-            )
-            .unwrap();
-            let (client, observer) = ConsumerPropertyReadRuntime::try_new(
-                registration,
-                policy,
-                Arc::new(Clock),
-                bank.clone(),
-            )
-            .unwrap_or_else(|e| panic!("{:?}", e.error()));
+            let bank = accounts();
+            let calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
             let td: clinkz_wot_td::thing::Thing =
                 serde_json::from_str(server.description(exposure.key()).unwrap()).unwrap();
-            let handle = match client
-                .consume(&td, &mut work(1_000_000), |build| {
-                    for _ in 0..10000 {
-                        build.step(&mut work(1_000_000));
-                        if build.is_finished() {
-                            return;
-                        }
-                    }
-                    panic!("Consumer preparation stalled");
-                })
+            let (instance, client) = consumer_read::prepare_consumer(
+                &td,
+                &bank,
+                consumer_read::http_registration(),
+                Default::default(),
+            )
+            .unwrap();
+            let name = td
+                .properties
+                .as_ref()
                 .unwrap()
-            {
-                StartStatus::Ready(handle) => handle,
-                _ => panic!("Consumer not ready"),
-            };
+                .keys()
+                .next()
+                .unwrap()
+                .clone();
+            let read = client.handle().bind_property_read(&name).unwrap();
             drop(td);
             for _ in 0..3 {
-                let mut call = handle
-                    .read_property("level", InteractionOptions::new(), &mut work(1_000_000))
-                    .unwrap();
+                let mut call = read.read(&calls, Deadline::NONE, now(0)).unwrap();
                 let end = Instant::now() + Duration::from_secs(5);
                 let output = loop {
                     assert!(Instant::now() < end);
                     step(&mut server, &mut exposure);
-                    call.step(&mut cx(), &mut work(1_000_000));
-                    if let Some(result) = call.try_take(&mut work(1_000_000)).unwrap() {
+                    if let Poll::Ready(result) = call.poll(&mut cx(), now(0)) {
                         break result.unwrap();
                     }
                     tokio::time::sleep(Duration::from_millis(1)).await;
                 };
-                assert_eq!(output.data().unwrap().body.as_ref(), b"42");
+                assert_eq!(output.result().unwrap().data().unwrap().body, b"42");
                 assert_eq!(
                     exposure.take_settlement().unwrap().delivery,
                     FiniteDelivery::Delivered
                 );
             }
-            drop(handle);
-            let end = Instant::now() + Duration::from_secs(5);
-            loop {
-                if let StartStatus::Ready(outcome) =
-                    client.shutdown(&mut cx(), &mut work(1_000_000))
-                {
-                    assert!(outcome.is_complete());
-                    break;
-                }
-                assert!(Instant::now() < end);
-            }
-            drop(client);
-            drop(observer);
+            assert!(calls.is_idle());
+            drop((read, calls, client, instance));
             assert!(
-                bank.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                    .iter()
-                    .all(|a| a.used() == 0)
+                ResourceKind::ALL
+                    .into_iter()
+                    .all(|kind| bank.account(kind).used() == 0)
             );
             close(&mut server, &mut exposure);
             assert_eq!(application.calls.get(), 3);

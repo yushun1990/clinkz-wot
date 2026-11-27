@@ -35,10 +35,9 @@ check "planning default"        -p clinkz-wot-planning
 check "planning no-features"    -p clinkz-wot-planning --no-default-features
 check "planning async"          -p clinkz-wot-planning --no-default-features --features async
 
-echo "=== isolated Planning normal dependency ==="
-check "planning isolated default"     --manifest-path planning/tests/normal-dependency/Cargo.toml
-check "planning isolated no-default"  --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features
-check "planning isolated async"       --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features --features async
+echo "=== independently linked Consumer ==="
+check "open Consumer preparation" --manifest-path tools/architecture-fixtures/open-consumer/Cargo.toml --lib
+check "open Consumer execution"   --manifest-path tools/architecture-fixtures/open-consumer/Cargo.toml --lib --no-default-features
 
 echo "=== protocol-bindings-http ==="
 check "http preparation"        -p clinkz-wot-binding-http
@@ -60,10 +59,11 @@ check "servient default"        -p clinkz-wot-servient
 check "servient no-features"    -p clinkz-wot-servient --no-default-features
 check "servient async"          -p clinkz-wot-servient --no-default-features --features async
 
-echo "=== source-free Producer execution ==="
+echo "=== finite execution ==="
 check "finite default"          -p clinkz-wot-servient-finite
 check "finite no-features"      -p clinkz-wot-servient-finite --no-default-features
 check "finite caller-owned"     -p clinkz-wot-constrained-consumer-fixture
+check "finite caller-owned source" -p clinkz-wot-constrained-consumer-fixture --features prepare
 check "finite prepared loan"    -p clinkz-wot-constrained-consumer-fixture --features host-meaning
 
 echo "=== Property Read architecture fixtures ==="
@@ -73,12 +73,6 @@ check "aggregate binding async"        -p clinkz-wot-property-read-binding-fixtu
 check "aggregate runner default"       -p clinkz-wot-property-read-architecture-runner
 check "aggregate runner no-features"   -p clinkz-wot-property-read-architecture-runner --no-default-features
 check "aggregate runner async"         -p clinkz-wot-property-read-architecture-runner --no-default-features --features async
-check "consumer binding default"       -p clinkz-wot-consumer-property-read-binding-fixture
-check "consumer binding no-features"   -p clinkz-wot-consumer-property-read-binding-fixture --no-default-features
-check "consumer binding async"         -p clinkz-wot-consumer-property-read-binding-fixture --no-default-features --features async
-check "consumer runner default"        -p clinkz-wot-consumer-property-read-runtime-runner
-check "consumer runner no-features"    -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features
-check "consumer runner async"          -p clinkz-wot-consumer-property-read-runtime-runner --no-default-features --features async
 
 echo "=== codec-cbor ==="
 check "cbor default"            -p clinkz-wot-codec-cbor

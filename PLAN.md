@@ -40,17 +40,15 @@ and individually retired replies. Its Host preparation and composed participants
 still use legacy accounting. The remaining dependencies determine the order.
 [Accepted migration](workspace/0133-resource-management-proposal.md#disposition-of-308-and-the-roadmap) · [Owner and progress contracts](docs/spec/foundation.md)
 
-1. **Finite Consumer execution.** The composed Host path now drives named,
-   bound and collection operations through one bounded native poll in Core.
-   The caller-owned Read holds a typed result slot through disposal. Both can
-   retire the original exchange under cancellation while its result remains
-   held. The Host still shares outstanding-call, response, scratch and cleanup
-   accounts with other families. Native registration still reports footprints
-   to the restricted Host Read. Migrate that Read and its source-enabled and
-   prepared-only Host/static callers, façade exports, fixtures and workload
-   drivers. Retire the restricted Read policy with that façade. The Producer
-   and preparation paths below also consume plan-set and route-stage artifacts.
-   Their last use releases the shared adapters and frozen schema-2 checks.
+1. **Finite Consumer Read convergence.** Host Reads use the same finite calls
+   as Write and the collection operations. Source-enabled Host preparation and
+   source-free mappings share that execution path. Caller-owned Reads lend
+   prepared meaning and keep their typed result slot through disposal. The
+   restricted Read façade, schema-2 policy and inline compiler are retired.
+   Shared Host outstanding-call, response, scratch and cleanup accounts still
+   cover multiple families. Host registration and preparation still consume
+   footprint and artifact declarations. The remaining route-stage plan adapter
+   serves Producer paths.
    [Host execution](servient/finite/src/consumer.rs) · [Caller-owned evidence](docs/evidence/constrained-finite-execution.md)
 2. **Continuing and published work.** Migrate Consumer Invoke/Query/Cancel and
    notification conversations, then Producer candidate, invocation, delivery and

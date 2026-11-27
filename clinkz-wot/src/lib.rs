@@ -21,8 +21,7 @@ pub mod cbor {
 }
 pub mod prelude {
     pub use crate::core::{
-        CoreError, CoreResult, InteractionInput, InteractionOptions, InteractionOutput, Payload,
-        ReadPropertyHandler,
+        CoreError, CoreResult, InteractionInput, InteractionOutput, Payload, ReadPropertyHandler,
     };
     #[cfg(feature = "std")]
     pub use crate::servient::host_producer::{

@@ -63,29 +63,26 @@ pub use artifact::{
     BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
     BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRef,
     BindingArtifactRejection, BindingArtifactRejectionReason, BindingArtifactRole,
-    ConsumerBindingConfiguration,
 };
 #[cfg(feature = "std")]
 #[cfg(target_has_atomic = "ptr")]
-pub use artifact::{HostArtifactStorage, HostBindingArtifact};
+pub use artifact::{ConsumerBindingConfiguration, HostArtifactStorage, HostBindingArtifact};
 #[cfg(target_has_atomic = "ptr")]
 pub use binding::{
     BindingCallSettlement, BindingCancellationDisposition, BindingDeliveryOutcome,
     BindingExecutionSupport, BindingIngressLimits, BindingIngressPolicy, BindingInputRejection,
     BindingLifetimeFootprint, BindingOperationalError, BindingRegistrationCapabilities,
-    BindingRegistrationIdentity, BindingResourceContract, BindingResourceDeclarations,
-    BindingStateLayout, BindingStatusPolicy, BindingTransientFootprint, CleanupPhaseContext,
-    CleanupReservation, CleanupTransferAcceptance, CleanupTransferEnvelope, CleanupTransferRequest,
-    CleanupTransferTarget, ClientRequestSlot, CollisionDomainId, EndpointReservationKey,
-    NoCleanupSuccessor, PollClientBinding, PollServerBinding, PrepareInput, RouteAcceptClaim,
-    RouteAcceptClaimError, RouteAcceptEvent, RouteAcceptLease, RouteActivationOutcome,
-    RouteActivationPermit, RouteCleanupOutcome, RouteCleanupSuccessor, RouteCommitOutcome,
-    RouteInboundRequest, RouteInboundResponse, RoutePreparationVisibility, RoutePrepareOutcome,
-    RouteReadinessOutcome, RouteReadinessSlot, RouteReservationIdentity, RouteResponseOpportunity,
-    RouteTerminal, ServerResponseSlot, ServerRouteSlot, ServingActivationAuthority,
-    StaticBindingComponents, StaticBindingRegistration, StaticBindingRegistrationInput,
-    StaticConsumerBindingRegistration, StaticConsumerBindingRegistrationInput,
-    StaticConsumerPropertyReadSlot, StaticServerProgress,
+    BindingRegistrationIdentity, BindingResourceDeclarations, BindingStateLayout,
+    BindingStatusPolicy, BindingTransientFootprint, CleanupPhaseContext, CleanupReservation,
+    CleanupTransferAcceptance, CleanupTransferEnvelope, CleanupTransferRequest,
+    CleanupTransferTarget, CollisionDomainId, EndpointReservationKey, NoCleanupSuccessor,
+    PollServerBinding, PrepareInput, RouteAcceptClaim, RouteAcceptClaimError, RouteAcceptEvent,
+    RouteAcceptLease, RouteActivationOutcome, RouteActivationPermit, RouteCleanupOutcome,
+    RouteCleanupSuccessor, RouteCommitOutcome, RouteInboundRequest, RouteInboundResponse,
+    RoutePreparationVisibility, RoutePrepareOutcome, RouteReadinessOutcome, RouteReadinessSlot,
+    RouteReservationIdentity, RouteResponseOpportunity, RouteTerminal, ServerResponseSlot,
+    ServerRouteSlot, ServingActivationAuthority, StaticBindingRegistration,
+    StaticBindingRegistrationInput, StaticServerProgress,
 };
 #[cfg(feature = "std")]
 #[cfg(target_has_atomic = "ptr")]
@@ -112,8 +109,8 @@ pub use identity::{
     SubscriptionSlotId, ThingId, ThingSlotId,
 };
 pub use interaction::{
-    AcceptHint, BindingResponseMetadata, InteractionOptions, InteractionOutputMetadata,
-    InteractionOutputView, InteractionStatus, MediaType, ResponsePayloadRole, ResponseSelection,
+    AcceptHint, BindingResponseMetadata, InteractionOutputMetadata, InteractionOutputView,
+    InteractionStatus, MediaType, ResponsePayloadRole, ResponseSelection,
 };
 #[cfg(target_has_atomic = "ptr")]
 pub use interaction::{InteractionInput, InteractionOutput, interaction_output_backing};

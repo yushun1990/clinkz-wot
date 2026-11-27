@@ -3,6 +3,8 @@
 //! actual UDP datagrams in tests. This is not a production protocol mapping.
 #![no_std]
 pub mod action;
+#[cfg(feature = "prepare")]
+pub mod preparation;
 use clinkz_wot_core::{
     BindingGeneration, BindingId, BindingResponseMetadata, CoreError, CoreResult, Deadline,
     ErrorContext, ErrorPhase, InteractionOutputMetadata, InteractionOutputView, InteractionStatus,
@@ -42,7 +44,7 @@ pub struct Program<'a> {
     pub plan: PlanId,
 }
 pub struct TestBinding<'a, S> {
-    pub open: &'a dyn Fn() -> CoreResult<S>,
+    pub open: &'a dyn Fn(&str) -> CoreResult<S>,
     pub stats: &'a Statistics<'a>,
     pub configuration: u32,
 }
@@ -65,7 +67,7 @@ impl<'a, S: TestDatagrams> ReadBinding for TestBinding<'a, S> {
         meaning.operation() == Operation::ReadProperty && media == "application/x-test-number"
     }
     fn start(&self, p: &Self::Program, _: Deadline) -> CoreResult<Self::Call> {
-        let socket = (self.open)()?;
+        let socket = (self.open)(p.target)?;
         bump(&self.stats.starts);
         Ok(TestCall {
             socket: Some(socket),

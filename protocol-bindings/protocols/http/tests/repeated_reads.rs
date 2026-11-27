@@ -41,34 +41,33 @@ fn hundred_alternating_public_reads_are_source_free_and_use_fresh_connections() 
         finishing.recv_timeout(Duration::from_secs(5)).unwrap();
     });
     recipe().block_on(async {
-        let (runtime, handle, observer, parent) = engine(port);
-        let account_baseline: Vec<_> = parent
-            .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-            .iter()
-            .map(|a| a.used())
-            .collect();
+        let (owner, handle, calls, parent) = engine(port);
+        let account_baseline = usage(&parent);
         #[cfg(target_os = "linux")]
         let fd_baseline = std::fs::read_dir("/proc/self/fd").unwrap().count();
         for i in 0..100 {
             let mut call = handle
                 .read_property(
+                    &calls,
                     if i % 2 == 0 { "a" } else { "b" },
-                    InteractionOptions::new(),
-                    &mut work(),
+                    Deadline::NONE,
+                    now(),
                 )
                 .unwrap();
             assert!(
                 handle
-                    .read_property("a", InteractionOptions::new(), &mut work())
+                    .read_property(&calls, "a", Deadline::NONE, now())
                     .is_err()
             );
             let output = take(&mut call).await.unwrap();
             assert_eq!(
-                &*output.data().unwrap().body,
+                output.result().unwrap().data().unwrap().body,
                 if i % 2 == 0 { b"17" } else { b"29" }
             );
             assert_eq!(
                 output
+                    .result()
+                    .unwrap()
                     .metadata()
                     .binding_response()
                     .unwrap()
@@ -79,14 +78,7 @@ fn hundred_alternating_public_reads_are_source_free_and_use_fresh_connections() 
             drop(output);
             drop(call);
             retirement.recv_timeout(Duration::from_secs(5)).unwrap();
-            assert_eq!(
-                parent
-                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                    .iter()
-                    .map(|a| a.used())
-                    .collect::<Vec<_>>(),
-                account_baseline
-            );
+            assert_eq!(usage(&parent), account_baseline);
             #[cfg(target_os = "linux")]
             assert_eq!(
                 std::fs::read_dir("/proc/self/fd").unwrap().count(),
@@ -95,16 +87,7 @@ fn hundred_alternating_public_reads_are_source_free_and_use_fresh_connections() 
             );
         }
         finished.send(()).unwrap();
-        drop(handle);
-        shutdown(&runtime);
-        drop(runtime);
-        drop(observer);
-        assert!(
-            parent
-                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                .iter()
-                .all(|a| a.used() == 0)
-        );
+        release((owner, handle, calls, parent));
     });
     peer.join().unwrap();
 }

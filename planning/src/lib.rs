@@ -32,25 +32,7 @@ use clinkz_wot_foundation::WorkBudget;
 use clinkz_wot_td::thing::Thing;
 
 mod property_read;
-pub use property_read::{
-    PropertyReadBuildCursor, PropertyReadPlanCompiler, select_consumer_property_read,
-};
-
-#[cfg(feature = "validated-thing")]
-mod consumer_property_read;
-#[cfg(feature = "validated-thing")]
-pub use consumer_property_read::{
-    ConsumerPropertyReadBuild, ConsumerPropertyReadBuildConfig, ConsumerPropertyReadBuildStep,
-    ConsumerPropertyReadCleanupSlot, ConsumerPropertyReadDraft, ConsumerPropertyReadPreflight,
-    ConsumerPropertyReadRollback, ConsumerPropertyReadRollbackStep, ConsumerPropertyReadSelection,
-    InlineConsumerPropertyReadRegistration, PlanFootprint, build_consumer_property_read_aggregate,
-    select_consumer_property_read_aggregate,
-};
-#[cfg(feature = "std")]
-#[cfg(feature = "validated-thing")]
-pub use consumer_property_read::{
-    ConsumerPropertyReadOwnedOutput, ConsumerPropertyReadOwnedRollback,
-};
+pub use property_read::{PropertyReadBuildCursor, PropertyReadPlanCompiler};
 
 /// Borrowed immutable inputs for one plan-build transaction.
 #[derive(Clone, Copy)]

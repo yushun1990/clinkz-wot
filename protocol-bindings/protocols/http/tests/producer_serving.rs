@@ -1,4 +1,6 @@
 #![cfg(feature = "prepare")]
+#[path = "support/consumer_read.rs"]
+mod consumer_read;
 use clinkz_wot_binding_http::*;
 use clinkz_wot_core::{producer::*, *};
 use clinkz_wot_foundation::*;
@@ -6,6 +8,9 @@ use clinkz_wot_planning::{ProducerPropertyReadAdmission, ProducerPropertyReadSte
 use clinkz_wot_servient::{
     Servient, ServientBuilder, host_accounts::HostResourceAccounts,
     producer_installation::ProducerInstallationState as State,
+};
+use clinkz_wot_servient_finite::consumer::{
+    ConsumerAssociation, ConsumerCall, ConsumerCalls, ConsumerSettlement,
 };
 use clinkz_wot_td::{
     ValidatedThingAdmissionConfig, ValidatedThingCursor, ValidatedThingProgress, thing::Thing,
@@ -17,7 +22,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicU64, AtomicUsize, Ordering},
     },
-    task::{Context, Waker},
+    task::{Context, Poll, Waker},
     time::{Duration, Instant},
 };
 
@@ -795,104 +800,57 @@ impl RuntimeClock for Clock {
         std::num::NonZeroU64::new(1000).unwrap()
     }
 }
-fn consumer_policy() -> clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadPolicy {
-    clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadPolicy::try_new_owned(
-        BindingResourceContract::ConsumerOwnedHostV2,
-        ResourceProfileId::GATEWAY_DEFAULT_V1,
-        GatewayDefaultV1::LIMITS.clone(),
-        BindingLifetimeFootprint::new(8, 8192),
-        BindingLifetimeFootprint::new(8, 4096),
-        [1, 64, 64, 64],
-        [4096, 32],
-        [2, 2, 1, 1, 1, 1, 1],
-        [30_000, 1000],
-        65536,
-    )
-    .unwrap()
-}
 
 fn consumer(
     target: &str,
-    bank: Arc<HostResourceAccounts>,
-    clock: Arc<dyn RuntimeClock + Send + Sync>,
+    bank: &Arc<HostResourceAccounts>,
 ) -> (
-    clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadRuntime,
-    clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadHandle,
-    impl Fn() -> (Option<CleanupOutcome>, [u64; 4]) + use<>,
+    (
+        clinkz_wot_core::consumer::ConsumerInstance,
+        clinkz_wot_servient_finite::consumer::StandaloneConsumerAssociation,
+    ),
+    ConsumerAssociation,
+    ConsumerCalls,
 ) {
-    use clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadRuntime;
-    let registration = try_inline_consumer_registration(
-        HttpConsumerConfig::for_cleartext_ip().unwrap(),
-        BindingId::new(602),
-        BindingGeneration::INITIAL,
-        0,
-    )
-    .unwrap();
-    let (client, report) = accepted(ConsumerPropertyReadRuntime::try_new(
-        registration,
-        consumer_policy(),
-        clock,
-        bank,
-    ));
     let td: Thing = serde_json::from_value(serde_json::json!({
         "@context": "https://www.w3.org/2022/wot/td/v1.1",
         "title": "client", "id": "urn:test:consumer",
         "securityDefinitions": {"n": {"scheme": "nosec"}}, "security": ["n"],
-        "properties": {"value": {"forms": [{"href": target}]}}
+        "properties": {"value": {"readOnly":true,"forms": [{"href": target}]}}
     }))
     .unwrap();
-    let handle = match client
-        .consume(&td, &mut work(1_000_000), |build| {
-            for _ in 0..10000 {
-                build.step(&mut work(1_000_000));
-                if build.is_finished() {
-                    return;
-                }
-            }
-            panic!("Consumer preparation stalled");
-        })
-        .unwrap()
-    {
-        StartStatus::Ready(handle) => handle,
-        _ => panic!("Consumer not installed"),
-    };
-    (client, handle, report)
-    // The Consumer TD and all semantic/build loans end before any call starts.
-}
-fn shutdown_consumer(
-    client: &clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadRuntime,
-) {
-    for _ in 0..10000 {
-        if let StartStatus::Ready(outcome) = client.shutdown(
-            &mut Context::from_waker(Waker::noop()),
-            &mut work(1_000_000),
-        ) {
-            assert!(outcome.is_complete());
-            return;
-        }
-    }
-    panic!("Consumer retirement stalled");
+    let owner = consumer_read::prepare_consumer(
+        &td,
+        bank,
+        consumer_read::http_registration(),
+        Default::default(),
+    )
+    .unwrap();
+    let handle = owner.1.handle();
+    let calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
+    (owner, handle, calls)
 }
 async fn public_result(
-    call: &mut clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadCall,
+    call: &mut ConsumerCall,
     mut server: Option<&mut Server>,
-) -> CoreResult<InteractionOutput> {
+    clock: &dyn RuntimeClock,
+) -> CoreResult<ConsumerSettlement> {
     let end = Instant::now() + Duration::from_secs(2);
     loop {
         if let Some(s) = &mut server {
             step(s, &mut work(1), 0);
         }
-        call.step(
-            &mut Context::from_waker(Waker::noop()),
-            &mut work(1_000_000),
-        );
-        if let Some(result) = call.try_take(&mut work(1_000_000)).unwrap() {
-            return result;
+        if let Poll::Ready(result) = call.poll(&mut Context::from_waker(Waker::noop()), clock.now())
+        {
+            let result = result?;
+            result.result()?;
+            return Ok(result);
         }
         assert!(Instant::now() < end, "public loop stalled");
         tokio::time::sleep(Duration::from_millis(1)).await;
     }
 }
+
 #[test]
 fn public_consumer_and_producer_share_capacity_and_execute_two_source_free_generations() {
     let _serial = SERIAL.lock().unwrap();
@@ -922,27 +880,22 @@ fn public_consumer_and_producer_share_capacity_and_execute_two_source_free_gener
             previous = Some(s.instance_key());
             installed(&mut s);
             s.begin_expose(30_000).unwrap();
-            let (client, handle, report) = consumer(
-                &format!("http://{a}{path}"),
-                bank.clone(),
-                Arc::new(Clock(Instant::now())),
-            );
+            let clock = Clock(Instant::now());
+            let (client, handle, capacity) = consumer(&format!("http://{a}{path}"), &bank);
             let baseline = bank.snapshot(ResourceKind::ALL).map(|a| a.used());
             for _ in 0..100 {
                 let mut call = handle
-                    .read_property("value", InteractionOptions::new(), &mut work(1_000_000))
+                    .read_property(&capacity, "value", Deadline::NONE, clock.now())
                     .unwrap();
-                let output = public_result(&mut call, Some(&mut s)).await.unwrap();
-                assert_eq!(&*output.data().unwrap().body, body);
+                let output = public_result(&mut call, Some(&mut s), &clock).await.unwrap();
+                assert_eq!(output.result().unwrap().data().unwrap().body, body);
                 drop(output);
                 drop(call);
                 assert_eq!(bank.snapshot(ResourceKind::ALL).map(|a| a.used()), baseline);
             }
             assert_eq!(calls.load(Ordering::SeqCst), 100);
-            drop(handle);
-            shutdown_consumer(&client);
-            drop(client);
-            drop(report);
+            assert!(capacity.is_idle());
+            drop((handle, capacity, client));
             drop(s);
             empty(&bank);
         }
@@ -986,9 +939,10 @@ fn public_loop_failure_owners_retire_then_the_same_endpoint_serves_a_fresh_incar
                     installed(s.as_mut().unwrap());
                     s.as_mut().unwrap().begin_expose(10).unwrap();
                     let server_baseline = bank.snapshot(ResourceKind::ALL).map(|a| a.used());
-                    let clock = Arc::new(ControlledClock(AtomicU64::new(0)));
+                    let clock = ControlledClock(AtomicU64::new(0));
                     let target = format!("http://{a}/value");
-                    let (client, handle, report) = consumer(&target, bank.clone(), clock.clone());
+                    let (client, handle, capacity) = consumer(&target, &bank);
+                    let mut capacity = Some(capacity);
                     let mut client = Some(client);
                     let mut handle = Some(handle);
                     let baseline = bank.snapshot(ResourceKind::ALL).map(|a| a.used());
@@ -997,9 +951,10 @@ fn public_loop_failure_owners_retire_then_the_same_endpoint_serves_a_fresh_incar
                             .as_ref()
                             .unwrap()
                             .read_property(
+                                capacity.as_ref().unwrap(),
                                 "value",
-                                InteractionOptions::new().with_timeout(Duration::from_millis(10)),
-                                &mut work(1_000_000),
+                                Deadline::at(clock.now().checked_add_ticks(10).unwrap()),
+                                clock.now(),
                             )
                             .unwrap(),
                     );
@@ -1012,9 +967,11 @@ fn public_loop_failure_owners_retire_then_the_same_endpoint_serves_a_fresh_incar
                             &mut WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1),
                             0,
                         );
-                        call.as_ref().unwrap().step(
-                            &mut Context::from_waker(Waker::noop()),
-                            &mut work(1_000_000),
+                        assert!(
+                            call.as_ref()
+                                .unwrap()
+                                .progress(&mut Context::from_waker(Waker::noop()), clock.now())
+                                .is_pending()
                         );
                         if s.as_ref().unwrap().state() == State::Dispatching {
                             break;
@@ -1032,29 +989,31 @@ fn public_loop_failure_owners_retire_then_the_same_endpoint_serves_a_fresh_incar
                     }
                     assert_eq!(calls.load(Ordering::SeqCst), usize::from(dispatch));
                     match mode {
-                        "call-cancel" => call.as_ref().unwrap().cancel().unwrap(),
+                        "call-cancel" => call.as_ref().unwrap().cancel(),
                         "call-deadline" => {
                             clock.0.store(10, Ordering::SeqCst);
-                            call.as_ref()
-                                .unwrap()
-                                .step(&mut Context::from_waker(Waker::noop()), &mut work(0));
-                            call.as_ref().unwrap().cancel().unwrap();
+                            assert!(matches!(
+                                call.as_ref()
+                                    .unwrap()
+                                    .progress(&mut Context::from_waker(Waker::noop()), clock.now()),
+                                Poll::Ready(Ok(()))
+                            ));
+                            call.as_ref().unwrap().cancel();
                         }
                         "call-drop" => drop(call.take()),
                         "client-root-loss" => {
-                            // Each interest retains the real Consumer root. Losing
-                            // the public runtime alone is not final-owner loss.
                             drop(client.take());
+                            drop(capacity.take());
+                            drop(handle.take());
                             assert_ne!(
                                 bank.snapshot(ResourceKind::ALL).map(|a| a.used()),
                                 server_baseline
                             );
                             drop(call.take());
-                            drop(handle.take());
-                            assert!(matches!(
-                                report().0,
-                                Some(CleanupOutcome::ResidualExternalState(_))
-                            ));
+                            assert_eq!(
+                                bank.snapshot(ResourceKind::ALL).map(|a| a.used()),
+                                server_baseline
+                            );
                         }
                         "producer-cancel" => s.as_mut().unwrap().cancel(),
                         "producer-deadline" => {
@@ -1083,27 +1042,34 @@ fn public_loop_failure_owners_retire_then_the_same_endpoint_serves_a_fresh_incar
                         assert_eq!(s.state(), State::Closed);
                     }
                     if let Some(call) = &mut call {
-                        let result = public_result(call, None).await;
+                        let result = public_result(call, None, &clock).await;
                         match mode {
                             "call-cancel" => assert!(
                                 matches!(result, Err(CoreError::Cancelled(_))),
-                                "{result:?}"
+                                "{:?}",
+                                result.as_ref().err()
                             ),
                             "call-deadline" => {
-                                assert!(matches!(result, Err(CoreError::TimedOut(_))), "{result:?}")
+                                assert!(
+                                    matches!(result, Err(CoreError::TimedOut(_))),
+                                    "{:?}",
+                                    result.as_ref().err()
+                                )
                             }
                             _ => assert!(
                                 matches!(result, Err(CoreError::Binding(_))),
-                                "{mode}: {result:?}"
+                                "{mode}: {:?}",
+                                result.as_ref().err()
                             ),
                         }
                     } else if mode == "call-drop" {
                         // The manual root, not the lost call ticket, owns cleanup.
                         loop {
-                            client.as_ref().unwrap().step(
-                                &mut Context::from_waker(Waker::noop()),
-                                &mut work(1_000_000),
-                            );
+                            capacity
+                                .as_ref()
+                                .unwrap()
+                                .step(&mut Context::from_waker(Waker::noop()), clock.now())
+                                .unwrap();
                             if bank.snapshot(ResourceKind::ALL).map(|a| a.used()) == baseline {
                                 break;
                             }
@@ -1135,40 +1101,34 @@ fn public_loop_failure_owners_retire_then_the_same_endpoint_serves_a_fresh_incar
                     if let Some(handle) = &handle {
                         let before = bank.snapshot(ResourceKind::ALL).map(|a| a.used());
                         let mut retry = handle
-                            .read_property("value", InteractionOptions::new(), &mut work(1_000_000))
+                            .read_property(
+                                capacity.as_ref().unwrap(),
+                                "value",
+                                Deadline::NONE,
+                                clock.now(),
+                            )
                             .unwrap();
-                        let output = public_result(&mut retry, Some(&mut fresh)).await.unwrap();
-                        assert_eq!(&*output.data().unwrap().body, b"43");
+                        let output = public_result(&mut retry, Some(&mut fresh), &clock)
+                            .await
+                            .unwrap();
+                        assert_eq!(output.result().unwrap().data().unwrap().body, b"43");
                         drop(output);
                         drop(retry);
                         assert_eq!(bank.snapshot(ResourceKind::ALL).map(|a| a.used()), before);
                     } else {
-                        let (replacement, handle, observer) =
-                            consumer(&target, bank.clone(), clock);
+                        let (replacement, handle, capacity) = consumer(&target, &bank);
                         let mut retry = handle
-                            .read_property("value", InteractionOptions::new(), &mut work(1_000_000))
+                            .read_property(&capacity, "value", Deadline::NONE, clock.now())
                             .unwrap();
-                        assert_eq!(
-                            &*public_result(&mut retry, Some(&mut fresh))
-                                .await
-                                .unwrap()
-                                .data()
-                                .unwrap()
-                                .body,
-                            b"43"
-                        );
-                        drop(retry);
-                        drop(handle);
-                        shutdown_consumer(&replacement);
-                        drop(replacement);
-                        drop(observer);
+                        let output = public_result(&mut retry, Some(&mut fresh), &clock)
+                            .await
+                            .unwrap();
+                        assert_eq!(output.result().unwrap().data().unwrap().body, b"43");
+                        drop((output, retry, handle, capacity, replacement));
                     }
                     assert_eq!(calls.load(Ordering::SeqCst), usize::from(dispatch) + 1);
-                    drop(handle);
-                    if let Some(client) = client {
-                        shutdown_consumer(&client);
-                    }
-                    drop(report);
+                    assert!(capacity.as_ref().is_none_or(ConsumerCalls::is_idle));
+                    drop((handle, capacity, client));
                     drop(fresh);
                     empty(&bank);
                 }
@@ -1267,53 +1227,44 @@ fn partially_written_native_reply_is_disposed_on_cancel_or_last_root_loss() {
 #[test]
 fn a_live_producer_exhausts_the_same_cleanup_capacity_used_by_public_consumer() {
     let _serial = SERIAL.lock().unwrap();
-    use clinkz_wot_servient::consumer_property_read::ConsumerPropertyReadRuntime;
-    let limits = GatewayDefaultV1::LIMITS
-        .clone()
-        .try_with_limit(ResourceKind::CleanupItemsMax, Some(1))
-        .unwrap();
-    let bank = Arc::new(HostResourceAccounts::new(&limits));
+    let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
     let a = address();
-    let mut s = server(a, bank.clone(), Arc::new(AtomicUsize::new(0)), b"42", false);
-    installed(&mut s);
-    let registration = try_inline_consumer_registration(
-        HttpConsumerConfig::for_cleartext_ip().unwrap(),
-        BindingId::new(602),
-        BindingGeneration::INITIAL,
-        0,
-    )
-    .unwrap();
-    let rejection = ConsumerPropertyReadRuntime::try_new(
-        registration,
-        consumer_policy(),
-        Arc::new(Clock(Instant::now())),
-        bank.clone(),
-    )
-    .err()
-    .expect("shared cleanup capacity must refuse");
-    assert_eq!(bank.account(ResourceKind::CleanupItemsMax).used(), 1);
-    assert_eq!(
-        rejection
-            .error()
-            .error()
-            .context()
-            .resource_failure()
-            .unwrap()
-            .1,
-        ResourceFailureDomain::EngineCapacity
-    );
-    let (registration, policy, clock, original) = rejection.into_input();
-    assert!(Arc::ptr_eq(&bank, &original));
-    drop(s);
-    empty(&bank);
-    let (client, report) = accepted(ConsumerPropertyReadRuntime::try_new(
-        registration,
-        policy,
-        clock,
-        original,
-    ));
-    drop(client);
-    drop(report);
+    let (owner, handle, capacity) = consumer(&format!("http://{a}/value"), &bank);
+    let kind = ResourceKind::CleanupItemsMax;
+    let account = bank.account(kind);
+    let pressure = bank
+        .reserve(kind, account.limit() - account.used() - 1)
+        .unwrap();
+    let mut server = server(a, bank.clone(), Arc::new(AtomicUsize::new(0)), b"42", false);
+    installed(&mut server);
+    assert_eq!(bank.account(kind).used(), account.limit());
+
+    tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let clock = Clock(Instant::now());
+            let error = handle
+                .read_property(&capacity, "value", Deadline::NONE, clock.now())
+                .err()
+                .expect("shared cleanup capacity must refuse");
+            assert!(matches!(error, CoreError::LimitExceeded { resource, .. } if resource == kind));
+            assert!(capacity.is_idle());
+            drop(server);
+            let mut call = handle
+                .read_property(&capacity, "value", Deadline::NONE, clock.now())
+                .unwrap();
+            call.cancel();
+            let Poll::Ready(Ok(result)) =
+                call.poll(&mut Context::from_waker(Waker::noop()), clock.now())
+            else {
+                panic!("local cancellation stalled");
+            };
+            assert!(matches!(result.result(), Err(CoreError::Cancelled(_))));
+            drop((result, call));
+        });
+    drop((pressure, owner, handle, capacity));
     empty(&bank);
 }
 

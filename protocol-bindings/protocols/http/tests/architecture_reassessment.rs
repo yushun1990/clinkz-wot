@@ -8,19 +8,19 @@
 //! kernel probe covers identity/shape only, not installed execution or schemas.
 //! See docs/reviews/review-08-integrated-architecture-reassessment.md.
 
+#[path = "support/consumer_read.rs"]
+mod consumer_read;
+
 #[cfg(test)]
 mod tests {
-    use clinkz_wot_binding_http::{HttpConsumerConfig, try_inline_consumer_registration};
+
+    use super::consumer_read::{http_registration, prepare_consumer};
+    use clinkz_wot_core::host_accounts::HostResourceAccounts;
     use clinkz_wot_core::*;
     use clinkz_wot_foundation::*;
-    use clinkz_wot_servient::consumer_property_read::*;
     use clinkz_wot_td::{thing::Thing, validate::Validate};
     use serde_json::{Value, json};
-    use std::{
-        num::NonZeroU64,
-        sync::Arc,
-        task::{Context, Waker},
-    };
+    use std::sync::Arc;
 
     fn td() -> Value {
         json!({"@context":["https://www.w3.org/2022/wot/td/v1.1", {"ex":"https://example.org/"}],
@@ -29,105 +29,26 @@ mod tests {
             "properties":{"a":{"type":"number", "readOnly":true,
                 "forms":[{"href":"http://127.0.0.1:9/a"}]}}})
     }
-    fn work() -> WorkBudget {
-        WorkClass::ALL
-            .into_iter()
-            .fold(WorkBudget::new(), |b, w| b.with_remaining(w, 1_000_000))
-    }
-    struct Clock;
-    impl RuntimeClock for Clock {
-        fn now(&self) -> MonotonicInstant {
-            MonotonicInstant::new(ClockId::new(800), 0)
-        }
-        fn ticks_per_second(&self) -> NonZeroU64 {
-            NonZeroU64::new(1000).unwrap()
-        }
-    }
     fn consume(value: Value) -> bool {
         let thing: Thing = serde_json::from_value(value).unwrap();
         thing.validate().expect("ordinary TD Basic validation");
-        let policy = ConsumerPropertyReadPolicy::try_new_owned(
-            BindingResourceContract::ConsumerOwnedHostV2,
-            ResourceProfileId::GATEWAY_DEFAULT_V1,
-            GatewayDefaultV1::LIMITS.clone(),
-            BindingLifetimeFootprint::new(8, 8192),
-            BindingLifetimeFootprint::new(8, 4096),
-            [1, 64, 64, 64],
-            [4096, 32],
-            [2, 2, 1, 1, 1, 1, 1],
-            [30_000, 1000],
-            65536,
-        )
-        .unwrap();
-        let parent = Arc::new(
-            clinkz_wot_servient::host_accounts::HostResourceAccounts::try_from_accounts(
-                policy.parent_accounts(),
-            )
-            .unwrap(),
-        );
-        let registration = try_inline_consumer_registration(
-            HttpConsumerConfig::for_cleartext_ip().unwrap(),
-            BindingId::new(800),
-            BindingGeneration::INITIAL,
-            800,
-        )
-        .unwrap();
-        let (runtime, observer) = ConsumerPropertyReadRuntime::try_new(
-            registration,
-            policy,
-            Arc::new(Clock),
-            parent.clone(),
-        )
-        .unwrap_or_else(|_| panic!("runtime construction"));
-        let result = runtime.consume(&thing, &mut work(), |b| {
-            for _ in 0..300_000 {
-                b.step(&mut work());
-                if b.is_finished() {
-                    return;
-                }
-            }
-            panic!("build stalled")
-        });
-        let supported = match result {
-            Ok(StartStatus::Ready(handle)) => {
-                drop(handle);
-                true
-            }
-            Err(e) => {
-                println!("Basic-valid input rejected: {e:?}");
-                false
-            }
-            _ => panic!("unexpected pending publication"),
-        };
-        drop(thing);
-        let mut done = false;
-        for _ in 0..10_000 {
-            if let StartStatus::Ready(outcome) =
-                runtime.shutdown(&mut Context::from_waker(Waker::noop()), &mut work())
-            {
-                assert!(outcome.is_complete());
-                done = true;
-                break;
-            }
-        }
-        assert!(done);
-        drop(runtime);
-        drop(observer);
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let supported =
+            prepare_consumer(&thing, &bank, http_registration(), Default::default()).is_ok();
         assert!(
-            parent
-                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                .iter()
-                .all(|a| a.used() == 0)
+            ResourceKind::ALL
+                .into_iter()
+                .all(|k| bank.account(k).used() == 0)
         );
         supported
     }
 
     #[test]
-    fn consumer_still_requires_source_id_and_nonempty_property_key() {
+    fn standalone_consumer_uses_the_source_without_an_id_or_nonempty_key() {
         assert!(consume(td()));
         let mut absent = td();
         absent.as_object_mut().unwrap().remove("id");
-        assert!(!consume(absent));
+        assert!(consume(absent));
         let mut empty = td();
         let p = empty["properties"]
             .as_object_mut()
@@ -135,7 +56,7 @@ mod tests {
             .remove("a")
             .unwrap();
         empty["properties"][""] = p;
-        assert!(!consume(empty));
+        assert!(consume(empty));
     }
 
     #[test]
@@ -166,8 +87,10 @@ mod tests {
             BindingArtifactCompatibility::new([2; 16]),
             BindingArtifactRole::ConsumerCall,
         );
-        let request = OutboundRequest::property_read(
+        let request = OutboundRequest::finite(
             BindingArtifactRef::new(identity, SlotIndex::new(0)),
+            Operation::ReadProperty,
+            None,
             Default::default(),
             None,
         )

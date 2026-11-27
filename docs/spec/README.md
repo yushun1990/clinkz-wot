@@ -13,7 +13,7 @@
 | [Time amendment](../amendments/WP-100-time-domain-v1.md) | Retained exact clock/source-time semantics |
 
 The [old authority map](v5-authority-reset.toml) is a historical tombstone.
-[Consumer resource schema 2](consumer-resource-ownership.md), remaining amendments,
+Remaining amendments,
 Property Read admission/gate/evidence records and numeric resource profiles have
 only the explicit historical/restricted scope registered in the successor map.
 In the [requirements matrix](../requirements.csv), `all` applies a requirement

@@ -404,7 +404,11 @@ fn schema_head(schema: SchemaView<'_>) -> CoreResult<Option<PreparedSchema>> {
         || f.format.is_some()
         || schema.one_of().is_some()
         || schema.items().is_some()
-        || !schema.extension_semantics().all(annotation)
+        || !schema.extension_semantics().all(|node| {
+            annotation(node)
+                || node.name().is("http://www.w3.org/2000/01/rdf-schema#label")
+                    && matches!(node.value(), SemanticValue::Text(_))
+        })
     {
         return Err(refused());
     }

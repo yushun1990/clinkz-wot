@@ -17,15 +17,15 @@ the successor requirements and applicable review, not inherit this admission.
 
 `index.toml` owns the state of `WP-400-CONSUMER-RESOURCE-OWNERSHIP`. This is a
 record of the separate ADR-0013 readmission of the cross-package
-successor to the accepted strict Consumer path under ADR-0023. The [scoped specification](../spec/consumer-resource-ownership.md)
-and [schema overlay](../resource-contracts/consumer-ownership-v2.toml) own exact
+successor to the accepted strict Consumer path under ADR-0023. The [scoped specification](https://github.com/yushun1990/clinkz-wot/blob/51abb0c57e724e6ee4c6ef86939c5455ee2cd820/docs/spec/consumer-resource-ownership.md)
+and [schema overlay](https://github.com/yushun1990/clinkz-wot/blob/51abb0c57e724e6ee4c6ef86939c5455ee2cd820/docs/resource-contracts/consumer-ownership-v2.toml) own exact
 semantics and row/API/diagnostic changes. At the readmission baseline, production
 code and existing predecessor evidence records were unchanged.
 
 ## Compilation-cell readmission
 
 This documentation-only readmission records the already accepted
-[cell/support contract and API scope](../spec/consumer-resource-ownership.md#compilation-cell-projection-amendment)
+[cell/support contract and API scope](https://github.com/yushun1990/clinkz-wot/blob/51abb0c57e724e6ee4c6ef86939c5455ee2cd820/docs/spec/consumer-resource-ownership.md#compilation-cell-projection-amendment)
 on unchanged master `d4bde22f9276ad2d94bbd9d455277a6d99223e94`.
 [Review 5544009375](https://github.com/yushun1990/clinkz-wot/pull/187#pullrequestreview-5544009375)
 accepted the exact two-getter delta at `1afa7d335afee37d635f7269e31106174fb1c797`;
@@ -130,7 +130,7 @@ all 16 registered admission prechecks passing at the exact reviewed head.
 
 That documentation-only transition recorded admission of that accepted boundary;
 implementation was `planned`. The
-[configuration amendment](../spec/consumer-resource-ownership.md#closed-consumer-binding-configuration)
+[configuration amendment](https://github.com/yushun1990/clinkz-wot/blob/51abb0c57e724e6ee4c6ef86939c5455ee2cd820/docs/spec/consumer-resource-ownership.md#closed-consumer-binding-configuration)
 resolves the [binding/compiler configuration conflict](../../workspace/0086-consumer-owned-artifact-configuration.md)
 at the contract and source-scope boundary. It specifies the missing closed-compiler/API
 projection and actual-client correspondence; their production implementation and

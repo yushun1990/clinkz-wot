@@ -773,8 +773,10 @@ fn https_dynamic_resolution_uses_actual_audience_and_rejects_substituted_native_
                     definition.content().security(),
                 )
                 .unwrap();
-            let raw = OutboundRequest::property_read(
+            let raw = OutboundRequest::finite(
                 BindingArtifactRef::new(artifact.identity(), SlotIndex::new(0)),
+                Operation::ReadProperty,
+                None,
                 [("resource".into(), "off".into())].into_iter().collect(),
                 None,
             )

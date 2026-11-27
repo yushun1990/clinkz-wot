@@ -1,21 +1,6 @@
 #![cfg(feature = "prepare")]
 include!("support/application.rs");
 use std::sync::mpsc;
-async fn take_woken(call: &mut ConsumerPropertyReadCall) -> CoreResult<InteractionOutput> {
-    tokio::time::timeout(
-        Duration::from_secs(5),
-        std::future::poll_fn(|cx| {
-            call.step(cx, &mut work());
-            match call.try_take(&mut work()).unwrap() {
-                Some(result) => std::task::Poll::Ready(result),
-                None => std::task::Poll::Pending,
-            }
-        }),
-    )
-    .await
-    .expect("call made no wake-driven progress")
-}
-
 fn unfinished_chunked_trailers_must_reject(trailers: Vec<u8>) {
     let mut bytes = chunked_head();
     bytes.extend_from_slice(b"0\r\n");
@@ -46,50 +31,42 @@ fn unfinished_response_must_reject(bytes: Vec<u8>) {
         assert_eq!(next.read(&mut byte).unwrap(), 0);
     });
     let (timed_out, error) = recipe().block_on(async {
-        let (runtime, handle, observer, parent) = engine(port);
+        let (owner, handle, calls, parent) = engine(port);
         let mut call = handle
-            .read_property("a", InteractionOptions::new(), &mut work())
+            .read_property(&calls, "a", Deadline::NONE, now())
             .unwrap();
         let outcome = tokio::time::timeout(
             Duration::from_millis(250),
-            std::future::poll_fn(|cx| {
-                call.step(cx, &mut work());
-                match call.try_take(&mut work()).unwrap() {
-                    Some(result) => std::task::Poll::Ready(result),
-                    None => std::task::Poll::Pending,
-                }
-            }),
+            std::future::poll_fn(|cx| call.poll(cx, now())),
         )
         .await;
         let timed_out = outcome.is_err();
         let error = match outcome {
-            Ok(result) => result.unwrap_err(),
+            Ok(result) => settled(result).err().expect("expected framing refusal"),
             Err(_) => {
                 // Failure-only cleanup keeps the counterexample's ownership
                 // and peer assertions useful before the production fix too.
-                call.cancel().unwrap();
-                take(&mut call).await.unwrap_err()
+                call.cancel();
+                take(&mut call).await.err().unwrap()
             }
         };
         drop(call);
         let mut next = handle
-            .read_property("b", InteractionOptions::new(), &mut work())
+            .read_property(&calls, "b", Deadline::NONE, now())
             .unwrap();
         assert_eq!(
-            &*take_woken(&mut next).await.unwrap().data().unwrap().body,
+            take_woken(&mut next)
+                .await
+                .unwrap()
+                .result()
+                .unwrap()
+                .data()
+                .unwrap()
+                .body,
             b"2"
         );
         drop(next);
-        drop(handle);
-        shutdown(&runtime);
-        drop(runtime);
-        drop(observer);
-        assert!(
-            parent
-                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                .iter()
-                .all(|a| a.used() == 0)
-        );
+        release((owner, handle, calls, parent));
         (timed_out, error)
     });
     peer.join().unwrap();
@@ -182,26 +159,28 @@ fn response_case_with_body(
         assert!(listener.accept().is_err(), "retry/reconnect is forbidden");
     });
     recipe().block_on(async {
-        let (runtime, handle, observer, parent) = engine(port);
+        let (owner, handle, calls, parent) = engine(port);
         let mut call = handle
-            .read_property("a", InteractionOptions::new(), &mut work())
+            .read_property(&calls, "a", Deadline::NONE, now())
             .unwrap();
         let result = take_woken(&mut call).await;
-        assert_eq!(result.is_ok(), success, "{result:?}");
+        assert_eq!(result.is_ok(), success, "{:?}", result.as_ref().err());
         if let Some(body) = expected {
-            assert_eq!(&*result.unwrap().data().unwrap().body, body);
+            assert_eq!(
+                result
+                    .as_ref()
+                    .ok()
+                    .unwrap()
+                    .result()
+                    .unwrap()
+                    .data()
+                    .unwrap()
+                    .body,
+                body
+            );
         }
-        drop(call);
-        drop(handle);
-        shutdown(&runtime);
-        drop(runtime);
-        drop(observer);
-        assert!(
-            parent
-                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                .iter()
-                .all(|a| a.used() == 0)
-        );
+        drop((result, call));
+        release((owner, handle, calls, parent));
     });
     peer.join().unwrap();
 }
@@ -214,11 +193,11 @@ fn framing_and_body_boundaries() {
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {n}\r\n\r\n"
             )
             .into_bytes();
-            fixed.extend(std::iter::repeat_n(b'1', n));
-            response_case(fixed, fragmented, n <= 4096);
+            fixed.extend(json_body(n));
+            response_case(fixed, fragmented, (1..=4096).contains(&n));
             let mut close = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n".to_vec();
-            close.extend(std::iter::repeat_n(b'1', n));
-            response_case(close, fragmented, n <= 4096);
+            close.extend(json_body(n));
+            response_case(close, fragmented, (1..=4096).contains(&n));
         }
     }
 }
@@ -271,7 +250,7 @@ fn chunked_body_boundaries_deliver_exact_bytes_without_peer_eof() {
     for fragmented in [false, true] {
         for n in [0, 1, 4095, 4096, 4097] {
             let mut bytes = chunked_head();
-            let body = vec![b'1'; n];
+            let body = json_body(n);
             // Multiple real chunks, extensions and the final empty section.
             for part in body.chunks(511) {
                 bytes.extend_from_slice(format!("{:X};example=value\r\n", part.len()).as_bytes());
@@ -282,8 +261,8 @@ fn chunked_body_boundaries_deliver_exact_bytes_without_peer_eof() {
             response_case_with_body(
                 bytes,
                 fragmented,
-                n <= 4096,
-                (n <= 4096).then_some(body.as_slice()),
+                (1..=4096).contains(&n),
+                (1..=4096).contains(&n).then_some(body.as_slice()),
                 false,
             );
         }
@@ -307,25 +286,23 @@ fn slow_chunked_octets_wake_public_runtime_across_every_delimiter() {
         assert_eq!(socket.read(&mut byte).unwrap(), 0);
     });
     recipe().block_on(async {
-        let (runtime, handle, observer, parent) = engine(port);
+        let (owner, handle, calls, parent) = engine(port);
         let mut call = handle
-            .read_property("a", InteractionOptions::new(), &mut work())
+            .read_property(&calls, "a", Deadline::NONE, now())
             .unwrap();
         assert_eq!(
-            &*take_woken(&mut call).await.unwrap().data().unwrap().body,
+            take_woken(&mut call)
+                .await
+                .unwrap()
+                .result()
+                .unwrap()
+                .data()
+                .unwrap()
+                .body,
             b"[12,34]"
         );
         drop(call);
-        drop(handle);
-        shutdown(&runtime);
-        drop(runtime);
-        drop(observer);
-        assert!(
-            parent
-                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                .iter()
-                .all(|a| a.used() == 0)
-        );
+        release((owner, handle, calls, parent));
     });
     peer.join().unwrap();
 }
@@ -554,21 +531,22 @@ fn incomplete_supported_responses_cancel_or_expire_then_reuse_original_runtime()
                 next.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n2").unwrap();
             });
             recipe().block_on(async {
-                let (runtime, handle, observer, parent) = engine(port);
+                let (owner, handle, calls, parent) = engine(port);
                 let mut call = handle
                     .read_property(
+                        &calls,
                         "a",
                         if mode == "deadline" {
-                            InteractionOptions::new().with_timeout(Duration::from_millis(100))
+                            after(100)
                         } else {
-                            InteractionOptions::new()
+                            Deadline::NONE
                         },
-                        &mut work(),
+                        now(),
                     )
                     .unwrap();
                 let end = Instant::now() + Duration::from_secs(5);
                 loop {
-                    call.step(&mut Context::from_waker(Waker::noop()), &mut work());
+                    let _ = call.progress(&mut Context::from_waker(Waker::noop()), now());
                     if received.try_recv().is_ok() {
                         break;
                     }
@@ -578,35 +556,25 @@ fn incomplete_supported_responses_cancel_or_expire_then_reuse_original_runtime()
                 // Reactor progress lets the decoder consume the partial frame.
                 for _ in 0..3 {
                     tokio::time::sleep(Duration::from_millis(1)).await;
-                    call.step(&mut Context::from_waker(Waker::noop()), &mut work());
-                    assert!(call.try_take(&mut work()).unwrap().is_none());
+                    let _ = call.progress(&mut Context::from_waker(Waker::noop()), now());
+                    assert!(!call.is_settled());
                 }
                 assert!(
                     parent
-                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                        .iter()
-                        .any(|a| a.used() != 0)
+                        .account(ResourceKind::PendingHandlerCallsGlobalMax)
+                        .used()
+                        == 1
                 );
-                // Result occupancy cannot be borrowed by an ordinary new read.
-                let rejected = handle
-                    .read_property(
-                        "b",
-                        InteractionOptions::new().with_uri_variable("proof", "original"),
-                        &mut work(),
-                    )
+                let refused = handle
+                    .read_property(&calls, "b", Deadline::NONE, now())
                     .err()
-                    .unwrap();
-                let (options, request) = rejected.into_parts().0;
-                assert!(
-                    request.is_none(),
-                    "engine occupancy must reject before raw construction"
-                );
-                assert_eq!(options.uri_variables().get("proof").unwrap(), "original");
+                    .expect("the slot is occupied");
+                assert!(matches!(refused, CoreError::Backpressure(_)));
                 if mode == "cancel" {
-                    call.cancel().unwrap();
+                    call.cancel();
                 }
                 if mode != "drop" {
-                    let error = take(&mut call).await.unwrap_err();
+                    let error = take(&mut call).await.err().unwrap();
                     if mode == "deadline" {
                         assert!(matches!(error, CoreError::TimedOut(_)), "{error:?}");
                     } else {
@@ -615,26 +583,26 @@ fn incomplete_supported_responses_cancel_or_expire_then_reuse_original_runtime()
                 }
                 drop(call);
                 for _ in 0..3 {
-                    runtime.step(&mut Context::from_waker(Waker::noop()), &mut work());
+                    calls
+                        .step(&mut Context::from_waker(Waker::noop()), now())
+                        .unwrap();
                 }
                 let mut next = handle
-                    .read_property("b", InteractionOptions::new(), &mut work())
+                    .read_property(&calls, "b", Deadline::NONE, now())
                     .unwrap();
                 assert_eq!(
-                    &*take_woken(&mut next).await.unwrap().data().unwrap().body,
+                    take_woken(&mut next)
+                        .await
+                        .unwrap()
+                        .result()
+                        .unwrap()
+                        .data()
+                        .unwrap()
+                        .body,
                     b"2"
                 );
                 drop(next);
-                drop(handle);
-                shutdown(&runtime);
-                drop(runtime);
-                drop(observer);
-                assert!(
-                    parent
-                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                        .iter()
-                        .all(|a| a.used() == 0)
-                );
+                release((owner, handle, calls, parent));
             });
             peer.join().unwrap();
         }
@@ -666,13 +634,13 @@ fn buffered_completion_respects_cancel_and_result_orders() {
                 assert_retired(&mut socket);
             });
             recipe().block_on(async {
-                let (runtime, handle, observer, parent) = engine(port);
+                let (owner, handle, calls, parent) = engine(port);
                 let mut call = handle
-                    .read_property("a", InteractionOptions::new(), &mut work())
+                    .read_property(&calls, "a", Deadline::NONE, now())
                     .unwrap();
                 let end = Instant::now() + Duration::from_secs(5);
                 loop {
-                    call.step(&mut Context::from_waker(Waker::noop()), &mut work());
+                    let _ = call.progress(&mut Context::from_waker(Waker::noop()), now());
                     if received.try_recv().is_ok() {
                         break;
                     }
@@ -686,28 +654,20 @@ fn buffered_completion_respects_cancel_and_result_orders() {
                     tokio::time::sleep(Duration::from_millis(1)).await;
                 }
                 if cancel_first {
-                    call.cancel().unwrap();
+                    call.cancel();
                     assert!(matches!(
                         take_woken(&mut call).await,
                         Err(CoreError::Cancelled(_))
                     ));
                 } else {
                     let output = take_woken(&mut call).await.unwrap();
-                    assert_eq!(&*output.data().unwrap().body, b"12");
-                    assert!(call.cancel().is_err());
+                    assert_eq!(output.result().unwrap().data().unwrap().body, b"12");
+                    call.cancel();
+                    assert_eq!(output.result().unwrap().data().unwrap().body, b"12");
                     drop(output);
                 }
                 drop(call);
-                drop(handle);
-                shutdown(&runtime);
-                drop(runtime);
-                drop(observer);
-                assert!(
-                    parent
-                        .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                        .iter()
-                        .all(|a| a.used() == 0)
-                );
+                release((owner, handle, calls, parent));
             });
             peer.join().unwrap();
         }
@@ -734,13 +694,13 @@ fn cancellation_and_dropped_ticket_retire_socket_and_allow_next_read() {
             .unwrap();
         });
         recipe().block_on(async {
-            let (runtime, handle, observer, parent) = engine(port);
+            let (owner, handle, calls, parent) = engine(port);
             let mut call = handle
-                .read_property("a", InteractionOptions::new(), &mut work())
+                .read_property(&calls, "a", Deadline::NONE, now())
                 .unwrap();
             let end = Instant::now() + Duration::from_secs(5);
             loop {
-                call.step(&mut Context::from_waker(Waker::noop()), &mut work());
+                let _ = call.progress(&mut Context::from_waker(Waker::noop()), now());
                 if received.try_recv().is_ok() {
                     break;
                 }
@@ -748,63 +708,51 @@ fn cancellation_and_dropped_ticket_retire_socket_and_allow_next_read() {
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
             if !drop_ticket {
-                call.cancel().unwrap();
+                call.cancel();
                 assert!(take(&mut call).await.is_err());
             }
             drop(call);
             for _ in 0..10 {
-                runtime.step(&mut Context::from_waker(Waker::noop()), &mut work());
+                calls
+                    .step(&mut Context::from_waker(Waker::noop()), now())
+                    .unwrap();
             }
             let mut next = handle
-                .read_property("b", InteractionOptions::new(), &mut work())
+                .read_property(&calls, "b", Deadline::NONE, now())
                 .unwrap();
             assert!(take(&mut next).await.is_ok());
             drop(next);
-            drop(handle);
-            shutdown(&runtime);
-            drop(runtime);
-            drop(observer);
-            assert!(
-                parent
-                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                    .iter()
-                    .all(|a| a.used() == 0)
-            );
+            release((owner, handle, calls, parent));
         });
         peer.join().unwrap();
     }
 }
 
 #[test]
-fn preacceptance_rejections_recover_the_original_request_without_connecting() {
+fn preacceptance_refusals_release_the_slot_without_connecting() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     listener.set_nonblocking(true).unwrap();
     // Missing runtime and a runtime without enable_io both reject before raw
     // acceptance. Registration and consume themselves require no Tokio context.
     for disabled in [false, true] {
-        let (runtime, handle, observer, parent) = engine(port);
+        let (owner, handle, calls, parent) = engine(port);
         let disabled_runtime = tokio::runtime::Builder::new_current_thread()
             .build()
             .unwrap();
         let entered = disabled.then(|| disabled_runtime.enter());
-        let rejected = match handle.read_property("a", InteractionOptions::new(), &mut work()) {
+        let rejected = match handle.read_property(&calls, "a", Deadline::NONE, now()) {
             Err(r) => r,
             Ok(_) => panic!("missing I/O services accepted"),
         };
-        let (_, request) = rejected.into_parts().0;
-        assert!(request.unwrap().uri_variables().is_empty());
-        drop(entered);
-        drop(handle);
-        shutdown(&runtime);
-        drop(runtime);
-        drop(observer);
-        assert!(
-            parent
-                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                .iter()
-                .all(|a| a.used() == 0)
+        let error = rejected;
+        assert_eq!(
+            error.context().resource_failure().unwrap().1,
+            ResourceFailureDomain::DeploymentFailure
         );
+        assert!(calls.is_idle());
+        drop(entered);
+        release((owner, handle, calls, parent));
     }
     let rt = recipe();
     let _entered = rt.enter();
@@ -814,47 +762,25 @@ fn preacceptance_rejections_recover_the_original_request_without_connecting() {
         "http://user@127.0.0.1/a",
         "http://127.0.0.1:0/a",
     ] {
-        let (runtime, handle, observer, parent) =
+        let (owner, handle, calls, parent) =
             engine_with_targets(target.into(), format!("http://127.0.0.1:{port}/b"));
-        let rejected = match handle.read_property("a", InteractionOptions::new(), &mut work()) {
+        let rejected = match handle.read_property(&calls, "a", Deadline::NONE, now()) {
             Err(r) => r,
             Ok(_) => panic!("unsupported target accepted: {target}"),
         };
         // Unsupported native targets now fail during compilation/selection,
         // before construction of an OutboundRequest.
-        assert!(rejected.into_parts().0.1.is_none());
-        drop(handle);
-        shutdown(&runtime);
-        drop(runtime);
-        drop(observer);
-        assert!(
-            parent
-                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                .iter()
-                .all(|a| a.used() == 0)
-        );
+        assert!(matches!(rejected, CoreError::UnsupportedOperation(_)));
+        release((owner, handle, calls, parent));
     }
-    let (runtime, handle, observer, parent) = engine(port);
-    let rejected = match handle.read_property(
-        "a",
-        InteractionOptions::new().with_uri_variable("x", "original"),
-        &mut work(),
-    ) {
-        Err(r) => r,
-        Ok(_) => panic!("URI variables accepted"),
-    };
-    let request = rejected.into_parts().0.1.unwrap();
-    assert_eq!(request.uri_variables().get("x").unwrap(), "original");
-    drop(handle);
-    shutdown(&runtime);
-    drop(runtime);
-    drop(observer);
-    assert!(
-        parent
-            .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-            .iter()
-            .all(|a| a.used() == 0)
-    );
+    let (owner, handle, calls, parent) = engine(port);
+    let error = handle
+        .read_property_with_variables(&calls, "a", &[("x", "original")], Deadline::NONE, now())
+        .err()
+        .expect("static Form cannot accept unqualified variables");
+    assert!(matches!(error, CoreError::Validation(_)));
+    assert!(calls.is_idle());
+    release((owner, handle, calls, parent));
     assert!(listener.accept().is_err());
 }
 
@@ -872,16 +798,16 @@ fn deadline_drain_and_root_loss_retire_partial_chunked_peer() {
             assert_retired(&mut socket);
         });
         recipe().block_on(async {
-            let (runtime, handle, observer, parent) = engine(port);
-            let options = if mode == "deadline" {
-                InteractionOptions::new().with_timeout(Duration::from_millis(100))
+            let (owner, handle, calls, parent) = engine(port);
+            let deadline = if mode == "deadline" {
+                after(100)
             } else {
-                InteractionOptions::new()
+                Deadline::NONE
             };
-            let mut call = handle.read_property("a", options, &mut work()).unwrap();
+            let mut call = handle.read_property(&calls, "a", deadline, now()).unwrap();
             let end = Instant::now() + Duration::from_secs(5);
             loop {
-                call.step(&mut Context::from_waker(Waker::noop()), &mut work());
+                let _ = call.progress(&mut Context::from_waker(Waker::noop()), now());
                 if received.try_recv().is_ok() {
                     break;
                 }
@@ -889,34 +815,25 @@ fn deadline_drain_and_root_loss_retire_partial_chunked_peer() {
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
             if mode == "root-loss" {
-                drop(runtime);
+                drop(owner);
                 drop(handle);
+                drop(calls);
                 drop(call);
+                assert!(usage(&parent).iter().all(|used| *used == 0));
             } else {
                 if mode == "drain" {
-                    runtime.close();
+                    owner.1.begin_close();
+                    calls.begin_close();
                 }
-                let result = take(&mut call).await.unwrap_err();
+                let result = take(&mut call).await.err().unwrap();
                 if mode == "deadline" {
                     assert!(matches!(result, CoreError::TimedOut(_)), "{result:?}");
+                } else {
+                    assert!(matches!(result, CoreError::StaleHandle(_)), "{result:?}");
                 }
                 drop(call);
-                drop(handle);
-                shutdown(&runtime);
-                drop(runtime);
+                release((owner, handle, calls, parent));
             }
-            if mode == "root-loss" {
-                assert!(observer().0.unwrap().is_residual());
-            } else {
-                assert!(observer().0.unwrap().is_complete());
-            }
-            drop(observer);
-            assert!(
-                parent
-                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                    .iter()
-                    .all(|a| a.used() == 0)
-            );
         });
         peer.join().unwrap();
     }
@@ -959,23 +876,14 @@ server.server_close()
         .unwrap();
     let port = line.trim().parse().unwrap();
     recipe().block_on(async {
-        let (runtime, handle, observer, parent) = engine(port);
+        let (owner, handle, calls, parent) = engine(port);
         let mut call = handle
-            .read_property("a", InteractionOptions::new(), &mut work())
+            .read_property(&calls, "a", Deadline::NONE, now())
             .unwrap();
         let output = take(&mut call).await.unwrap();
-        assert_eq!(&*output.data().unwrap().body, b"37");
-        drop(call);
-        drop(handle);
-        shutdown(&runtime);
-        drop(runtime);
-        drop(observer);
-        assert!(
-            parent
-                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                .iter()
-                .all(|a| a.used() == 0)
-        );
+        assert_eq!(output.result().unwrap().data().unwrap().body, b"37");
+        drop((output, call));
+        release((owner, handle, calls, parent));
     });
     assert!(peer.wait().unwrap().success());
 }
@@ -985,23 +893,17 @@ fn accepted_but_unpolled_call_has_no_network_effect() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     recipe().block_on(async {
-        let (runtime, handle, observer, parent) = engine(listener.local_addr().unwrap().port());
+        let (owner, handle, calls, parent) = engine(listener.local_addr().unwrap().port());
         let call = handle
-            .read_property("a", InteractionOptions::new(), &mut work())
+            .read_property(&calls, "a", Deadline::NONE, now())
             .unwrap();
         assert!(listener.accept().is_err());
-        call.cancel().unwrap();
+        call.cancel();
         drop(call);
-        drop(handle);
-        shutdown(&runtime);
-        drop(runtime);
-        drop(observer);
+        calls
+            .step(&mut Context::from_waker(Waker::noop()), now())
+            .unwrap();
+        release((owner, handle, calls, parent));
         assert!(listener.accept().is_err());
-        assert!(
-            parent
-                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                .iter()
-                .all(|a| a.used() == 0)
-        );
     });
 }

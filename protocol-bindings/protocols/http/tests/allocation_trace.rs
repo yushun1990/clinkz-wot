@@ -15,7 +15,7 @@ struct Trace {
     largest: usize,
     last_layout: (usize, usize),
     blocks: [(usize, usize); 512],
-    sizes: [(usize, usize); 64],
+    sizes: [(usize, usize); 256],
 }
 const EMPTY: Trace = Trace {
     armed: false,
@@ -26,7 +26,7 @@ const EMPTY: Trace = Trace {
     largest: 0,
     last_layout: (0, 0),
     blocks: [(0, 0); 512],
-    sizes: [(0, 0); 64],
+    sizes: [(0, 0); 256],
 };
 thread_local! { static TRACE: RefCell<Trace> = const { RefCell::new(EMPTY) }; }
 thread_local! {
@@ -125,32 +125,30 @@ fn raw_call_allocation_refusal_recovers_input_and_releases_binding_occupancy() {
     listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
     recipe().block_on(async {
-        let (runtime, handle, observer, parent) = engine(port);
-        let baseline: Vec<_> = parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().map(|a| a.used()).collect();
+        let (owner, handle, calls, parent) = engine(port);
+        let baseline = usage(&parent);
         // The final allocation in Client::invoke is HostBindingCallBox::try_new.
         // Measure this graph's actual Layout using an accepted, unpolled call;
         // the rejection's cause below independently checks the raw owner.
         TRACE.with(|t| *t.borrow_mut() = Trace { armed: true, ..EMPTY });
-        let mut probe = handle.read_property("a", InteractionOptions::new(), &mut work()).unwrap();
+        let mut probe = handle.read_property(&calls, "a", Deadline::NONE, now()).unwrap();
         let layout = TRACE.with(|t| { let mut t = t.borrow_mut(); t.armed = false; t.last_layout });
         assert_ne!(layout.0, 0);
-        probe.cancel().unwrap();
+        probe.cancel();
         assert!(matches!(take(&mut probe).await, Err(CoreError::Cancelled(_))));
         drop(probe);
-        assert_eq!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
+        assert_eq!(usage(&parent), baseline);
         println!("fallible raw-call allocation Layout={layout:?}");
         CALL_REFUSALS.with(|n| n.set(0));
         DENY_NEXT_CALL.with(|deny| deny.set(Some(layout)));
-        let rejected = handle.read_property("a", InteractionOptions::new().with_timeout(Duration::from_millis(321)), &mut work()).err().expect("raw box refusal");
+        let rejected = handle.read_property(&calls, "a", after(321), now()).err().expect("raw box refusal");
         assert!(DENY_NEXT_CALL.with(|deny| deny.replace(None)).is_none(), "raw box allocation was not reached");
         assert_eq!(CALL_REFUSALS.with(Cell::get), 1);
-        let ((options, original), error) = rejected.into_parts();
-        assert_eq!(options.timeout, Some(Duration::from_millis(321)));
-        assert_eq!(error.error().context().cause_code(), Some(600), "the raw HTTP constructor, not Core's envelope, must reject");
-        assert_eq!(error.error().context().plan(), Some(original.as_ref().unwrap().plan_id()));
-        assert_eq!(error.error().context().resource_failure().unwrap().1, ResourceFailureDomain::DeploymentFailure);
-        drop((options, original, error));
-        assert_eq!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().map(|a| a.used()).collect::<Vec<_>>(), baseline);
+        let error = rejected;
+        assert_eq!(error.context().cause_code(), Some(600), "the raw HTTP constructor, not Core's envelope, must reject");
+        assert!(error.context().plan().is_some());
+        assert_eq!(error.context().resource_failure().unwrap().1, ResourceFailureDomain::DeploymentFailure);
+        assert_eq!(usage(&parent), baseline);
         assert_eq!(listener.accept().unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
         listener.set_nonblocking(false).unwrap();
         let peer = std::thread::spawn(move || {
@@ -159,15 +157,11 @@ fn raw_call_allocation_refusal_recovers_input_and_releases_binding_occupancy() {
             socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n29").unwrap();
             assert_retired(&mut socket);
         });
-        let mut retry = handle.read_property("b", InteractionOptions::new(), &mut work()).unwrap();
-        assert_eq!(&*take(&mut retry).await.unwrap().data().unwrap().body, b"29");
+        let mut retry = handle.read_property(&calls, "b", Deadline::NONE, now()).unwrap();
+        assert_eq!(take(&mut retry).await.unwrap().result().unwrap().data().unwrap().body, b"29");
         drop(retry);
         peer.join().unwrap();
-        drop(handle);
-        shutdown(&runtime);
-        drop(runtime);
-        drop(observer);
-        assert!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().all(|a| a.used() == 0));
+        release((owner, handle, calls, parent));
     });
 }
 
@@ -208,7 +202,7 @@ fn body_allocator_refusal_preserves_deployment_domain_and_allows_retry() {
             }
         });
         recipe().block_on(async {
-            let (runtime, handle, observer, parent) = engine(port);
+            let (owner, handle, calls, parent) = engine(port);
             let mut failures = Vec::new();
             BODY_REFUSALS.with(|count| count.set(0));
             for domain in [
@@ -216,14 +210,14 @@ fn body_allocator_refusal_preserves_deployment_domain_and_allows_retry() {
                 ResourceFailureDomain::BindingPolicy,
             ] {
                 let mut call = handle
-                    .read_property("a", InteractionOptions::new(), &mut work())
+                    .read_property(&calls, "a", Deadline::NONE, now())
                     .unwrap();
                 DENY_NEXT_BODY
                     .with(|deny| deny.set(domain == ResourceFailureDomain::DeploymentFailure));
                 let result = take(&mut call).await;
                 let still_armed = DENY_NEXT_BODY.with(|deny| deny.replace(false));
                 assert!(!still_armed, "body reservation was not reached");
-                let error = result.unwrap_err();
+                let error = result.err().unwrap();
                 assert!(matches!(error, CoreError::Binding(_)), "{error:?}");
                 let (key, actual_domain, local, parent_owner) =
                     error.context().resource_failure().unwrap();
@@ -261,26 +255,25 @@ fn body_allocator_refusal_preserves_deployment_domain_and_allows_retry() {
                 "policy identity or selected plan changed"
             );
             let mut retry = handle
-                .read_property("a", InteractionOptions::new(), &mut work())
+                .read_property(&calls, "a", Deadline::NONE, now())
                 .unwrap();
             let output = take(&mut retry).await.unwrap();
-            assert_eq!(&*output.data().unwrap().body, b"1");
+            assert_eq!(output.result().unwrap().data().unwrap().body, b"1");
             assert_eq!(
-                Some(output.metadata().binding_response().unwrap().plan_id()),
+                Some(
+                    output
+                        .result()
+                        .unwrap()
+                        .metadata()
+                        .binding_response()
+                        .unwrap()
+                        .plan_id()
+                ),
                 failures[0].1
             );
             drop(output);
             drop(retry);
-            drop(handle);
-            shutdown(&runtime);
-            drop(runtime);
-            drop(observer);
-            assert!(
-                parent
-                    .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                    .iter()
-                    .all(|a| a.used() == 0)
-            );
+            release((owner, handle, calls, parent));
         });
         peer.join().unwrap();
     }
@@ -294,7 +287,7 @@ fn public_path_allocation_observation_and_complete_release() {
         let (mut socket, _) = listener.accept().unwrap();
         request(&mut socket);
         socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n").unwrap();
-        socket.write_all(&[b'1'; 4096]).unwrap();
+        socket.write_all(&json_body(4096)).unwrap();
         let mut byte = [0];
         assert_eq!(socket.read(&mut byte).unwrap(), 0);
     });
@@ -305,11 +298,11 @@ fn public_path_allocation_observation_and_complete_release() {
     // this thread is still included and reported, not assigned to engine rows.
     let (startup, accepted, terminal, parent_peak, accepted_layouts) = io_runtime.block_on(async {
         TRACE.with(|t| t.borrow_mut().armed = true);
-        let (runtime, handle, observer, parent) = engine(port);
+        let (owner, handle, calls, parent) = engine(port);
         let startup_snapshot = TRACE.with(|t| *t.borrow());
         let startup = startup_snapshot.live;
         let mut call = handle
-            .read_property("a", InteractionOptions::new(), &mut work())
+            .read_property(&calls, "a", Deadline::NONE, now())
             .unwrap();
         let accepted_snapshot = TRACE.with(|t| *t.borrow());
         let accepted = accepted_snapshot.live;
@@ -322,25 +315,17 @@ fn public_path_allocation_observation_and_complete_release() {
             }
         });
         let output = take(&mut call).await.unwrap();
-        assert_eq!(output.data().unwrap().content_type.capacity(), 16);
+        assert_eq!(
+            output.result().unwrap().data().unwrap().content_type,
+            "application/json"
+        );
         let terminal = TRACE.with(|t| t.borrow().live);
         let parent_peak: u64 = parent
-            .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-            .iter()
-            .map(|a| a.peak())
-            .sum();
+            .account(ResourceKind::EngineLiveBytesGlobalMax)
+            .peak();
         drop(output);
         drop(call);
-        drop(handle);
-        shutdown(&runtime);
-        drop(runtime);
-        drop(observer);
-        assert!(
-            parent
-                .snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS)
-                .iter()
-                .all(|a| a.used() == 0)
-        );
+        release((owner, handle, calls, parent));
         (startup, accepted, terminal, parent_peak, accepted_layouts)
     });
     // Shared-runtime shutdown may initialize its thread-local parker; that
@@ -357,7 +342,7 @@ fn public_path_allocation_observation_and_complete_release() {
         "tracked backing survived root and I/O runtime destruction"
     );
     println!(
-        "startup={startup} accepted={accepted} terminal={terminal} requests={} peak={} largest={} parent_peak_sum={parent_peak} remaining={}",
+        "startup={startup} accepted={accepted} terminal={terminal} requests={} peak={} largest={} engine_live_account_peak={parent_peak} remaining={}",
         measured.count, measured.peak, measured.largest, measured.live
     );
     println!(
@@ -383,13 +368,13 @@ fn cancellation_observes_sdk_disposal_and_checks_allocation_free_engine_handoff(
         assert_eq!(socket.read(&mut byte).unwrap(), 0);
     });
     recipe().block_on(async {
-        let (runtime, handle, observer, parent) = engine(port);
+        let (owner, handle, calls, parent) = engine(port);
         let mut call = handle
-            .read_property("a", InteractionOptions::new(), &mut work())
+            .read_property(&calls, "a", Deadline::NONE, now())
             .unwrap();
         let end = Instant::now() + Duration::from_secs(5);
         loop {
-            call.step(&mut Context::from_waker(Waker::noop()), &mut work());
+            let _ = call.progress(&mut Context::from_waker(Waker::noop()), now());
             if received.try_recv().is_ok() {
                 break;
             }
@@ -401,11 +386,11 @@ fn cancellation_observes_sdk_disposal_and_checks_allocation_free_engine_handoff(
             *t = EMPTY;
             t.armed = true;
         });
-        call.cancel().unwrap();
+        call.cancel();
         assert_eq!(TRACE.with(|t| t.borrow().count), 0);
-        call.step(&mut Context::from_waker(Waker::noop()), &mut work());
+        let _ = call.progress(&mut Context::from_waker(Waker::noop()), now());
         let disposal = TRACE.with(|t| *t.borrow());
-        let result = call.try_take(&mut work()).unwrap().unwrap();
+        let result = take_ready(&mut call).unwrap();
         let requests = TRACE.with(|t| {
             let mut t = t.borrow_mut();
             t.armed = false;
@@ -415,11 +400,7 @@ fn cancellation_observes_sdk_disposal_and_checks_allocation_free_engine_handoff(
         println!("SDK cancellation: requests={} peak={} largest={} retained_before_reactor_turn={}; engine cancel/status and result-taking=0", disposal.count,disposal.peak,disposal.largest,disposal.live);
         assert!(matches!(result, Err(CoreError::Cancelled(_))));
         drop(call);
-        drop(handle);
-        shutdown(&runtime);
-        drop(runtime);
-        drop(observer);
-        assert!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().all(|a| a.used() == 0));
+        release((owner, handle, calls, parent));
     });
     peer.join().unwrap();
 }
@@ -439,7 +420,7 @@ fn stock_chunked_growth_overlap_and_incomplete_trailer_disposal_observations() {
             bytes.extend_from_slice(b"X-Pad: ");
             bytes.resize(8188, b'x');
             bytes.extend_from_slice(b"\r\n\r\n1000\r\n");
-            bytes.extend_from_slice(&[b'1'; 4096]);
+            bytes.extend_from_slice(&json_body(4096));
             bytes.extend_from_slice(b"\r\n0\r\n");
             let start = bytes.len();
             bytes.extend_from_slice(b"X: y");
@@ -461,50 +442,53 @@ fn stock_chunked_growth_overlap_and_incomplete_trailer_disposal_observations() {
         });
         let io_runtime = recipe();
         io_runtime.block_on(async {
-            let (runtime, handle, observer, parent) = engine(port);
-            let mut call = handle.read_property("a", InteractionOptions::new(), &mut work()).unwrap();
+            let (owner, handle, calls, parent) = engine(port);
+            let mut call = handle.read_property(&calls, "a", Deadline::NONE, now()).unwrap();
             TRACE.with(|t| { *t.borrow_mut() = Trace { armed: true, ..EMPTY }; });
             let end = Instant::now() + Duration::from_secs(5);
             let mut max_poll_allocations = 0;
             let mut pending_snapshot = EMPTY;
             let result = loop {
                 let before = TRACE.with(|t| t.borrow().count);
-                call.step(&mut Context::from_waker(Waker::noop()), &mut work());
+                let _ = call.progress(&mut Context::from_waker(Waker::noop()), now());
                 max_poll_allocations = max_poll_allocations.max(TRACE.with(|t| t.borrow().count) - before);
-                if let Some(result) = call.try_take(&mut work()).unwrap() { break result; }
+                if call.is_settled() { break take_ready(&mut call).unwrap(); }
                 if mode == "cancel-byte8191" && TRACE.with(|t| t.borrow().sizes.iter().any(|(n, count)| *n == 8192 && *count >= 2)) {
                     // Both Hyper read and trailer backing have grown. Leave ample
                     // real reactor turns for the unfinished section to be consumed.
                     for _ in 0..20 {
                         tokio::time::sleep(Duration::from_millis(1)).await;
-                        call.step(&mut Context::from_waker(Waker::noop()), &mut work());
-                        assert!(call.try_take(&mut work()).unwrap().is_none());
+                        let _ = call.progress(&mut Context::from_waker(Waker::noop()), now());
+                        assert!(!call.is_settled());
                     }
                     pending_snapshot = TRACE.with(|t| *t.borrow());
                     let before = pending_snapshot.count;
-                    call.cancel().unwrap();
+                    call.cancel();
                     assert_eq!(TRACE.with(|t| t.borrow().count), before, "engine cancel/status allocated");
-                    call.step(&mut Context::from_waker(Waker::noop()), &mut work());
+                    let _ = call.progress(&mut Context::from_waker(Waker::noop()), now());
                     let after_disposal = TRACE.with(|t| t.borrow().count);
-                    let result = call.try_take(&mut work()).unwrap().unwrap();
+                    let result = take_ready(&mut call).unwrap();
                     assert_eq!(TRACE.with(|t| t.borrow().count), after_disposal, "engine result-taking allocated");
                     break result;
                 }
                 assert!(Instant::now() < end, "allocation observation stalled: {mode}");
                 tokio::time::sleep(Duration::from_millis(1)).await;
             };
-            match mode {
-                "maxima" => assert_eq!(result.unwrap().data().unwrap().body.len(), 4096),
-                "reject-byte8192" => assert!(matches!(result, Err(CoreError::Binding(_)))),
-                _ => assert!(matches!(result, Err(CoreError::Cancelled(_)))),
+            match &result {
+                Ok(output) => {
+                    assert_eq!(mode, "maxima");
+                    assert_eq!(output.result().unwrap().data().unwrap().body.len(), 4096);
+                }
+                Err(CoreError::Binding(_)) => assert_eq!(mode, "reject-byte8192"),
+                Err(CoreError::Cancelled(_)) => assert_eq!(mode, "cancel-byte8191"),
+                Err(error) => panic!("{error:?}"),
             }
             let snapshot = TRACE.with(|t| { let mut t=t.borrow_mut(); t.armed=false; *t });
             println!("stock {mode}: requests={} peak={} largest={} terminal_live={} max_observed_poll_allocations={} pending_live={} disposal_requests={:?}",
                 snapshot.count, snapshot.peak, snapshot.largest, snapshot.live, max_poll_allocations,
                 pending_snapshot.live, if mode == "cancel-byte8191" { Some(snapshot.count - pending_snapshot.count) } else { None });
             println!("stock {mode} allocation size/counts: {:?}", snapshot.sizes.into_iter().filter(|(n,_)| *n != 0).collect::<Vec<_>>());
-            drop(call); drop(handle); shutdown(&runtime); drop(runtime); drop(observer);
-            assert!(parent.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().all(|a| a.used() == 0));
+            drop((result, call)); release((owner, handle, calls, parent));
         });
         drop(io_runtime);
         assert_eq!(

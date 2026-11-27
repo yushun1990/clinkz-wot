@@ -225,124 +225,21 @@ impl<A> BindingArtifact<A> {
     }
 }
 
-/// Checked immutable eligibility of the closed Consumer compiler and client.
-///
-/// This metadata identifies configuration, not program content or a live lease.
-/// The private-policy key must describe the captured client's actual policy.
+/// Immutable native format, policy identity and bounds for a Host Consumer.
+#[cfg(feature = "std")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ConsumerBindingConfiguration {
-    contract: BindingResourceContract,
-    capacity: u8,
-    cell: u8,
-    default_json_forms: bool,
-    #[cfg(feature = "std")]
-    native: Option<BindingArtifactCompatibility>,
-    #[cfg(feature = "std")]
-    native_capacity: usize,
+    target_capacity: usize,
+    compatibility: BindingArtifactCompatibility,
     private_policy: BindingConfigurationDigest,
     result: (u64, u64),
     key: BindingConfigurationDigest,
 }
 
+#[cfg(feature = "std")]
 impl ConsumerBindingConfiguration {
-    /// Checks the current compilation cell, capacity, and complete result backing.
-    /// Derivation performs fixed, allocation-free work without client callbacks.
-    pub fn try_new(
-        contract: BindingResourceContract,
-        target_capacity: usize,
-        private_policy: BindingConfigurationDigest,
-        body_bytes: u64,
-        media_capacity: u64,
-    ) -> CoreResult<Self> {
-        let error = || {
-            CoreError::Validation(
-                ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
-                    .with_redacted_cause(326, "unsupported Consumer binding configuration"),
-            )
-        };
-        if contract == BindingResourceContract::StrictV1
-            || (contract == BindingResourceContract::ConsumerOwnedHostV2 && !cfg!(feature = "std"))
-            || !(1..=RESOLVED_TARGET_CAPACITY).contains(&target_capacity)
-            || crate::response::consumer_result_backing(body_bytes, media_capacity).is_none()
-        {
-            return Err(error());
-        }
-        let cell = if cfg!(feature = "std") {
-            2
-        } else if cfg!(feature = "async") {
-            1
-        } else {
-            0
-        };
-        let tag = match contract {
-            BindingResourceContract::ConsumerOwnedV2 => 1,
-            BindingResourceContract::ConsumerOwnedHostV2 => 2,
-            BindingResourceContract::StrictV1 => unreachable!(),
-        };
-        let key = BindingConfigurationDigest::new(
-            sha2_const_stable::Sha256::new()
-                .update(b"clinkz-consumer-binding-configuration-v1\0")
-                .update(&[tag, cell, target_capacity as u8])
-                .update(RESOLVED_TARGET_COMPATIBILITY.as_bytes())
-                .update(private_policy.as_bytes())
-                .update(&body_bytes.to_le_bytes())
-                .update(&media_capacity.to_le_bytes())
-                .finalize(),
-        );
-        // Exclude the entire strict namespace even in the event of collision.
-        if (1..=64).any(|capacity| key == strict_configuration(capacity)) {
-            return Err(error());
-        }
-        Ok(Self {
-            contract,
-            capacity: target_capacity as u8,
-            cell,
-            default_json_forms: false,
-            #[cfg(feature = "std")]
-            native: None,
-            #[cfg(feature = "std")]
-            native_capacity: 0,
-            private_policy,
-            result: (body_bytes, media_capacity),
-            key,
-        })
-    }
-    /// Returns the explicitly selected resource and disposal contract.
-    pub const fn resource_contract(&self) -> BindingResourceContract {
-        self.contract
-    }
-    /// Returns the supported target capacity.
-    pub const fn target_capacity(&self) -> usize {
-        #[cfg(feature = "std")]
-        if self.native.is_some() {
-            return self.native_capacity;
-        }
-        self.capacity as usize
-    }
-    /// Returns the singleton compilation cell captured by this configuration.
-    pub const fn compilation_cell(&self) -> &'static str {
-        match self.cell {
-            2 => "std",
-            1 => "async-no-std",
-            _ => "no-default",
-        }
-    }
-    /// Returns the actual client's private-policy identity.
-    pub const fn private_policy(&self) -> BindingConfigurationDigest {
-        self.private_policy
-    }
-    /// Returns maximum body bytes and capacity of each media String.
-    pub const fn result_limits(&self) -> (u64, u64) {
-        self.result
-    }
-    /// Returns the derived eligibility key, shared by compiler and artifacts.
-    pub const fn configuration(&self) -> BindingConfigurationDigest {
-        self.key
-    }
-
-    /// Native Host target capacity is Binding policy, independent of the old
-    /// inline copy helper's ceiling. Result backing remains engine-checked.
-    #[cfg(feature = "std")]
+    /// Identifies the actual native format, private policy and checked bounds.
+    /// This identity grants no live execution permission.
     pub fn for_semantic_host(
         target_capacity: usize,
         private_policy: BindingConfigurationDigest,
@@ -369,62 +266,30 @@ impl ConsumerBindingConfiguration {
                 .finalize(),
         );
         Ok(Self {
-            contract: BindingResourceContract::ConsumerOwnedHostV2,
-            capacity: 0,
-            cell: 2,
-            default_json_forms: false,
-            native: Some(compatibility),
-            native_capacity: target_capacity,
+            target_capacity,
+            compatibility,
             private_policy,
             result: (body_bytes, media_capacity),
             key,
         })
     }
 
-    /// Restricts the closed compiler to known metadata-free default JSON Forms.
-    /// The derived key preserves every original configuration operand. Repeated
-    /// application is idempotent and performs no allocation or client callback.
-    pub fn with_default_json_forms(mut self) -> CoreResult<Self> {
-        #[cfg(feature = "std")]
-        if self.native.is_some() {
-            return Err(CoreError::Validation(ErrorContext::new(
-                ErrorPhase::Admission,
-                RetryClass::Never,
-            )));
-        }
-        if self.default_json_forms {
-            return Ok(self);
-        }
-        let key = BindingConfigurationDigest::new(
-            sha2_const_stable::Sha256::new()
-                .update(b"clinkz-consumer-default-json-forms-v1\0")
-                .update(self.key.as_bytes())
-                .finalize(),
-        );
-        if key == self.key || (1..=64).any(|capacity| key == strict_configuration(capacity)) {
-            return Err(CoreError::Validation(
-                ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
-                    .with_redacted_cause(327, "Consumer Form restriction identity collision"),
-            ));
-        }
-        self.key = key;
-        self.default_json_forms = true;
-        Ok(self)
+    pub const fn target_capacity(&self) -> usize {
+        self.target_capacity
     }
-
-    /// Whether the client and compiler require paid default JSON Form facts.
-    pub const fn requires_default_json_forms(&self) -> bool {
-        self.default_json_forms
+    pub const fn native_compatibility(&self) -> BindingArtifactCompatibility {
+        self.compatibility
     }
-}
-
-pub const fn strict_configuration(capacity: u8) -> BindingConfigurationDigest {
-    let mut bytes = [0; 32];
-    bytes[0] = 0x63;
-    bytes[1] = 0x74;
-    bytes[2] = 1;
-    bytes[3] = capacity;
-    BindingConfigurationDigest::new(bytes)
+    pub const fn private_policy(&self) -> BindingConfigurationDigest {
+        self.private_policy
+    }
+    /// Maximum body bytes and capacity of each media String.
+    pub const fn result_limits(&self) -> (u64, u64) {
+        self.result
+    }
+    pub const fn configuration(&self) -> BindingConfigurationDigest {
+        self.key
+    }
 }
 
 /// Reason a measured artifact could not enter an immutable plan set.
@@ -669,25 +534,6 @@ impl BindingArtifact<HostBindingArtifact> {
                 route_reservation,
                 payload,
             }),
-        }
-    }
-}
-
-const RESOLVED_TARGET_CAPACITY: usize = 64;
-
-const RESOLVED_TARGET_COMPATIBILITY: BindingArtifactCompatibility =
-    BindingArtifactCompatibility::new(*b"clinkz-target-v1");
-
-impl ConsumerBindingConfiguration {
-    /// Native format selected by this immutable policy, if any.
-    pub const fn native_compatibility(&self) -> Option<BindingArtifactCompatibility> {
-        #[cfg(feature = "std")]
-        {
-            self.native
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            None
         }
     }
 }

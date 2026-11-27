@@ -8,20 +8,10 @@ const HTTP: &str = "http://www.w3.org/2011/http#";
 #[derive(Debug)]
 pub(super) struct HttpCompiler {
     config: HttpConsumerConfig,
-    caller_resolves_targets: bool,
 }
 impl HttpCompiler {
-    pub(super) fn for_restricted_read(config: HttpConsumerConfig) -> Self {
-        Self {
-            config,
-            caller_resolves_targets: false,
-        }
-    }
     pub(super) fn for_finite(config: HttpConsumerConfig) -> Self {
-        Self {
-            config,
-            caller_resolves_targets: true,
-        }
+        Self { config }
     }
 }
 impl HostSemanticCompiler for HttpCompiler {
@@ -34,13 +24,6 @@ impl HostSemanticCompiler for HttpCompiler {
     fn configuration(&self) -> ConsumerBindingConfiguration {
         self.config.configuration
     }
-    fn schemes(&self) -> &'static [&'static str] {
-        if self.config.secure {
-            &["https"]
-        } else {
-            &["http"]
-        }
-    }
     fn compile(&self, input: ResolvedBindingInput<'_>) -> CoreResult<HttpArtifact> {
         self.qualify_target(input)?;
         let mut output = self.extract(input)?.lower()?;
@@ -50,17 +33,8 @@ impl HostSemanticCompiler for HttpCompiler {
     }
 }
 impl HttpCompiler {
-    /// Instance specialization, including the restricted owner's template limit.
     pub(super) fn qualify_target(&self, input: ResolvedBindingInput<'_>) -> CoreResult<()> {
-        // Template eligibility depends on the actual execution owner. The
-        // restricted Read owner has no validated actual-destination admission;
-        // admitting a template there would mask executable literal alternatives.
-        if self.caller_resolves_targets {
-            crate::address::qualify(input.target, self.config.secure)
-        } else {
-            Target::parse_for(input.target, self.config.secure)
-        }
-        .map_err(|_| unsupported())?;
+        crate::address::qualify(input.target, self.config.secure).map_err(|_| unsupported())?;
         if input.target.contains('{')
             && !matches!(
                 input.operation,
