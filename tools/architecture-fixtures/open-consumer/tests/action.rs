@@ -516,8 +516,14 @@ fn distinct_downstream_invoke_and_control_bindings_execute_native_action_lifecyc
         )
         .ok()
         .unwrap();
-    assert_eq!(h.progress(&mut cx(), now()).unwrap(), ActionTurn::Waiting);
-    assert_eq!(p.replies.load(Ordering::Relaxed), 0);
+    assert!(matches!(
+        h.progress(&mut cx(), now()).unwrap(),
+        ActionTurn::Waiting | ActionTurn::Advanced
+    ));
+    // The peer can reply in the first poll. Retirement still needs its own turn.
+    assert_eq!(p.polls.load(Ordering::Relaxed), 1);
+    assert_eq!(p.live.load(Ordering::Relaxed), 1);
+    assert_eq!(h.state().unwrap(), ConsumerActionState::Invoking);
     drive(&h, ConsumerActionState::Pending);
     h.query(now()).unwrap();
     drive(&h, ConsumerActionState::Pending);
