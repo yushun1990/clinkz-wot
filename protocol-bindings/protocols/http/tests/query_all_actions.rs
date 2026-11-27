@@ -1345,7 +1345,6 @@ fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authorit
                     Rc::new(definition),
                     access,
                     bank.clone(),
-                    &mut work(),
                 )
                 .ok()
                 .unwrap()
@@ -1366,12 +1365,12 @@ fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authorit
                 Some(Payload::new(b"12".to_vec(), "application/json")),
                 Deadline::NONE,
                 now(),
-                &mut work(),
             )
             .ok()
             .unwrap();
         let end = Instant::now() + Duration::from_secs(5);
-        while a.progress(&mut cx(), now(), &mut work()).unwrap() != ConsumerActionState::Pending {
+        while a.state().unwrap() != ConsumerActionState::Pending {
+            a.progress(&mut cx(), now()).unwrap();
             let native = server
                 .exposure
                 .participant_mut::<HttpActionRuntime>(0)
@@ -1387,11 +1386,11 @@ fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authorit
                 Some(Payload::new(b"1".to_vec(), "application/json")),
                 Deadline::NONE,
                 now(),
-                &mut work(),
             )
             .ok()
             .unwrap();
-        while b.progress(&mut cx(), now(), &mut work()).unwrap() != ConsumerActionState::Pending {
+        while b.state().unwrap() != ConsumerActionState::Pending {
+            b.progress(&mut cx(), now()).unwrap();
             let native = server
                 .exposure
                 .participant_mut::<HttpActionRuntime>(0)
@@ -1408,18 +1407,19 @@ fn td_prepared_continuing_invocations_and_root_query_share_one_consumer_authorit
         assert_eq!(v["run"][0]["status"], "running");
         assert_eq!(v["signal"][0]["status"], "running");
         assert_eq!([a.identity().unwrap(), b.identity().unwrap()], before);
+        drop(before);
         assert_eq!(server.app.invoked.get(), 2);
         drop(result);
         drop(call);
         a.cancel_local();
         b.cancel_local();
         for h in [&a, &b] {
-            while h.progress(&mut cx(), now(), &mut work()).unwrap() != ConsumerActionState::Closed
-            {
+            while h.state().unwrap() != ConsumerActionState::Closed {
+                h.progress(&mut cx(), now()).unwrap();
                 assert!(Instant::now() < end);
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
-            drop(h.take_settlement(now(), &mut work()).unwrap());
+            drop(h.take_settlement(now()).unwrap());
         }
         drop(a);
         drop(b);

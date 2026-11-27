@@ -1,6 +1,7 @@
 #![cfg(feature = "prepare")]
 //! Downstream Action facet: independently typed invoke/control Bindings, native
 //! datagrams, opaque continuation and delayed/failed physical retirement.
+use clinkz_wot_core::execution::ValueValidator;
 use clinkz_wot_core::{consumer::*, consumer_action::*, host_accounts::*, *};
 use clinkz_wot_foundation::*;
 use clinkz_wot_planning::open_consumer::*;
@@ -104,7 +105,14 @@ impl Native {
             answered: false,
             media: self.media,
             late: None,
-            ascii_continuation: self.ascii_continuation,
+            output: Vec::with_capacity(128),
+            accepted: (self.operation == Operation::InvokeAction).then(|| {
+                if self.ascii_continuation {
+                    Box::new(*b"7") as Box<dyn Any>
+                } else {
+                    Box::new(Token(7))
+                }
+            }),
             probe: self.probe.clone(),
         }))
     }
@@ -124,7 +132,6 @@ macro_rules! mapping {
                     temporary_bytes: 256,
                     continuation_bytes: 64,
                     response_bytes: 2048,
-                    poll_work: 32,
                 }
             }
             fn native_definition(&self) -> &dyn Any {
@@ -153,9 +160,11 @@ macro_rules! mapping {
             }
             fn start(
                 &self,
+                destination: &str,
                 input: Option<&Payload>,
                 continuation: Option<&dyn Any>,
             ) -> CoreResult<Box<dyn ConsumerActionExchange>> {
+                assert_eq!(destination, &*self.0.endpoint);
                 self.0.start(input, continuation)
             }
         }
@@ -171,7 +180,8 @@ struct Exchange {
     media: &'static str,
     late: Option<ConsumerActionReply>,
     probe: Arc<NativeProbe>,
-    ascii_continuation: bool,
+    output: Vec<u8>,
+    accepted: Option<Box<dyn Any>>,
 }
 impl ConsumerActionExchange for Exchange {
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<CoreResult<ConsumerActionReply>> {
@@ -189,15 +199,18 @@ impl ConsumerActionExchange for Exchange {
                 self.answered = true;
                 self.probe.replies.fetch_add(1, Ordering::Relaxed);
                 let reply = match &data[..n] {
-                    b"ACCEPT 7" if self.ascii_continuation => {
-                        Ok(ConsumerActionReply::Accepted(Box::new(*b"7")))
-                    }
-                    b"ACCEPT 7" => Ok(ConsumerActionReply::Accepted(Box::new(Token(7)))),
+                    b"ACCEPT 7" => Ok(ConsumerActionReply::Accepted(self.accepted.take().unwrap())),
                     b"WAIT" => Ok(ConsumerActionReply::Pending),
                     b"STOP REQUESTED" => Ok(ConsumerActionReply::CancelRequested),
-                    bytes if bytes.starts_with(b"OUTPUT ") => Ok(ConsumerActionReply::Complete(
-                        InteractionOutput::with_data(Payload::new(&bytes[7..], self.media)),
-                    )),
+                    bytes if bytes.starts_with(b"OUTPUT ") => {
+                        self.output.extend_from_slice(&bytes[7..]);
+                        Ok(ConsumerActionReply::Complete(
+                            ConsumerActionOutput::buffered(
+                                std::mem::take(&mut self.output),
+                                self.media,
+                            ),
+                        ))
+                    }
                     _ => Err(invalid()),
                 };
                 if self.probe.fail_with_late.swap(false, Ordering::Relaxed) {
@@ -442,7 +455,6 @@ fn bind_datagram_action(
         Rc::new(definition),
         authority,
         bank.clone(),
-        &mut work(),
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
     (association, ConsumerActions::try_new(1, bank).unwrap())
@@ -450,7 +462,8 @@ fn bind_datagram_action(
 fn drive(h: &ConsumerActionHandle, expected: ConsumerActionState) {
     let start = Instant::now();
     loop {
-        if h.progress(&mut cx(), now(), &mut work()).unwrap() == expected {
+        h.progress(&mut cx(), now()).unwrap();
+        if h.state().unwrap() == expected {
             return;
         }
         assert!(start.elapsed() < Duration::from_secs(2));
@@ -500,24 +513,19 @@ fn distinct_downstream_invoke_and_control_bindings_execute_native_action_lifecyc
             Some(Payload::new(b"12".as_slice(), "application/json")),
             Deadline::NONE,
             now(),
-            &mut work(),
         )
         .ok()
         .unwrap();
-    assert_eq!(
-        h.progress(&mut cx(), now(), &mut WorkBudget::new())
-            .unwrap(),
-        ConsumerActionState::Invoking
-    );
+    assert_eq!(h.progress(&mut cx(), now()).unwrap(), ActionTurn::Waiting);
     assert_eq!(p.replies.load(Ordering::Relaxed), 0);
     drive(&h, ConsumerActionState::Pending);
-    h.query(now(), &mut work()).unwrap();
+    h.query(now()).unwrap();
     drive(&h, ConsumerActionState::Pending);
-    h.request_cancel(now(), &mut work()).unwrap();
+    h.request_cancel(now()).unwrap();
     drive(&h, ConsumerActionState::Pending);
-    h.query(now(), &mut work()).unwrap();
+    h.query(now()).unwrap();
     drive(&h, ConsumerActionState::Completed);
-    let s = h.take_settlement(now(), &mut work()).unwrap();
+    let s = h.take_settlement(now()).unwrap();
     assert!(s.accepted());
     assert_eq!(
         s.remote_cancellation(),
@@ -539,7 +547,7 @@ fn distinct_downstream_invoke_and_control_bindings_execute_native_action_lifecyc
     peer.join().unwrap();
 }
 #[test]
-fn delayed_cleanup_keeps_late_output_validation_first_cause_and_original_funding() {
+fn delayed_cleanup_keeps_raw_late_output_first_cause_and_original_funding() {
     let (address, peer) = peer(vec![
         (b"INVOKE 12", b"ACCEPT 7"),
         (b"QUERY 7", b"OUTPUT invalid"),
@@ -556,24 +564,23 @@ fn delayed_cleanup_keeps_late_output_validation_first_cause_and_original_funding
             Some(Payload::new(b"12".as_slice(), "application/json")),
             Deadline::NONE,
             now(),
-            &mut work(),
         )
         .ok()
         .unwrap();
     drive(&h, ConsumerActionState::Pending);
     p.close_blocked.store(true, Ordering::Relaxed);
-    h.query(now(), &mut work()).unwrap();
+    h.query(now()).unwrap();
     let start = Instant::now();
     while p.replies.load(Ordering::Relaxed) < 2 {
-        h.progress(&mut cx(), now(), &mut work()).unwrap();
+        h.progress(&mut cx(), now()).unwrap();
         assert!(start.elapsed() < Duration::from_secs(2));
         std::thread::yield_now();
     }
     h.cancel_local();
     owner.revoke();
     p.fail_close.store(true, Ordering::Relaxed);
-    h.progress(&mut cx(), now(), &mut work()).unwrap();
-    assert!(h.take_settlement(now(), &mut work()).is_err());
+    h.progress(&mut cx(), now()).unwrap();
+    assert!(h.take_settlement(now()).is_err());
     assert_eq!(p.live.load(Ordering::Relaxed), 1);
     assert!(b.account(ResourceKind::CleanupBytesMax).used() > 0);
     // Losing the root does not dispose work retained by its original handle.
@@ -582,14 +589,14 @@ fn delayed_cleanup_keeps_late_output_validation_first_cause_and_original_funding
     drop(replacement);
     p.close_blocked.store(false, Ordering::Relaxed);
     drive(&h, ConsumerActionState::Closed);
-    let s = h.take_settlement(now(), &mut work()).unwrap();
+    let s = h.take_settlement(now()).unwrap();
     assert!(matches!(s.first_cause(), Some(CoreError::Cancelled(_))));
     assert!(s.cleanup_error().is_some());
-    assert!(s.validation_error().is_some());
+    assert!(s.validation_error().is_none());
     assert!(s.native_result().unwrap().is_ok());
     assert!(s.result().is_err());
     assert!(s.accepted());
-    assert_eq!(data.validates.load(Ordering::Relaxed), 2);
+    assert_eq!(data.validates.load(Ordering::Relaxed), 1);
     assert_eq!(p.live.load(Ordering::Relaxed), 0);
     assert_eq!(p.drops_funded.load(Ordering::Relaxed), 2);
     drop(h);
@@ -621,14 +628,13 @@ fn last_local_owner_uses_funded_nonblocking_abort_without_remote_cancel() {
             Some(Payload::new(b"12".as_slice(), "application/json")),
             Deadline::NONE,
             now(),
-            &mut work(),
         )
         .ok()
         .unwrap();
     p.close_blocked.store(true, Ordering::Relaxed);
     drop(runtime);
-    h.progress(&mut cx(), now(), &mut work()).unwrap();
-    assert!(h.take_settlement(now(), &mut work()).is_err());
+    h.progress(&mut cx(), now()).unwrap();
+    assert!(h.take_settlement(now()).is_err());
     assert_eq!(p.live.load(Ordering::Relaxed), 1);
     drop(h);
     drop(owner);
@@ -660,9 +666,89 @@ struct Representation {
     probe: Arc<CodecProbe>,
     bank: Arc<HostResourceAccounts>,
 }
+impl ValueValidator for Representation {
+    fn content_type(&self) -> &str {
+        ConsumerDataService::content_type(self)
+    }
+    fn supports(&self, schema: &data_schema::PreparedSchema) -> bool {
+        ConsumerDataService::supports_schema(self, schema)
+    }
+    fn body_bytes(&self) -> usize {
+        self.policy().body_bytes as usize
+    }
+    fn available(&self) -> bool {
+        ConsumerDataService::available(self)
+    }
+    fn validate(
+        &self,
+        schema: &data_schema::PreparedSchema,
+        payload: PayloadView<'_>,
+    ) -> CoreResult<()> {
+        self.probe.validations.fetch_add(1, Ordering::Relaxed);
+        assert!(
+            self.bank
+                .account(ResourceKind::BindingPollTemporaryBytesGlobalMax)
+                .used()
+                >= self.policy().temporary_bytes
+        );
+        if payload.content_type != ConsumerDataService::content_type(self)
+            || payload.content_coding.is_some()
+            || payload.body.len() as u64 > self.body
+        {
+            return Err(invalid());
+        }
+        if self.operation == Operation::InvokeAction {
+            return clinkz_wot_codec_json::validate_json(schema, payload.body);
+        }
+        // The native text is borrowed directly, with shared constraint meaning
+        // evaluated by Core. There is no intermediate JSON or conversion API.
+        struct Text<'a>(&'a str);
+        impl data_schema::ValueAccess for Text<'_> {
+            type Node = Option<i64>;
+            fn kind(
+                &self,
+                node: Self::Node,
+            ) -> Result<data_schema::ValueType, data_schema::SchemaViolation> {
+                Ok(if node.is_some() {
+                    data_schema::ValueType::Integer
+                } else {
+                    data_schema::ValueType::String
+                })
+            }
+            fn number(
+                &self,
+                node: Self::Node,
+            ) -> Result<data_schema::NumberValue<'_>, data_schema::SchemaViolation> {
+                node.map(data_schema::NumberValue::Signed)
+                    .ok_or(data_schema::SchemaViolation::Value)
+            }
+            fn string_length(&self, _: Self::Node) -> Result<usize, data_schema::SchemaViolation> {
+                Ok(self.0.chars().count())
+            }
+            fn property(
+                &self,
+                _: Self::Node,
+                _: &str,
+            ) -> Result<Option<Self::Node>, data_schema::SchemaViolation> {
+                Err(data_schema::SchemaViolation::Value)
+            }
+        }
+        let text = std::str::from_utf8(payload.body).map_err(|_| invalid())?;
+        let node = if schema.accepts_kind(data_schema::ValueType::Integer) {
+            Some(text.parse::<i64>().map_err(|_| invalid())?)
+        } else {
+            None
+        };
+        schema.validate(&Text(text), node).map_err(|_| invalid())
+    }
+}
 impl ConsumerDataService for Representation {
+    fn action_validator(&self) -> Option<&dyn ValueValidator> {
+        Some(self)
+    }
+
     fn qualification_revision(&self) -> u64 {
-        0
+        u64::from(self.probe.changed.load(Ordering::Relaxed))
     }
 
     fn content_type(&self) -> &str {
@@ -701,66 +787,11 @@ impl ConsumerDataService for Representation {
                 47
             } else {
                 7
-            } + u64::from(self.probe.changed.load(Ordering::Relaxed)),
+            },
         }
     }
     fn validate(&self, schema: &data_schema::PreparedSchema, payload: &Payload) -> CoreResult<()> {
-        self.probe.validations.fetch_add(1, Ordering::Relaxed);
-        assert!(
-            self.bank
-                .account(ResourceKind::BindingPollTemporaryBytesGlobalMax)
-                .used()
-                >= self.policy().temporary_bytes
-        );
-        if payload.content_type != self.content_type()
-            || payload.content_coding.is_some()
-            || payload.body.len() as u64 > self.body
-        {
-            return Err(invalid());
-        }
-        if self.operation == Operation::InvokeAction {
-            return clinkz_wot_codec_json::validate_payload(schema, payload);
-        }
-        // The native text is borrowed directly, with shared constraint meaning
-        // evaluated by Core. There is no intermediate JSON or conversion API.
-        struct Text<'a>(&'a str);
-        impl data_schema::ValueAccess for Text<'_> {
-            type Node = Option<i64>;
-            fn kind(
-                &self,
-                node: Self::Node,
-            ) -> Result<data_schema::ValueType, data_schema::SchemaViolation> {
-                Ok(if node.is_some() {
-                    data_schema::ValueType::Integer
-                } else {
-                    data_schema::ValueType::String
-                })
-            }
-            fn number(
-                &self,
-                node: Self::Node,
-            ) -> Result<data_schema::NumberValue<'_>, data_schema::SchemaViolation> {
-                node.map(data_schema::NumberValue::Signed)
-                    .ok_or(data_schema::SchemaViolation::Value)
-            }
-            fn string_length(&self, _: Self::Node) -> Result<usize, data_schema::SchemaViolation> {
-                Ok(self.0.chars().count())
-            }
-            fn property(
-                &self,
-                _: Self::Node,
-                _: &str,
-            ) -> Result<Option<Self::Node>, data_schema::SchemaViolation> {
-                Err(data_schema::SchemaViolation::Value)
-            }
-        }
-        let text = std::str::from_utf8(&payload.body).map_err(|_| invalid())?;
-        let node = if schema.accepts_kind(data_schema::ValueType::Integer) {
-            Some(text.parse::<i64>().map_err(|_| invalid())?)
-        } else {
-            None
-        };
-        schema.validate(&Text(text), node).map_err(|_| invalid())
+        ValueValidator::validate(self, schema, payload.view())
     }
 }
 fn representation_client(
@@ -866,7 +897,6 @@ fn representation_client(
             cancel: Some(access),
         },
         bank.clone(),
-        &mut work(),
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
     (
@@ -876,7 +906,7 @@ fn representation_client(
 }
 
 #[test]
-fn independent_query_representation_owns_schema_validation_limits_and_exact_work() {
+fn independent_query_representation_owns_schema_validation_limits_and_per_operation_backing() {
     // Same Action output meaning, independent body limits and codecs. Also
     // reject a valid text representation that violates the shared schema.
     for (invoke_limit, query_limit, output_only, answer, valid) in [
@@ -911,7 +941,6 @@ fn independent_query_representation_owns_schema_validation_limits_and_exact_work
                 Some(Payload::new(b"12".as_slice(), "application/json")),
                 Deadline::NONE,
                 now(),
-                &mut work(),
             )
             .ok()
             .unwrap();
@@ -919,7 +948,7 @@ fn independent_query_representation_owns_schema_validation_limits_and_exact_work
         assert_eq!(
             bank.account(ResourceKind::BindingPollTemporaryBytesGlobalMax)
                 .used(),
-            1024
+            256
         );
         drive(&h, ConsumerActionState::Pending);
         // The generous, both-role case isolates media while Invoke remains
@@ -927,45 +956,31 @@ fn independent_query_representation_owns_schema_validation_limits_and_exact_work
         codecs[0]
             .unavailable
             .store(invoke_limit == 2 || output_only, Ordering::Relaxed);
-        // Controls carry no application input; Cancel has no codec roles at all.
-        let mut control_credit = work().with_remaining(WorkClass::CodecInputBytes, 0);
-        h.request_cancel(now(), &mut control_credit).unwrap();
-        let start = Instant::now();
-        while h.progress(&mut cx(), now(), &mut control_credit).unwrap()
-            != ConsumerActionState::Pending
-        {
-            assert!(start.elapsed() < Duration::from_secs(2));
-            std::thread::yield_now();
-        }
-        h.query(
-            now(),
-            &mut work().with_remaining(WorkClass::CodecInputBytes, 0),
-        )
-        .unwrap();
-        let polls = native.polls.load(Ordering::Relaxed);
-        h.progress(
-            &mut cx(),
-            now(),
-            &mut work().with_remaining(WorkClass::CodecInputBytes, 6),
-        )
-        .unwrap();
-        assert_eq!(native.polls.load(Ordering::Relaxed), polls);
-        let start = Instant::now();
-        loop {
-            let mut exact = work().with_remaining(WorkClass::CodecInputBytes, 7);
-            let state = h.progress(&mut cx(), now(), &mut exact).unwrap();
-            assert_eq!(exact.remaining(WorkClass::CodecInputBytes), 0);
-            if matches!(
-                state,
-                ConsumerActionState::Completed | ConsumerActionState::Closed
-            ) {
-                assert_eq!(state == ConsumerActionState::Completed, valid);
-                break;
-            }
-            assert!(start.elapsed() < Duration::from_secs(2));
-            std::thread::yield_now();
-        }
-        let s = h.take_settlement(now(), &mut work()).unwrap();
+        h.request_cancel(now()).unwrap();
+        drive(&h, ConsumerActionState::Pending);
+        assert_eq!(
+            bank.account(ResourceKind::BindingPollTemporaryBytesGlobalMax)
+                .used(),
+            0
+        );
+        h.query(now()).unwrap();
+        assert_eq!(
+            bank.account(ResourceKind::BindingPollTemporaryBytesGlobalMax)
+                .used(),
+            1024
+        );
+        let expected = if valid {
+            ConsumerActionState::Completed
+        } else {
+            ConsumerActionState::Closed
+        };
+        drive(&h, expected);
+        assert_eq!(
+            bank.account(ResourceKind::BindingPollTemporaryBytesGlobalMax)
+                .used(),
+            0
+        );
+        let s = h.take_settlement(now()).unwrap();
         assert_eq!(s.identity(), &identity);
         assert_eq!(
             s.remote_cancellation(),
@@ -984,6 +999,7 @@ fn independent_query_representation_owns_schema_validation_limits_and_exact_work
         drop((h, runtime, owner));
         assert!(bank.account(ResourceKind::CleanupBytesMax).used() > 0);
         drop(s);
+        drop(identity);
         clean(&bank);
         peer.join().unwrap();
     }
@@ -1009,13 +1025,12 @@ fn late_query_text_keeps_original_codec_funding_and_failure_evidence() {
                 Some(Payload::new(b"12".as_slice(), "application/json")),
                 Deadline::NONE,
                 now(),
-                &mut work(),
             )
             .ok()
             .unwrap();
         let identity = h.identity().unwrap();
         drive(&h, ConsumerActionState::Pending);
-        h.query(now(), &mut work()).unwrap();
+        h.query(now()).unwrap();
         native.close_blocked.store(true, Ordering::Relaxed);
         native.fail_with_late.store(true, Ordering::Relaxed);
         drive(&h, ConsumerActionState::Closing);
@@ -1023,32 +1038,30 @@ fn late_query_text_keeps_original_codec_funding_and_failure_evidence() {
         h.cancel_local();
         owner.revoke();
         native.fail_close.store(true, Ordering::Relaxed);
-        h.progress(&mut cx(), now(), &mut work()).unwrap();
-        assert!(h.take_settlement(now(), &mut work()).is_err());
+        h.progress(&mut cx(), now()).unwrap();
+        assert!(h.take_settlement(now()).is_err());
         codecs[0].unavailable.store(true, Ordering::Relaxed);
         codecs[1].changed.store(changed, Ordering::Relaxed);
         drop((runtime, owner));
         native.close_blocked.store(false, Ordering::Relaxed);
         drive(&h, ConsumerActionState::Closed);
-        let s = h.take_settlement(now(), &mut work()).unwrap();
+        let s = h.take_settlement(now()).unwrap();
         assert_eq!(s.identity(), &identity);
         assert!(s.native_error().is_some());
         assert!(s.cleanup_error().is_some());
-        assert_eq!(s.validation_error().is_some(), changed);
+        assert!(s.validation_error().is_none());
         assert!(s.result().is_err());
         let output = s.native_result().unwrap().unwrap().data().unwrap();
         assert_eq!(output.content_type, "text/plain");
         assert_eq!(output.body, b"ready");
         assert_eq!(codecs[0].validations.load(Ordering::Relaxed), 1);
-        assert_eq!(
-            codecs[1].validations.load(Ordering::Relaxed),
-            usize::from(!changed)
-        );
+        assert_eq!(codecs[1].validations.load(Ordering::Relaxed), 0);
         assert_eq!(native.live.load(Ordering::Relaxed), 0);
         assert_eq!(native.drops_funded.load(Ordering::Relaxed), 2);
         drop(h);
         assert!(bank.account(ResourceKind::CleanupBytesMax).used() > 0);
         drop(s);
+        drop(identity);
         clean(&bank);
         peer.join().unwrap();
     }

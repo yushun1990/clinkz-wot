@@ -166,7 +166,6 @@ fn main() {
             cancel: Some(services.access.clone()),
         },
         bank.clone(),
-        &mut work(),
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
     drop((registry, services));
@@ -261,7 +260,6 @@ fn main() {
                     (args[6] != "-").then(|| Payload::new(args[6].as_bytes(), "application/json")),
                     deadline,
                     now(),
-                    &mut work(),
                 )
                 .unwrap_or_else(|e| panic!("{:?}", e.error())),
         );
@@ -291,7 +289,7 @@ fn main() {
             }
             let instant = now();
             calls.step(cx, instant).unwrap();
-            actions.step(cx, instant, &mut work()).unwrap();
+            actions.step(cx, instant).unwrap();
             notifications.step(cx, &mut work()).unwrap();
             let idle =
                 calls.is_idle() && actions.is_idle() && notifications.retained_subscriptions() == 0;
@@ -312,13 +310,13 @@ fn main() {
             if let Some(handle) = &action {
                 match handle.state().unwrap() {
                     ConsumerActionState::Pending if Instant::now() >= next_query => {
-                        handle.query(now(), &mut work()).unwrap(); // Explicit application decision.
+                        handle.query(now()).unwrap(); // Explicit application decision.
                         next_query = Instant::now() + Duration::from_millis(100);
                     }
                     ConsumerActionState::Completed
                     | ConsumerActionState::Failed
                     | ConsumerActionState::Closed => {
-                        let result = handle.take_settlement(now(), &mut work()).unwrap();
+                        let result = handle.take_settlement(now()).unwrap();
                         eprintln!("Action: {:?}", result.result());
                         action = None;
                     }

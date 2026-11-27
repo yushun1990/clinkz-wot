@@ -157,23 +157,22 @@ are dropped, settlements retain their original services, definition and account
 owners. Final result disposal releases every account; physical service destructors
 observe original funding. Result access lends existing Core slice views, with
 compile-fail examples rejecting detached normal/native/input body Arcs and escaped
-loans. A weak reference to the actual HTTP output stays live while a shared
-settlement survives and expires on its last disposal, with original accounts
-retained until that point. HTTP still allows only one unretired finite exchange
+loans. The bytes lent by a shared settlement have the same backing address as
+the original HTTP value checked by its validator. The original shared result
+quota remains held through disposal. HTTP still allows only one unretired finite exchange
 per actual registration. Independent Engine capacity does not increase that
 native allowance or imply one connection per Consumer.
 
-Additional real HTTP cases change an access revision/work declaration, prepared
-data work or native bounds after unread completion, and change data work inside
-actual Query output validation. Each observed violation of the relevant original native/authority or retained Query data dependencies
+Additional real HTTP cases change an access or data qualification revision,
+service backing or native bounds after unread completion. Another changes the
+qualification revision during actual Query output validation. Each observed violation of the relevant original native/authority or retained Query data dependencies
 irreversibly fences its own invocation. Restoring declarations cannot enable query or successful handoff;
-original identity and native output remain in the failed settlement. Original
-returning-operation validation still runs for late output when cancellation/access
-loss has already fenced application acceptance, under that service's original allowance.
+original identity and native output remain in the failed settlement. A fenced invocation retains late output as raw evidence independently of the
+availability of the returning validator.
 
 The operation-scope HTTP counterexample uses three independent operation data/
 access services and native mappings. Changing only unused Cancel access revision,
-work, retained-backing declaration or native byte/work bounds leaves pending Invoke and its
+retained backing or native backing limits leaves pending Invoke and its
 independently authorized Query result usable. Per-instance Cancel denial likewise
 refuses before effects. Cases cover both never-used Cancel and an acknowledged,
 fully retired cancellation: a failed later request preserves original identity,
@@ -193,17 +192,17 @@ usable, while full qualification still refuses new invocation admission. Losing
 Query's actual codec before Query admission refuses without native effects or
 revoking pending Invoke; an independently authorized Cancel remains usable.
 Negative cases change the actually admitted Query/Cancel revision with native work
-owned: the invocation stays irreversibly fenced through short-credit/pending
-retirement, preserves a late validated Query output and uncertain Cancel status,
+owned: the invocation stays irreversibly fenced through pending or failed
+retirement, preserves raw late Query output and uncertain Cancel status,
 and releases only its original owners. The unread-result HTTP cases use independent
 Query services to ensure narrowing cannot bypass its selected grant/bounds.
 
 The [raw callback suite](../../servient/finite/tests/consumer_action_callbacks.rs)
 retains deterministic occupied-slot/reentry, time, wake, unwind, cancellation,
-late-result and paid disposal cases. The independent
+late-result and bounded disposal cases. The independent
 [downstream datagram fixture](../../tools/architecture-fixtures/open-consumer/tests/action.rs)
 continues to use different actual invoke/control Binding types and blocked/error
-retirement with funded late validation.
+retirement with retained raw evidence.
 
 The HTTP body-allowance counterexample fails against `485b5e5`: Invoke accepts
 input `12` under a two-byte body policy, then a Query with an eight-byte policy
@@ -215,34 +214,21 @@ retained, validation fails before codec entry, and settlement cannot succeed.
 Independent service, definition, association and execution banks all reach zero
 only after original settlement disposal.
 
-The downstream representation counterexamples use integer JSON Invoke input
-and a shared five-character string output schema. Invoke uses a JSON service
-with a two- or 64-byte policy; Query uses an independent plain-text service with
-a 64-byte policy, 1024-byte scratch and seven work units, versus Invoke's 64-byte
-scratch and 47 units. Both services can support both schemas in the media-only
-case. A separate case lets Query implement only its actual output role; Cancel's
-service implements neither application schema. Real datagrams preserve `ready`
-as `text/plain` through settlement, without JSON quotes or conversion. Query
-completes with Invoke available in the media-only case and after its retired
-codec becomes unavailable in other cases, with its exact seven work units;
-six units enter no native poll. Control start and Cancel progress use
-zero application codec credit. Query's own too-small body limit and a valid text
-value violating the shared string constraint both refuse application success.
-The Query validator observes the original scratch reservation during callback.
-Admission reserves exactly its 1024-byte maximum used-role scratch, omitting
-the Cancel carrier's unused 2048-byte application codec declaration.
+The downstream representation tests use integer JSON Invoke input and a
+five-character string output schema. Query uses a plain-text service with a
+64-byte body limit and 1024-byte scratch allowance. Invoke uses a separate
+JSON service. The two services can both support the schemas, and an output-only
+Query service qualifies the role it serves. Real datagrams retain `ready` as
+`text/plain`. A too-small body limit or failed string constraint prevents
+validated delivery and leaves the native value with the settlement. Query's
+scratch claim begins at Query admission and is released after validation.
+Cancel uses its native backing. The test never enters the unused Cancel codec.
 
-Late text output is returned by the original exchange's `poll_close` after a
-native poll error, blocked/failed retirement, local cancellation, Consumer
-revocation and root loss. It is validated once by Query under its captured
-allowance; Invoke is not reentered. The settlement retains original identity,
-poll/cleanup errors, raw text/media and failed application outcome. Changing
-Query's declared work while cleanup is pending prevents validation entry under
-the stale allowance, retains a distinct validation error and the exact native
-output, and never refreshes funding or the qualification baseline. Native
-destructors observe original cleanup funding; all accounts clear after final
-settlement disposal. Existing cancellation/reentry/uncertain-control cases remain
-in the HTTP and raw suites.
+A close that follows native poll failure can return late text after blocked
+and failed cleanup, cancellation, Consumer revocation and root loss.
+Retirement releases the exchange and preserves the original text/media and
+first cause without calling the codecs. The settlement holds the original
+failure, native evidence and shared claims through their respective releases.
 
 The
 [root QueryAllActions integration](../../protocol-bindings/protocols/http/tests/query_all_actions.rs)

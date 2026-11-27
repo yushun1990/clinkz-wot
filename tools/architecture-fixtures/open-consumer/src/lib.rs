@@ -366,8 +366,32 @@ impl ConsumerDataService for Data {
         !self.0.data_lost.load(Ordering::Relaxed)
     }
     fn validate(&self, schema: &data_schema::PreparedSchema, data: &Payload) -> CoreResult<()> {
+        clinkz_wot_core::execution::ValueValidator::validate(self, schema, data.view())
+    }
+    fn action_validator(&self) -> Option<&dyn clinkz_wot_core::execution::ValueValidator> {
+        Some(self)
+    }
+}
+impl clinkz_wot_core::execution::ValueValidator for Data {
+    fn content_type(&self) -> &str {
+        ConsumerDataService::content_type(self)
+    }
+    fn supports(&self, schema: &data_schema::PreparedSchema) -> bool {
+        self.supports_schema(schema)
+    }
+    fn body_bytes(&self) -> usize {
+        self.policy().body_bytes as usize
+    }
+    fn available(&self) -> bool {
+        ConsumerDataService::available(self)
+    }
+    fn validate(
+        &self,
+        schema: &data_schema::PreparedSchema,
+        data: PayloadView<'_>,
+    ) -> CoreResult<()> {
         self.0.validates.fetch_add(1, Ordering::Relaxed);
-        let integer = std::str::from_utf8(&data.body)
+        let integer = std::str::from_utf8(data.body)
             .ok()
             .and_then(|s| s.parse::<i64>().ok());
         if data.content_type != "application/json"

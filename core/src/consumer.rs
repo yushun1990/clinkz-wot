@@ -44,6 +44,11 @@ pub trait ConsumerDataService: Send + Sync {
 
     fn validate(&self, schema: &PreparedSchema, payload: &Payload) -> CoreResult<()>;
     fn policy(&self) -> ConsumerDataPolicy;
+    /// Bounded validation of a continuing Action's exact value loan. A
+    /// service that qualifies this facet provides its own validation workspace.
+    fn action_validator(&self) -> Option<&dyn crate::execution::ValueValidator> {
+        None
+    }
     /// Actual status representation support. Scalar Object support cannot
     /// validate invocation identity, state or each Action's completed output.
     fn supports_action_statuses(&self, _schema: &crate::action::ActionCollectionSchema) -> bool {
@@ -122,7 +127,7 @@ pub struct ConsumerDataPolicy {
     /// Complete returned selection-payload backing, reserved before encoding.
     /// Zero declines selection encoding. Separate from transient encoder scratch.
     pub encoded_selection_bytes: u64,
-    /// Legacy callback allowance for continuing Actions and notifications.
+    /// Legacy callback allowance for notifications and preparation.
     pub validation_work: u64,
 }
 

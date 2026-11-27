@@ -66,113 +66,69 @@ Its production fixture code uses concrete native exchange/token types, Cell
 instrumentation and inline output, with no std/reference counts/atomics/lock.
 Host tests supply actual UDP I/O to that same code. This requires no conversion
 from the Host Box/Any/Arc artifacts. Each native representation qualifies its
-actual configuration, supported meaning, continuation compatibility and complete
-work/backing declarations. Sharing schema or transitions proves no native
+actual configuration, supported meaning, continuation compatibility and original
+backing. Sharing schema or transitions proves no native
 compilation-work reuse.
 
-## Executable boundary
+## Owner-enforced backing and bounded turns
 
-The [caller-owned tests](../../tools/architecture-fixtures/constrained-consumer/src/action/tests.rs)
-exercise:
+The replacement keeps one Action kernel and gives native polling, retirement
+and semantic settlement separate turns. An acknowledged close returns the
+exchange to its Binding while the invocation stays pending or its result
+remains unread. Terminal settlement releases the continuation. A retained
+result keeps its input, actual returning destination and result backing.
 
-- Invoke acceptance, explicit Pending Query, remote Cancel acknowledgement and
-  later Query completion, including different Invoke/Query media and retired
-  input-codec availability;
-- independently authorized equal numeric slots sharing the same actual native
-  definition, foreign/reused handle refusal and retained original results while
-  a sibling completes;
-- original input, opaque token, native output and exact lease ownership through
-  unread settlement, disposal and slot reuse; all created native socket ports
-  become bindable after their actual owners retire;
-- one prepaid input view reused across authorization, validation and native
-  start: policy-time selection of `99` cannot replace the validated `7` on the
-  actual wire, input-view-time revocation fences an immediate-send Binding,
-  and short admission credit obtains no input view or native effect;
-- paid output loans over a safe-Rust Cell-selected native output: authorization
-  after validation or at owner handoff can select invalid `99`, media/coding,
-  status or response metadata, and each exact application loan refuses it;
-  changing a selector after a successful loan cannot change that loan's checked
-  bytes or metadata, while another loan must validate its own view;
-- loan work separate from owner transfer: short view/codec credit retains all
-  owners without callbacks or a sticky failure, unavailable codecs are not
-  re-entered, invalid loans keep native evidence and first cause, and disposal
-  returns original funding without native re-poll or new permission;
-- native-evidence and input inspection each prepay adapter work for present
-  values, with no callback at zero credit or after a single allowance is spent;
-  absent/native-error observations stay passive, while cancelled/late evidence
-  remains accessible with adapter-only credit even after codec/authority loss;
-- cancellation before initial native progress and after Query starts, issuer
-  revocation, Pending/failed physical close, retained late output and validation
-  using original funding without effectful polling after local fencing;
-- native poll error independently retained alongside late output and repeated
-  cleanup errors; remote Cancel failure retains uncertainty, with no rollback
-  claim and the same conservative Unknown effect as Host Actions;
-- output shape, media, coding and DataSchema refusal with original output
-  retention; unavailable original Query service is never re-entered;
-- short callback/handoff credit, unchanged input/lease on refused admission,
-  no automatic Query/Cancel, unused control declaration drift and pre-effect
-  control refusal preserving unrelated Pending invocation authority;
-- fresh paid unread-result permission, policy rotation within callbacks,
-  output-validator-time revocation, deadlines/clock regression, and finite local
-  Drop without a false close acknowledgement;
-- an optional loan of the exact schemas inside a modern Host Action content
-  owner to the different native representation, without schema recompilation.
+The [caller-owned datagram suite](../../tools/architecture-fixtures/constrained-consumer/src/action/tests.rs)
+uses one exclusive typed result slot per admission. A held result excludes
+reuse of that cell while an independent cell remains usable. The Binding,
+validators and access services are supplied at installation of the prepared
+program. Siblings share a drive cell. An access callback attempting to poll a
+sibling gets a readiness lifecycle error before observing its clock, and
+passive cancellation still fences the sibling's next turn. The peer receives
+one datagram from the outer turn.
 
-The settlement compile-fail cases reject a result slice escaping its owner and
-moving that owner into funding return while the result loan is still used.
-Unvalidated native evidence loans have the same owner/funding lifetime protection.
-Host callback regressions and the existing downstream/real HTTP Action suites
-execute the extracted kernel under their original reentrant authority, wake,
-service-funding, unread-result, late-output and physical-release obligations.
-They are retained evidence, not replaced by matching synthetic traces.
+The [Host callback suite](../../servient/finite/tests/consumer_action_callbacks.rs)
+exercises original first cause, a failed and blocked close, terminal token
+disposal under the Host execution turn, and the original output after
+callback unwind. The [independent Host datagram fixture](../../tools/architecture-fixtures/open-consumer/tests/action.rs)
+uses different Invoke and control Bindings, and validates Query output in its
+own media before delivery. The [real HTTP Action suite](../../protocol-bindings/protocols/http/tests/action_consumer.rs)
+exercises the last response-buffer quota with a held result. A later Invoke
+and Cancel proceed while a Query that needs that quota is refused before I/O.
+The Query succeeds when the original value is disposed.
 
-Reproduce from the repository root:
+The [HTTP allocation fixture](../../protocol-bindings/protocols/http/tests/allocation_trace.rs)
+withholds the fallible Query output-buffer allocation. The original
+invocation and expanded control remain usable. On retry, a 514-byte JSON
+string with a length constraint can be validated and delivered with shared
+pools exhausted. The validation and handoff turns make no allocation request
+of 512 bytes or larger. A finite Read sharing the last outstanding-call unit
+is refused while the Action settlement is held and succeeds on the same
+public path after disposal.
+
+Native poll failure, failed close, late output and first cause are independent
+records. When a fence is already active, retirement keeps raw output without
+entering the access or data service. The typed result loan checks current
+permission and validates the exact bytes, media, coding, shape and metadata
+it returns. Changing a native selector after validation can affect a later
+view, while a previously lent view retains the original evidence. The input
+adapter follows the same exact-view rule before Invoke. These checks use real
+UDP requests alongside safe interior-mutability test adapters.
+
+Reproduce from the repository root.
 
 ```sh
-cargo test --locked -p clinkz-wot-constrained-consumer-fixture
-cargo test --locked -p clinkz-wot-constrained-consumer-fixture --features host-meaning
+cargo test --locked -p clinkz-wot-constrained-consumer-fixture --features host-meaning,prepare
 cargo check --locked -p clinkz-wot-constrained-consumer-fixture --target thumbv6m-none-eabi
 cargo test --locked -p clinkz-wot-servient-finite --no-default-features --doc
-cargo test --locked -p clinkz-wot-core -p clinkz-wot-planning -p clinkz-wot-servient-finite -p clinkz-wot-servient -p clinkz-wot-binding-http
-cargo test --locked --manifest-path tools/architecture-fixtures/open-consumer/Cargo.toml
-bash tools/check-design-artifacts.sh
+cargo test --locked -p clinkz-wot-servient-finite --test consumer_action_callbacks
+cargo test --locked -p clinkz-wot-binding-http --test action_consumer --test allocation_trace
+cargo test --locked --manifest-path tools/architecture-fixtures/open-consumer/Cargo.toml --test action
 ```
 
-No-atomic compilation establishes buildability of these contracts and fixture
-owners, while hosted real datagrams establish execution and ownership behavior.
-Neither establishes executable embedded hardware/SDK/allocator/real-time support.
-Exact checked revisions and validation results belong to the PR.
-
-## Output validation and owner handoff
-
-At `fb8dee594f2df595cadcf01a8ad17317dad53f0c`, a conforming safe-Rust native output
-could use `Cell` to select immutable backing. The real Query response supplied
-`7`, which the original codec validated against maximum 50; a subsequent access
-callback selected `99`, and the old unpaid `result()` exposed it successfully.
-Retaining the same output owner did not establish payload/media/status/metadata
-identity. This was a real application-validation gap.
-
-The corrected `result(budget)` validates one captured view and returns that
-same loan. Each successful call certifies its own bytes and metadata, without
-promising immutable replay of every prior view. It uses the original returning
-operation's schema/codec/bounds and charges its adapter and validation work.
-Progress validation remains necessary for normal/late evidence. Moving the owned
-settlement remains the permission/ownership handoff; obtaining an application
-loan does no fresh authorization or native work. No payload or metadata-history
-copy, self-reference, scheduler or shared execution storage is introduced.
-
-The input selection regression additionally verifies the distinction between
-the original input owner and a dispatched byte receipt: the peer receives `I7`
-while `settlement.input(budget)` later lends that owner's current `99` selection.
-
-At `67a106fdf209b93b617d9220155d11c5bf540a56`, `native_result()` still invoked the
-output adapter without consuming work. The review's real-datagram counterexample
-advanced the view count from 1 to 2 after zero-credit application access had
-correctly refused. Input inspection had the same unbudgeted callback pattern.
-Both inspection methods now require adapter credit for a present value. Native
-absence/error fields remain passive; short credit is distinct from a native
-failure and preserves original state, evidence and funding. No view caching,
-copying, codec access or new execution owner is needed.
+No-pointer-atomics compilation verifies that the typed execution path builds
+without the Host representation. Hardware and hard resource bounds require
+target-specific evidence. Exact checked revisions belong to the PR.
 
 ## Remaining 0081 and runtime-independence scope
 

@@ -237,9 +237,6 @@ impl ValueValidator for NumberCodec<'_> {
     fn body_bytes(&self) -> usize {
         32
     }
-    fn work(&self) -> u64 {
-        32
-    }
     fn available(&self) -> bool {
         self.available.get()
     }

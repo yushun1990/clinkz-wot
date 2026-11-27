@@ -1,5 +1,6 @@
 #![cfg(all(feature = "std", feature = "validated-thing"))]
 //! Public preparation accounting; this test Binding performs no native I/O.
+use clinkz_wot_core::execution::ValueValidator;
 use clinkz_wot_core::{
     consumer::*, consumer_action::*, data_schema::PreparedSchema, host_accounts::*, *,
 };
@@ -27,7 +28,28 @@ fn unsupported() -> CoreError {
     CoreError::UnsupportedOperation(ErrorContext::new(ErrorPhase::Binding, RetryClass::Never))
 }
 struct Data(Box<str>);
+impl ValueValidator for Data {
+    fn content_type(&self) -> &str {
+        ConsumerDataService::content_type(self)
+    }
+    fn supports(&self, schema: &PreparedSchema) -> bool {
+        ConsumerDataService::supports_schema(self, schema)
+    }
+    fn body_bytes(&self) -> usize {
+        self.policy().body_bytes as usize
+    }
+    fn available(&self) -> bool {
+        ConsumerDataService::available(self)
+    }
+    fn validate(&self, _: &PreparedSchema, _: PayloadView<'_>) -> CoreResult<()> {
+        Err(unsupported())
+    }
+}
 impl ConsumerDataService for Data {
+    fn action_validator(&self) -> Option<&dyn ValueValidator> {
+        Some(self)
+    }
+
     fn qualification_revision(&self) -> u64 {
         0
     }
@@ -44,8 +66,8 @@ impl ConsumerDataService for Data {
             validation_work: 1,
         }
     }
-    fn validate(&self, _: &PreparedSchema, _: &Payload) -> CoreResult<()> {
-        Err(unsupported())
+    fn validate(&self, schema: &PreparedSchema, payload: &Payload) -> CoreResult<()> {
+        ValueValidator::validate(self, schema, payload.view())
     }
 }
 struct Access;
@@ -113,7 +135,6 @@ impl ConsumerActionMapping for Mapping {
             temporary_bytes: 0,
             continuation_bytes: 1,
             response_bytes: 1,
-            poll_work: 1,
         }
     }
     fn native_definition(&self) -> &dyn Any {
@@ -127,6 +148,7 @@ impl ConsumerActionMapping for Mapping {
     }
     fn start(
         &self,
+        _destination: &str,
         _: Option<&Payload>,
         _: Option<&dyn Any>,
     ) -> CoreResult<Box<dyn ConsumerActionExchange>> {

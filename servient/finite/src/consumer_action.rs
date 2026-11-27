@@ -3,10 +3,10 @@
 use super::{ConsumerObserver, ConsumerOwned, ConsumerTurn};
 use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
 use clinkz_wot_core::{
-    action::raw_action_output_shape, consumer::*, consumer_action::*, data_schema::PreparedSchema,
+    artifact::try_box, consumer::*, consumer_action::*, data_schema::PreparedSchema,
     host_accounts::*, *,
 };
-use clinkz_wot_foundation::{MonotonicInstant, ResourceKind as K, WorkBudget, WorkClass as W};
+use clinkz_wot_foundation::{MonotonicInstant, ResourceKind as K};
 use core::{
     any::Any,
     cell::{Cell, RefCell},
@@ -15,27 +15,40 @@ use core::{
 };
 
 use clinkz_wot_core::execution::action::{
-    ActionDriver, ActionObservation, ActionProgress, ActionWork, step_action,
+    ActionDriver, ActionObservation, ActionProgress, action_output_shape, check_action_handoff,
+    retain_action_reply, step_action,
 };
-pub use clinkz_wot_core::execution::action::{ConsumerActionCancellation, ConsumerActionState};
-#[derive(Clone, Debug)]
-pub struct ConsumerActionIdentity {
+pub use clinkz_wot_core::execution::action::{
+    ActionTurn, ConsumerActionCancellation, ConsumerActionState,
+};
+#[derive(Clone)]
+pub struct ConsumerActionIdentity(Rc<Identity>);
+struct Identity {
     consumer: ConsumerInstanceRef,
     sequence: u64,
-    authority: Rc<()>,
+    // A passive identity can outlive the handle and result.
+    _live: HostCapacityReservation,
+}
+impl core::fmt::Debug for ConsumerActionIdentity {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ConsumerActionIdentity")
+            .field("consumer", self.consumer())
+            .field("sequence", &self.sequence())
+            .finish_non_exhaustive()
+    }
 }
 impl PartialEq for ConsumerActionIdentity {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.authority, &other.authority)
+        Rc::ptr_eq(&self.0, &other.0)
     }
 }
 impl Eq for ConsumerActionIdentity {}
 impl ConsumerActionIdentity {
     pub fn consumer(&self) -> &ConsumerInstanceRef {
-        &self.consumer
+        &self.0.consumer
     }
     pub fn sequence(&self) -> u64 {
-        self.sequence
+        self.0.sequence
     }
 }
 type AccessOwner = Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>;
@@ -48,18 +61,15 @@ pub struct ConsumerActionAccess {
 }
 struct CapturedAccess {
     owner: AccessOwner,
-    work: u64,
     revision: u64,
 }
 impl CapturedAccess {
     fn check(&self) -> CoreResult<()> {
-        if self.owner.work() != self.work
-            || self.work == 0
-            || self.owner.qualification_revision() != self.revision
+        if self.owner.qualification_revision() != self.revision
             || self.owner.retained_bytes() != self.owner.backing_bytes()
             || !self
                 .owner
-                .supports_security(&clinkz_wot_core::security::SecurityRequirement::NOSEC)
+                .supports_security(&security::SecurityRequirement::NOSEC)
         {
             return Err(invalid());
         }
@@ -69,32 +79,26 @@ impl CapturedAccess {
 struct Selected<'a> {
     op: &'a ConsumerActionOperation,
     access: &'a CapturedAccess,
-    policy: ConsumerDataPolicy,
-    access_work: u64,
-    bounds: ConsumerActionBounds,
-    identity: BindingRegistrationIdentity,
+    data_revision: u64,
 }
 impl Selected<'_> {
-    fn check(
+    fn authorize(
         &self,
         state: &State,
         control: &Control,
-        continuation: Option<&dyn Any>,
+        destination: &str,
         schema: Option<&PreparedSchema>,
     ) -> CoreResult<()> {
         control.check(state)?;
         self.check_services(schema)?;
         control.check(state)?;
-        let destination = self.op.mapping.destination(continuation)?;
-        self.check_services(schema)?;
-        control.check(state)?;
         let result = self.access.owner.authorize_instance(
-            &control.identity.consumer,
-            self.identity,
-            &destination,
+            control.identity.consumer(),
+            self.op.identity,
+            destination,
             self.op.operation,
         );
-        // Preserve dependency loss even when the policy callback also refuses.
+        control.check(state)?;
         self.check_services(schema)?;
         control.check(state)?;
         result
@@ -102,14 +106,15 @@ impl Selected<'_> {
     fn check_services(&self, schema: Option<&PreparedSchema>) -> CoreResult<()> {
         self.op.check_native_dependencies()?;
         self.access.check()?;
-        self.check_data(schema)
+        if schema.is_some() {
+            self.check_data()?;
+        }
+        Ok(())
     }
-    fn check_data(&self, schema: Option<&PreparedSchema>) -> CoreResult<()> {
-        if let Some(schema) = schema {
-            self.op.check_data_dependencies()?;
-            if !self.op.data.supports_schema(schema) {
-                return Err(invalid());
-            }
+    fn check_data(&self) -> CoreResult<()> {
+        self.op.check_data_dependencies()?;
+        if self.op.data.qualification_revision() != self.data_revision {
+            return Err(invalid());
         }
         Ok(())
     }
@@ -118,8 +123,9 @@ struct Association {
     consumer: ConsumerInstanceRef,
     definition: Rc<ConsumerActionDefinition>,
     access: [Option<CapturedAccess>; 3],
+    data_revisions: [u64; 3],
     bank: Arc<HostResourceAccounts>,
-    _funding: Vec<HostCapacityReservation>,
+    _live: HostCapacityReservation,
 }
 impl Association {
     fn operations(&self) -> [Option<&ConsumerActionOperation>; 3] {
@@ -130,24 +136,24 @@ impl Association {
     /// whole set does not make every operation a live dependency of old work.
     fn check_dependencies(&self) -> CoreResult<()> {
         self.definition.check_dependencies()?;
-        for access in self.access.iter().flatten() {
-            access.check()?;
+        let definition = self.definition.input();
+        for (i, op) in self.operations().into_iter().enumerate() {
+            if op.is_some() {
+                let selected = self.selected(i)?;
+                selected.access.check()?;
+                if (i == 0 && definition.schemas.input.is_some())
+                    || (i != 2 && definition.schemas.output.is_some())
+                {
+                    selected.check_data()?;
+                }
+            }
         }
         Ok(())
     }
     /// One operation's original qualification, without importing unused
     /// siblings into an admitted invocation's invalidation scope.
     fn check_operation(&self, operation: usize, schema: Option<&PreparedSchema>) -> CoreResult<()> {
-        let selected = self.selected(operation)?;
-        selected.check_services(schema)?;
-        let definition = self.definition.input();
-        if operation != 0 {
-            selected
-                .op
-                .mapping
-                .supports_continuation(definition.invoke.mapping.as_ref())?;
-        }
-        Ok(())
+        self.selected(operation)?.check_services(schema)
     }
     fn selected(&self, i: usize) -> CoreResult<Selected<'_>> {
         let op = self.operations()[i].ok_or_else(unsupported)?;
@@ -155,32 +161,28 @@ impl Association {
         Ok(Selected {
             op,
             access,
-            policy: op.data_policy,
-            access_work: access.work,
-            bounds: op.bounds,
-            identity: op.identity,
+            data_revision: self.data_revisions[i],
         })
     }
     fn validate(
         &self,
         operation: usize,
         schema: Option<&PreparedSchema>,
-        payload: Option<&Payload>,
+        payload: Option<PayloadView<'_>>,
     ) -> CoreResult<()> {
         let selected = self.selected(operation)?;
+        let op = selected.op;
         match (schema, payload) {
             (None, None) => Ok(()),
             (Some(s), Some(p))
-                if p.body.len() as u64 <= selected.policy.body_bytes
-                    && p.content_type == *selected.op.content_type
+                if p.body.len() as u64 <= op.body_bytes
+                    && p.content_type == &*op.content_type
                     && p.content_coding.is_none() =>
             {
-                // Late observations use the same original representation even
-                // after authority loss. Never substitute the Invoke codec or
-                // refresh a changed service's declaration before callback entry.
-                selected.check_data(Some(s))?;
-                let result = selected.op.data.validate(s, p);
-                selected.check_data(Some(s))?;
+                selected.check_data()?;
+                let validator = op.data.action_validator().ok_or_else(invalid)?;
+                let result = validator.validate(s, p);
+                selected.check_data()?;
                 result
             }
             _ => Err(invalid()),
@@ -206,7 +208,6 @@ impl ConsumerActionAssociation {
         definition: Rc<ConsumerActionDefinition>,
         access: ConsumerActionAccess,
         bank: Arc<HostResourceAccounts>,
-        budget: &mut WorkBudget,
     ) -> Result<Self, BindingInputRejection<(Rc<ConsumerActionDefinition>, ConsumerActionAccess)>>
     {
         let _turn = match ConsumerTurn::enter() {
@@ -222,49 +223,38 @@ impl ConsumerActionAssociation {
         ]
         .map(|owner| {
             owner.map(|owner| CapturedAccess {
-                work: owner.work(),
                 revision: owner.qualification_revision(),
                 owner,
             })
         });
+        let d = definition.input();
+        let operations = [Some(&d.invoke), d.query.as_ref(), d.cancel.as_ref()];
+        let data_revisions =
+            operations.map(|op| op.map_or(0, |op| op.data.qualification_revision()));
         let build = (|| {
             definition.check_dependencies()?;
             if !consumer.is_current() {
                 return Err(stale());
             }
-            let d = definition.input();
-            for (op, selected) in [Some(&d.invoke), d.query.as_ref(), d.cancel.as_ref()]
-                .into_iter()
-                .zip(&captured)
-            {
-                let (op, selected) = match (op, selected) {
-                    (Some(op), Some(selected)) => (op, selected),
-                    (None, None) => continue,
+            for (i, (op, selected)) in operations.into_iter().zip(&captured).enumerate() {
+                match (op, selected) {
+                    (Some(op), Some(selected)) => {
+                        selected.check()?;
+                        if i != 2 && op.data.qualification_revision() != data_revisions[i] {
+                            return Err(invalid());
+                        }
+                    }
+                    (None, None) => {}
                     _ => return Err(invalid()),
-                };
-                selected.check()?;
-                if !pay(budget, W::ProviderProbes, selected.work) {
-                    return Err(busy());
                 }
-                let result = selected
-                    .owner
-                    .authorize(op.identity, &op.endpoint, op.operation);
-                definition.check_dependencies()?;
-                // A later operation's callback can invalidate an earlier owner.
-                for selected in captured.iter().flatten() {
-                    selected.check()?;
-                }
-                if !consumer.is_current() {
-                    return Err(stale());
-                }
-                result?;
             }
-            reserve(
+            if !consumer.is_current() {
+                return Err(stale());
+            }
+            claim(
                 &bank,
-                &[(
-                    K::EngineLiveBytesGlobalMax,
-                    core::mem::size_of::<ConsumerOwned<Association>>() as u64 + 128,
-                )],
+                K::EngineLiveBytesGlobalMax,
+                rc_bytes::<ConsumerOwned<Association>>(),
             )
         })();
         let funding = match build {
@@ -276,8 +266,9 @@ impl ConsumerActionAssociation {
                 consumer,
                 definition,
                 access: captured,
+                data_revisions,
                 bank,
-                _funding: funding,
+                _live: funding,
             })),
         })
     }
@@ -288,34 +279,102 @@ impl ConsumerActionAssociation {
         &self.captured.definition
     }
 }
-struct Exchange(Option<Box<dyn ConsumerActionExchange>>);
+/// Counts actual retained owners against the still-shared Host ceilings.
+struct RetainedUsage {
+    _live: HostCapacityReservation,
+    _cleanup: HostCapacityReservation,
+}
+impl RetainedUsage {
+    fn claim(bank: &Arc<HostResourceAccounts>, bytes: u64) -> CoreResult<Self> {
+        Ok(Self {
+            _live: claim(bank, K::EngineLiveBytesGlobalMax, bytes)?,
+            _cleanup: claim(bank, K::CleanupBytesMax, bytes)?,
+        })
+    }
+}
+struct ResponseQuota {
+    _buffer: HostCapacityReservation,
+    _retained: RetainedUsage,
+}
+struct ExchangeQuotas {
+    native: RetainedUsage,
+    scratch: HostCapacityReservation,
+    scratch_live: HostCapacityReservation,
+    response: ResponseQuota,
+}
+impl ExchangeQuotas {
+    fn claim(
+        bank: &Arc<HostResourceAccounts>,
+        op: &ConsumerActionOperation,
+        uses_validator: bool,
+    ) -> CoreResult<Self> {
+        let bounds = op.bounds;
+        let temporary = if uses_validator {
+            bounds.temporary_bytes.max(op.validation_scratch_bytes)
+        } else {
+            bounds.temporary_bytes
+        };
+        let limit = bank.account(K::BindingPollTemporaryBytesPerCallMax).limit();
+        if temporary > limit {
+            return Err(limit_error(
+                K::BindingPollTemporaryBytesPerCallMax,
+                limit,
+                temporary,
+                None,
+            ));
+        }
+        Ok(Self {
+            native: RetainedUsage::claim(bank, bounds.exchange_bytes)?,
+            scratch: claim(bank, K::BindingPollTemporaryBytesGlobalMax, temporary)?,
+            scratch_live: claim(bank, K::EngineLiveBytesGlobalMax, temporary)?,
+            response: ResponseQuota {
+                _buffer: claim(
+                    bank,
+                    K::BindingResponseBufferBytesGlobalMax,
+                    bounds.response_bytes,
+                )?,
+                _retained: RetainedUsage::claim(bank, bounds.response_bytes)?,
+            },
+        })
+    }
+}
+struct Exchange {
+    owner: Option<Box<dyn ConsumerActionExchange>>,
+    _usage: RetainedUsage,
+}
 impl Drop for Exchange {
     fn drop(&mut self) {
-        if let Some(e) = self.0.take() {
-            e.abort_local();
+        if let Some(owner) = self.owner.take() {
+            owner.abort_local();
         }
     }
 }
 struct Invocation {
     progress: ActionProgress,
     control: Rc<Control>,
-    continuation: Option<Box<dyn Any>>,
     exchange: Option<Exchange>,
     reply: Option<ConsumerActionReply>,
-    native_result: Option<CoreResult<InteractionOutput>>,
+    continuation: Option<Box<dyn Any>>,
+    native_result: Option<CoreResult<ConsumerActionOutput>>,
     native_error: Option<CoreError>,
     input: Option<Payload>,
-    operation: usize,
-    effect: ConsumerEffect,
+    invoke_destination: Box<str>,
+    control_destination: Option<(Box<str>, RetainedUsage)>,
     association: Rc<ConsumerOwned<Association>>,
-    _funding: Vec<HostCapacityReservation>,
+    continuation_usage: Option<RetainedUsage>,
+    response_quota: Option<ResponseQuota>,
+    scratch: Option<(HostCapacityReservation, HostCapacityReservation)>,
+    _retained: RetainedUsage,
+    _cleanup_item: HostCapacityReservation,
+    _outstanding: HostCapacityReservation,
+    _instance_outstanding: Option<HostCapacityReservation>,
 }
 struct State {
     bank: Arc<HostResourceAccounts>,
     active: Cell<bool>,
+    controller_present: Cell<bool>,
     registry: RefCell<Registry>,
-    // Last: all original native, service and control owners precede funding.
-    _funding: Vec<HostCapacityReservation>,
+    _live: HostCapacityReservation,
 }
 impl Drop for State {
     fn drop(&mut self) {
@@ -358,9 +417,6 @@ struct Control {
     _funding: HostCapacityReservation,
 }
 impl Control {
-    fn allocation_bytes() -> u64 {
-        (core::mem::size_of::<Self>() + 4 * core::mem::size_of::<usize>()) as u64
-    }
     fn new(
         consumer: &ConsumerInstanceRef,
         sequence: u64,
@@ -368,16 +424,14 @@ impl Control {
         deadline: Deadline,
         now: MonotonicInstant,
     ) -> CoreResult<Rc<Self>> {
-        // Both Rc allocations, including the separately cloneable identity.
-        let funding = bank
-            .reserve(K::EngineLiveBytesGlobalMax, Self::allocation_bytes())
-            .ok_or_else(busy)?;
+        let funding = claim(bank, K::EngineLiveBytesGlobalMax, rc_bytes::<Self>())?;
+        let identity = ConsumerActionIdentity(Rc::new(Identity {
+            consumer: consumer.clone(),
+            sequence,
+            _live: claim(bank, K::EngineLiveBytesGlobalMax, rc_bytes::<Identity>())?,
+        }));
         Ok(Rc::new(Self {
-            identity: ConsumerActionIdentity {
-                consumer: consumer.clone(),
-                sequence,
-                authority: Rc::new(()),
-            },
+            identity,
             cause: RefCell::new(None),
             deadline,
             last_time: Cell::new(now),
@@ -387,6 +441,11 @@ impl Control {
         }))
     }
     fn record(&self, cause: CoreError) {
+        let cause = if self.identity.consumer().is_current() {
+            cause
+        } else {
+            stale()
+        };
         self.cause.borrow_mut().get_or_insert(cause);
     }
     fn cause(&self) -> Option<CoreError> {
@@ -404,7 +463,7 @@ impl Control {
         }
     }
     fn check(&self, state: &State) -> CoreResult<()> {
-        if !state.active.get() || !self.identity.consumer.is_current() {
+        if !state.active.get() || !self.identity.consumer().is_current() {
             self.record(stale());
         }
         self.cause().map_or(Ok(()), Err)
@@ -449,7 +508,7 @@ impl State {
         let Slot::Ready(invocation) = entry else {
             return None;
         };
-        let sequence = invocation.control.identity.sequence;
+        let sequence = invocation.control.identity.sequence();
         if original.is_some_and(|expected| expected != sequence) {
             return None;
         }
@@ -490,6 +549,24 @@ impl State {
             }
         }
     }
+    fn abort_slot(&self, index: usize, sequence: Option<u64>) {
+        if self.controller_present.get() {
+            return;
+        }
+        let removed = {
+            let mut registry = self.registry.borrow_mut();
+            match &registry.slots[index] {
+                Slot::Ready(work)
+                    if work.control.abandoned.get()
+                        && sequence.is_none_or(|s| s == work.control.identity.sequence()) =>
+                {
+                    Some(core::mem::replace(&mut registry.slots[index], Slot::Vacant))
+                }
+                _ => None,
+            }
+        };
+        drop(removed);
+    }
 }
 impl Lease<'_> {
     fn attach(&self, control: Rc<Control>) {
@@ -505,6 +582,16 @@ impl Lease<'_> {
 }
 impl Drop for Lease<'_> {
     fn drop(&mut self) {
+        let abandoned = if !self.state.controller_present.get()
+            && self
+                .invocation
+                .as_ref()
+                .is_some_and(|work| work.control.abandoned.get())
+        {
+            self.invocation.take()
+        } else {
+            None
+        };
         let replacement = self.invocation.take().map_or(Slot::Vacant, Slot::Ready);
         let old = {
             let mut r = self.state.registry.borrow_mut();
@@ -514,6 +601,7 @@ impl Drop for Lease<'_> {
             unreachable!()
         };
         debug_assert_eq!(sequence, self.sequence);
+        drop(abandoned);
     }
 }
 /// Bounded continuing Action execution capacity shared by independent Consumer
@@ -527,10 +615,8 @@ impl ConsumerActions {
         if !(1..=32).contains(&invocations) {
             return Err(invalid());
         }
-        let bytes = (core::mem::size_of::<State>()
-            + 2 * core::mem::size_of::<usize>()
-            + invocations * core::mem::size_of::<Slot>()) as u64;
-        let funding = reserve(&bank, &[(K::EngineLiveBytesGlobalMax, bytes)])?;
+        let bytes = rc_bytes::<State>() + (invocations * core::mem::size_of::<Slot>()) as u64;
+        let funding = claim(&bank, K::EngineLiveBytesGlobalMax, bytes)?;
         let mut slots = Vec::new();
         slots.try_reserve_exact(invocations).map_err(|_| busy())?;
         slots.resize_with(invocations, || Slot::Vacant);
@@ -538,12 +624,13 @@ impl ConsumerActions {
             state: Rc::new(State {
                 bank,
                 active: Cell::new(true),
+                controller_present: Cell::new(true),
                 registry: RefCell::new(Registry {
                     slots,
                     sequence: 0,
                     next: 0,
                 }),
-                _funding: funding,
+                _live: funding,
             }),
         })
     }
@@ -555,7 +642,6 @@ impl ConsumerActions {
         input: Option<Payload>,
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> Result<ConsumerActionHandle, BindingInputRejection<Option<Payload>>> {
         let mut turn = match ConsumerTurn::enter() {
             Ok(turn) => turn,
@@ -568,85 +654,27 @@ impl ConsumerActions {
             if !state.active.get() || !d.consumer.is_current() {
                 return Err(stale());
             }
-            d.check_dependencies()?;
             check_time(deadline, now)?;
             let mut reserved = state.reserve_slot(&mut turn)?;
             let control = Control::new(&d.consumer, reserved.sequence, &state.bank, deadline, now)?;
             reserved.attach(control.clone());
             let invoke = d.selected(0)?;
-            let mut native = 0;
-            let mut temporary = 0;
-            let mut continuation = 0;
-            let mut response = 0;
-            for s in d.operations().into_iter().flatten() {
-                native = native.max(s.bounds.exchange_bytes);
-                temporary = temporary.max(s.bounds.temporary_bytes);
-                let schemas = &d.definition.input().schemas;
-                let has_data = match s.operation {
-                    Operation::InvokeAction => schemas.input.is_some() || schemas.output.is_some(),
-                    Operation::QueryAction => schemas.output.is_some(),
-                    _ => false,
-                };
-                if has_data {
-                    temporary = temporary.max(s.data_policy.temporary_bytes);
-                }
-                continuation = continuation.max(s.bounds.continuation_bytes);
-                response = response.max(s.bounds.response_bytes);
-            }
-            if temporary
-                > state
-                    .bank
-                    .account(K::BindingPollTemporaryBytesPerCallMax)
-                    .limit()
-            {
-                return Err(busy());
-            }
+            let schemas = &d.definition.input().schemas;
+            let quotas = ExchangeQuotas::claim(
+                &state.bank,
+                invoke.op,
+                schemas.input.is_some() || schemas.output.is_some(),
+            )?;
             let input_bytes =
                 clinkz_wot_core::notification::notification_payload_backing(input.as_ref())
                     .ok_or_else(invalid)? as u64;
-            let lifetime = native
-                .checked_add(continuation)
-                .and_then(|n| n.checked_add(response))
-                .and_then(|n| n.checked_add(input_bytes))
-                .and_then(|n| n.checked_add(core::mem::size_of::<Invocation>() as u64 + 512))
+            let retained = input_bytes
+                .checked_add(core::mem::size_of::<Invocation>() as u64)
+                .and_then(|n| n.checked_add(MAX_DESTINATION_BYTES as u64))
                 .ok_or_else(invalid)?;
-            let mut funding = reserve(
-                &state.bank,
-                &[
-                    (
-                        K::EngineLiveBytesGlobalMax,
-                        lifetime.checked_add(temporary).ok_or_else(invalid)?,
-                    ),
-                    (K::BindingPollTemporaryBytesGlobalMax, temporary),
-                    (
-                        K::CleanupBytesMax,
-                        lifetime
-                            .checked_add(Control::allocation_bytes())
-                            .ok_or_else(invalid)?,
-                    ),
-                    (K::CleanupItemsMax, 1),
-                    (K::PendingHandlerCallsGlobalMax, 1),
-                    (K::BindingResponseBufferBytesGlobalMax, response),
-                ],
-            )?;
-            // A separate association domain constrains outstanding obligations,
-            // including unread/retained results; this is a quota, not RAM backing.
-            if !Arc::ptr_eq(&d.bank, &state.bank) {
-                funding.try_reserve_exact(1).map_err(|_| busy())?;
-                funding.extend(reserve(&d.bank, &[(K::PendingHandlerCallsGlobalMax, 1)])?);
-            }
-            let schema = d.definition.input().schemas.input.as_ref();
-            prepay(&invoke, budget, schema.is_some())?;
-            invoke.check(state, &control, None, schema)?;
-            d.validate(0, schema, input.as_ref())?;
-            invoke.check(state, &control, None, schema)?;
-            d.check_dependencies()?;
-            control.check(state)?;
-            // Allocate the separately funded record before native effects. Input
-            // stays caller-owned until start succeeds, including on refusal.
-            let mut invocation = Box::new(Invocation {
+            let mut invocation = try_box(Invocation {
                 progress: ActionProgress::default(),
-                control,
+                control: control.clone(),
                 association: d.clone(),
                 continuation: None,
                 exchange: None,
@@ -654,20 +682,49 @@ impl ConsumerActions {
                 native_result: None,
                 native_error: None,
                 input: None,
-                operation: 0,
-                effect: ConsumerEffect::Unknown,
-                _funding: funding,
-            });
-            let raw = invoke.op.mapping.start(input.as_ref(), None)?;
-            invocation.exchange = Some(Exchange(Some(raw)));
+                invoke_destination: "".into(),
+                control_destination: None,
+                continuation_usage: Some(RetainedUsage::claim(
+                    &state.bank,
+                    invoke.op.bounds.continuation_bytes,
+                )?),
+                response_quota: None,
+                scratch: None,
+                _retained: RetainedUsage::claim(&state.bank, retained)?,
+                _cleanup_item: claim(&state.bank, K::CleanupItemsMax, 1)?,
+                _outstanding: claim(&state.bank, K::PendingHandlerCallsGlobalMax, 1)?,
+                _instance_outstanding: if Arc::ptr_eq(&d.bank, &state.bank) {
+                    None
+                } else {
+                    Some(claim(&d.bank, K::PendingHandlerCallsGlobalMax, 1)?)
+                },
+            })
+            .map_err(|_| busy())?;
+            d.check_dependencies()?;
+            let schema = schemas.input.as_ref();
+            let destination = resolve_destination(invoke.op, None)?;
+            invoke.authorize(state, &control, &destination, schema)?;
+            d.validate(0, schema, input.as_ref().map(Payload::view))?;
+            invoke.authorize(state, &control, &destination, schema)?;
+            d.check_dependencies()?;
+            control.check(state)?;
+            let raw = match invoke.op.mapping.start(&destination, input.as_ref(), None) {
+                Ok(raw) => raw,
+                Err(error) => {
+                    control.check(state)?;
+                    return Err(error);
+                }
+            };
+            invocation.invoke_destination = destination;
+            invocation.start_exchange(raw, quotas);
             let slot = reserved.slot;
             let sequence = reserved.sequence;
             let control = invocation.control.clone();
             invocation.input = input.take();
             // A successful start may already own native effects, even if its
             // callback closed this invocation. Retain the complete exchange.
-            invocation.fence(state);
             reserved.invocation = Some(invocation);
+            reserved.invocation.as_mut().unwrap().fence(state);
             Ok(ConsumerActionHandle {
                 state: self.state.clone(),
                 slot,
@@ -680,35 +737,27 @@ impl ConsumerActions {
     pub fn begin_close(&self) {
         self.state.close();
     }
-    /// Drive the invocation capacity from an independent application turn.
-    pub fn step(
-        &self,
-        cx: &mut Context<'_>,
-        now: MonotonicInstant,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<()> {
+    /// Observe original deadlines and give one rotating slot a bounded turn.
+    pub fn step(&self, cx: &mut Context<'_>, now: MonotonicInstant) -> CoreResult<ActionTurn> {
         let mut turn = ConsumerTurn::enter()?;
-        let (start, count) = {
-            let mut r = self.state.registry.borrow_mut();
-            for control in r.slots.iter().filter_map(Slot::control) {
+        let index = {
+            let mut registry = self.state.registry.borrow_mut();
+            for control in registry.slots.iter().filter_map(Slot::control) {
                 control.observe_time(now);
             }
-            let count = r.slots.len();
-            let start = r.next;
-            r.next = (start + 1) % count;
-            (start, count)
+            let index = registry.next;
+            registry.next = (index + 1) % registry.slots.len();
+            index
         };
-        for i in 0..count {
-            let Some(mut lease) = self.state.checkout(&mut turn, (start + i) % count, None) else {
-                continue;
-            };
-            let v = lease.invocation.as_mut().unwrap();
-            v.step(&self.state, cx, budget);
-            if v.control.abandoned.get() && v.progress.state.settlement_ready() {
-                drop(lease.take());
-            }
+        let Some(mut lease) = self.state.checkout(&mut turn, index, None) else {
+            return Ok(ActionTurn::Idle);
+        };
+        let invocation = lease.invocation.as_mut().unwrap();
+        let progress = invocation.step(&self.state, cx);
+        if invocation.control.abandoned.get() && invocation.progress.state.settlement_ready() {
+            drop(lease.take());
         }
-        Ok(())
+        Ok(progress)
     }
     pub fn is_idle(&self) -> bool {
         self.state
@@ -721,7 +770,13 @@ impl ConsumerActions {
 }
 impl Drop for ConsumerActions {
     fn drop(&mut self) {
+        let _turn = ConsumerTurn::scope();
+        self.state.controller_present.set(false);
         self.state.revoke();
+        let count = self.state.registry.borrow().slots.len();
+        for index in 0..count {
+            self.state.abort_slot(index, None);
+        }
     }
 }
 
@@ -762,7 +817,7 @@ impl ConsumerActionHandle {
     }
     fn get<'a>(&self, r: &'a Registry) -> CoreResult<&'a Invocation> {
         match &r.slots[self.slot] {
-            Slot::Ready(v) if v.control.identity.sequence == self.sequence => Ok(v),
+            Slot::Ready(v) if v.control.identity.sequence() == self.sequence => Ok(v),
             Slot::Reserved { sequence, .. } if *sequence == self.sequence => Err(busy()),
             _ => Err(stale()),
         }
@@ -772,10 +827,10 @@ impl ConsumerActionHandle {
         let r = self.state.registry.borrow();
         let v = self.get(&r)?;
         Ok(if self.control.cause().is_some() {
-            if v.exchange.is_some() {
-                ConsumerActionState::Closing
-            } else {
+            if v.progress.state.settlement_ready() {
                 ConsumerActionState::Closed
+            } else {
+                ConsumerActionState::Closing
             }
         } else {
             v.progress.state
@@ -800,70 +855,61 @@ impl ConsumerActionHandle {
     }
     /// Explicit described control; neither call automatically queries/reinvokes.
     /// Mapped control requires an independent application turn.
-    pub fn query(&self, now: MonotonicInstant, budget: &mut WorkBudget) -> CoreResult<()> {
-        self.control(1, now, budget)
+    pub fn query(&self, now: MonotonicInstant) -> CoreResult<()> {
+        self.control(Operation::QueryAction, now)
     }
-    pub fn request_cancel(&self, now: MonotonicInstant, budget: &mut WorkBudget) -> CoreResult<()> {
-        self.control(2, now, budget)
+    pub fn request_cancel(&self, now: MonotonicInstant) -> CoreResult<()> {
+        self.control(Operation::CancelAction, now)
     }
-    fn control(
-        &self,
-        operation: usize,
-        now: MonotonicInstant,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<()> {
+    fn control(&self, operation: Operation, now: MonotonicInstant) -> CoreResult<()> {
         let mut turn = ConsumerTurn::enter()?;
         let mut lease = self.checkout(&mut turn, now)?;
-        let v = lease.invocation.as_mut().unwrap();
-        v.fence(&self.state);
+        let invocation = lease.invocation.as_mut().unwrap();
+        invocation.fence(&self.state);
         self.control.check(&self.state)?;
-        if v.progress.state != ConsumerActionState::Pending || v.exchange.is_some() {
+        if !invocation.progress.can_control() {
             return Err(busy());
         }
-        let association = v.association.clone();
-        let selected = association.selected(operation)?;
-        // Controls carry no application input. Their output validation is paid
-        // separately before native progress can return a completed value.
-        prepay(&selected, budget, false)?;
-        let schema = if operation == 1 {
+        let index = operation_index(operation);
+        let association = invocation.association.clone();
+        let selected = association.selected(index)?;
+        let schema = if operation == Operation::QueryAction {
             association.definition.input().schemas.output.as_ref()
         } else {
             None
         };
-        let continuation = v.continuation.as_deref().ok_or_else(invalid)?;
-        let preflight = selected
-            .check(&self.state, &self.control, Some(continuation), schema)
-            .and_then(|()| association.check_operation(operation, schema));
-        // The requested control has no admitted work yet. Refusal cannot
-        // withdraw Invoke authority, but its callbacks may invalidate the
-        // invocation's original dependencies. Record that observation before
-        // returning an error or permitting another native effect.
-        v.fence(&self.state);
+        let prepared = (|| {
+            let quotas = ExchangeQuotas::claim(&self.state.bank, selected.op, schema.is_some())?;
+            let destination_usage =
+                RetainedUsage::claim(&self.state.bank, MAX_DESTINATION_BYTES as u64)?;
+            selected.check_services(schema)?;
+            let destination = resolve_destination(selected.op, invocation.continuation.as_deref())?;
+            selected.authorize(&self.state, &self.control, &destination, schema)?;
+            Ok((destination, destination_usage, quotas))
+        })();
+        // Refusing a control leaves the original invocation available, while
+        // a callback-time loss of its authority still fences that invocation.
+        invocation.fence(&self.state);
         self.control.check(&self.state)?;
-        preflight?;
-        let continuation = v.continuation.as_deref().ok_or_else(invalid)?;
-        let raw = match selected.op.mapping.start(None, Some(continuation)) {
-            Ok(raw) => raw,
-            Err(error) => {
-                v.fence(&self.state);
-                self.control.check(&self.state)?;
-                return Err(error);
+        let (destination, destination_usage, quotas) = prepared?;
+        match selected
+            .op
+            .mapping
+            .start(&destination, None, invocation.continuation.as_deref())
+        {
+            Ok(raw) => {
+                invocation.control_destination = Some((destination, destination_usage));
+                invocation.start_exchange(raw, quotas);
+                invocation.progress.start_control(operation);
+                invocation.fence(&self.state);
+                Ok(())
             }
-        };
-        v.exchange = Some(Exchange(Some(raw)));
-        v.operation = operation;
-        v.progress.retiring = false;
-        v.reply = None;
-        v.progress.state = if operation == 1 {
-            ConsumerActionState::Querying
-        } else {
-            ConsumerActionState::Cancelling
-        };
-        if operation == 2 {
-            v.progress.remote_cancel = ConsumerActionCancellation::Uncertain;
+            Err(error) => {
+                invocation.fence(&self.state);
+                self.control.check(&self.state)?;
+                Err(error)
+            }
         }
-        v.fence(&self.state);
-        Ok(())
     }
     /// Stops local work only. Does not send a hidden CancelAction or claim that
     /// a remote effect was undone. First cause and any late result are retained.
@@ -876,34 +922,24 @@ impl ConsumerActionHandle {
     }
     /// Drive the original invocation. A callback attempting another drive
     /// receives a lifecycle error before it can change the clock or waiter.
-    pub fn progress(
-        &self,
-        cx: &mut Context<'_>,
-        now: MonotonicInstant,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<ConsumerActionState> {
+    pub fn progress(&self, cx: &mut Context<'_>, now: MonotonicInstant) -> CoreResult<ActionTurn> {
         let mut turn = ConsumerTurn::enter()?;
         let mut lease = self.checkout(&mut turn, now)?;
-        let v = lease.invocation.as_mut().unwrap();
-        v.step(&self.state, cx, budget);
-        Ok(v.progress.state)
+        Ok(lease.invocation.as_mut().unwrap().step(&self.state, cx))
     }
-    /// Native completion remains revocable until this paid, fresh handoff.
-    /// Busy/short-credit entry retains the original slot and complete evidence.
-    pub fn take_settlement(
-        &self,
-        now: MonotonicInstant,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<ConsumerActionSettlement> {
+    /// Transfer the original result only after acknowledged native retirement
+    /// and a fresh check of the returning operation's authority.
+    pub fn take_settlement(&self, now: MonotonicInstant) -> CoreResult<ConsumerActionSettlement> {
         let mut turn = ConsumerTurn::enter()?;
         let mut lease = self.checkout(&mut turn, now)?;
-        let v = lease.invocation.as_mut().unwrap();
-        v.fence(&self.state);
-        if !v.progress.state.settlement_ready() || !pay(budget, W::CleanupItems, 1) {
+        let invocation = lease.invocation.as_mut().unwrap();
+        if !invocation.progress.state.settlement_ready() {
             return Err(busy());
         }
-        v.refresh_access(&self.state, budget)?;
-        v.fence(&self.state);
+        check_action_handoff(&mut HostActionDriver {
+            invocation,
+            state: &self.state,
+        });
         Ok(ConsumerActionSettlement {
             invocation: Some(lease.take()),
         })
@@ -911,9 +947,11 @@ impl ConsumerActionHandle {
 }
 impl Drop for ConsumerActionHandle {
     fn drop(&mut self) {
+        let _turn = ConsumerTurn::scope();
         if self.live().is_ok() {
             self.control.abandoned.set(true);
             self.control.record(CoreError::Cancelled(context()));
+            self.state.abort_slot(self.slot, Some(self.sequence));
         }
     }
 }
@@ -972,7 +1010,7 @@ impl ConsumerActionSettlement {
         &self.invocation().control.identity
     }
     pub fn effect(&self) -> ConsumerEffect {
-        self.invocation().effect
+        ConsumerEffect::Unknown
     }
     pub fn state(&self) -> ConsumerActionState {
         self.invocation().progress.state
@@ -996,7 +1034,7 @@ impl ConsumerActionSettlement {
         self.invocation()
             .native_result
             .as_ref()
-            .map(|r| r.as_ref().map(InteractionOutput::view))
+            .map(|r| r.as_ref().map(ConsumerActionOutput::view))
     }
     /// Original poll failure, independent of a subsequently retained late output
     /// and of an earlier local cancellation or cleanup failure.
@@ -1029,8 +1067,33 @@ impl ConsumerActionSettlement {
     }
 }
 impl Invocation {
+    fn store_reply(&mut self, reply: ConsumerActionReply) -> CoreResult<()> {
+        if let ConsumerActionReply::Complete(output) = &reply {
+            let selected = self
+                .association
+                .selected(operation_index(self.progress.operation()))?;
+            if output
+                .backing_bytes()
+                .is_none_or(|n| n as u64 > selected.op.bounds.response_bytes)
+            {
+                let error = invalid();
+                self.progress.validation_error = Some(error.clone());
+                return Err(error);
+            }
+        }
+        self.reply = Some(reply);
+        Ok(())
+    }
+    fn start_exchange(&mut self, owner: Box<dyn ConsumerActionExchange>, quotas: ExchangeQuotas) {
+        self.exchange = Some(Exchange {
+            owner: Some(owner),
+            _usage: quotas.native,
+        });
+        self.response_quota = Some(quotas.response);
+        self.scratch = Some((quotas.scratch, quotas.scratch_live));
+    }
     fn live_output_schema(&self) -> Option<&PreparedSchema> {
-        if self.operation != 2
+        if self.progress.operation() != Operation::CancelAction
             && (self.exchange.is_some()
                 || matches!(self.reply, Some(ConsumerActionReply::Complete(_)))
                 || matches!(self.native_result, Some(Ok(_))))
@@ -1041,67 +1104,33 @@ impl Invocation {
         }
     }
     fn check_dependencies(&self) -> CoreResult<()> {
-        // Invoke owns native continuation and authority throughout. A retired
-        // input codec does not own a Query representation. Only the exchange
-        // or unread completed value keeps its actual output codec live.
-        self.association.check_operation(0, None)?;
-        if self.operation != 0 {
-            self.association.check_operation(self.operation, None)?;
+        let operation = operation_index(self.progress.operation());
+        if operation != 0 {
+            self.association.check_operation(0, None)?;
         }
         self.association
-            .selected(self.operation)?
-            .check_data(self.live_output_schema())
+            .check_operation(operation, self.live_output_schema())
     }
     fn close(&mut self, cause: CoreError) {
         self.control.record(cause);
-        self.progress.first_cause = self.control.cause();
-        self.progress.retiring = self.exchange.is_some();
-        self.progress.state = if self.progress.retiring {
-            ConsumerActionState::Closing
-        } else {
-            ConsumerActionState::Closed
-        };
+        self.progress
+            .close(self.control.cause().expect("recorded Action cause"));
     }
-    /// Passive controls are rechecked after linked callbacks, including Pending.
+    fn fence_local(&mut self, state: &State) {
+        if let Err(error) = self.control.check(state) {
+            self.close(error);
+        }
+    }
     fn fence(&mut self, state: &State) {
-        if let Err(e) = self.control.check(state) {
-            self.close(e);
-        }
+        self.fence_local(state);
         if self.progress.first_cause.is_none()
-            && let Err(e) = self.check_dependencies()
+            && let Err(error) = self.check_dependencies()
         {
-            self.close(e);
+            self.close(error);
         }
-        if let Err(e) = self.control.check(state) {
-            self.close(e);
-        }
+        self.fence_local(state);
     }
-    fn refresh_access(&mut self, state: &State, budget: &mut WorkBudget) -> CoreResult<()> {
-        if self.progress.first_cause.is_some() {
-            return Ok(());
-        }
-        let selected = self.association.selected(self.operation)?;
-        // The native bound funds destination calculation, not a new exchange.
-        // No codec or native I/O callback is needed for an already validated result.
-        if !pay(budget, W::ProviderProbes, selected.access_work)
-            || !pay(budget, W::BindingPolls, selected.bounds.poll_work)
-        {
-            return Err(busy());
-        }
-        if let Err(e) = selected
-            .check(
-                state,
-                &self.control,
-                self.continuation.as_deref(),
-                self.live_output_schema(),
-            )
-            .and_then(|()| self.check_dependencies())
-        {
-            self.close(e);
-        }
-        Ok(())
-    }
-    fn step(&mut self, state: &State, cx: &mut Context<'_>, budget: &mut WorkBudget) {
+    fn step(&mut self, state: &State, cx: &mut Context<'_>) -> ActionTurn {
         self.control.observer.register(cx.waker());
         step_action(
             &mut HostActionDriver {
@@ -1109,8 +1138,7 @@ impl Invocation {
                 state,
             },
             cx,
-            budget,
-        );
+        )
     }
 }
 
@@ -1122,34 +1150,11 @@ impl ActionDriver for HostActionDriver<'_> {
     fn progress(&mut self) -> &mut ActionProgress {
         &mut self.invocation.progress
     }
-    fn operation(&self) -> Operation {
-        [
-            Operation::InvokeAction,
-            Operation::QueryAction,
-            Operation::CancelAction,
-        ][self.invocation.operation]
-    }
-    fn has_exchange(&self) -> bool {
-        self.invocation.exchange.is_some()
-    }
-    fn work(&self) -> ActionWork {
-        let v = &self.invocation;
-        let s = v
-            .association
-            .selected(v.operation)
-            .expect("captured operation");
-        ActionWork {
-            access: s.access_work,
-            native: s.bounds.poll_work,
-            validation: if v.live_output_schema().is_some() {
-                s.policy.validation_work
-            } else {
-                0
-            },
-        }
-    }
     fn fence(&mut self) {
         self.invocation.fence(self.state);
+    }
+    fn fence_local(&mut self) {
+        self.invocation.fence_local(self.state);
     }
     fn close(&mut self, cause: CoreError) {
         self.invocation.close(cause);
@@ -1158,115 +1163,160 @@ impl ActionDriver for HostActionDriver<'_> {
         invalid()
     }
     fn check_current(&mut self) -> CoreResult<()> {
-        let v = &self.invocation;
-        v.association.selected(v.operation)?.check(
+        let invocation = &self.invocation;
+        let operation = operation_index(invocation.progress.operation());
+        invocation.association.selected(operation)?.authorize(
             self.state,
-            &v.control,
-            v.continuation.as_deref(),
-            v.live_output_schema(),
+            &invocation.control,
+            invocation
+                .control_destination
+                .as_ref()
+                .map_or(&*invocation.invoke_destination, |(destination, _)| {
+                    destination
+                }),
+            invocation.live_output_schema(),
         )
     }
-    fn refresh_access(&mut self, budget: &mut WorkBudget) -> CoreResult<()> {
-        self.invocation.refresh_access(self.state, budget)
-    }
     fn poll_exchange(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>> {
-        let v = &mut self.invocation;
-        v.exchange
+        let invocation = &mut self.invocation;
+        invocation
+            .exchange
             .as_mut()
             .unwrap()
-            .0
+            .owner
             .as_mut()
             .unwrap()
             .poll(cx)
             .map(|result| match result {
-                Ok(reply) => {
-                    v.reply = Some(reply);
-                    Ok(())
-                }
-                Err(e) => {
-                    v.native_error.get_or_insert_with(|| e.clone());
-                    v.native_result = Some(Err(e.clone()));
-                    Err(e)
+                Ok(reply) => invocation.store_reply(reply),
+                Err(error) => {
+                    invocation.native_error = Some(error.clone());
+                    invocation.native_result = Some(Err(error.clone()));
+                    Err(error)
                 }
             })
     }
     fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>> {
-        let v = &mut self.invocation;
-        v.exchange
-            .as_mut()
-            .unwrap()
-            .0
+        let invocation = &mut self.invocation;
+        let Some(exchange) = invocation.exchange.as_mut() else {
+            return Poll::Ready(Ok(()));
+        };
+        exchange
+            .owner
             .as_mut()
             .unwrap()
             .poll_close(cx)
             .map(|result| {
                 result.map(|late| {
-                    if v.reply.is_none() {
-                        v.reply = late;
+                    if invocation.reply.is_none()
+                        && let Some(late) = late
+                        && let Err(error) = invocation.store_reply(late)
+                    {
+                        invocation.close(error);
                     }
-                    v.exchange = None;
+                    let mut retired = invocation.exchange.take().unwrap();
+                    drop(retired.owner.take());
                 })
             })
     }
     fn retain_reply(&mut self) -> Option<ActionObservation> {
-        let v = &mut self.invocation;
-        Some(match v.reply.take()? {
-            ConsumerActionReply::Accepted(token) if v.operation == 0 => {
-                v.continuation = Some(token);
-                ActionObservation::Accepted
-            }
-            ConsumerActionReply::Accepted(_) => ActionObservation::Invalid,
-            ConsumerActionReply::Complete(output) => {
-                v.native_result = Some(Ok(output));
-                ActionObservation::Complete
-            }
-            ConsumerActionReply::Failed(e) => {
-                v.native_result = Some(Err(e));
-                ActionObservation::Failed
-            }
-            ConsumerActionReply::Pending => ActionObservation::Pending,
-            ConsumerActionReply::CancelRequested => ActionObservation::CancelRequested,
-            ConsumerActionReply::AlreadyTerminal => ActionObservation::AlreadyTerminal,
-        })
+        let invocation = &mut self.invocation;
+        let reply = invocation.reply.take()?;
+        let operation = invocation.progress.operation();
+        Some(retain_action_reply(
+            operation,
+            reply,
+            &mut invocation.continuation,
+            &mut invocation.native_result,
+        ))
     }
     fn validate_output(&mut self) -> CoreResult<()> {
-        let v = &self.invocation;
-        let output = v.native_result.as_ref().unwrap().as_ref().unwrap();
-        if !raw_action_output_shape(output)
-            || interaction_output_backing(output).is_none_or(|n| {
-                n as u64
-                    > v.association
-                        .selected(v.operation)
-                        .unwrap()
-                        .bounds
-                        .response_bytes
-            })
-        {
+        let invocation = &self.invocation;
+        let output = invocation
+            .native_result
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .view();
+        if !action_output_shape(output) {
             return Err(invalid());
         }
-        v.association.validate(
-            v.operation,
-            v.association.definition.input().schemas.output.as_ref(),
+        invocation.association.validate(
+            operation_index(invocation.progress.operation()),
+            invocation
+                .association
+                .definition
+                .input()
+                .schemas
+                .output
+                .as_ref(),
             output.data(),
         )
     }
-    fn reset_operation(&mut self) {
-        self.invocation.operation = 0;
+    fn finish_operation(&mut self) {
+        let invocation = &mut self.invocation;
+        invocation.scratch = None;
+        if !matches!(invocation.native_result, Some(Ok(_))) {
+            invocation.response_quota = None;
+        }
+        if invocation.progress.state.settlement_ready() {
+            drop((
+                invocation.continuation.take(),
+                invocation.continuation_usage.take(),
+            ));
+        } else {
+            invocation.control_destination = None;
+        }
     }
 }
 
-fn prepay(s: &Selected<'_>, budget: &mut WorkBudget, codec: bool) -> CoreResult<()> {
-    s.access_work.checked_mul(2).ok_or_else(invalid)?;
-    if (ActionWork {
-        access: s.access_work,
-        native: s.bounds.poll_work,
-        validation: if codec { s.policy.validation_work } else { 0 },
+const MAX_DESTINATION_BYTES: usize = 256;
+fn resolve_destination(
+    op: &ConsumerActionOperation,
+    continuation: Option<&dyn Any>,
+) -> CoreResult<Box<str>> {
+    let destination = op.mapping.destination(continuation)?;
+    if destination.is_empty() || destination.len() > MAX_DESTINATION_BYTES {
+        return Err(invalid());
+    }
+    Ok(destination)
+}
+fn operation_index(operation: Operation) -> usize {
+    match operation {
+        Operation::InvokeAction => 0,
+        Operation::QueryAction => 1,
+        Operation::CancelAction => 2,
+        _ => unreachable!("admitted Action operation"),
+    }
+}
+fn rc_bytes<T>() -> u64 {
+    (core::mem::size_of::<T>() + 2 * core::mem::size_of::<usize>()) as u64
+}
+fn claim(
+    bank: &Arc<HostResourceAccounts>,
+    kind: K,
+    bytes: u64,
+) -> CoreResult<HostCapacityReservation> {
+    bank.reserve(kind, bytes).ok_or_else(|| {
+        let account = bank.account(kind);
+        limit_error(kind, account.limit(), bytes, Some(account.used()))
     })
-    .prepay(budget)
-    {
-        Ok(())
-    } else {
-        Err(busy())
+}
+fn limit_error(resource: K, limit: u64, requested: u64, observed: Option<u64>) -> CoreError {
+    CoreError::LimitExceeded {
+        resource,
+        limit,
+        requested: Some(requested),
+        observed,
+        context: ErrorContext::new(
+            ErrorPhase::Admission,
+            if requested > limit {
+                RetryClass::Never
+            } else {
+                RetryClass::Safe
+            },
+        ),
     }
 }
 
@@ -1294,7 +1344,4 @@ fn unsupported() -> CoreError {
 }
 fn reject<T>(input: T, e: CoreError) -> BindingInputRejection<T> {
     BindingInputRejection::new(input, BindingOperationalError::new(e))
-}
-fn pay(b: &mut WorkBudget, w: W, n: u64) -> bool {
-    b.consume(w, n).is_ok()
 }

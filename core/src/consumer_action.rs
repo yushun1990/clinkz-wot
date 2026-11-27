@@ -1,33 +1,75 @@
 //! Continuing Consumer Actions. Native mappings and opaque continuation backing
 //! belong to the selected Binding; neither is logical invocation authority.
-use crate::{consumer::*, host_accounts::*, *};
+use crate::{
+    consumer::*, execution::action::ActionReply, host_accounts::HostCapacityReservation, *,
+};
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{
     any::Any,
     task::{Context, Poll},
 };
 
-/// Complete trusted bounds, including variable backing and local destruction.
-/// One invocation has at most one native exchange at a time. All callbacks are
-/// cooperative; abort (including destructors) is finite and nonblocking.
+/// Backing limits enforced by the native owner. Together with configuration
+/// these delimit what the Host admits for one specific operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ConsumerActionBounds {
+    /// Native exchange backing through acknowledged close.
     pub exchange_bytes: u64,
     pub temporary_bytes: u64,
+    /// Opaque Invoke continuation. Zero means the operation cannot return one.
     pub continuation_bytes: u64,
+    /// Complete owned application result. Zero means the operation cannot return one.
     pub response_bytes: u64,
-    pub poll_work: u64,
 }
 
-/// Distinct native observations. Acceptance is never a completed application
-/// result. A cancel acknowledgement proves only a request, not remote rollback.
-pub enum ConsumerActionReply {
-    Accepted(Box<dyn Any>),
-    Pending,
-    Complete(InteractionOutput),
-    Failed(CoreError),
-    CancelRequested,
-    AlreadyTerminal,
+pub type ConsumerActionReply = ActionReply<Box<dyn Any>, ConsumerActionOutput>;
+
+/// Stable result backing lent directly by the Host settlement. A Binding can
+/// move an existing output or a byte buffer acquired before the native effect.
+pub struct ConsumerActionOutput(ActionOutputBacking);
+
+enum ActionOutputBacking {
+    Interaction(InteractionOutput),
+    Buffered(Vec<u8>, &'static str),
+}
+
+impl From<InteractionOutput> for ConsumerActionOutput {
+    fn from(output: InteractionOutput) -> Self {
+        Self(ActionOutputBacking::Interaction(output))
+    }
+}
+
+impl ConsumerActionOutput {
+    pub fn buffered(body: Vec<u8>, media: &'static str) -> Self {
+        Self(ActionOutputBacking::Buffered(body, media))
+    }
+
+    pub fn view(&self) -> InteractionOutputView<'_> {
+        static EMPTY: InteractionOutput = InteractionOutput::empty();
+        match &self.0 {
+            ActionOutputBacking::Interaction(output) => output.view(),
+            ActionOutputBacking::Buffered(body, media) => InteractionOutputView::new(
+                Some(PayloadView {
+                    body,
+                    content_type: media,
+                    content_coding: None,
+                }),
+                InteractionStatus::Ok,
+                EMPTY.view().metadata(),
+            ),
+        }
+    }
+
+    pub fn backing_bytes(&self) -> Option<usize> {
+        match &self.0 {
+            ActionOutputBacking::Interaction(output) => interaction_output_backing(output)?
+                .checked_sub(core::mem::size_of::<InteractionOutput>())?
+                .checked_add(core::mem::size_of::<Self>()),
+            ActionOutputBacking::Buffered(body, _) => {
+                core::mem::size_of::<Self>().checked_add(body.capacity())
+            }
+        }
+    }
 }
 
 /// Owns a finite native exchange, not the continuing invocation. Ready/error
@@ -65,8 +107,11 @@ pub trait ConsumerActionMapping {
     /// Start MUST use that same destination; redirects/proxies are unsupported
     /// unless the concrete mapping supplies equivalent policy coverage.
     fn destination(&self, continuation: Option<&dyn Any>) -> CoreResult<Box<str>>;
+    /// Secure original exchange, continuation/result and retirement backing
+    /// before native effects. Use the same actual destination checked by access.
     fn start(
         &self,
+        destination: &str,
         input: Option<&Payload>,
         continuation: Option<&dyn Any>,
     ) -> CoreResult<Box<dyn ConsumerActionExchange>>;
@@ -81,7 +126,8 @@ pub struct ConsumerActionOperation {
     pub data: Arc<ConsumerServiceOwner<dyn ConsumerDataService>>,
     /// Original qualification, captured by preparation and never refreshed by
     /// association or execution construction.
-    pub data_policy: ConsumerDataPolicy,
+    pub body_bytes: u64,
+    pub validation_scratch_bytes: u64,
     pub content_type: Box<str>,
     pub identity: BindingRegistrationIdentity,
     pub operation: Operation,
@@ -93,8 +139,7 @@ pub struct ConsumerActionDefinitionInput {
     pub invoke: ConsumerActionOperation,
     pub query: Option<ConsumerActionOperation>,
     pub cancel: Option<ConsumerActionOperation>,
-    pub bank: Arc<HostResourceAccounts>,
-    // Last: actual native definitions and services die before original funding.
+    // Preparation allocation charges. No runtime capacity is acquired here.
     pub funding: Vec<HostCapacityReservation>,
 }
 /// Reusable source-free definition. Contains no Consumer, permission, vacant
@@ -109,12 +154,21 @@ pub fn action_data_supported(
     schemas: &ValueSchemas,
     data: &dyn ConsumerDataService,
 ) -> bool {
+    let supports = |schema: &crate::data_schema::PreparedSchema| {
+        data.action_validator().is_some_and(|validator| {
+            validator.available()
+                && validator.content_type() == data.content_type()
+                && validator.body_bytes() as u64 == data.policy().body_bytes
+                && validator.supports(schema)
+        })
+    };
     match operation {
-        Operation::InvokeAction => schemas.supports(data),
-        Operation::QueryAction => schemas
-            .output
-            .as_ref()
-            .is_none_or(|s| data.supports_schema(s)),
+        Operation::InvokeAction => schemas
+            .input
+            .iter()
+            .chain(schemas.output.iter())
+            .all(supports),
+        Operation::QueryAction => schemas.output.as_ref().is_none_or(supports),
         Operation::CancelAction => true,
         _ => false,
     }
@@ -150,7 +204,12 @@ impl ConsumerActionDefinition {
             (Operation::CancelAction, input.cancel.as_ref()),
         ] {
             let Some(selected) = selected else { continue };
-            selected.check_dependencies()?;
+            selected.check_native_dependencies()?;
+            if (operation == Operation::InvokeAction && input.schemas.input.is_some())
+                || (operation != Operation::CancelAction && input.schemas.output.is_some())
+            {
+                selected.check_data_dependencies()?;
+            }
             if selected.operation != operation
                 || !action_data_supported(operation, &input.schemas, selected.data.service())
             {
@@ -172,10 +231,6 @@ impl ConsumerActionDefinition {
     }
 }
 impl ConsumerActionOperation {
-    pub fn check_dependencies(&self) -> CoreResult<()> {
-        self.check_native_dependencies()?;
-        self.check_data_dependencies()
-    }
     /// Original native mapping/continuation qualification, independent of a
     /// codec whose application-value role may already have retired.
     pub fn check_native_dependencies(&self) -> CoreResult<()> {
@@ -183,10 +238,7 @@ impl ConsumerActionOperation {
         if self.mapping.identity() != self.identity
             || self.mapping.operation() != self.operation
             || self.mapping.bounds() != b
-            || b.poll_work == 0
             || b.exchange_bytes == 0
-            || b.response_bytes == 0
-            || b.continuation_bytes == 0
             || self.endpoint.len() > 256
         {
             return Err(invalid());
@@ -195,11 +247,17 @@ impl ConsumerActionOperation {
     }
     /// Original representation and resource declaration, never a new snapshot.
     pub fn check_data_dependencies(&self) -> CoreResult<()> {
+        let policy = self.data.policy();
         if !self.data.available()
-            || self.data.policy() != self.data_policy
-            || self.data_policy.retained_bytes != self.data.backing_bytes()
-            || self.data_policy.validation_work == 0
+            || policy.retained_bytes != self.data.backing_bytes()
+            || policy.body_bytes != self.body_bytes
+            || policy.temporary_bytes != self.validation_scratch_bytes
             || self.data.content_type() != &*self.content_type
+            || !self.data.action_validator().is_some_and(|validator| {
+                validator.available()
+                    && validator.content_type() == &*self.content_type
+                    && validator.body_bytes() as u64 == policy.body_bytes
+            })
         {
             return Err(invalid());
         }

@@ -977,16 +977,15 @@ The source-free `ConsumerActionDefinition` retains qualified mappings/data and
 can be shared through `Rc` across independent Consumers at its original
 endpoint/registration/configuration. Bind it with
 `ConsumerActionAssociation::try_new`, passing the original Consumer reference,
-explicit per-operation `ConsumerActionAccess` owners, an instance bank and work
-budget. Associations allocate no invocation slots, and dropping their passive
-views does not cancel admitted work.
+explicit per-operation `ConsumerActionAccess` owners and an instance bank.
+Dropping an association view leaves admitted work with its original owner.
 
 `ConsumerActions::try_new(slots, work_bank)` supplies independent bounded
 execution capacity for many associations. `invoke_action(&association, input,
-deadline, now, budget)` returns the local invocation handle; the invocation
-retains its original association and native continuation beyond each finite
-exchange. `progress` exposes Invoking, Pending, Querying, Cancelling, local Closing
-and terminal states. The [invoke_action example](examples/invoke_action.rs)
+deadline, now)` returns the local invocation handle. The invocation retains
+its original association and continuation across finite exchanges. Each
+`progress(cx, now)` returns an `ActionTurn` after at most one native or close
+poll. The handle's `state()` reports the invocation state. The [invoke_action example](examples/invoke_action.rs)
 shows retained service adoption, association binding and capacity construction.
 `query` and `request_cancel` are explicit described operations. POST 202 with the
 bounded native id means accepted work, never a terminal result. GET `running`
@@ -1000,7 +999,10 @@ or cancellation replays the Action.
 The native Consumer exchanges use one fresh closing TCP connection, with 16
 headers, an inclusive 8192-byte head, one Content-Length, an 8192-byte response
 envelope and 4096-byte application data. At most 16384 response bytes are retained;
-one native poll shares 4096 read/write bytes. Complete framing is checked through
+one native poll attempts a read or write of up to 4096 bytes. The exchange acquires its wire
+buffers and any output buffer or continuation storage before the first socket
+poll. An explicit Query or Cancel needs the corresponding exchange backing
+at its own start. Complete framing is checked through
 peer EOF, including fragmented trailing bytes. Chunked/close-delimited bodies,
 content codings, trailers, upgrades, informational responses, malformed/duplicate
 response fields and unexpected status/role combinations refuse this mapping.
@@ -1019,21 +1021,21 @@ remote cancellation; Requested still permits eventual application completion.
 Settlement retains accepted status, original native result, validation and cleanup
 errors, remote cancellation and effect uncertainty separately. Input and
 normal/late output access lend slices; sharing the settlement keeps the original
-bytes and their funding together. Pre-effect refusal returns original input. Pending/error cleanup and unread settlement keep original
-funding; Drop disposes native owners finitely before refunding it. The API admits
+bytes and their quota together. Pre-effect refusal returns original input.
+Retirement acknowledgement releases the exchange. Terminal settlement releases
+the continuation and the returning value stays available through result disposal. The API admits
 no detached job, native pooling, reconnect or cleanup transfer.
 
 `Completed` means a validated native result is ready; unread success remains
-revocable. `take_settlement(now, budget)` is the application handoff and performs
-fresh paid time/authority/service/access checks even after recent progress.
-Zero or short handoff credit keeps the original result and invocation slot.
+revocable. `take_settlement(now)` checks time and current permission for the
+exact authorized destination even after recent progress.
 Cancellation, root/instance loss, expiry or policy loss before handoff yields a
 fenced settlement with the original native output still available as evidence.
 Once successful handoff has occurred, later revocation does not retract that value.
 If a native poll fails but retirement returns a late completion, `native_error()`
 keeps the poll error while `native_result()` keeps the actual late output.
-The returning exchange's original validator still checks it; neither a valid late result nor a later
-cancellation can erase the original failure or silently retry the Action.
+After a local fence the late output remains raw evidence. Retiring that
+exchange does not need a validator or access callback.
 
 Run `serve_action`, save its printed qualified TD to `TD.json`, then run:
 

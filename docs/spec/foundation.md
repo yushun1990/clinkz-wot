@@ -93,8 +93,9 @@ bounded fallback when diagnostic storage is full.
 The [numeric profiles](../resource-limits.csv) still supply shared Host quotas,
 preparation limits and legacy Producer staging bounds. The Host finite Consumer
 takes the result bounds from the native configuration and keeps shared charges
-through disposal. Caller-owned Reads use typed slots with exclusive backing
-and a bounded native poll. The target has no exhaustive public limit schema,
+through disposal. Continuing Host Actions acquire native and response backing
+for each admitted Invoke or control. Caller-owned Read and Action execution use
+exclusive typed slots and bounded native polls. The target has no exhaustive public limit schema,
 generic admission receipt or registration-wide footprint declaration.
 
 ## Host allocation and environment failure scope

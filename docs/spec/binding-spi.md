@@ -711,8 +711,12 @@ pair returns `UnsupportedOperation` so Planning can examine another pairing.
 Other errors propagate. The answer must stay stable under the selection
 configuration. Different Binding implementations can share a continuation
 contract, and two mappings of the same protocol can address incompatible peers.
-`destination` calculates the actual target before captured fresh authorization;
-`start` must use that same target and capture all borrowed input. Refusal permits
+`destination` calculates the actual target before fresh authorization.
+`start` receives that exact operand and captures all borrowed input. Before a
+native effect, the Binding must secure the original exchange, any promised
+continuation or value backing and local retirement. A typed exchange can use
+inline or exclusive storage. Host Bindings can move an admitted byte buffer into
+`ConsumerActionOutput` and release the native exchange independently. Refusal permits
 no semantic effect. Refused control start does not withdraw unrelated admitted
 Invoke work. A successful start retains that operation's own dependencies through
 exchange retirement and any unread result; merely retaining a sibling mapping
@@ -742,8 +746,9 @@ after physical retirement; invocation capacity is independently Engine-owned.
 
 A normal poll error and an original late observation from retirement are separate
 outcomes. The Consumer retains the poll error immediately and keeps any late
-completion returned by `poll_close` as raw evidence. The Binding can finish
-physical retirement and release its slot with the codec unavailable. Core
+completion returned by `poll_close` as raw evidence. The Binding performs a bounded close poll without entering access or codec
+services. A validator supplies a bounded operation using stack or original
+protected workspace when application handoff needs it. Core
 governs disposal and validated handoff. [Action outcomes](interaction-core.md#continuing-execution-across-representations)
 Consumer Action settlements lend original input and normal/late output slices;
 the native exchange may transfer owned output into the invocation, but application

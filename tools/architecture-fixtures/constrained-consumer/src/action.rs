@@ -26,7 +26,7 @@ pub struct Statistics {
     pub close_error: Cell<bool>,
     pub poll_error_with_late: Cell<bool>,
     pub fail_start: Cell<bool>,
-    pub query_work: Cell<u64>,
+    pub query_mapping_changed: Cell<bool>,
     pub output_views: Cell<usize>,
     pub output_variant: Cell<OutputVariant>,
     pub select_after_validation: Cell<Option<OutputVariant>>,
@@ -74,9 +74,6 @@ impl ActionInput for Input<'_> {
             content_coding: None,
         }
     }
-    fn backing_bytes(&self) -> u64 {
-        0
-    } // The input's original backing is borrowed.
 }
 impl Drop for Input<'_> {
     fn drop(&mut self) {
@@ -148,6 +145,7 @@ impl<'a, S: TestDatagrams> ActionBinding for Binding<'a, S> {
     type Program = Program<'a>;
     type Configuration = u32;
     type Exchange = Exchange<'a, S>;
+    type Destination = &'a str;
     fn configuration(&self) -> &u32 {
         &self.configuration
     }
@@ -160,42 +158,35 @@ impl<'a, S: TestDatagrams> ActionBinding for Binding<'a, S> {
             binding: BindingId::new(if op == Operation::InvokeAction {
                 71
             } else {
-                72
+                72 + u32::from(
+                    op == Operation::QueryAction && self.stats.query_mapping_changed.get(),
+                )
             }),
             generation: BindingGeneration::INITIAL,
             target: p.target,
         })
     }
-    fn destination<'b>(
-        &'b self,
-        p: &'b Self::Program,
-        op: Operation,
-        _: Option<&'b Token<'a>>,
-    ) -> CoreResult<ActionMapping<'b>> {
-        self.mapping(p, op).ok_or_else(failed)
+    fn destination(
+        &self,
+        p: &Self::Program,
+        _: Operation,
+        _: Option<&Token<'a>>,
+    ) -> CoreResult<Self::Destination> {
+        Ok(p.target)
     }
     fn supports(&self, _: &Self::Program, m: ValueExecution<'_>) -> bool {
         m.operation() == Operation::InvokeAction
     }
-    fn poll_work(&self, op: Operation) -> u64 {
-        if op == Operation::QueryAction {
-            2 + self.stats.query_work.get()
-        } else {
-            2
-        }
-    }
-    fn backing_bytes(&self) -> u64 {
-        0
-    } // All Engine-visible work/results are inline.
     fn start(
         &self,
-        _: &Self::Program,
+        program: &Self::Program,
         op: Operation,
+        destination: &Self::Destination,
         input: Option<PayloadView<'_>>,
         token: Option<&Token<'a>>,
         _: Deadline,
     ) -> CoreResult<Self::Exchange> {
-        if self.stats.fail_start.get() {
+        if self.stats.fail_start.get() || *destination != program.target {
             return Err(failed());
         }
         let mut request = [0; 64];
@@ -345,9 +336,6 @@ impl ValueValidator for Codec<'_> {
     fn body_bytes(&self) -> usize {
         self.number.body_bytes()
     }
-    fn work(&self) -> u64 {
-        self.number.work()
-    }
     fn available(&self) -> bool {
         self.number.available()
     }
@@ -370,9 +358,6 @@ pub struct Permission<'a> {
 impl ActionAccess for Permission<'_> {
     fn revision(&self) -> u64 {
         self.revision.get()
-    }
-    fn work(&self) -> u64 {
-        1
     }
     fn authorize(
         &self,

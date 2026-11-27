@@ -1,6 +1,7 @@
 #![cfg(feature = "prepare")]
 //! The public TD-prepared Consumer against the qualified HTTP Producer.
 use clinkz_wot_binding_http::*;
+use clinkz_wot_core::execution::ValueValidator;
 use clinkz_wot_core::{
     consumer::*, consumer_action::*, data_schema::PreparedSchema, host_accounts::*, *,
 };
@@ -83,7 +84,33 @@ struct Policy {
     log: Mutex<Vec<(BindingId, Operation, String)>>,
 }
 struct Data(Arc<Policy>, Arc<dyn ConsumerDataService>);
+impl ValueValidator for Data {
+    fn content_type(&self) -> &str {
+        ConsumerDataService::content_type(self)
+    }
+    fn supports(&self, schema: &PreparedSchema) -> bool {
+        ConsumerDataService::supports_schema(self, schema)
+    }
+    fn body_bytes(&self) -> usize {
+        self.policy().body_bytes as usize
+    }
+    fn available(&self) -> bool {
+        ConsumerDataService::available(self)
+    }
+    fn validate(&self, schema: &PreparedSchema, p: PayloadView<'_>) -> CoreResult<()> {
+        self.0.validations.fetch_add(1, Ordering::Relaxed);
+        callback(CallbackEdge::Validate);
+        if self.0.reject_output.load(Ordering::Relaxed) && p.body == b"24" {
+            return Err(invalid());
+        }
+        self.1.action_validator().unwrap().validate(schema, p)
+    }
+}
 impl ConsumerDataService for Data {
+    fn action_validator(&self) -> Option<&dyn ValueValidator> {
+        Some(self)
+    }
+
     fn qualification_revision(&self) -> u64 {
         self.1.qualification_revision()
     }
@@ -101,12 +128,7 @@ impl ConsumerDataService for Data {
         self.1.supports_schema(schema)
     }
     fn validate(&self, schema: &PreparedSchema, p: &Payload) -> CoreResult<()> {
-        self.0.validations.fetch_add(1, Ordering::Relaxed);
-        callback(CallbackEdge::Validate);
-        if self.0.reject_output.load(Ordering::Relaxed) && p.body.as_ref() == b"24" {
-            return Err(invalid());
-        }
-        self.1.validate(schema, p)
+        ValueValidator::validate(self, schema, p.view())
     }
 }
 struct Access(Arc<Policy>, Arc<dyn ConsumerAccessService>);
@@ -245,7 +267,6 @@ fn bind(
         Rc::new(prepared.0),
         prepared.1,
         bank.clone(),
-        &mut budget(),
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let calls = ConsumerActions::try_new(slots, bank).unwrap();
@@ -375,7 +396,8 @@ impl Producer {
     async fn drive(&mut self, h: &ConsumerActionHandle, expected: ConsumerActionState) {
         for _ in 0..1000 {
             self.step();
-            let s = h.progress(&mut cx(), now(), &mut budget()).unwrap();
+            h.progress(&mut cx(), now()).unwrap();
+            let s = h.state().unwrap();
             if s == expected {
                 return;
             }
@@ -429,39 +451,27 @@ fn accepted_pending_query_completed_uses_selected_forms_and_independent_identity
         drop(text);
         let h = runtime
             .calls
-            .invoke_action(
-                &runtime.association,
-                payload(b"12"),
-                Deadline::NONE,
-                now(),
-                &mut budget(),
-            )
+            .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
             .ok()
             .unwrap();
         let identity = h.identity().unwrap();
         producer.drive(&h, ConsumerActionState::Pending).await;
         assert_eq!(producer.counts.invoked.get(), 1);
-        assert!(h.take_settlement(now(), &mut budget()).is_err());
-        h.query(now(), &mut budget()).unwrap();
+        assert!(h.take_settlement(now()).is_err());
+        h.query(now()).unwrap();
         producer.drive(&h, ConsumerActionState::Pending).await;
         assert_eq!(h.identity().unwrap(), identity);
         producer.counts.complete.set(true);
-        h.query(now(), &mut budget()).unwrap();
+        h.query(now()).unwrap();
         producer.drive(&h, ConsumerActionState::Completed).await;
         // Unread completion retains its slot. No implicit reinvocation on pressure.
         assert!(
             runtime
                 .calls
-                .invoke_action(
-                    &runtime.association,
-                    payload(b"12"),
-                    Deadline::NONE,
-                    now(),
-                    &mut budget()
-                )
+                .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now(),)
                 .is_err()
         );
-        let settlement = h.take_settlement(now(), &mut budget()).unwrap();
+        let settlement = h.take_settlement(now()).unwrap();
         assert_eq!(settlement.identity(), &identity);
         assert_eq!(settlement.result().unwrap().data().unwrap().body, b"24");
         assert_eq!(settlement.effect(), ConsumerEffect::Unknown);
@@ -469,7 +479,7 @@ fn accepted_pending_query_completed_uses_selected_forms_and_independent_identity
             settlement.selected_form(Operation::QueryAction).unwrap(),
             (definition_identity(91), 1)
         );
-        assert!(h.query(now(), &mut budget()).is_err());
+        assert!(h.query(now()).is_err());
         let log = policy.log.lock().unwrap();
         assert!(log.iter().any(|(b, o, t)| *b == BindingId::new(91)
             && *o == Operation::QueryAction
@@ -480,6 +490,7 @@ fn accepted_pending_query_completed_uses_selected_forms_and_independent_identity
         drop(owner);
         assert!(b.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0);
         drop(settlement);
+        drop(identity);
         clean(&b);
         producer.finish();
     });
@@ -524,7 +535,6 @@ fn structured_actions_validate_both_roles_before_effects_and_keep_original_conte
                         payload(invalid.as_bytes()),
                         Deadline::NONE,
                         now(),
-                        &mut budget()
                     )
                     .is_err()
             );
@@ -541,7 +551,6 @@ fn structured_actions_validate_both_roles_before_effects_and_keep_original_conte
                 payload(STRUCTURED_INPUT),
                 Deadline::NONE,
                 now(),
-                &mut budget(),
             )
             .ok()
             .unwrap();
@@ -553,23 +562,22 @@ fn structured_actions_validate_both_roles_before_effects_and_keep_original_conte
                 payload(STRUCTURED_INPUT),
                 Deadline::NONE,
                 now(),
-                &mut budget(),
             )
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         producer.drive(&second, ConsumerActionState::Pending).await;
         assert_ne!(first.identity().unwrap(), second.identity().unwrap());
         assert_eq!(producer.counts.invoked.get(), 2);
         // Remote cancellation is a request; a validated result can still follow.
-        first.request_cancel(now(), &mut budget()).unwrap();
+        first.request_cancel(now()).unwrap();
         producer.drive(&first, ConsumerActionState::Pending).await;
         assert_eq!(producer.counts.cancelled.get(), 1);
         producer.counts.complete.set(true);
         for h in [&first, &second] {
-            h.query(now(), &mut budget()).unwrap();
+            h.query(now()).unwrap();
             producer.drive(h, ConsumerActionState::Completed).await;
         }
-        let a = first.take_settlement(now(), &mut budget()).unwrap();
-        let c = second.take_settlement(now(), &mut budget()).unwrap();
+        let a = first.take_settlement(now()).unwrap();
+        let c = second.take_settlement(now()).unwrap();
         for s in [&a, &c] {
             assert_eq!(s.result().unwrap().data().unwrap().body, STRUCTURED_OUTPUT);
             assert_eq!(s.effect(), ConsumerEffect::Unknown);
@@ -605,7 +613,6 @@ fn structured_producer_completion_is_checked_against_its_distinct_output_role() 
                 payload(STRUCTURED_INPUT),
                 Deadline::NONE,
                 now(),
-                &mut budget(),
             )
             .ok()
             .unwrap();
@@ -614,9 +621,9 @@ fn structured_producer_completion_is_checked_against_its_distinct_output_role() 
         // must have the output role's required names and integer boundaries.
         *producer.counts.output.borrow_mut() = Some(STRUCTURED_INPUT.to_vec());
         producer.counts.complete.set(true);
-        h.query(now(), &mut budget()).unwrap();
+        h.query(now()).unwrap();
         producer.drive(&h, ConsumerActionState::Failed).await;
-        let s = h.take_settlement(now(), &mut budget()).unwrap();
+        let s = h.take_settlement(now()).unwrap();
         assert!(s.native_result().unwrap().is_err());
         let native = producer
             .exposure
@@ -661,7 +668,28 @@ impl ConsumerActionPreparation for TracedPreparation {
     }
 }
 struct TypesOnly(Arc<dyn ConsumerDataService>);
+impl ValueValidator for TypesOnly {
+    fn content_type(&self) -> &str {
+        ConsumerDataService::content_type(self)
+    }
+    fn supports(&self, schema: &PreparedSchema) -> bool {
+        ConsumerDataService::supports_schema(self, schema)
+    }
+    fn body_bytes(&self) -> usize {
+        self.policy().body_bytes as usize
+    }
+    fn available(&self) -> bool {
+        ConsumerDataService::available(self)
+    }
+    fn validate(&self, schema: &PreparedSchema, payload: PayloadView<'_>) -> CoreResult<()> {
+        self.0.action_validator().unwrap().validate(schema, payload)
+    }
+}
 impl ConsumerDataService for TypesOnly {
+    fn action_validator(&self) -> Option<&dyn ValueValidator> {
+        Some(self)
+    }
+
     fn qualification_revision(&self) -> u64 {
         self.0.qualification_revision()
     }
@@ -780,17 +808,11 @@ fn described_cancel_acknowledges_request_and_query_can_still_complete() {
         );
         let h = runtime
             .calls
-            .invoke_action(
-                &runtime.association,
-                payload(b"12"),
-                Deadline::NONE,
-                now(),
-                &mut budget(),
-            )
+            .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
             .ok()
             .unwrap();
         producer.drive(&h, ConsumerActionState::Pending).await;
-        h.request_cancel(now(), &mut budget()).unwrap();
+        h.request_cancel(now()).unwrap();
         assert_eq!(
             h.remote_cancellation().unwrap(),
             ConsumerActionCancellation::Uncertain
@@ -810,20 +832,20 @@ fn described_cancel_acknowledges_request_and_query_can_still_complete() {
                     && *op == Operation::CancelAction
                     && t.contains("/stop?id="))
         );
-        h.query(now(), &mut budget()).unwrap();
+        h.query(now()).unwrap();
         producer.drive(&h, ConsumerActionState::Pending).await;
         producer.counts.complete.set(true);
         producer.step();
-        h.request_cancel(now(), &mut budget()).unwrap();
+        h.request_cancel(now()).unwrap();
         producer.drive(&h, ConsumerActionState::Pending).await;
         assert_eq!(
             h.remote_cancellation().unwrap(),
             ConsumerActionCancellation::AlreadyTerminal
         );
-        assert!(h.take_settlement(now(), &mut budget()).is_err());
-        h.query(now(), &mut budget()).unwrap();
+        assert!(h.take_settlement(now()).is_err());
+        h.query(now()).unwrap();
         producer.drive(&h, ConsumerActionState::Completed).await;
-        let s = h.take_settlement(now(), &mut budget()).unwrap();
+        let s = h.take_settlement(now()).unwrap();
         assert!(s.result().is_ok());
         assert_eq!(
             s.remote_cancellation(),
@@ -860,7 +882,6 @@ fn input_and_completion_validation_and_remote_failure_keep_original_evidence() {
                     payload(b"\"bad\""),
                     Deadline::NONE,
                     now(),
-                    &mut budget(),
                 )
                 .err()
                 .unwrap();
@@ -868,20 +889,14 @@ fn input_and_completion_validation_and_remote_failure_keep_original_evidence() {
             assert_eq!(producer.counts.invoked.get(), 0);
             let h = runtime
                 .calls
-                .invoke_action(
-                    &runtime.association,
-                    payload(b"12"),
-                    Deadline::NONE,
-                    now(),
-                    &mut budget(),
-                )
+                .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
                 .ok()
                 .unwrap();
             producer.drive(&h, ConsumerActionState::Pending).await;
             p.reject_output.store(!remote_invalid, Ordering::Relaxed);
             producer.counts.invalid.set(remote_invalid);
             producer.counts.complete.set(true);
-            h.query(now(), &mut budget()).unwrap();
+            h.query(now()).unwrap();
             producer
                 .drive(
                     &h,
@@ -892,7 +907,7 @@ fn input_and_completion_validation_and_remote_failure_keep_original_evidence() {
                     },
                 )
                 .await;
-            let s = h.take_settlement(now(), &mut budget()).unwrap();
+            let s = h.take_settlement(now()).unwrap();
             assert!(s.result().is_err());
             assert_eq!(s.effect(), ConsumerEffect::Unknown);
             assert_eq!(s.native_result().unwrap().is_err(), remote_invalid);
@@ -986,20 +1001,14 @@ fn local_cancellation_and_cancel_response_loss_do_not_claim_remote_rollback() {
             );
             let h = runtime
                 .calls
-                .invoke_action(
-                    &runtime.association,
-                    payload(b"12"),
-                    Deadline::NONE,
-                    now(),
-                    &mut budget(),
-                )
+                .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
                 .ok()
                 .unwrap();
             producer.drive(&h, ConsumerActionState::Pending).await;
             if remote_cancel {
-                h.request_cancel(now(), &mut budget()).unwrap();
+                h.request_cancel(now()).unwrap();
                 for _ in 0..1000 {
-                    h.progress(&mut cx(), now(), &mut budget()).unwrap();
+                    h.progress(&mut cx(), now()).unwrap();
                     producer.step();
                     if producer.counts.cancelled.get() == 1 {
                         break;
@@ -1011,7 +1020,7 @@ fn local_cancellation_and_cancel_response_loss_do_not_claim_remote_rollback() {
             // The Producer accepted cancellation but has not delivered its reply.
             h.cancel_local();
             producer.drive(&h, ConsumerActionState::Closed).await;
-            let s = h.take_settlement(now(), &mut budget()).unwrap();
+            let s = h.take_settlement(now()).unwrap();
             assert!(matches!(s.first_cause(), Some(CoreError::Cancelled(_))));
             assert_eq!(
                 s.remote_cancellation(),
@@ -1054,13 +1063,7 @@ fn capacity_replacement_policy_deadline_and_abandonment_retire_original_work() {
             assert!(
                 runtime
                     .calls
-                    .invoke_action(
-                        &runtime.association,
-                        payload(b"12"),
-                        Deadline::NONE,
-                        now(),
-                        &mut budget()
-                    )
+                    .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now(),)
                     .is_err()
             );
             assert_eq!(producer.counts.invoked.get(), 0);
@@ -1072,26 +1075,14 @@ fn capacity_replacement_policy_deadline_and_abandonment_retire_original_work() {
             };
             let h = runtime
                 .calls
-                .invoke_action(
-                    &runtime.association,
-                    payload(b"12"),
-                    deadline,
-                    now(),
-                    &mut budget(),
-                )
+                .invoke_action(&runtime.association, payload(b"12"), deadline, now())
                 .ok()
                 .unwrap();
             // Native exchange concurrency is separate from retained invocation capacity.
             assert!(
                 runtime
                     .calls
-                    .invoke_action(
-                        &runtime.association,
-                        payload(b"12"),
-                        Deadline::NONE,
-                        now(),
-                        &mut budget()
-                    )
+                    .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now(),)
                     .is_err()
             );
             producer.drive(&h, ConsumerActionState::Pending).await;
@@ -1101,30 +1092,26 @@ fn capacity_replacement_policy_deadline_and_abandonment_retire_original_work() {
                 2 => {
                     // The shared codec becomes a live dependency when a Query
                     // exchange owns a potential application result.
-                    h.query(now(), &mut budget()).unwrap();
+                    h.query(now()).unwrap();
                     p.unavailable.store(true, Ordering::Relaxed);
                 }
                 3 => {
-                    h.progress(
-                        &mut cx(),
-                        MonotonicInstant::new(ClockId::new(1), 1),
-                        &mut budget(),
-                    )
-                    .unwrap();
+                    h.progress(&mut cx(), MonotonicInstant::new(ClockId::new(1), 1))
+                        .unwrap();
                 }
                 _ => runtime.calls.begin_close(),
             }
             if reason != 3 {
                 producer.drive(&h, ConsumerActionState::Closed).await;
             }
-            let s = h.take_settlement(now(), &mut budget()).unwrap();
+            let s = h.take_settlement(now()).unwrap();
             assert!(s.result().is_err());
             assert_eq!(s.effect(), ConsumerEffect::Unknown);
             assert_eq!(producer.counts.invoked.get(), 1);
             // A new incarnation at the same slot cannot inherit the old handle.
             let replacement = instance();
             assert_ne!(replacement.reference(), owner.reference());
-            assert!(h.query(now(), &mut budget()).is_err());
+            assert!(h.query(now()).is_err());
             drop(s);
             drop(h);
             drop(runtime);
@@ -1146,18 +1133,12 @@ fn capacity_replacement_policy_deadline_and_abandonment_retire_original_work() {
         );
         let h = runtime
             .calls
-            .invoke_action(
-                &runtime.association,
-                payload(b"12"),
-                Deadline::NONE,
-                now(),
-                &mut budget(),
-            )
+            .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
             .ok()
             .unwrap();
         producer.drive(&h, ConsumerActionState::Pending).await;
         drop(h);
-        runtime.calls.step(&mut cx(), now(), &mut budget()).unwrap();
+        runtime.calls.step(&mut cx(), now()).unwrap();
         assert!(runtime.calls.is_idle());
         drop(runtime);
         drop(owner);
@@ -1181,22 +1162,16 @@ fn producer_replacement_rejects_original_token_and_cannot_transfer_or_replay_inv
         );
         let old = runtime
             .calls
-            .invoke_action(
-                &runtime.association,
-                payload(b"12"),
-                Deadline::NONE,
-                now(),
-                &mut budget(),
-            )
+            .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
             .ok()
             .unwrap();
         producer.drive(&old, ConsumerActionState::Pending).await;
         let old_counts = producer.counts.clone();
         let old_identity = old.identity().unwrap();
         let mut old_exposure = producer.replace();
-        old.query(now(), &mut budget()).unwrap();
+        old.query(now()).unwrap();
         producer.drive(&old, ConsumerActionState::Closed).await;
-        let s = old.take_settlement(now(), &mut budget()).unwrap();
+        let s = old.take_settlement(now()).unwrap();
         assert!(s.result().is_err());
         assert_eq!(s.effect(), ConsumerEffect::Unknown);
         assert_eq!(producer.counts.invoked.get(), 0);
@@ -1204,28 +1179,17 @@ fn producer_replacement_rejects_original_token_and_cannot_transfer_or_replay_inv
         // The vacated local slot can be reused only by an explicit new invocation.
         let new = runtime
             .calls
-            .invoke_action(
-                &runtime.association,
-                payload(b"12"),
-                Deadline::NONE,
-                now(),
-                &mut budget(),
-            )
+            .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
             .ok()
             .unwrap();
         assert_ne!(new.identity().unwrap(), old_identity);
-        assert!(old.request_cancel(now(), &mut budget()).is_err());
+        assert!(old.request_cancel(now()).is_err());
         producer.drive(&new, ConsumerActionState::Pending).await;
         producer.counts.complete.set(true);
-        new.query(now(), &mut budget()).unwrap();
+        new.query(now()).unwrap();
         producer.drive(&new, ConsumerActionState::Completed).await;
-        new.request_cancel(now(), &mut budget()).unwrap_err();
-        assert!(
-            new.take_settlement(now(), &mut budget())
-                .unwrap()
-                .result()
-                .is_ok()
-        );
+        new.request_cancel(now()).unwrap_err();
+        assert!(new.take_settlement(now()).unwrap().result().is_ok());
         old_counts.complete.set(true);
         let native = old_exposure
             .participant_mut::<HttpActionRuntime>(0)
@@ -1245,6 +1209,7 @@ fn producer_replacement_rejects_original_token_and_cannot_transfer_or_replay_inv
             .retire(&mut producer.owner, &mut budget())
             .unwrap();
         drop(old_exposure);
+        drop(old_identity);
         drop(s);
         drop(old);
         drop(new);
@@ -1275,28 +1240,22 @@ fn absent_controls_are_unsupported_and_never_synthesized() {
         );
         let h = runtime
             .calls
-            .invoke_action(
-                &runtime.association,
-                payload(b"12"),
-                Deadline::NONE,
-                now(),
-                &mut budget(),
-            )
+            .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
             .ok()
             .unwrap();
         producer.drive(&h, ConsumerActionState::Pending).await;
         assert!(matches!(
-            h.query(now(), &mut budget()),
+            h.query(now()),
             Err(CoreError::UnsupportedOperation(_))
         ));
         assert!(matches!(
-            h.request_cancel(now(), &mut budget()),
+            h.request_cancel(now()),
             Err(CoreError::UnsupportedOperation(_))
         ));
         h.cancel_local();
         producer.drive(&h, ConsumerActionState::Closed).await;
         assert_eq!(producer.counts.cancelled.get(), 0);
-        drop(h.take_settlement(now(), &mut budget()).unwrap());
+        drop(h.take_settlement(now()).unwrap());
         drop(h);
         drop(runtime);
         drop(owner);
@@ -1346,27 +1305,20 @@ fn malformed_native_acceptance_and_framing_never_grant_completion_or_replay() {
             );
             let h = runtime
                 .calls
-                .invoke_action(
-                    &runtime.association,
-                    payload(b"12"),
-                    Deadline::NONE,
-                    now(),
-                    &mut budget(),
-                )
+                .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
                 .ok()
                 .unwrap();
             for _ in 0..1000 {
-                if h.progress(&mut cx(), now(), &mut budget()).unwrap()
-                    == ConsumerActionState::Closed
-                {
+                h.progress(&mut cx(), now()).unwrap();
+                if h.state().unwrap() == ConsumerActionState::Closed {
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
-            let s = h.take_settlement(now(), &mut budget()).unwrap();
+            let s = h.take_settlement(now()).unwrap();
             assert!(s.result().is_err());
             assert_eq!(s.effect(), ConsumerEffect::Unknown);
-            assert!(h.query(now(), &mut budget()).is_err());
+            assert!(h.query(now()).is_err());
             drop(s);
             drop(h);
             drop(runtime);
@@ -1445,33 +1397,23 @@ fn wire_location_cannot_replace_the_selected_query_form() {
         );
         let h = runtime
             .calls
-            .invoke_action(
-                &runtime.association,
-                payload(b"12"),
-                Deadline::NONE,
-                now(),
-                &mut budget(),
-            )
+            .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
             .ok()
             .unwrap();
         for expected in [ConsumerActionState::Pending, ConsumerActionState::Completed] {
             for _ in 0..1000 {
-                if h.progress(&mut cx(), now(), &mut budget()).unwrap() == expected {
+                h.progress(&mut cx(), now()).unwrap();
+                if h.state().unwrap() == expected {
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
             assert_eq!(h.state().unwrap(), expected);
             if expected == ConsumerActionState::Pending {
-                h.query(now(), &mut budget()).unwrap();
+                h.query(now()).unwrap();
             }
         }
-        assert!(
-            h.take_settlement(now(), &mut budget())
-                .unwrap()
-                .result()
-                .is_ok()
-        );
+        assert!(h.take_settlement(now()).unwrap().result().is_ok());
         drop(h);
         drop(runtime);
         drop(owner);
@@ -1506,13 +1448,12 @@ fn unread_completion_remains_revocable_until_settlement_handoff() {
                         payload(b"12"),
                         Deadline::at(MonotonicInstant::new(ClockId::new(1), 1)),
                         now(),
-                        &mut budget(),
                     )
                     .ok()
                     .unwrap();
                 producer.drive(&h, ConsumerActionState::Pending).await;
                 producer.counts.complete.set(true);
-                h.query(now(), &mut budget()).unwrap();
+                h.query(now()).unwrap();
                 producer.drive(&h, ConsumerActionState::Completed).await;
                 match cause {
                     0 => owner.revoke(),
@@ -1530,9 +1471,9 @@ fn unread_completion_remains_revocable_until_settlement_handoff() {
                     _ => now(),
                 };
                 if progress_before_handoff {
-                    h.progress(&mut cx(), time, &mut budget()).unwrap();
+                    h.progress(&mut cx(), time).unwrap();
                 }
-                let s = h.take_settlement(time, &mut budget()).unwrap();
+                let s = h.take_settlement(time).unwrap();
                 assert!(
                     s.result().is_err(),
                     "unread completion escaped cause {cause}"
@@ -1570,7 +1511,7 @@ fn unread_completion_remains_revocable_until_settlement_handoff() {
 }
 
 #[test]
-fn unread_success_requires_paid_fresh_handoff_and_keeps_its_slot_on_short_credit() {
+fn unread_success_handoffs_under_shared_quota_pressure_with_fresh_permission() {
     io().block_on(async {
         for deny_handoff in [false, true] {
             let mut producer = Producer::new();
@@ -1578,70 +1519,31 @@ fn unread_success_requires_paid_fresh_handoff_and_keeps_its_slot_on_short_credit
             let owner = instance();
             let p = Arc::new(Policy::default());
             let d = definition(&td(producer.address, None), b.clone(), p.clone(), true).unwrap();
-            let selected = d.0.input().query.as_ref().unwrap();
-            let access_work = d.1.query.as_ref().unwrap().work();
-            let destination_work = selected.mapping.bounds().poll_work;
             let runtime = bind(d, &owner, b.clone(), 1);
             let h = runtime
                 .calls
-                .invoke_action(
-                    &runtime.association,
-                    payload(b"12"),
-                    Deadline::NONE,
-                    now(),
-                    &mut budget(),
-                )
+                .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
                 .ok()
                 .unwrap();
             producer.drive(&h, ConsumerActionState::Pending).await;
             producer.counts.complete.set(true);
-            h.query(now(), &mut budget()).unwrap();
+            h.query(now()).unwrap();
             producer.drive(&h, ConsumerActionState::Completed).await;
-            let before = b.account(ResourceKind::EngineLiveBytesGlobalMax).used();
             let access_calls = p.log.lock().unwrap().len();
             assert_eq!(p.validations.load(Ordering::Relaxed), 2);
+            let pressure = [
+                ResourceKind::BindingResponseBufferBytesGlobalMax,
+                ResourceKind::BindingPollTemporaryBytesGlobalMax,
+                ResourceKind::CleanupItemsMax,
+                ResourceKind::EngineLiveBytesGlobalMax,
+            ]
+            .map(|kind| {
+                let account = b.account(kind);
+                b.reserve(kind, account.limit() - account.used()).unwrap()
+            });
             p.denied.store(deny_handoff, Ordering::Relaxed);
-            assert!(matches!(
-                h.take_settlement(now(), &mut WorkBudget::new()),
-                Err(CoreError::Backpressure(_))
-            ));
-            for (class, required) in [
-                (WorkClass::ProviderProbes, access_work),
-                (WorkClass::BindingPolls, destination_work),
-                (WorkClass::CleanupItems, 1),
-            ] {
-                let mut short = budget();
-                short.set_remaining(class, required - 1);
-                assert!(matches!(
-                    h.take_settlement(now(), &mut short),
-                    Err(CoreError::Backpressure(_))
-                ));
-                assert_eq!(h.state().unwrap(), ConsumerActionState::Completed);
-                assert_eq!(p.log.lock().unwrap().len(), access_calls);
-                assert_eq!(
-                    b.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
-                    before
-                );
-                assert!(
-                    runtime
-                        .calls
-                        .invoke_action(
-                            &runtime.association,
-                            payload(b"12"),
-                            Deadline::NONE,
-                            now(),
-                            &mut budget()
-                        )
-                        .is_err()
-                );
-            }
-            // A completed value needs a fresh access check, not another codec
-            // callback or native exchange. Recent progress cannot cache permission.
-            let mut handoff = WorkBudget::new()
-                .with_remaining(WorkClass::ProviderProbes, access_work)
-                .with_remaining(WorkClass::BindingPolls, destination_work)
-                .with_remaining(WorkClass::CleanupItems, 1);
-            let s = h.take_settlement(now(), &mut handoff).unwrap();
+            let s = h.take_settlement(now()).unwrap();
+            drop(pressure);
             assert_eq!(p.log.lock().unwrap().len(), access_calls + 1);
             assert_eq!(p.validations.load(Ordering::Relaxed), 2);
             assert_eq!(s.result().is_err(), deny_handoff);
@@ -1649,7 +1551,7 @@ fn unread_success_requires_paid_fresh_handoff_and_keeps_its_slot_on_short_credit
                 assert!(matches!(s.first_cause(), Some(CoreError::Security { .. })));
             }
             assert!(s.native_result().unwrap().is_ok());
-            assert!(h.take_settlement(now(), &mut budget()).is_err());
+            assert!(h.take_settlement(now()).is_err());
             owner.revoke();
             drop(h);
             drop(runtime);
@@ -1664,6 +1566,98 @@ fn unread_success_requires_paid_fresh_handoff_and_keeps_its_slot_on_short_credit
             clean(&b);
             producer.finish();
         }
+    });
+}
+
+#[test]
+fn held_query_result_uses_the_last_response_quota_while_cancel_remains_available() {
+    io().block_on(async {
+        let mut producer = Producer::new();
+        let config = HttpConsumerConfig::for_cleartext_ip().unwrap();
+        let query =
+            HttpActionConsumer::new(config, BindingId::new(80), BindingGeneration::INITIAL, 0)
+                .mapping(
+                    &format!("http://{}/status{{?id}}", producer.address),
+                    Operation::QueryAction,
+                )
+                .unwrap();
+        let response_bytes = query.bounds().response_bytes;
+        let mut limits = limits();
+        let response_quota = ResourceKind::BindingResponseBufferBytesGlobalMax;
+        assert!(limits.set(response_quota, Some(response_bytes)));
+        let bank = Arc::new(HostResourceAccounts::new(&limits));
+        let owner = instance();
+        let policy = Arc::new(Policy::default());
+        let runtime = client(
+            &td(producer.address, None),
+            bank.clone(),
+            policy.clone(),
+            &owner,
+            false,
+            1,
+        );
+        let invoke = || {
+            runtime
+                .calls
+                .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
+                .ok()
+                .unwrap()
+        };
+        let first = invoke();
+        producer.drive(&first, ConsumerActionState::Pending).await;
+        producer.counts.complete.set(true);
+        producer.step();
+        first.query(now()).unwrap();
+        producer.drive(&first, ConsumerActionState::Completed).await;
+        let held = first.take_settlement(now()).unwrap();
+        drop(first);
+        assert_eq!(bank.account(response_quota).used(), response_bytes);
+        assert_eq!(
+            bank.account(ResourceKind::BindingPollTemporaryBytesGlobalMax)
+                .used(),
+            0
+        );
+
+        producer.counts.complete.set(false);
+        let next = invoke();
+        producer.drive(&next, ConsumerActionState::Pending).await;
+        let checks = policy.log.lock().unwrap().len();
+        assert!(matches!(
+            next.query(now()),
+            Err(CoreError::LimitExceeded { resource, observed: Some(used), .. })
+                if resource == response_quota && used == response_bytes
+        ));
+        assert_eq!(policy.log.lock().unwrap().len(), checks);
+        assert_eq!(next.state().unwrap(), ConsumerActionState::Pending);
+        next.request_cancel(now()).unwrap();
+        producer.drive(&next, ConsumerActionState::Pending).await;
+        assert_eq!(
+            next.remote_cancellation().unwrap(),
+            ConsumerActionCancellation::Requested
+        );
+        assert_eq!(held.result().unwrap().data().unwrap().body, b"24");
+        drop(held);
+        assert_eq!(bank.account(response_quota).used(), 0);
+
+        producer.counts.complete.set(true);
+        for _ in 0..2 {
+            producer.step();
+        }
+        next.query(now()).unwrap();
+        producer.drive(&next, ConsumerActionState::Completed).await;
+        assert_eq!(
+            next.take_settlement(now())
+                .unwrap()
+                .result()
+                .unwrap()
+                .data()
+                .unwrap()
+                .body,
+            b"24"
+        );
+        drop((next, runtime, owner));
+        clean(&bank);
+        producer.finish();
     });
 }
 
@@ -1686,7 +1680,6 @@ impl ConsumerActionMapping for RetirementMapping {
     fn bounds(&self) -> ConsumerActionBounds {
         let mut b = self.original.bounds();
         b.exchange_bytes += std::mem::size_of::<RetirementExchange>() as u64;
-        b.poll_work += 16;
         b
     }
     fn native_definition(&self) -> &dyn Any {
@@ -1700,11 +1693,12 @@ impl ConsumerActionMapping for RetirementMapping {
     }
     fn start(
         &self,
+        destination: &str,
         input: Option<&Payload>,
         continuation: Option<&dyn Any>,
     ) -> CoreResult<Box<dyn ConsumerActionExchange>> {
         Ok(Box::new(RetirementExchange {
-            original: self.original.start(input, continuation)?,
+            original: self.original.start(destination, input, continuation)?,
             reply: None,
             polled: false,
             probe: self.probe.clone(),
@@ -1762,7 +1756,7 @@ fn query_poll_error() -> CoreError {
     )
 }
 #[test]
-fn poll_error_preserves_and_validates_actual_http_output_arriving_during_retirement() {
+fn poll_error_preserves_raw_http_output_arriving_during_retirement() {
     io().block_on(async {
         for (structured, invalid_output) in
             [(false, false), (false, true), (true, false), (true, true)]
@@ -1813,7 +1807,6 @@ fn poll_error_preserves_and_validates_actual_http_output_arriving_during_retirem
                     payload(if structured { STRUCTURED_INPUT } else { b"12" }),
                     Deadline::NONE,
                     now(),
-                    &mut budget(),
                 )
                 .ok()
                 .unwrap();
@@ -1822,24 +1815,23 @@ fn poll_error_preserves_and_validates_actual_http_output_arriving_during_retirem
             p.reject_output
                 .store(invalid_output && !structured, Ordering::Relaxed);
             probe.blocked.store(true, Ordering::Relaxed);
-            h.query(now(), &mut budget()).unwrap();
-            h.progress(&mut cx(), now(), &mut budget()).unwrap();
-            assert!(h.take_settlement(now(), &mut budget()).is_err());
+            h.query(now()).unwrap();
+            h.progress(&mut cx(), now()).unwrap();
+            assert!(h.take_settlement(now()).is_err());
             assert!(b.account(ResourceKind::CleanupBytesMax).used() > 0);
             assert_eq!(h.first_cause().unwrap(), Some(query_poll_error()));
             if structured {
                 owner.revoke();
             }
             h.cancel_local();
-            h.progress(&mut cx(), now(), &mut WorkBudget::new())
-                .unwrap();
+            h.progress(&mut cx(), now()).unwrap();
             assert_eq!(probe.late_replies.load(Ordering::Relaxed), 0);
             probe.blocked.store(false, Ordering::Relaxed);
             producer.drive(&h, ConsumerActionState::Closed).await;
-            let s = h.take_settlement(now(), &mut budget()).unwrap();
+            let s = h.take_settlement(now()).unwrap();
             assert_eq!(s.first_cause(), Some(&query_poll_error()));
             assert_eq!(s.native_error(), Some(&query_poll_error()));
-            assert_eq!(p.validations.load(Ordering::Relaxed), 2);
+            assert_eq!(p.validations.load(Ordering::Relaxed), 1);
             assert_eq!(
                 s.native_result()
                     .unwrap()
@@ -1851,7 +1843,7 @@ fn poll_error_preserves_and_validates_actual_http_output_arriving_during_retirem
                 if structured { STRUCTURED_OUTPUT } else { b"24" }
             );
             assert!(s.native_result().unwrap().is_ok(), "late output was lost");
-            assert_eq!(s.validation_error().is_some(), invalid_output);
+            assert!(s.validation_error().is_none());
             assert!(s.result().is_err());
             assert_eq!(probe.late_replies.load(Ordering::Relaxed), 1);
             assert_eq!(producer.counts.invoked.get(), 1);
@@ -1903,7 +1895,6 @@ impl ConsumerActionMapping for CallbackMapping {
     fn bounds(&self) -> ConsumerActionBounds {
         let mut b = self.0.bounds();
         b.exchange_bytes += std::mem::size_of::<CallbackExchange>() as u64;
-        b.poll_work += 16;
         b
     }
     fn native_definition(&self) -> &dyn Any {
@@ -1917,12 +1908,15 @@ impl ConsumerActionMapping for CallbackMapping {
     }
     fn start(
         &self,
+        destination: &str,
         input: Option<&Payload>,
         continuation: Option<&dyn Any>,
     ) -> CoreResult<Box<dyn ConsumerActionExchange>> {
-        Ok(Box::new(CallbackExchange(
-            self.0.start(input, continuation)?,
-        )))
+        Ok(Box::new(CallbackExchange(self.0.start(
+            destination,
+            input,
+            continuation,
+        )?)))
     }
 }
 struct CallbackExchange(Box<dyn ConsumerActionExchange>);
@@ -1982,19 +1976,13 @@ fn actual_http_action_callbacks_reenter_original_owner_and_retain_fenced_complet
             let h = Rc::new(
                 runtime
                     .calls
-                    .invoke_action(
-                        &runtime.association,
-                        payload(b"12"),
-                        Deadline::NONE,
-                        now(),
-                        &mut budget(),
-                    )
+                    .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
                     .ok()
                     .unwrap(),
             );
             producer.drive(&h, ConsumerActionState::Pending).await;
             producer.counts.complete.set(true);
-            h.query(now(), &mut budget()).unwrap();
+            h.query(now()).unwrap();
             if edge == CallbackEdge::Access {
                 producer.drive(&h, ConsumerActionState::Completed).await;
             }
@@ -2003,12 +1991,9 @@ fn actual_http_action_callbacks_reenter_original_owner_and_retain_fenced_complet
             on_callback(edge, move || {
                 assert!(!rt.calls.is_idle());
                 assert!(nested.identity().is_ok());
+                assert!(matches!(nested.query(now()), Err(CoreError::Lifecycle(_))));
                 assert!(matches!(
-                    nested.query(now(), &mut budget()),
-                    Err(CoreError::Lifecycle(_))
-                ));
-                assert!(matches!(
-                    nested.take_settlement(now(), &mut budget()),
+                    nested.take_settlement(now()),
                     Err(CoreError::Lifecycle(_))
                 ));
                 if edge == CallbackEdge::Access || edge == CallbackEdge::Close {
@@ -2017,14 +2002,14 @@ fn actual_http_action_callbacks_reenter_original_owner_and_retain_fenced_complet
                     nested.cancel_local();
                 }
                 assert!(matches!(
-                    rt.calls.step(&mut cx(), now(), &mut budget()),
+                    rt.calls.step(&mut cx(), now()),
                     Err(CoreError::Lifecycle(_))
                 ));
             });
             if edge != CallbackEdge::Access {
                 producer.drive(&h, ConsumerActionState::Closed).await;
             }
-            let s = h.take_settlement(now(), &mut budget()).unwrap();
+            let s = h.take_settlement(now()).unwrap();
             CALLBACK.with(|h| assert!(h.borrow().is_none()));
             if edge == CallbackEdge::Access || edge == CallbackEdge::Close {
                 assert!(matches!(s.result(), Err(CoreError::StaleHandle(_))));
@@ -2047,7 +2032,14 @@ fn actual_http_action_callbacks_reenter_original_owner_and_retain_fenced_complet
                     .body,
                 b"24"
             );
-            assert_eq!(p.validations.load(Ordering::Relaxed), 2);
+            assert_eq!(
+                p.validations.load(Ordering::Relaxed),
+                if matches!(edge, CallbackEdge::Close | CallbackEdge::Poll) {
+                    1
+                } else {
+                    2
+                }
+            );
             assert_eq!(producer.counts.invoked.get(), 1);
             drop(h);
             drop(runtime);
@@ -2107,20 +2099,19 @@ fn automatic_action_selects_the_compatible_query_in_both_form_orders() {
                 producer.counts.complete.set(false);
                 let h = runtime
                     .calls
-                    .invoke_action(
-                        &runtime.association,
-                        payload(b"12"),
-                        Deadline::NONE,
-                        now(),
-                        &mut budget(),
-                    )
+                    .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
                     .ok()
                     .unwrap();
                 producer.drive(&h, ConsumerActionState::Pending).await;
                 producer.counts.complete.set(true);
-                h.query(now(), &mut budget()).unwrap();
+                // All four invocations can remain in the Producer's retained store.
+                // Give its round-robin progression an opportunity before asking for completion.
+                for _ in 0..4 {
+                    producer.step();
+                }
+                h.query(now()).unwrap();
                 producer.drive(&h, ConsumerActionState::Completed).await;
-                let outcome = h.take_settlement(now(), &mut budget()).unwrap();
+                let outcome = h.take_settlement(now()).unwrap();
                 assert_eq!(
                     outcome.selected_form(Operation::QueryAction),
                     Some((definition_identity(90), good_index))

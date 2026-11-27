@@ -253,7 +253,6 @@ impl ConsumerActionRegistry {
             query: take(1),
             cancel: take(2),
             schemas,
-            bank: admission.bank.clone(),
             funding: ::core::mem::take(&mut search.funding),
         };
         drop(search);
@@ -311,18 +310,22 @@ impl ConsumerActionRegistry {
             }
             r.services.check_backing()?;
             let policy = r.services.data.policy();
+            let data_revision = r.services.data.qualification_revision();
             let access_work = r.services.access.work();
             let revision = r.services.access.qualification_revision();
             let content_type = r.services.data.content_type();
             let b = r.preparation.bounds();
-            if b.work == 0 || policy.validation_work == 0 || access_work == 0 {
+            if b.work == 0 || access_work == 0 {
                 return Err(invalid());
             }
             let current = || {
                 r.services.check_backing()?;
+                let current_data = r.services.data.policy();
                 if r.preparation.identity() != id
                     || r.preparation.bounds() != b
-                    || r.services.data.policy() != policy
+                    || current_data.body_bytes != policy.body_bytes
+                    || current_data.temporary_bytes != policy.temporary_bytes
+                    || r.services.data.qualification_revision() != data_revision
                     || !r.services.data.available()
                     || r.services.data.content_type() != content_type
                     || !action_data_supported(operation, schemas, r.services.data.service())
@@ -426,7 +429,8 @@ impl ConsumerActionRegistry {
                 endpoint: endpoint.into(),
                 form,
                 data: r.services.data.clone(),
-                data_policy: policy,
+                body_bytes: policy.body_bytes,
+                validation_scratch_bytes: policy.temporary_bytes,
                 content_type: content_type.into(),
                 identity: id,
                 operation,

@@ -1,8 +1,17 @@
 //! Consumer counterpart of the qualified Producer's documented native mapping.
 //! Tokens, template expansion, framing and status conversion stay entirely here.
 use super::*;
-use clinkz_wot_core::consumer_action::*;
-use std::{any::Any, future::poll_fn, io::ErrorKind};
+use clinkz_wot_core::{artifact::try_box, consumer_action::*};
+use std::{
+    any::Any,
+    future::poll_fn,
+    io::{ErrorKind, Write},
+};
+
+const BODY_LIMIT: usize = 4096;
+const MESSAGE_LIMIT: usize = 16_384;
+const TOKEN_LIMIT: usize = 27;
+const IO_CHUNK: usize = 4096;
 
 #[derive(Clone)]
 pub struct HttpActionConsumer {
@@ -67,7 +76,13 @@ struct Mapping {
 /// mapping identity is retained independently of an exchange's correlation.
 struct Continuation {
     address: SocketAddr,
-    token: Box<str>,
+    token: [u8; TOKEN_LIMIT],
+    len: usize,
+}
+impl Continuation {
+    fn token(&self) -> &str {
+        std::str::from_utf8(&self.token[..self.len]).expect("checked HTTP Action token")
+    }
 }
 impl Mapping {
     fn continuation<'a>(&self, c: Option<&'a dyn Any>) -> CoreResult<&'a Continuation> {
@@ -93,9 +108,16 @@ impl ConsumerActionMapping for Mapping {
         ConsumerActionBounds {
             exchange_bytes: 32768,
             temporary_bytes: 32768,
-            continuation_bytes: 512,
-            response_bytes: 8192,
-            poll_work: 32768,
+            continuation_bytes: if self.operation == Operation::InvokeAction {
+                std::mem::size_of::<Continuation>() as u64
+            } else {
+                0
+            },
+            response_bytes: if self.operation == Operation::QueryAction {
+                (BODY_LIMIT + std::mem::size_of::<ConsumerActionOutput>()) as u64
+            } else {
+                0
+            },
         }
     }
     fn native_definition(&self) -> &dyn Any {
@@ -119,38 +141,41 @@ impl ConsumerActionMapping for Mapping {
             Ok(format!("http://{}{}", self.address, self.path).into())
         } else {
             let c = self.continuation(continuation)?;
-            Ok(format!("http://{}{}?id={}", self.address, self.path, c.token).into())
+            Ok(format!("http://{}{}?id={}", self.address, self.path, c.token()).into())
         }
     }
     fn start(
         &self,
+        destination: &str,
         input: Option<&Payload>,
         continuation: Option<&dyn Any>,
     ) -> CoreResult<Box<dyn ConsumerActionExchange>> {
         let handle = transport::runtime()?;
-        let destination = self.destination(continuation)?;
-        let target = Target {
-            address: self.address,
-            uri: destination.parse().map_err(|_| invalid())?,
-        };
-        if self.operation != Operation::InvokeAction && input.is_some() {
+        let target = Target::parse(destination)?;
+        if target.address != self.address
+            || (self.operation != Operation::InvokeAction && input.is_some())
+        {
+            return Err(invalid());
+        }
+        let path = target.uri.path_and_query().ok_or_else(invalid)?;
+        if self.operation == Operation::InvokeAction {
+            if path.as_str() != &*self.path || continuation.is_some() {
+                return Err(invalid());
+            }
+        } else if path.path() != &*self.path
+            || path.query().and_then(|q| q.strip_prefix("id="))
+                != Some(self.continuation(continuation)?.token())
+        {
             return Err(invalid());
         }
         if input.is_some_and(|p| {
-            p.body.len() > 4096
+            p.body.len() > BODY_LIMIT
                 || p.content_type != "application/json"
                 || p.content_coding.is_some()
         }) {
             return Err(invalid());
         }
-        if self
-            .registration
-            .busy
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-        {
-            return Err(CoreError::Backpressure(context()));
-        }
+        let occupancy = Occupancy::claim(&self.registration.busy)?;
         let method = match self.operation {
             Operation::InvokeAction => "POST",
             Operation::QueryAction => "GET",
@@ -162,33 +187,83 @@ impl ConsumerActionMapping for Mapping {
         } else {
             "Content-Type: application/json\r\n"
         };
-        let mut request = format!("{method} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n{media}Content-Length: {}\r\n\r\n",
-            target.uri.path_and_query().unwrap().as_str(), self.address, body.len()).into_bytes();
+        // Reserve the complete wire and handoff buffers before the first socket
+        // poll. The successful reply moves its token or output out of this owner.
+        let mut request = buffer(body.len() + 512)?;
+        write!(request, "{method} {path} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n{media}Content-Length: {}\r\n\r\n",
+            self.address, body.len()).map_err(|_| invalid())?;
         request.extend_from_slice(body);
-        let allowance = Arc::new(AtomicUsize::new(0));
-        Ok(Box::new(Exchange {
-            future: Some(Box::pin(exchange(
-                target.address,
-                request,
-                self.operation,
-                allowance.clone(),
-            ))),
+        let backing = ReplyBacking {
+            bytes: buffer(MESSAGE_LIMIT)?,
+            output: if self.operation == Operation::QueryAction {
+                buffer(BODY_LIMIT)?
+            } else {
+                Vec::new()
+            },
+            continuation: if self.operation == Operation::InvokeAction {
+                Some(
+                    try_box(Continuation {
+                        address: self.address,
+                        token: [0; TOKEN_LIMIT],
+                        len: 0,
+                    })
+                    .map_err(|_| busy())?,
+                )
+            } else {
+                None
+            },
+        };
+        let io_available = Arc::new(AtomicBool::new(false));
+        let future = try_box(exchange(
+            target.address,
+            request,
+            self.operation,
+            io_available.clone(),
+            backing,
+        ))
+        .map_err(|_| busy())?;
+        Ok(try_box(Exchange {
+            future: Some(Box::into_pin(future)),
             handle,
-            allowance,
-            busy: self.registration.busy.clone(),
-        }))
+            io_available,
+            _occupancy: occupancy,
+        })
+        .map_err(|_| busy())?)
     }
+}
+fn buffer(bytes: usize) -> CoreResult<Vec<u8>> {
+    let mut buffer = Vec::new();
+    buffer.try_reserve_exact(bytes).map_err(|_| busy())?;
+    Ok(buffer)
+}
+struct Occupancy(Arc<AtomicBool>);
+impl Occupancy {
+    fn claim(busy: &Arc<AtomicBool>) -> CoreResult<Self> {
+        busy.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| CoreError::Backpressure(context()))?;
+        Ok(Self(busy.clone()))
+    }
+}
+impl Drop for Occupancy {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
+struct ReplyBacking {
+    bytes: Vec<u8>,
+    output: Vec<u8>,
+    continuation: Option<Box<Continuation>>,
 }
 type ExchangeFuture = Pin<Box<dyn Future<Output = CoreResult<ConsumerActionReply>>>>;
 struct Exchange {
     future: Option<ExchangeFuture>,
     handle: tokio::runtime::Handle,
-    allowance: Arc<AtomicUsize>,
-    busy: Arc<AtomicBool>,
+    io_available: Arc<AtomicBool>,
+    _occupancy: Occupancy,
 }
 impl ConsumerActionExchange for Exchange {
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<ConsumerActionReply>> {
-        self.allowance.store(4096, Ordering::Relaxed);
+        self.io_available.store(true, Ordering::Relaxed);
         let _entered = self.handle.enter();
         let result = self.future.as_mut().ok_or_else(invalid);
         match result {
@@ -210,18 +285,12 @@ impl ConsumerActionExchange for Exchange {
         drop(self);
     }
 }
-impl Drop for Exchange {
-    fn drop(&mut self) {
-        // Dispose the socket/future before making native capacity reusable.
-        self.future = None;
-        self.busy.store(false, Ordering::Release);
-    }
-}
 async fn exchange(
     address: SocketAddr,
     request: Vec<u8>,
     operation: Operation,
-    allowance: Arc<AtomicUsize>,
+    io_available: Arc<AtomicBool>,
+    mut backing: ReplyBacking,
 ) -> CoreResult<ConsumerActionReply> {
     let socket = tokio::net::TcpStream::connect(address)
         .await
@@ -229,23 +298,18 @@ async fn exchange(
     let mut written = 0;
     while written != request.len() {
         let n = poll_fn(|cx| {
-            let available = allowance
-                .load(Ordering::Relaxed)
-                .min(request.len() - written);
-            if available == 0 {
+            if !io_available.swap(false, Ordering::Relaxed) {
                 cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
+            let available = IO_CHUNK.min(request.len() - written);
             match socket.poll_write_ready(cx) {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(Err(_)) => Poll::Ready(Err(error(651, "HTTP Action write failed"))),
                 Poll::Ready(Ok(_)) => {
                     match socket.try_write(&request[written..written + available]) {
                         Ok(0) => Poll::Ready(Err(error(651, "HTTP Action write ended"))),
-                        Ok(n) => {
-                            allowance.fetch_sub(n, Ordering::Relaxed);
-                            Poll::Ready(Ok(n))
-                        }
+                        Ok(n) => Poll::Ready(Ok(n)),
                         Err(e) if e.kind() == ErrorKind::WouldBlock => {
                             cx.waker().wake_by_ref();
                             Poll::Pending
@@ -258,23 +322,20 @@ async fn exchange(
         .await?;
         written += n;
     }
-    let mut bytes = Vec::with_capacity(16384);
+    let bytes = &mut backing.bytes;
+    let mut header_complete = false;
     loop {
-        let mut scratch = [0u8; 4096];
+        let mut scratch = [0u8; IO_CHUNK];
         let n = poll_fn(|cx| {
-            let available = allowance.load(Ordering::Relaxed).min(scratch.len());
-            if available == 0 {
+            if !io_available.swap(false, Ordering::Relaxed) {
                 cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
             match socket.poll_read_ready(cx) {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(Err(_)) => Poll::Ready(Err(error(652, "HTTP Action read failed"))),
-                Poll::Ready(Ok(_)) => match socket.try_read(&mut scratch[..available]) {
-                    Ok(n) => {
-                        allowance.fetch_sub(n, Ordering::Relaxed);
-                        Poll::Ready(Ok(n))
-                    }
+                Poll::Ready(Ok(_)) => match socket.try_read(&mut scratch) {
+                    Ok(n) => Poll::Ready(Ok(n)),
                     Err(e) if e.kind() == ErrorKind::WouldBlock => {
                         cx.waker().wake_by_ref();
                         Poll::Pending
@@ -287,20 +348,23 @@ async fn exchange(
         if n == 0 {
             break;
         }
-        if n > 16384 - bytes.len() {
+        if n > MESSAGE_LIMIT - bytes.len() {
             return Err(invalid());
         }
         bytes.extend_from_slice(&scratch[..n]);
         // Reject malformed/oversized headers as soon as they are inspectable.
-        let mut headers = [httparse::EMPTY_HEADER; 16];
-        let mut response = httparse::Response::new(&mut headers);
-        match response.parse(&bytes).map_err(|_| invalid())? {
-            httparse::Status::Partial if bytes.len() >= 8192 => return Err(invalid()),
-            httparse::Status::Complete(end) if end > 8192 => return Err(invalid()),
-            _ => {}
+        if !header_complete {
+            let mut headers = [httparse::EMPTY_HEADER; 16];
+            let mut response = httparse::Response::new(&mut headers);
+            match response.parse(bytes).map_err(|_| invalid())? {
+                httparse::Status::Partial if bytes.len() >= 8192 => return Err(invalid()),
+                httparse::Status::Complete(end) if end <= 8192 => header_complete = true,
+                httparse::Status::Complete(_) => return Err(invalid()),
+                _ => {}
+            }
         }
     }
-    decode(&bytes, operation, address)
+    decode(backing, operation)
 }
 
 struct Envelope<'a> {
@@ -343,11 +407,8 @@ impl<'de> serde::Deserialize<'de> for Envelope<'de> {
         d.deserialize_map(Visitor)
     }
 }
-fn decode(
-    bytes: &[u8],
-    operation: Operation,
-    address: SocketAddr,
-) -> CoreResult<ConsumerActionReply> {
+fn decode(mut backing: ReplyBacking, operation: Operation) -> CoreResult<ConsumerActionReply> {
+    let bytes = &backing.bytes;
     let mut headers = [httparse::EMPTY_HEADER; 16];
     let mut response = httparse::Response::new(&mut headers);
     let end = match response.parse(bytes).map_err(|_| invalid())? {
@@ -407,20 +468,20 @@ fn decode(
     let envelope: Envelope<'_> = serde_json::from_slice(&bytes[end..]).map_err(|_| invalid())?;
     match (operation, envelope.status, envelope.id, envelope.output) {
         (Operation::InvokeAction, "accepted", Some(token), None) if valid_token(token) => {
-            Ok(ConsumerActionReply::Accepted(Box::new(Continuation {
-                address,
-                token: token.into(),
-            })))
+            let mut continuation = backing.continuation.take().ok_or_else(invalid)?;
+            continuation.token[..token.len()].copy_from_slice(token.as_bytes());
+            continuation.len = token.len();
+            Ok(ConsumerActionReply::Accepted(continuation))
         }
         (Operation::QueryAction, "running", None, None) => Ok(ConsumerActionReply::Pending),
         (Operation::QueryAction, "completed", None, output) => {
             let output = match output {
-                Some(raw) if raw.get().len() <= 4096 => InteractionOutput::with_data(Payload::new(
-                    raw.get().as_bytes().to_vec(),
-                    "application/json",
-                )),
+                Some(raw) if raw.get().len() <= BODY_LIMIT => {
+                    backing.output.extend_from_slice(raw.get().as_bytes());
+                    ConsumerActionOutput::buffered(backing.output, "application/json")
+                }
                 Some(_) => return Err(invalid()),
-                None => InteractionOutput::empty(),
+                None => InteractionOutput::empty().into(),
             };
             Ok(ConsumerActionReply::Complete(output))
         }
@@ -468,6 +529,9 @@ fn context() -> ErrorContext {
 }
 fn invalid() -> CoreError {
     CoreError::Validation(context())
+}
+fn busy() -> CoreError {
+    CoreError::Backpressure(context())
 }
 fn unsupported() -> CoreError {
     CoreError::UnsupportedOperation(context())

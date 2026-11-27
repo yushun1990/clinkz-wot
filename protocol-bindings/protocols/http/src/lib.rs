@@ -763,6 +763,24 @@ impl HttpConsumerConfig {
     }
 }
 struct HttpConsumerData;
+impl clinkz_wot_core::execution::ValueValidator for HttpConsumerData {
+    fn content_type(&self) -> &str {
+        "application/json"
+    }
+    fn supports(&self, _: &clinkz_wot_core::data_schema::PreparedSchema) -> bool {
+        true
+    }
+    fn body_bytes(&self) -> usize {
+        BODY as usize
+    }
+    fn validate(
+        &self,
+        schema: &clinkz_wot_core::data_schema::PreparedSchema,
+        payload: PayloadView<'_>,
+    ) -> CoreResult<()> {
+        crate::producer_validation::validate_json(schema, payload.body)
+    }
+}
 impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
     fn qualification_revision(&self) -> u64 {
         0
@@ -770,6 +788,9 @@ impl clinkz_wot_core::consumer::ConsumerDataService for HttpConsumerData {
 
     fn supports_schema(&self, _: &clinkz_wot_core::data_schema::PreparedSchema) -> bool {
         true
+    }
+    fn action_validator(&self) -> Option<&dyn clinkz_wot_core::execution::ValueValidator> {
+        Some(self)
     }
     fn content_type(&self) -> &str {
         "application/json"

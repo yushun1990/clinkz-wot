@@ -77,7 +77,6 @@ fn main() {
         Rc::new(definition),
         access,
         bank.clone(),
-        &mut work(),
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
     drop(services);
@@ -97,21 +96,20 @@ fn main() {
                 input,
                 Deadline::at(now().checked_add_ticks(10_000).unwrap()),
                 now(),
-                &mut work(),
             )
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let mut cancel_sent = false;
         loop {
-            match handle
-                .progress(&mut Context::from_waker(Waker::noop()), now(), &mut work())
-                .unwrap()
-            {
+            handle
+                .progress(&mut Context::from_waker(Waker::noop()), now())
+                .unwrap();
+            match handle.state().unwrap() {
                 ConsumerActionState::Pending => {
                     if args.get(4).is_some_and(|arg| arg == "--cancel") && !cancel_sent {
-                        handle.request_cancel(now(), &mut work()).unwrap();
+                        handle.request_cancel(now()).unwrap();
                         cancel_sent = true;
                     } else {
-                        handle.query(now(), &mut work()).unwrap();
+                        handle.query(now()).unwrap();
                     }
                 }
                 ConsumerActionState::Completed
@@ -121,7 +119,7 @@ fn main() {
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        let settlement = handle.take_settlement(now(), &mut work()).unwrap();
+        let settlement = handle.take_settlement(now()).unwrap();
         eprintln!(
             "accepted={}, cancellation={:?}, effect={:?}",
             settlement.accepted(),

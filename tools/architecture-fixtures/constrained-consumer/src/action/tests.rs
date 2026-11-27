@@ -3,12 +3,9 @@ use clinkz_wot_core::execution::read::LocalConsumerInstance;
 use clinkz_wot_core::{
     AffordanceSite, ThingSlotId, data_schema::ValueSchemas, security::SecurityRequirement,
 };
-use clinkz_wot_foundation::{
-    ClockId, Generation, MonotonicInstant, ResourceAccount, ResourceKind, ResourceReservation,
-    SlotIndex, WorkBudget, WorkClass,
-};
+use clinkz_wot_foundation::{ClockId, Generation, MonotonicInstant, SlotIndex};
 use clinkz_wot_servient_finite::borrowed_action::{
-    ActionDefinition, ActionHandle, ActionSettlement, ActionSlot,
+    ActionDefinition, ActionHandle, ActionResultSlot, ActionSettlement, ActionSlot,
 };
 use std::{
     cell::RefCell,
@@ -34,13 +31,6 @@ static SCHEMAS: ValueSchemas = ValueSchemas {
 fn now(t: u64) -> MonotonicInstant {
     MonotonicInstant::new(ClockId::new(1), t)
 }
-fn budget() -> WorkBudget {
-    let mut b = WorkBudget::new();
-    for w in WorkClass::ALL {
-        b.set_remaining(w, 1000);
-    }
-    b
-}
 fn meaning() -> ValueExecution<'static> {
     ValueExecution::try_new(
         AffordanceSite::Action("measure"),
@@ -52,14 +42,6 @@ fn meaning() -> ValueExecution<'static> {
 }
 fn instance() -> LocalConsumerInstance {
     LocalConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL))
-}
-fn account() -> ResourceAccount {
-    ResourceAccount::new(
-        SlotIndex::new(1),
-        Generation::INITIAL,
-        ResourceKind::EngineLiveBytesGlobalMax,
-        100_000,
-    )
 }
 struct Peer {
     socket: UdpSocket,
@@ -111,22 +93,33 @@ impl TestDatagrams for Socket {
         }
     }
 }
-type Slot<'a> = ActionSlot<'a, Binding<'a, Socket>, Input<'a>>;
-type Settlement<'a> = ActionSettlement<'a, Binding<'a, Socket>, Input<'a>>;
-struct Case<'a> {
+type Slot<'a, 'native> = ActionSlot<'a, Binding<'native, Socket>, Input<'native>>;
+fn drive<B: ActionBinding, I: ActionInput>(slot: &mut ActionSlot<'_, B, I>, now: MonotonicInstant) {
+    let mut cx = Context::from_waker(core::task::Waker::noop());
+    for _ in 0..3 {
+        if slot.step(&mut cx, now).unwrap() != ActionTurn::Advanced {
+            return;
+        }
+    }
+}
+type Settlement<'a, 'native> = ActionSettlement<'a, Binding<'native, Socket>, Input<'native>>;
+struct Case<'a, 'native: 'a> {
     peer: &'a Peer,
-    stats: &'a Statistics,
+    stats: &'native Statistics,
     invoke_codec: &'a Codec<'a>,
     query_codec: &'a Codec<'a>,
     authority: &'a LocalConsumerInstance,
     invoke_access: &'a Permission<'a>,
     query_access: &'a Permission<'a>,
-    slot: Slot<'a>,
-    other: Slot<'a>,
-    funding: Option<ResourceReservation<'a>>,
-    other_funding: Option<ResourceReservation<'a>>,
+    slot: Slot<'a, 'native>,
+    other: Slot<'a, 'native>,
+    driving: &'a RefCell<()>,
+    definition: &'a ActionDefinition<'a, Program<'native>, u32>,
+    binding: &'a Binding<'native, Socket>,
+    result: &'a ActionResultSlot<Output<'native>>,
+    other_result: &'a ActionResultSlot<Output<'native>>,
 }
-impl<'a> Case<'a> {
+impl<'a, 'native: 'a> Case<'a, 'native> {
     fn start(&mut self) -> ActionHandle<'a> {
         self.slot
             .invoke(
@@ -134,19 +127,14 @@ impl<'a> Case<'a> {
                     body: b"7",
                     stats: self.stats,
                 }),
-                self.funding.take().unwrap(),
+                self.result,
                 Deadline::NONE,
                 now(1),
-                &mut budget(),
             )
             .unwrap_or_else(|_| panic!("admission"))
     }
     fn step(&mut self) {
-        self.slot.step(
-            &mut Context::from_waker(core::task::Waker::noop()),
-            now(1),
-            &mut budget(),
-        );
+        drive(&mut self.slot, now(1));
     }
     fn exchange(&mut self, expected: &[u8], reply: &[u8]) {
         self.step();
@@ -159,17 +147,20 @@ impl<'a> Case<'a> {
         assert_eq!(self.slot.state(h).unwrap(), ConsumerActionState::Pending);
         h
     }
-    fn finish(&mut self, h: ActionHandle<'a>) -> Settlement<'a> {
-        self.slot.take_settlement(h, now(1), &mut budget()).unwrap()
+    fn finish(&mut self, h: ActionHandle<'a>) -> Settlement<'a, 'native> {
+        if self.slot.state(h).unwrap() == ConsumerActionState::Closing {
+            self.step();
+        }
+        self.slot.take_settlement(h, now(1)).unwrap()
     }
     fn complete(&mut self) -> ActionHandle<'a> {
         let h = self.accept();
-        self.slot.query(h, now(1), &mut budget()).unwrap();
+        self.slot.query(h, now(1)).unwrap();
         self.exchange(&[b'Q', 7], b"O\x0042");
         h
     }
 }
-fn fixture_with(meaning: ValueExecution<'_>, f: impl FnOnce(Case<'_>)) {
+fn fixture_with(meaning: ValueExecution<'_>, f: impl FnOnce(Case<'_, '_>)) {
     let peer = Peer::new();
     let open = || peer.open();
     let stats = Statistics::default();
@@ -196,15 +187,7 @@ fn fixture_with(meaning: ValueExecution<'_>, f: impl FnOnce(Case<'_>)) {
         revoke_on_validate: Cell::new(false),
         authority: &authority,
     };
-    let definition = ActionDefinition::try_new(
-        meaning,
-        &binding,
-        &program,
-        4,
-        Some(&invoke_codec),
-        Some(&query_codec),
-    )
-    .unwrap();
+    let definition = ActionDefinition::try_new(meaning, &program, 4).unwrap();
     let select_after_validation = || {
         if (invoke_codec.number.validations.get() >= 2 || query_codec.number.validations.get() != 0)
             && let Some(variant) = stats.select_after_validation.get()
@@ -226,11 +209,31 @@ fn fixture_with(meaning: ValueExecution<'_>, f: impl FnOnce(Case<'_>)) {
         Some(&query_access as &dyn ActionAccess),
         Some(&cancel_access as &dyn ActionAccess),
     ];
-    let slot = Slot::try_new(&definition, authority.reference(), access).unwrap();
-    let other = Slot::try_new(&definition, other_authority.reference(), access).unwrap();
-    let mut bank = account();
-    let mut other_bank = account();
-    let bytes = slot.required_bytes(None).unwrap();
+    let driving = RefCell::new(());
+    let data = [
+        Some(&invoke_codec as &dyn ValueValidator),
+        Some(&query_codec as &dyn ValueValidator),
+    ];
+    let slot = Slot::bind(
+        &driving,
+        &definition,
+        &binding,
+        authority.reference(),
+        data,
+        access,
+    )
+    .unwrap();
+    let other = Slot::bind(
+        &driving,
+        &definition,
+        &binding,
+        other_authority.reference(),
+        data,
+        access,
+    )
+    .unwrap();
+    let result = ActionResultSlot::new();
+    let other_result = ActionResultSlot::new();
     f(Case {
         peer: &peer,
         stats: &stats,
@@ -241,47 +244,37 @@ fn fixture_with(meaning: ValueExecution<'_>, f: impl FnOnce(Case<'_>)) {
         query_access: &query_access,
         slot,
         other,
-        funding: Some(bank.try_reserve(bytes).unwrap()),
-        other_funding: Some(other_bank.try_reserve(bytes).unwrap()),
+        driving: &driving,
+        definition: &definition,
+        binding: &binding,
+        result: &result,
+        other_result: &other_result,
     });
-    assert_eq!(bank.used(), 0);
-    assert_eq!(other_bank.used(), 0);
     peer.released();
     assert_eq!(stats.starts.get(), stats.exchanges_dropped.get());
 }
-fn fixture(f: impl FnOnce(Case<'_>)) {
+fn fixture(f: impl FnOnce(Case<'_, '_>)) {
     fixture_with(meaning(), f);
 }
 
 #[test]
-fn native_evidence_inspection_requires_adapter_credit() {
+fn raw_evidence_adapter_uses_one_exclusive_turn_without_policy_or_validation() {
     fixture(|mut c| {
         let h = c.complete();
-        let mut s = c.finish(h);
+        let s = c.finish(h);
         let before = c.stats.output_views.get();
-        let mut zero = WorkBudget::new();
-        assert!(matches!(
-            s.result(&mut zero),
-            Err(CoreError::Backpressure(_))
-        ));
-        assert_eq!(c.stats.output_views.get(), before);
-        assert!(matches!(
-            s.native_result(&mut zero),
-            Err(CoreError::Backpressure(_))
-        ));
-        assert_eq!(
-            c.stats.output_views.get(),
-            before,
-            "unfunded native evidence inspection entered the adapter"
-        );
         let validations = c.query_codec.number.validations.get();
         let checks = c.query_access.checks.get();
         let polls = c.stats.polls.get();
         let closes = c.stats.closes.get();
         c.query_codec.number.available.set(false);
-        let mut one = WorkBudget::new().with_remaining(WorkClass::HandlerSteps, 1);
+        {
+            let _turn = c.driving.borrow_mut();
+            assert!(matches!(s.native_result(), Err(CoreError::Lifecycle(_))));
+            assert_eq!(c.stats.output_views.get(), before);
+        }
         assert_eq!(
-            s.native_result(&mut one)
+            s.native_result()
                 .unwrap()
                 .unwrap()
                 .unwrap()
@@ -290,59 +283,42 @@ fn native_evidence_inspection_requires_adapter_credit() {
                 .body,
             b"42"
         );
-        assert_eq!(one.remaining(WorkClass::HandlerSteps), 0);
-        assert_eq!(c.stats.output_views.get(), before + 1);
-        assert!(matches!(
-            s.native_result(&mut one),
-            Err(CoreError::Backpressure(_))
-        ));
         assert_eq!(c.stats.output_views.get(), before + 1);
         assert_eq!(c.query_codec.number.validations.get(), validations);
         assert_eq!(c.query_access.checks.get(), checks);
         assert_eq!(c.stats.polls.get(), polls);
         assert_eq!(c.stats.closes.get(), closes);
         assert!(s.first_cause().is_none());
-        assert!(s.validation_error().is_none());
         assert_eq!(c.stats.outputs_dropped.get(), 0);
-        assert_eq!(c.stats.tokens_dropped.get(), 0);
     });
 }
 
 #[test]
-fn input_owner_inspection_requires_adapter_credit() {
+fn input_owner_inspection_obeys_the_same_turn_boundary() {
     fixture(|mut c| {
         let h = c.complete();
         let s = c.finish(h);
         let before = c.stats.input_views.get();
-        assert!(matches!(
-            s.input(&mut WorkBudget::new()),
-            Err(CoreError::Backpressure(_))
-        ));
-        assert_eq!(
-            c.stats.input_views.get(),
-            before,
-            "unfunded input inspection entered the adapter"
-        );
         let validations = c.invoke_codec.number.validations.get();
-        let mut one = WorkBudget::new().with_remaining(WorkClass::HandlerSteps, 1);
-        assert_eq!(s.input(&mut one).unwrap().unwrap().body, b"7");
-        assert_eq!(one.remaining(WorkClass::HandlerSteps), 0);
-        assert_eq!(c.stats.input_views.get(), before + 1);
-        assert!(matches!(s.input(&mut one), Err(CoreError::Backpressure(_))));
+        {
+            let _turn = c.driving.borrow_mut();
+            assert!(matches!(s.input(), Err(CoreError::Lifecycle(_))));
+            assert_eq!(c.stats.input_views.get(), before);
+        }
+        assert_eq!(s.input().unwrap().unwrap().body, b"7");
         assert_eq!(c.stats.input_views.get(), before + 1);
         assert_eq!(c.invoke_codec.number.validations.get(), validations);
-        assert!(s.first_cause().is_none());
         assert_eq!(c.stats.inputs_dropped.get(), 0);
     });
 }
 
 #[test]
-fn absent_and_failed_native_dispositions_are_passive_at_zero_credit() {
+fn absent_and_failed_native_dispositions_call_no_view_adapter() {
     for failed in [false, true] {
         fixture(|mut c| {
             let h = if failed {
                 let h = c.accept();
-                c.slot.query(h, now(1), &mut budget()).unwrap();
+                c.slot.query(h, now(1)).unwrap();
                 c.exchange(&[b'Q', 7], b"F");
                 h
             } else {
@@ -353,21 +329,17 @@ fn absent_and_failed_native_dispositions_are_passive_at_zero_credit() {
             };
             let s = c.finish(h);
             let views = c.stats.output_views.get();
-            let mut zero = WorkBudget::new();
-            let observation = s.native_result(&mut zero).unwrap();
+            let observation = s.native_result().unwrap();
             if failed {
                 let error = observation.unwrap().unwrap_err();
                 assert!(matches!(error, CoreError::Binding(_)));
-                let again = s.native_result(&mut zero).unwrap().unwrap().unwrap_err();
+                let again = s.native_result().unwrap().unwrap().unwrap_err();
                 assert!(core::ptr::eq(error, again));
             } else {
                 assert!(observation.is_none());
                 assert!(matches!(s.first_cause(), Some(CoreError::Cancelled(_))));
             }
             assert_eq!(c.stats.output_views.get(), views);
-            for class in WorkClass::ALL {
-                assert_eq!(zero.remaining(class), 0);
-            }
         });
     }
 }
@@ -387,7 +359,7 @@ fn authorization_cannot_expose_output_selected_after_validation() {
                     c.stats.select_after_validation.set(Some(variant));
                 }
                 let h = c.accept();
-                c.slot.query(h, now(1), &mut budget()).unwrap();
+                c.slot.query(h, now(1)).unwrap();
                 c.exchange(&[b'Q', 7], b"O\x007");
                 assert_eq!(c.query_codec.number.validations.get(), 1);
                 if at_handoff {
@@ -397,7 +369,7 @@ fn authorization_cannot_expose_output_selected_after_validation() {
                 assert_eq!(c.slot.state(h).unwrap(), ConsumerActionState::Completed);
                 let mut s = c.finish(h);
                 assert_eq!(c.stats.output_variant.get(), variant);
-                let result = s.result(&mut budget());
+                let result = s.result();
                 assert!(
                     result.is_err(),
                     "unvalidated {variant:?} escaped application handoff: {:?}",
@@ -409,9 +381,9 @@ fn authorization_cannot_expose_output_selected_after_validation() {
                 assert!(s.validation_error().is_some());
                 assert!(matches!(s.first_cause(), Some(CoreError::Validation(_))));
                 assert_eq!(s.state(), ConsumerActionState::Closed);
-                assert!(s.native_result(&mut budget()).unwrap().unwrap().is_ok());
+                assert!(s.native_result().unwrap().unwrap().is_ok());
                 assert_eq!(c.stats.outputs_dropped.get(), 0);
-                assert_eq!(c.stats.tokens_dropped.get(), 0);
+                assert_eq!(c.stats.tokens_dropped.get(), 1);
                 drop(s);
                 assert_eq!(c.stats.outputs_dropped.get(), 1);
                 assert_eq!(c.stats.tokens_dropped.get(), 1);
@@ -424,14 +396,14 @@ fn authorization_cannot_expose_output_selected_after_validation() {
 fn result_loan_stays_valid_when_later_views_select_different_bytes() {
     fixture(|mut c| {
         let h = c.accept();
-        c.slot.query(h, now(1), &mut budget()).unwrap();
+        c.slot.query(h, now(1)).unwrap();
         c.exchange(&[b'Q', 7], b"O\x007");
         let mut s = c.finish(h);
         let checks = c.query_access.checks.get();
         let polls = c.stats.polls.get();
         let closes = c.stats.closes.get();
         {
-            let view = s.result(&mut budget()).unwrap();
+            let view = s.result().unwrap();
             c.stats.output_variant.set(OutputVariant::Bytes);
             // A changed selector cannot alter the exact loan already validated.
             assert_eq!(view.data().unwrap().body, b"7");
@@ -441,67 +413,43 @@ fn result_loan_stays_valid_when_later_views_select_different_bytes() {
             assert_eq!(view.metadata(), &InteractionOutputMetadata::default());
         }
         assert_eq!(c.query_codec.number.validations.get(), 2);
-        assert!(s.result(&mut budget()).is_err());
+        assert!(s.result().is_err());
         assert_eq!(c.query_codec.number.validations.get(), 3);
-        assert_eq!(c.query_access.checks.get(), checks);
+        assert_eq!(c.query_access.checks.get(), checks + 4);
         assert_eq!(c.stats.polls.get(), polls);
         assert_eq!(c.stats.closes.get(), closes);
         assert!(s.validation_error().is_some());
         let views = c.stats.output_views.get();
         c.stats.output_variant.set(OutputVariant::Original);
-        assert!(matches!(
-            s.result(&mut WorkBudget::new()),
-            Err(CoreError::Validation(_))
-        ));
+        assert!(matches!(s.result(), Err(CoreError::Validation(_))));
         assert_eq!(c.stats.output_views.get(), views);
         assert_eq!(c.query_codec.number.validations.get(), 3);
-        let bytes = c.slot.required_bytes(None).unwrap();
-        let lease = s.into_funding();
-        assert_eq!(lease.bytes(), bytes);
+        drop(s);
         assert_eq!(c.stats.outputs_dropped.get(), 1);
         assert_eq!(c.stats.tokens_dropped.get(), 1);
         assert_eq!(c.stats.inputs_dropped.get(), 1);
-        c.funding = Some(lease);
     });
 }
 
 #[test]
-fn result_loan_credit_is_separate_from_original_owner_and_permission_handoff() {
+fn new_result_loans_need_current_authority_and_existing_loans_stay_valid() {
     fixture(|mut c| {
-        let h = c.accept();
-        c.slot.query(h, now(1), &mut budget()).unwrap();
-        c.exchange(&[b'Q', 7], b"O\x007");
+        let h = c.complete();
         let mut s = c.finish(h);
         let views = c.stats.output_views.get();
         let checks = c.query_access.checks.get();
-        let work = c.query_codec.number.work();
-        for short in [WorkClass::HandlerSteps, WorkClass::CodecInputBytes] {
-            let mut allowance = WorkBudget::new()
-                .with_remaining(WorkClass::HandlerSteps, 1)
-                .with_remaining(WorkClass::CodecInputBytes, work);
-            allowance.set_remaining(short, 0);
-            assert!(matches!(
-                s.result(&mut allowance),
-                Err(CoreError::Backpressure(_))
-            ));
+        {
+            let _turn = c.driving.borrow_mut();
+            assert!(matches!(s.result(), Err(CoreError::Lifecycle(_))));
             assert_eq!(c.stats.output_views.get(), views);
+            assert_eq!(c.query_access.checks.get(), checks);
             assert_eq!(c.query_codec.number.validations.get(), 1);
-            assert_eq!(s.state(), ConsumerActionState::Completed);
             assert!(s.first_cause().is_none());
-            assert!(s.validation_error().is_none());
-            assert_eq!(c.stats.outputs_dropped.get(), 0);
         }
-        // Ownership permission already transferred. Revocation cannot retarget
-        // or retract it; this loan still needs its own data validation work.
+        let loan = s.result().unwrap();
         c.authority.revoke();
-        let mut allowance = WorkBudget::new()
-            .with_remaining(WorkClass::HandlerSteps, 1)
-            .with_remaining(WorkClass::CodecInputBytes, work);
-        assert_eq!(s.result(&mut allowance).unwrap().data().unwrap().body, b"7");
-        assert_eq!(allowance.remaining(WorkClass::HandlerSteps), 0);
-        assert_eq!(allowance.remaining(WorkClass::CodecInputBytes), 0);
-        assert_eq!(c.query_codec.number.validations.get(), 2);
-        assert_eq!(c.query_access.checks.get(), checks);
+        assert_eq!(loan.data().unwrap().body, b"42");
+        assert!(matches!(s.result(), Err(CoreError::StaleHandle(_))));
         assert!(c.slot.is_idle());
         assert_eq!(c.stats.outputs_dropped.get(), 0);
     });
@@ -511,15 +459,15 @@ fn result_loan_credit_is_separate_from_original_owner_and_permission_handoff() {
 fn accepted_owner_retains_native_output_when_loan_validation_service_is_unavailable() {
     fixture(|mut c| {
         let h = c.accept();
-        c.slot.query(h, now(1), &mut budget()).unwrap();
+        c.slot.query(h, now(1)).unwrap();
         c.exchange(&[b'Q', 7], b"O\x007");
         let mut s = c.finish(h);
         c.query_codec.number.available.set(false);
-        assert!(s.result(&mut budget()).is_err());
+        assert!(s.result().is_err());
         assert_eq!(c.query_codec.number.validations.get(), 1);
-        assert!(s.validation_error().is_some());
+        assert!(s.validation_error().is_none());
         assert_eq!(
-            s.native_result(&mut budget())
+            s.native_result()
                 .unwrap()
                 .unwrap()
                 .unwrap()
@@ -529,7 +477,7 @@ fn accepted_owner_retains_native_output_when_loan_validation_service_is_unavaila
             b"7"
         );
         assert_eq!(c.stats.outputs_dropped.get(), 0);
-        assert_eq!(c.stats.tokens_dropped.get(), 0);
+        assert_eq!(c.stats.tokens_dropped.get(), 1);
     });
 }
 
@@ -537,16 +485,16 @@ fn accepted_owner_retains_native_output_when_loan_validation_service_is_unavaila
 fn continuing_invoke_pending_query_cancel_then_completion_keeps_original_owners() {
     fixture(|mut c| {
         let h = c.accept();
-        c.slot.query(h, now(1), &mut budget()).unwrap();
+        c.slot.query(h, now(1)).unwrap();
         c.exchange(&[b'Q', 7], b"P");
-        c.slot.request_cancel(h, now(1), &mut budget()).unwrap();
+        c.slot.request_cancel(h, now(1)).unwrap();
         c.exchange(&[b'C', 7], b"C");
         // Retired Invoke data is no longer a dependency of Query's representation.
         c.invoke_codec.number.available.set(false);
-        c.slot.query(h, now(1), &mut budget()).unwrap();
+        c.slot.query(h, now(1)).unwrap();
         c.exchange(&[b'Q', 7], b"O\x0042");
         assert_eq!(c.slot.state(h).unwrap(), ConsumerActionState::Completed);
-        assert_eq!(c.stats.tokens_dropped.get(), 0);
+        assert_eq!(c.stats.tokens_dropped.get(), 1);
         assert_eq!(c.stats.inputs_dropped.get(), 0);
         let mut s = c.finish(h);
         assert!(s.accepted());
@@ -558,50 +506,37 @@ fn continuing_invoke_pending_query_cancel_then_completion_keeps_original_owners(
             s.remote_cancellation(),
             ConsumerActionCancellation::Requested
         );
-        assert_eq!(s.result(&mut budget()).unwrap().data().unwrap().body, b"42");
+        assert_eq!(s.result().unwrap().data().unwrap().body, b"42");
         assert_eq!(
-            s.result(&mut budget())
-                .unwrap()
-                .data()
-                .unwrap()
-                .content_type,
+            s.result().unwrap().data().unwrap().content_type,
             "text/x-test-number"
         );
-        assert_eq!(s.input(&mut budget()).unwrap().unwrap().body, b"7");
+        assert_eq!(s.input().unwrap().unwrap().body, b"7");
         assert_eq!(c.invoke_codec.number.validations.get(), 1);
         // Initial completion plus two separately validated application loans.
         assert_eq!(c.query_codec.number.validations.get(), 3);
-        let lease = s.into_funding();
-        c.funding = Some(lease);
+        drop(s);
         assert_eq!(c.stats.tokens_dropped.get(), 1);
         assert_eq!(c.stats.outputs_dropped.get(), 1);
         assert_eq!(c.stats.inputs_dropped.get(), 1);
         c.peer.released();
-        // Reusing the same slot and exact original reservation never revives h.
+        // Reusing the same slot never revives h.
         c.invoke_codec.number.available.set(true);
         let next = c.start();
         assert!(matches!(
-            c.slot.query(h, now(1), &mut budget()),
+            c.slot.query(h, now(1)),
             Err(CoreError::StaleHandle(_))
         ));
         c.exchange(b"I7", b"O\x0041");
-        assert_eq!(
-            c.finish(next)
-                .result(&mut budget())
-                .unwrap()
-                .data()
-                .unwrap()
-                .body,
-            b"41"
-        );
+        assert_eq!(c.finish(next).result().unwrap().data().unwrap().body, b"41");
     });
 }
 
 #[test]
-fn cancellation_retains_pending_failed_close_and_validated_late_output_after_revocation() {
+fn cancellation_retains_pending_failed_close_and_raw_late_output_after_revocation() {
     fixture(|mut c| {
         let h = c.accept();
-        c.slot.query(h, now(1), &mut budget()).unwrap();
+        c.slot.query(h, now(1)).unwrap();
         c.step();
         c.peer.last_open();
         c.slot.cancel_local(h).unwrap();
@@ -611,7 +546,7 @@ fn cancellation_retains_pending_failed_close_and_validated_late_output_after_rev
         c.step();
         assert_eq!(c.stats.polls.get(), polls);
         c.peer.last_open();
-        assert!(c.slot.take_settlement(h, now(1), &mut budget()).is_err());
+        assert!(c.slot.take_settlement(h, now(1)).is_err());
         c.stats.close_error.set(true);
         c.step();
         c.peer.last_open();
@@ -622,20 +557,14 @@ fn cancellation_retains_pending_failed_close_and_validated_late_output_after_rev
         assert!(matches!(s.first_cause(), Some(CoreError::Cancelled(_))));
         assert!(s.cleanup_error().is_some());
         assert!(s.native_error().is_none());
-        assert!(s.result(&mut budget()).is_err());
+        assert!(s.result().is_err());
         let views = c.stats.output_views.get();
-        assert!(matches!(
-            s.native_result(&mut WorkBudget::new()),
-            Err(CoreError::Backpressure(_))
-        ));
-        assert_eq!(c.stats.output_views.get(), views);
         assert!(matches!(s.first_cause(), Some(CoreError::Cancelled(_))));
         assert!(s.cleanup_error().is_some());
         assert_eq!(s.state(), ConsumerActionState::Closed);
         c.query_codec.number.available.set(false);
-        let mut evidence = WorkBudget::new().with_remaining(WorkClass::HandlerSteps, 1);
         assert_eq!(
-            s.native_result(&mut evidence)
+            s.native_result()
                 .unwrap()
                 .unwrap()
                 .unwrap()
@@ -644,11 +573,10 @@ fn cancellation_retains_pending_failed_close_and_validated_late_output_after_rev
                 .body,
             b"42"
         );
-        assert_eq!(evidence.remaining(WorkClass::HandlerSteps), 0);
         assert_eq!(c.stats.output_views.get(), views + 1);
-        assert_eq!(c.query_codec.number.validations.get(), 1);
+        assert_eq!(c.query_codec.number.validations.get(), 0);
         assert_eq!(c.stats.outputs_dropped.get(), 0);
-        assert_eq!(c.stats.tokens_dropped.get(), 0);
+        assert_eq!(c.stats.tokens_dropped.get(), 1);
         drop(s);
         assert_eq!(c.stats.outputs_dropped.get(), 1);
         assert_eq!(c.stats.tokens_dropped.get(), 1);
@@ -659,7 +587,7 @@ fn cancellation_retains_pending_failed_close_and_validated_late_output_after_rev
 fn poll_error_and_late_output_survive_repeated_physical_retirement_failure() {
     fixture(|mut c| {
         let h = c.accept();
-        c.slot.query(h, now(1), &mut budget()).unwrap();
+        c.slot.query(h, now(1)).unwrap();
         c.stats.poll_error_with_late.set(true);
         c.stats.close_blocked.set(true);
         c.exchange(&[b'Q', 7], b"O\x0042");
@@ -679,7 +607,7 @@ fn poll_error_and_late_output_survive_repeated_physical_retirement_failure() {
         assert!(s.cleanup_error().is_some());
         assert!(s.validation_error().is_none());
         assert_eq!(
-            s.native_result(&mut budget())
+            s.native_result()
                 .unwrap()
                 .unwrap()
                 .unwrap()
@@ -688,27 +616,46 @@ fn poll_error_and_late_output_survive_repeated_physical_retirement_failure() {
                 .body,
             b"42"
         );
-        assert_eq!(c.query_codec.number.validations.get(), 1);
+        assert_eq!(c.query_codec.number.validations.get(), 0);
     });
 }
 
 #[test]
-fn unread_completion_requires_fresh_permission_and_short_handoff_retains_slot() {
+fn unread_and_held_results_exclude_admission_and_keep_fresh_permission() {
     fixture(|mut c| {
         let h = c.complete();
         let validations = c.query_codec.number.validations.get();
-        assert!(
-            c.slot
-                .take_settlement(h, now(1), &mut WorkBudget::new())
-                .is_err()
-        );
+        // The result cell remains exclusive before and after owner handoff.
+        let denied = || {
+            Some(Input {
+                body: b"7",
+                stats: c.stats,
+            })
+        };
+        let (input, error) = c
+            .other
+            .invoke(denied(), c.result, Deadline::NONE, now(1))
+            .err()
+            .unwrap();
+        assert!(matches!(error, CoreError::Backpressure(_)));
         assert!(!c.slot.is_idle());
         c.query_access.denied.set(true);
         let mut s = c.finish(h);
+        let (input, error) = c
+            .other
+            .invoke(input, c.result, Deadline::NONE, now(1))
+            .err()
+            .unwrap();
+        assert!(matches!(error, CoreError::Backpressure(_)));
         assert!(matches!(s.first_cause(), Some(CoreError::Security { .. })));
-        assert!(s.result(&mut budget()).is_err());
-        assert!(s.native_result(&mut budget()).unwrap().unwrap().is_ok());
+        assert!(s.result().is_err());
+        assert!(s.native_result().unwrap().unwrap().is_ok());
         assert_eq!(c.query_codec.number.validations.get(), validations);
+        drop(s);
+        let _ = c
+            .other
+            .invoke(input, c.result, Deadline::NONE, now(1))
+            .unwrap_or_else(|_| panic!("result slot released"));
     });
 }
 
@@ -723,10 +670,9 @@ fn equal_slots_share_definition_without_sharing_authority_or_work() {
                     body: b"7",
                     stats: c.stats,
                 }),
-                c.other_funding.take().unwrap(),
+                c.other_result,
                 Deadline::NONE,
                 now(1),
-                &mut budget(),
             )
             .unwrap_or_else(|_| panic!());
         assert!(matches!(
@@ -737,22 +683,15 @@ fn equal_slots_share_definition_without_sharing_authority_or_work() {
         c.step();
         let mut old = c.finish(h);
         assert!(matches!(old.first_cause(), Some(CoreError::StaleHandle(_))));
-        let mut cx = Context::from_waker(core::task::Waker::noop());
-        c.other.step(&mut cx, now(1), &mut budget());
+        drive(&mut c.other, now(1));
         c.peer.respond(b"I7", b"O\x0042");
-        c.other.step(&mut cx, now(1), &mut budget());
-        let mut current = c
-            .other
-            .take_settlement(other, now(1), &mut budget())
-            .unwrap();
-        assert_eq!(
-            current.result(&mut budget()).unwrap().data().unwrap().body,
-            b"42"
-        );
-        assert!(old.result(&mut budget()).is_err());
+        drive(&mut c.other, now(1));
+        let mut current = c.other.take_settlement(other, now(1)).unwrap();
+        assert_eq!(current.result().unwrap().data().unwrap().body, b"42");
+        assert!(old.result().is_err());
         assert!(c.slot.is_idle());
-        // Retained old settlement still owns its original continuation/input.
-        assert_eq!(c.stats.tokens_dropped.get(), 0);
+        // The old result still owns its input after the continuation retires.
+        assert_eq!(c.stats.tokens_dropped.get(), 1);
         drop(current);
         drop(old);
         assert_eq!(c.stats.tokens_dropped.get(), 1);
@@ -760,15 +699,15 @@ fn equal_slots_share_definition_without_sharing_authority_or_work() {
 }
 
 #[test]
-fn unused_control_drift_and_prefight_refusal_do_not_revoke_original_pending_invocation() {
+fn unused_control_drift_and_preflight_refusal_do_not_revoke_original_pending_invocation() {
     fixture(|mut c| {
         let h = c.accept();
         let starts = c.stats.starts.get();
-        c.stats.query_work.set(1);
-        assert!(c.slot.query(h, now(1), &mut budget()).is_err());
+        c.stats.query_mapping_changed.set(true);
+        assert!(c.slot.query(h, now(1)).is_err());
         assert_eq!(c.stats.starts.get(), starts);
         assert_eq!(c.slot.state(h).unwrap(), ConsumerActionState::Pending);
-        c.slot.request_cancel(h, now(1), &mut budget()).unwrap();
+        c.slot.request_cancel(h, now(1)).unwrap();
         c.exchange(&[b'C', 7], b"T");
         c.slot.cancel_local(h).unwrap();
         let s = c.finish(h);
@@ -784,15 +723,15 @@ fn unused_control_drift_and_prefight_refusal_do_not_revoke_original_pending_invo
 fn unavailable_query_codec_refuses_late_value_without_reentering_service() {
     fixture(|mut c| {
         let h = c.accept();
-        c.slot.query(h, now(1), &mut budget()).unwrap();
+        c.slot.query(h, now(1)).unwrap();
         c.step();
         c.query_codec.number.available.set(false);
         c.peer.respond(&[b'Q', 7], b"O\x0042");
         c.step();
         let mut s = c.finish(h);
-        assert!(s.validation_error().is_some());
-        assert!(s.result(&mut budget()).is_err());
-        assert!(s.native_result(&mut budget()).unwrap().unwrap().is_ok());
+        assert!(s.validation_error().is_none());
+        assert!(s.result().is_err());
+        assert!(s.native_result().unwrap().unwrap().is_ok());
         assert_eq!(c.query_codec.number.validations.get(), 0);
     });
 }
@@ -802,12 +741,12 @@ fn wrong_shape_media_coding_and_schema_keep_rejected_original_output() {
     for reply in [b"O\x0142".as_slice(), b"O\x0242", b"O\x0342", b"O\x0099"] {
         fixture(|mut c| {
             let h = c.accept();
-            c.slot.query(h, now(1), &mut budget()).unwrap();
+            c.slot.query(h, now(1)).unwrap();
             c.exchange(&[b'Q', 7], reply);
             let mut s = c.finish(h);
             assert!(s.validation_error().is_some());
-            assert!(s.result(&mut budget()).is_err());
-            assert!(s.native_result(&mut budget()).unwrap().unwrap().is_ok());
+            assert!(s.result().is_err());
+            assert!(s.native_result().unwrap().unwrap().is_ok());
             assert_eq!(c.stats.outputs_dropped.get(), 0);
             drop(s);
             assert_eq!(c.stats.outputs_dropped.get(), 1);
@@ -816,34 +755,90 @@ fn wrong_shape_media_coding_and_schema_keep_rejected_original_output() {
 }
 
 #[test]
-fn short_credits_enter_no_native_or_validator_callback_and_pending_never_auto_queries() {
+fn one_native_poll_per_turn_and_an_idle_invocation_never_auto_queries() {
     fixture(|mut c| {
         let h = c.start();
-        for class in [
-            WorkClass::ProviderProbes,
-            WorkClass::BindingPolls,
-            WorkClass::CleanupItems,
-            WorkClass::CodecInputBytes,
-        ] {
-            let mut b = budget();
-            b.set_remaining(class, 0);
-            c.slot.step(
-                &mut Context::from_waker(core::task::Waker::noop()),
-                now(1),
-                &mut b,
-            );
-            assert_eq!(c.stats.polls.get(), 0);
-            assert_eq!(c.stats.closes.get(), 0);
-            assert_eq!(c.invoke_codec.number.validations.get(), 1);
-        }
-        c.exchange(b"I7", &[b'A', 7]);
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        assert_eq!(c.slot.step(&mut cx, now(1)).unwrap(), ActionTurn::Waiting);
+        c.peer.respond(b"I7", &[b'A', 7]);
+        let polls = c.stats.polls.get();
+        assert_eq!(c.slot.step(&mut cx, now(1)).unwrap(), ActionTurn::Advanced);
+        assert_eq!(c.stats.polls.get(), polls + 1);
+        assert_eq!(c.stats.closes.get(), 0);
+        assert_eq!(c.slot.step(&mut cx, now(1)).unwrap(), ActionTurn::Advanced);
+        assert_eq!(c.stats.polls.get(), polls + 1);
+        assert_eq!(c.stats.closes.get(), 1);
+        assert_eq!(c.slot.step(&mut cx, now(1)).unwrap(), ActionTurn::Advanced);
         for _ in 0..4 {
-            c.step();
+            assert_eq!(c.slot.step(&mut cx, now(1)).unwrap(), ActionTurn::Idle);
         }
         assert_eq!(c.stats.starts.get(), 1);
         assert_eq!(c.slot.state(h).unwrap(), ConsumerActionState::Pending);
         c.slot.cancel_local(h).unwrap();
         drop(c.finish(h));
+    });
+}
+
+#[test]
+fn policy_callback_cannot_drive_a_sibling_but_can_cancel_it() {
+    fixture(|mut c| {
+        let input = || {
+            Some(Input {
+                body: b"7",
+                stats: c.stats,
+            })
+        };
+        let sibling = c
+            .other
+            .invoke(input(), c.other_result, Deadline::NONE, now(1))
+            .unwrap_or_else(|_| panic!("sibling admission"));
+        let other = RefCell::new(c.other);
+        let armed = Cell::new(false);
+        let callback = || {
+            if armed.replace(false) {
+                let mut other = other.borrow_mut();
+                let mut cx = Context::from_waker(core::task::Waker::noop());
+                assert!(matches!(
+                    other.step(&mut cx, now(9)),
+                    Err(CoreError::Lifecycle(_))
+                ));
+                assert_eq!(other.state(sibling).unwrap(), ConsumerActionState::Invoking);
+                other.cancel_local(sibling).unwrap();
+            }
+        };
+        let access = Permission {
+            callback: Some(&callback),
+            ..Permission::default()
+        };
+        let mut original = ActionSlot::bind(
+            c.driving,
+            c.definition,
+            c.binding,
+            c.authority.reference(),
+            [Some(c.invoke_codec), Some(c.query_codec)],
+            [Some(&access), Some(c.query_access), Some(&access)],
+        )
+        .unwrap();
+        original
+            .invoke(input(), c.result, Deadline::NONE, now(1))
+            .unwrap_or_else(|_| panic!("original admission"));
+        armed.set(true);
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        assert_eq!(original.step(&mut cx, now(1)).unwrap(), ActionTurn::Waiting);
+        assert_eq!(c.stats.polls.get(), 1);
+        assert_eq!(c.stats.closes.get(), 0);
+        assert!(!armed.get());
+        assert_eq!(
+            other.borrow_mut().step(&mut cx, now(1)).unwrap(),
+            ActionTurn::Settled
+        );
+        let settlement = other.borrow_mut().take_settlement(sibling, now(1)).unwrap();
+        assert!(matches!(
+            settlement.first_cause(),
+            Some(CoreError::Cancelled(_))
+        ));
+        assert_eq!(c.stats.polls.get(), 1);
+        c.peer.respond(b"I7", &[b'A', 7]);
     });
 }
 
@@ -855,19 +850,15 @@ fn changed_policy_during_callback_refuses_before_native_effects_and_returns_owne
             body: b"7",
             stats: c.stats,
         };
-        let lease = c.funding.take().unwrap();
-        let bytes = lease.bytes();
-        let (input, lease, error) = c
+        let (input, error) = c
             .slot
-            .invoke(Some(input), lease, Deadline::NONE, now(1), &mut budget())
+            .invoke(Some(input), c.result, Deadline::NONE, now(1))
             .err()
             .unwrap();
         assert!(matches!(error, CoreError::Validation(_)));
-        assert_eq!(lease.bytes(), bytes);
         assert_eq!(c.stats.starts.get(), 0);
         assert_eq!(c.stats.inputs_dropped.get(), 0);
         drop(input);
-        drop(lease);
         assert_eq!(c.stats.inputs_dropped.get(), 1);
     });
 }
@@ -888,28 +879,23 @@ fn deadline_and_clock_regression_preserve_original_late_completion() {
                         body: b"7",
                         stats: c.stats,
                     }),
-                    c.funding.take().unwrap(),
+                    c.result,
                     deadline,
                     now(1),
-                    &mut budget(),
                 )
                 .unwrap_or_else(|_| panic!());
             c.step();
             c.peer.respond(b"I7", b"O\x0042");
             let time = if expired { now(3) } else { now(0) };
-            c.slot.step(
-                &mut Context::from_waker(core::task::Waker::noop()),
-                time,
-                &mut budget(),
-            );
-            let mut s = c.slot.take_settlement(h, time, &mut budget()).unwrap();
+            drive(&mut c.slot, time);
+            let mut s = c.slot.take_settlement(h, time).unwrap();
             if expired {
                 assert!(matches!(s.first_cause(), Some(CoreError::TimedOut(_))));
             } else {
                 assert!(matches!(s.first_cause(), Some(CoreError::Validation(_))));
             }
-            assert!(s.native_result(&mut budget()).unwrap().unwrap().is_ok());
-            assert!(s.result(&mut budget()).is_err());
+            assert!(s.native_result().unwrap().unwrap().is_ok());
+            assert!(s.result().is_err());
         });
     }
 }
@@ -918,12 +904,12 @@ fn deadline_and_clock_regression_preserve_original_late_completion() {
 fn foreign_acceptance_cannot_replace_original_control_token() {
     fixture(|mut c| {
         let h = c.accept();
-        c.slot.query(h, now(1), &mut budget()).unwrap();
+        c.slot.query(h, now(1)).unwrap();
         c.exchange(&[b'Q', 7], &[b'A', 9]);
         let mut s = c.finish(h);
-        assert!(s.result(&mut budget()).is_err());
+        assert!(s.result().is_err());
         assert!(s.first_cause().is_some());
-        assert_eq!(c.stats.tokens_dropped.get(), 1);
+        assert_eq!(c.stats.tokens_dropped.get(), 2); // Both tokens have retired.
         drop(s);
         assert_eq!(c.stats.tokens_dropped.get(), 2);
     });
@@ -936,40 +922,32 @@ fn handoff_callback_policy_rotation_cannot_accept_unread_success() {
         c.query_access.rotate_on_check.set(true);
         let mut s = c.finish(h);
         assert!(matches!(s.first_cause(), Some(CoreError::Validation(_))));
-        assert!(s.native_result(&mut budget()).unwrap().unwrap().is_ok());
-        assert!(s.result(&mut budget()).is_err());
+        assert!(s.native_result().unwrap().unwrap().is_ok());
+        assert!(s.result().is_err());
     });
 }
 
 #[test]
-fn input_and_short_admission_refusals_return_original_funding_before_native_start() {
+fn invalid_input_leaves_the_supplied_result_slot_reusable() {
     fixture(|mut c| {
-        let lease = c.funding.take().unwrap();
-        let bytes = lease.bytes();
         let input = Some(Input {
             body: b"99",
             stats: c.stats,
         });
-        let (input, lease, error) = c
+        let (input, error) = c
             .slot
-            .invoke(input, lease, Deadline::NONE, now(1), &mut budget())
+            .invoke(input, c.result, Deadline::NONE, now(1))
             .err()
             .unwrap();
         assert!(matches!(error, CoreError::Validation(_)));
-        assert_eq!(lease.bytes(), bytes);
         assert_eq!(c.stats.starts.get(), 0);
         assert_eq!(c.stats.inputs_dropped.get(), 0);
-        let (input, lease, error) = c
-            .slot
-            .invoke(input, lease, Deadline::NONE, now(1), &mut WorkBudget::new())
-            .err()
-            .unwrap();
-        assert!(matches!(error, CoreError::Backpressure(_)));
-        assert_eq!(lease.bytes(), bytes);
-        assert_eq!(c.stats.starts.get(), 0);
+        assert_eq!(input.as_ref().unwrap().body, b"99");
+        let h = c.start();
+        c.slot.cancel_local(h).unwrap();
+        drop(c.finish(h));
         drop(input);
-        drop(lease);
-        assert_eq!(c.stats.inputs_dropped.get(), 1);
+        assert_eq!(c.stats.inputs_dropped.get(), 2);
     });
 }
 
@@ -977,7 +955,7 @@ fn input_and_short_admission_refusals_return_original_funding_before_native_star
 fn failed_remote_cancel_keeps_uncertainty_without_claiming_rollback() {
     fixture(|mut c| {
         let h = c.accept();
-        c.slot.request_cancel(h, now(1), &mut budget()).unwrap();
+        c.slot.request_cancel(h, now(1)).unwrap();
         c.exchange(&[b'C', 7], b"F");
         let mut s = c.finish(h);
         assert_eq!(
@@ -985,8 +963,8 @@ fn failed_remote_cancel_keeps_uncertainty_without_claiming_rollback() {
             ConsumerActionCancellation::Uncertain
         );
         assert!(s.accepted());
-        assert!(s.native_result(&mut budget()).unwrap().unwrap().is_err());
-        assert!(s.result(&mut budget()).is_err());
+        assert!(s.native_result().unwrap().unwrap().is_err());
+        assert!(s.result().is_err());
     });
 }
 
@@ -1009,14 +987,14 @@ fn output_validation_callback_revocation_preserves_output_before_failed_acceptan
     fixture(|mut c| {
         let h = c.accept();
         c.query_codec.revoke_on_validate.set(true);
-        c.slot.query(h, now(1), &mut budget()).unwrap();
+        c.slot.query(h, now(1)).unwrap();
         c.exchange(&[b'Q', 7], b"O\x0042");
         let mut s = c.finish(h);
         assert!(matches!(s.first_cause(), Some(CoreError::StaleHandle(_))));
-        assert!(s.result(&mut budget()).is_err());
+        assert!(s.result().is_err());
         assert!(s.validation_error().is_none());
         assert_eq!(
-            s.native_result(&mut budget())
+            s.native_result()
                 .unwrap()
                 .unwrap()
                 .unwrap()
@@ -1040,7 +1018,7 @@ fn cancellation_before_first_native_poll_closes_original_unsent_exchange() {
         assert_eq!(c.stats.polls.get(), 0);
         assert_eq!(c.stats.closes.get(), 1);
         assert!(!s.accepted());
-        assert!(s.native_result(&mut budget()).unwrap().is_none());
+        assert!(s.native_result().unwrap().is_none());
         c.peer.released();
     });
 }
@@ -1065,15 +1043,7 @@ fn host_action_content_lends_same_schema_to_distinct_native_representation() {
     assert!(core::ptr::eq(shared.schemas(), schemas));
     fixture_with(shared, |mut c| {
         let h = c.complete();
-        assert_eq!(
-            c.finish(h)
-                .result(&mut budget())
-                .unwrap()
-                .data()
-                .unwrap()
-                .body,
-            b"42"
-        );
+        assert_eq!(c.finish(h).result().unwrap().data().unwrap().body, b"42");
     });
 }
 
@@ -1096,9 +1066,6 @@ fn input_view_revocation_is_fenced_before_native_start() {
                 content_type: "application/x-test-number",
                 content_coding: None,
             }
-        }
-        fn backing_bytes(&self) -> u64 {
-            0
         }
     }
     // First-view revocation must refuse before effects; a second view must
@@ -1135,20 +1102,16 @@ fn input_view_revocation_is_fenced_before_native_start() {
             revoke_on_validate: Cell::new(false),
             authority: &authority,
         };
-        let definition = ActionDefinition::try_new(
-            meaning(),
-            &binding,
-            &program,
-            4,
-            Some(&invoke_codec),
-            Some(&query_codec),
-        )
-        .unwrap();
+        let definition = ActionDefinition::try_new(meaning(), &program, 4).unwrap();
         let access = Permission::default();
-        let mut bank = account();
-        let mut slot = ActionSlot::<_, RevokingInput<'_>>::try_new(
+        let driving = RefCell::new(());
+        let result_slot = ActionResultSlot::new();
+        let mut slot = ActionSlot::<_, RevokingInput<'_>>::bind(
+            &driving,
             &definition,
+            &binding,
             authority.reference(),
+            [Some(&invoke_codec), Some(&query_codec)],
             [Some(&access), Some(&access), Some(&access)],
         )
         .unwrap();
@@ -1158,54 +1121,36 @@ fn input_view_revocation_is_fenced_before_native_start() {
             views: &views,
             revoke_on,
         };
-        let funding = bank
-            .try_reserve(slot.required_bytes(Some(&input)).unwrap())
-            .unwrap();
-        let bytes = funding.bytes();
-        let result = slot.invoke(Some(input), funding, Deadline::NONE, now(1), &mut budget());
+        let result = slot.invoke(Some(input), &result_slot, Deadline::NONE, now(1));
         assert!(
             !started_after_revocation.get(),
             "native start sent a real datagram after the input view revoked its issuer"
         );
         assert_eq!(views.get(), 1);
         if revoke_on == 1 {
-            let (input, funding, error) = result.err().unwrap();
+            let (input, error) = result.err().unwrap();
             assert!(matches!(error, CoreError::StaleHandle(_)));
             assert!(core::ptr::eq(input.as_ref().unwrap().authority, &authority));
-            assert_eq!(funding.bytes(), bytes);
             assert!(slot.is_idle());
             assert_eq!(stats.starts.get(), 0);
             assert_eq!(invoke_codec.number.validations.get(), 0);
             peer.socket.set_nonblocking(true).unwrap();
             assert!(matches!(peer.socket.recv_from(&mut [0; 64]), Err(e)
             if e.kind() == std::io::ErrorKind::WouldBlock));
-            drop(funding);
         } else {
             let handle = result.unwrap_or_else(|_| panic!("admission"));
             // This Binding opens/sends during start, before any progress turn.
             let mut wire = [0; 64];
             let (len, _) = peer.socket.recv_from(&mut wire).unwrap();
             assert_eq!(&wire[..len], b"START");
-            let mut cx = Context::from_waker(core::task::Waker::noop());
-            slot.step(&mut cx, now(1), &mut budget());
+            drive(&mut slot, now(1));
             peer.respond(b"I7", b"O\x0042");
-            slot.step(&mut cx, now(1), &mut budget());
-            let mut settlement = slot.take_settlement(handle, now(1), &mut budget()).unwrap();
-            assert_eq!(
-                settlement
-                    .result(&mut budget())
-                    .unwrap()
-                    .data()
-                    .unwrap()
-                    .body,
-                b"42"
-            );
-            let funding = settlement.into_funding();
-            assert_eq!(funding.bytes(), bytes);
-            drop(funding);
+            drive(&mut slot, now(1));
+            let mut settlement = slot.take_settlement(handle, now(1)).unwrap();
+            assert_eq!(settlement.result().unwrap().data().unwrap().body, b"42");
+            drop(settlement);
         }
         drop(slot);
-        assert_eq!(bank.used(), 0);
         assert_eq!(stats.starts.get(), stats.exchanges_dropped.get());
         peer.released();
     }
@@ -1226,9 +1171,6 @@ fn native_start_uses_validated_input_view_when_authorization_changes_selection()
                 content_type: "application/x-test-number",
                 content_coding: None,
             }
-        }
-        fn backing_bytes(&self) -> u64 {
-            0
         }
     }
     impl Drop for SelectedInput<'_> {
@@ -1261,15 +1203,7 @@ fn native_start_uses_validated_input_view_when_authorization_changes_selection()
         revoke_on_validate: Cell::new(false),
         authority: &authority,
     };
-    let definition = ActionDefinition::try_new(
-        meaning(),
-        &binding,
-        &program,
-        4,
-        Some(&invoke_codec),
-        Some(&query_codec),
-    )
-    .unwrap();
+    let definition = ActionDefinition::try_new(meaning(), &program, 4).unwrap();
     let body = Cell::new(b"7".as_slice());
     let checks = Cell::new(0);
     let callback = || {
@@ -1282,10 +1216,14 @@ fn native_start_uses_validated_input_view_when_authorization_changes_selection()
         callback: Some(&callback),
         ..Permission::default()
     };
-    let mut bank = account();
-    let mut slot = ActionSlot::<_, SelectedInput<'_>>::try_new(
+    let driving = RefCell::new(());
+    let result_slot = ActionResultSlot::new();
+    let mut slot = ActionSlot::<_, SelectedInput<'_>>::bind(
+        &driving,
         &definition,
+        &binding,
         authority.reference(),
+        [Some(&invoke_codec), Some(&query_codec)],
         [Some(&access), Some(&access), Some(&access)],
     )
     .unwrap();
@@ -1296,60 +1234,36 @@ fn native_start_uses_validated_input_view_when_authorization_changes_selection()
         views: &views,
         dropped: &dropped,
     };
-    let funding = bank
-        .try_reserve(slot.required_bytes(Some(&input)).unwrap())
-        .unwrap();
-    let bytes = funding.bytes();
-    let (input, funding, error) = slot
-        .invoke(
-            Some(input),
-            funding,
-            Deadline::NONE,
-            now(1),
-            &mut WorkBudget::new(),
-        )
-        .err()
-        .unwrap();
-    assert!(matches!(error, CoreError::Backpressure(_)));
-    assert_eq!(funding.bytes(), bytes);
+    let (input, error) = {
+        let _turn = driving.borrow_mut();
+        slot.invoke(Some(input), &result_slot, Deadline::NONE, now(1))
+            .err()
+            .unwrap()
+    };
+    assert!(matches!(error, CoreError::Lifecycle(_)));
     assert_eq!(views.get(), 0);
     assert_eq!(checks.get(), 0);
     assert_eq!(stats.starts.get(), 0);
     assert_eq!(dropped.get(), 0);
     let handle = slot
-        .invoke(input, funding, Deadline::NONE, now(1), &mut budget())
+        .invoke(input, &result_slot, Deadline::NONE, now(1))
         .unwrap_or_else(|_| panic!("admission"));
     assert_eq!(body.get(), b"99");
     assert_eq!(views.get(), 1);
     assert_eq!(invoke_codec.number.validations.get(), 1);
-    let mut cx = Context::from_waker(core::task::Waker::noop());
-    slot.step(&mut cx, now(1), &mut budget());
+    drive(&mut slot, now(1));
     peer.respond(b"I7", b"O\x0042");
-    slot.step(&mut cx, now(1), &mut budget());
-    let mut settlement = slot.take_settlement(handle, now(1), &mut budget()).unwrap();
-    assert_eq!(
-        settlement
-            .result(&mut budget())
-            .unwrap()
-            .data()
-            .unwrap()
-            .body,
-        b"42"
-    );
+    drive(&mut slot, now(1));
+    let mut settlement = slot.take_settlement(handle, now(1)).unwrap();
+    assert_eq!(settlement.result().unwrap().data().unwrap().body, b"42");
     assert_eq!(views.get(), 1);
     assert_eq!(dropped.get(), 0);
     // The retained owner now supplies 99, even though the actual request was I7.
-    assert_eq!(
-        settlement.input(&mut budget()).unwrap().unwrap().body,
-        b"99"
-    );
+    assert_eq!(settlement.input().unwrap().unwrap().body, b"99");
     assert_eq!(views.get(), 2);
-    let funding = settlement.into_funding();
+    drop(settlement);
     assert_eq!(dropped.get(), 1);
-    assert_eq!(funding.bytes(), bytes);
-    drop(funding);
     drop(slot);
-    assert_eq!(bank.used(), 0);
     assert_eq!(stats.starts.get(), stats.exchanges_dropped.get());
     peer.released();
 }

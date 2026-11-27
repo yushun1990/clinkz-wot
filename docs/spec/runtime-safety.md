@@ -599,12 +599,12 @@ generation.
 ### Continuing Action associations and invocation capacity
 
 The Host `ConsumerActionAssociation` retains the original Consumer, a shared
-prepared definition and separately qualified per-operation access owners. Association construction allocates no vacant slot, exchange,
-continuation or work quota. It rechecks prepared data/native declarations and
-original backing before/after policy qualification. Explicit new access binding
-captures its actual configuration and revision and preserves the original prepared dependencies.
-Association construction and new invocation admission check the complete
-selected Invoke/Query/Cancel set against its original declarations. Retaining
+prepared definition and separately qualified per-operation access owners. Association construction checks the selected native and data capabilities and
+captures each bound service's qualification revision. It checks NoSec support
+without authorizing a Form template. Authority is checked at use against the
+actual destination. Association construction and new invocation admission
+check the complete selected Invoke/Query/Cancel set. The association needs
+backing only for its own record and retained services. Retaining
 that set does not create a blanket invalidation domain for admitted work.
 
 A live invocation checks its original Invoke native mapping/continuation and bound
@@ -622,8 +622,9 @@ remain retained. Shared actual services still invalidate every relevant use;
 separate operation coordinates do not isolate an aliased dependency.
 
 A control request checks its original native/access and used value-role
-qualification, continuation compatibility and fresh destination/instance
-permission before native start.
+qualification and fresh destination/instance permission before native start.
+The installed control pair has already qualified continuation compatibility.
+Progress and handoff reuse the exact expanded destination passed to start.
 An unavailable or denied control refuses without native effects or withdrawal
 of unrelated Invoke work. Every refusal still observes callback-time loss of
 already relevant dependencies and logical authority. Fresh policy checks remain
@@ -645,12 +646,30 @@ delivery requires current permission and validation covering that exact value
 and schema. Preserve the original bytes, first cause and any native, cleanup
 or validation errors independently.
 
-`ConsumerActions` supplies bounded invocation storage independently of the
-Consumer. Before effects, claim an invocation slot, passive control, native
-continuation, input and result/handoff backing and a path for retirement. Unread
-results retain their backing through transfer and final disposal. A distinct
-outstanding-work quota follows the lifetime promised by the deployment.
-Refusal returns the original input and provisional capacity without native effects.
+`ConsumerActions` supports 1–32 slots per capacity, with the caller choosing
+the size at construction. Before effects, claim an invocation slot and actual
+invocation, control and input backing. The Binding secures the native exchange,
+potential continuation or result, and retirement backing before it can cause an
+effect. Each explicit Query or Cancel acquires its own backing at start. A full
+control pool may refuse that request while the original invocation stays pending.
+The limit for an expanded Host destination is 256 bytes. Refusal returns the
+offered input and all provisional capacity before native effects.
+
+The Host bank continues to enforce the shared ceilings used by finite calls
+and other participating families. The capacity and original instance banks
+each count one outstanding invocation through settlement disposal, with a
+shared bank counted once. Engine-live bytes and cleanup bytes count retained
+backing over its ownership lifetime. A cleanup item tracks the original
+invocation through disposal. The active operation holds its declared bounded
+native backing until close acknowledges release. Its scratch allowance covers
+the active operation and its separate validation turn. Response bytes count the
+admitted operation's backed output opportunity through retirement and, when
+it returns a value, through result disposal. A mapping with zero output or
+continuation backing offers no such value. Unused claims are released when the
+operation's disposition is known. Expiry or saturation cannot prevent local
+retirement or successful handoff of an already validated, still-authorized value.
+The bank limits remain deployment quotas and share the original defaults and
+omission semantics. Actual native/validator storage belongs to its owner.
 
 Capacity close/Drop fences its admitted work, without revoking associations or
 sibling capacities. Original Consumer revocation fences its own invocations in
@@ -667,8 +686,10 @@ background task, native pool or general async cleanup transfer.
 The Host continuing Action owner has its own occupied invocation slots and
 separately funded passive controls. Registry borrows end before access,
 validation, destination/start, poll/retirement and linked destruction callbacks.
-The original invocation keeps its opaque token, selected mappings, exchange,
-normal/late evidence and funding across checkout. Admission reserves its slot
+The original invocation keeps its selected mappings, current exchange and
+normal/late evidence across checkout. The token survives nonterminal exchanges
+and is disposed at terminal local settlement, while the completed value and
+its destination survive through handoff. Admission reserves its slot
 and sequence before invoking linked services. Identity, first cause and local
 cancellation remain accessible during checkout. Inspection of checked-out
 native state returns `Backpressure`. Mapped query/cancel, progress and
@@ -680,8 +701,8 @@ control/dependency checks before another native effect or successful handoff.
 After native control start, loss of that exchange's authorization/services
 fences its admitted work irreversibly. A refusal before start leaves unrelated
 accepted work usable; it cannot hide an observed original Invoke dependency or
-logical authority violation. Short work or an unsupported control remains a
-refusal without inventing a remote effect. A successful native start returned
+logical authority violation. Capacity pressure or an unsupported control
+refuses admission without inventing a remote effect. A successful native start returned
 after revocation is retained for local retirement, without polling it for further
 effects.
 The original owner backs cleanup and any requested validated handoff. Physical
@@ -732,8 +753,9 @@ notification associations are explicitly bound, not looked up through a new
 universal configuration registry. Removing/replacing a parent or dropping its
 owner fences every original facet without retargeting work. Closing a capacity
 still fences only that capacity. The deployment calls each capacity directly.
-One finite capacity step observes deadlines for all its original calls and
-visits one slot in rotation for native progress. Cancellation and close preserve
+Finite and Action capacities observe deadlines for all their original calls
+and visit one slot per turn in rotation. An Action turn reports the disposition
+of the visited slot. The deployment continues rotating while siblings own work. Cancellation and close preserve
 any expiry already recorded as the first cause.
 
 The application holds execution authority for finite, continuing Action and
@@ -864,76 +886,54 @@ controls, a Host account bank and boxed native calls.
 
 ### Caller-owned continuing Action
 
-`borrowed_action::ActionSlot` supplies one continuing Consumer invocation
-opportunity using the common Action kernel. It borrows a source-free
-`ActionDefinition`, actual native program, captured per-operation data/access
-services and `LocalConsumerRef`; that loan proves original issuer lifetime and
-identity without revocation power. Separate equal numeric slots are foreign.
-Checked non-reused issuer sequences fence old handles across slot reuse. The
-exclusive mutable slot loan prevents duplicate native progress; callback-time
-external authority/service changes remain observable and must be fenced.
+`borrowed_action::ActionSlot` installs one continuing invocation opportunity
+from a source-free `ActionDefinition`. The definition contains immutable
+meaning, a native program loan and expected configuration. Binding attaches
+the actual native service, separate value and access services and the original
+`LocalConsumerRef`. Installation refuses incompatible configuration before
+effects. Slot and drive cell loans supply bounded work ownership. Each issuer
+uses non-reused sequences, including across slot reuse. Equal numeric slots
+from distinct issuers remain foreign.
+
+The caller lends the same drive cell to sibling Actions and Reads in its
+manual driver. Admission, Query, Cancel, progress, linked inspection and
+validated handoff borrow it exclusively. Reentrant entry returns readiness
+`Lifecycle` before examining the generation, touching the clock or invoking a
+linked service. Passive observation and cancellation remain available. Local
+disposal holds the original drive scope while releasing native, input, result
+and destination owners.
 
 The implemented subset is NoSec InvokeAction with optional QueryAction and
-CancelAction, static prepared value meaning and primary output. Unsupported
-security, dynamic URI meaning, response alternatives, missing service/schema
-support or changed native configuration refuse before dependent effects. This
-is execution-only qualification, not TD parsing/admission or a production
-protocol mapping. Native continuation compatibility belongs to the actual
-Binding's checked configuration; its typed `ActionExchange`/token/output can
-differ from Host Box/Any/Arc carriers. Destination calculation is pure and
-original-instance policy checks cover the same actual destination used by start.
-Invoke input and Invoke/Query output use their own captured media/body/work
-services over one shared schema pair. No codec is selected from untrusted media.
+CancelAction, static prepared value meaning and primary output. The actual
+Binding qualifies native meaning and continuation compatibility at installation.
+Invoke input and Invoke/Query output use their own captured media/service and
+body limits over one shared schema pair. Destination resolution produces a
+bounded native operand that is checked and used unchanged by start. Capture one
+input view before fresh authorization and use it for validation and native
+start. Retaining the input owner can later lend its current view.
 
-Capture one input payload view before fresh
-authorization. Validation and native start MUST use that same borrowed view,
-including its media/coding. Retaining the original input owner does not prove
-that repeated views select the same payload. No further input-view callback may
-follow final authorization; input-view-time revocation MUST refuse before native
-start. This requires neither an input copy nor a different ownership format.
+Before native construction, the caller-owned slot claims the original typed
+`ActionResultSlot` exclusively and retains the actual input and invocation
+record. The Binding secures exchange, token, output and retirement backing
+before effects. A full slot returns the same input. Taking settlement moves
+its exclusive result loan out of the invocation slot. The result cell becomes
+available after disposal. A different cell can serve a later invocation while
+the first result is held. The native exchange and terminal continuation have
+their own earlier release points.
 
-Definition and service storage stay with the caller through safe loans. Before
-native construction claim usable storage for the input, token, output/handoff
-and retirement. Refusal returns the identical input and any provisional slot.
-Accepted work retains its owners across exchanges and unread settlement. At
-admission check the whole mapping. For already admitted work, original Invoke
-native/authority dependencies remain, while data dependencies follow the actual
-current exchange/unread output. Unused or retired controls and a retired input
-codec do not revoke independently represented Query work. A pre-effect control
-refusal retains unrelated accepted work; it grants no control permission.
-
-Query and remote Cancel remain explicit. Local cancel, deadline, dependency loss,
-slot close or issuer revocation preserve first cause independently of native
-poll failure, failed/Pending close, validation failure and late output. Cleanup
-uses original funding without new authority. It enters no further effectful poll
-after local fencing. Accepted remote cancellation remains uncertain about remote
-termination/rollback; native continuation is evidence, not logical authority.
-Close acknowledgement concerns local exchange retirement only. Drop performs
-finite local disposal without waiting or claiming an acknowledged drain.
-
-A slot retains an unread completion until successful handoff or local disposal.
-Handoff checks the supplied time, original authority, destination and services
-under current permission. Failure leaves the native evidence with its owner.
-Where a generic output can expose different values on successive views, capture
-one view and validate its identity, shape, media, coding, size and schema before
-lending that exact value. A previous check can be reused only for the exact
-value and schema covered. Permission loss refuses a new validated delivery.
-A loan already returned remains an ordinary borrow under its original owner.
-
-Raw evidence can expose rejected or late native output under its access policy.
-Inspection of a retained input can expose its current view. Only an immutable
-input or an explicit receipt establishes the bytes previously dispatched.
-A validation failure retains its first cause and native evidence. The
-settlement owns the original input, output, continuation and dependencies
-until disposal. Neither inspection nor validation drives another native effect.
+See [Action associations and invocation capacity](#continuing-action-associations-and-invocation-capacity)
+for current dependencies, first cause and retirement. A settled result keeps
+raw output even when validation or permission fails. Handoff checks the given
+clock and original permission. Each new validated application loan checks
+current authority and validates the exact view it lends. A loan already returned
+keeps its original bytes and metadata. A raw adapter can lend rejected or late
+output in one bounded turn without authority, validation or native progress.
+Absent data and stored native errors require no linked adapter.
 
 The [cross-representation evidence](../evidence/continuing-action-runtime-independence.md)
-joins real datagrams, common Host Action regressions and no-atomic compilation
-under the earlier admission contract. The successor must also demonstrate
-authorized handoff of the exact value while general capacity is occupied.
-Constrained TD preparation, notifications, Producer publication, credentials,
-general schema arenas, hardware/allocator/time qualification and broader runtime
-independence remain open.
+covers real Host and portable datagrams and no-pointer-atomics compilation.
+This subset does not qualify constrained hardware, credentials, additional
+response alternatives, dynamic URI operands or general schema arenas.
 
 QueryAllActions retains its finite query's original Consumer authority, root
 mapping, named output schemas, actual services and normal/late native payload

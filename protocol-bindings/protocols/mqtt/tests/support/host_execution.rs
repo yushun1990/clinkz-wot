@@ -611,7 +611,7 @@ fn host_turns_join_independent_publications_all_families_replacement_and_complet
             })
             .ok();
         assert!(apps[0].polls.get() > polls);
-        invocation.query(e.now(), &mut budget()).unwrap();
+        invocation.query(e.now()).unwrap();
         until(
             &mut owner,
             &mut [&mut first, &mut sibling],
@@ -619,7 +619,7 @@ fn host_turns_join_independent_publications_all_families_replacement_and_complet
             |_, _, _| invocation.state().unwrap() == ConsumerActionState::Completed,
         )
         .await;
-        let action_result = invocation.take_settlement(e.now(), &mut budget()).unwrap();
+        let action_result = invocation.take_settlement(e.now()).unwrap();
         assert_eq!(action_result.result().unwrap().data().unwrap().body, b"24");
         let producer_action = acknowledge(&mut owner, &mut first);
         assert!(producer_action.result().is_ok());

@@ -130,7 +130,6 @@ fn selection_fences_a_reload_and_releases_competitors_after_the_decision() {
                 cancel: None,
             },
             bank.clone(),
-            &mut work(),
         )
         .ok()
         .unwrap()
@@ -178,7 +177,6 @@ fn selection_fences_a_reload_and_releases_competitors_after_the_decision() {
             Some(Payload::new(b"12".as_slice(), "application/json")),
             Deadline::NONE,
             now(),
-            &mut work(),
         )
     };
     assert!(invoke(&retired).is_err());
@@ -186,7 +184,7 @@ fn selection_fences_a_reload_and_releases_competitors_after_the_decision() {
     for association in [&live, &pinned] {
         let h = invoke(association).ok().unwrap();
         drive(&h, ConsumerActionState::Completed);
-        let result = h.take_settlement(now(), &mut work()).unwrap();
+        let result = h.take_settlement(now()).unwrap();
         assert_eq!(result.result().unwrap().data().unwrap().body, b"24");
     }
     server.join().unwrap();
@@ -242,7 +240,8 @@ fn http_peer() -> (SocketAddr, std::thread::JoinHandle<()>) {
 
 async fn drive_with_reactor(handle: &ConsumerActionHandle, expected: ConsumerActionState) {
     let until = Instant::now() + Duration::from_secs(3);
-    while handle.progress(&mut cx(), now(), &mut work()).unwrap() != expected {
+    while handle.state().unwrap() != expected {
+        handle.progress(&mut cx(), now()).unwrap();
         assert!(
             Instant::now() < until,
             "expected {expected:?}, got {:?}",
@@ -360,7 +359,6 @@ async fn exercise_mixed_selection(http: SocketAddr, udp: SocketAddr) {
                 Rc::new(definition),
                 access,
                 bank.clone(),
-                &mut work(),
             )
             .ok()
             .unwrap();
@@ -371,14 +369,13 @@ async fn exercise_mixed_selection(http: SocketAddr, udp: SocketAddr) {
                     Some(Payload::new(b"12".as_slice(), "application/json")),
                     Deadline::NONE,
                     now(),
-                    &mut work(),
                 )
                 .ok()
                 .unwrap();
             drive_with_reactor(&handle, ConsumerActionState::Pending).await;
-            handle.query(now(), &mut work()).unwrap();
+            handle.query(now()).unwrap();
             drive_with_reactor(&handle, ConsumerActionState::Completed).await;
-            let settlement = handle.take_settlement(now(), &mut work()).unwrap();
+            let settlement = handle.take_settlement(now()).unwrap();
             assert_eq!(
                 settlement.result().unwrap().data().unwrap().body,
                 if http_control { b"42" } else { b"24" }
@@ -651,18 +648,17 @@ fn execute_datagram_action(chosen: ConsumerActionDefinition, bank: &Arc<HostReso
             Some(Payload::new(b"12".as_slice(), "application/json")),
             Deadline::NONE,
             now(),
-            &mut work(),
         )
         .ok()
         .unwrap();
     drive(&handle, ConsumerActionState::Pending);
     if has_cancel {
-        handle.request_cancel(now(), &mut work()).unwrap();
+        handle.request_cancel(now()).unwrap();
         drive(&handle, ConsumerActionState::Pending);
     }
-    handle.query(now(), &mut work()).unwrap();
+    handle.query(now()).unwrap();
     drive(&handle, ConsumerActionState::Completed);
-    let settlement = handle.take_settlement(now(), &mut work()).unwrap();
+    let settlement = handle.take_settlement(now()).unwrap();
     assert_eq!(settlement.result().unwrap().data().unwrap().body, b"24");
     drop((settlement, handle, calls, association));
     clean(bank);
