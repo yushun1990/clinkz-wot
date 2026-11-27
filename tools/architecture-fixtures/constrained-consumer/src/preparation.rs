@@ -49,7 +49,8 @@ impl PreparedRead {
 /// Compile one explicitly selected coordinate while the validated source is
 /// lent. Unconsumed work stays in the same bounded preparation job. This
 /// integer datagram profile requires the standard TD 1.1 context as its sole
-/// root entry and refuses local contexts on the selected mapping.
+/// root entry. It refuses local contexts on the selected mapping and rejects
+/// proxies and extension fields on the selected `nosec` definition.
 pub fn prepare(thing: &Thing, name: &str, form: u32, plan: PlanId) -> CoreResult<PreparedRead> {
     let config = ValidatedThingAdmissionConfig::try_from_limits(GatewayDefaultV1::LIMITS)
         .map_err(|_| unsupported())?;
@@ -125,7 +126,7 @@ pub fn prepare(thing: &Thing, name: &str, form: u32, plan: PlanId) -> CoreResult
                     || target.contains('}')
                     || f.security_scheme() != Some("nosec")
                     || security._context.proxy.is_some()
-                    || security._context._extra_fields.contains_key("@context")
+                    || !security._context._extra_fields.is_empty()
                     || f.content_type() != "application/x-test-number"
                     || f.content_coding().is_some()
                     || f.subprotocol().is_some()

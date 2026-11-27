@@ -858,7 +858,7 @@ fn caller_owned_primary_read_refuses_lent_additional_response_meaning_before_nat
 
 #[cfg(feature = "prepare")]
 #[test]
-fn source_read_refuses_unsupported_contexts_in_the_selected_mapping() {
+fn source_read_refuses_unhandled_semantics_in_the_selected_mapping() {
     use clinkz_wot_td::context::WOT_CONTEXT_1_1;
     use serde_json::json;
 
@@ -873,9 +873,11 @@ fn source_read_refuses_unsupported_contexts_in_the_selected_mapping() {
         ]}}
     });
     let plan = PlanId::new(SlotIndex::new(0), Generation::INITIAL);
-    let prepare =
-        |source| preparation::prepare(&serde_json::from_value(source).unwrap(), "value", 0, plan);
-    assert!(prepare(source.clone()).is_ok());
+    let prepare = |source, form| {
+        let thing = serde_json::from_value(source).unwrap();
+        preparation::prepare(&thing, "value", form, plan)
+    };
+    assert!(prepare(source.clone(), 0).is_ok());
 
     let remote = "https://example.invalid/unknown-context";
     for (scope, context) in [
@@ -888,8 +890,28 @@ fn source_read_refuses_unsupported_contexts_in_the_selected_mapping() {
         let mut td = source.clone();
         td.pointer_mut(scope).unwrap()["@context"] = context;
         assert!(
-            matches!(prepare(td), Err(CoreError::UnsupportedOperation(_))),
+            matches!(prepare(td, 0), Err(CoreError::UnsupportedOperation(_))),
             "accepted an unsupported context at {scope:?}"
+        );
+    }
+
+    for field in [
+        "proxy",
+        "https://www.w3.org/2019/wot/security#proxy",
+        "urn:test:security-extension",
+    ] {
+        let mut td = source.clone();
+        td["securityDefinitions"]["selected"][field] = json!("https://example.invalid/proxy");
+        assert!(
+            matches!(
+                prepare(td.clone(), 0),
+                Err(CoreError::UnsupportedOperation(_))
+            ),
+            "accepted {field:?} on the selected security definition"
+        );
+        assert!(
+            prepare(td, 1).is_ok(),
+            "unused {field:?} blocked another Form"
         );
     }
 
@@ -897,7 +919,7 @@ fn source_read_refuses_unsupported_contexts_in_the_selected_mapping() {
     td["@context"] = json!([WOT_CONTEXT_1_1]);
     td["properties"]["value"]["forms"][1]["@context"] = json!(remote);
     td["securityDefinitions"]["default"]["@context"] = json!(remote);
-    assert!(prepare(td).is_ok());
+    assert!(prepare(td, 0).is_ok());
 }
 
 #[cfg(feature = "prepare")]
