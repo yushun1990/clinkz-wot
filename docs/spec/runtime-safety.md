@@ -615,10 +615,12 @@ Invoke's codec is not a dependency of an independently represented Query result;
 the original native continuation and Invoke authority remain live.
 An unused Query/Cancel dependency cannot fence unrelated accepted work
 or its handoff. A Query result retains its original Query dependencies until
-handoff. Once a nonterminal status or cancellation acknowledgement has been
-consumed and its exchange fully retired, that control no longer governs the
-pending invocation. The original continuation and known cancellation status
-remain retained. Shared actual services still invalidate every relevant use;
+handoff. The observation turn after close rechecks the returning operation's
+permission at its original expanded destination before restoring `Pending`.
+A refusal fences the invocation and preserves the native cancellation status.
+After a successful check, the retired control releases its execution
+dependencies. The original continuation and known cancellation status remain
+retained. Shared actual services still invalidate every relevant use;
 separate operation coordinates do not isolate an aliased dependency.
 
 A control request checks its original native/access and used value-role
@@ -662,11 +664,11 @@ shared bank counted once. Engine-live bytes and cleanup bytes count retained
 backing over its ownership lifetime. A cleanup item tracks the original
 invocation through disposal. The active operation holds its declared bounded
 native backing until close acknowledges release. Its scratch allowance covers
-the active operation and its separate validation turn. Response bytes count the
-admitted operation's backed output opportunity through retirement and, when
-it returns a value, through result disposal. A mapping with zero output or
-continuation backing offers no such value. Unused claims are released when the
-operation's disposition is known. Expiry or saturation cannot prevent local
+the active operation and its separate validation turn. Response bytes cover the
+admitted operation's backed output opportunity through retirement. A settlement
+with a payload holds its response quota until disposal. A payload-free outcome
+releases that quota at settlement. A mapping with zero output or continuation
+backing offers no such value. Expiry or saturation cannot prevent local
 retirement or successful handoff of an already validated, still-authorized value.
 The bank limits remain deployment quotas and share the original defaults and
 omission semantics. Actual native/validator storage belongs to its owner.

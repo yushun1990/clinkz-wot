@@ -1661,6 +1661,168 @@ fn held_query_result_uses_the_last_response_quota_while_cancel_remains_available
     });
 }
 
+#[test]
+fn returning_http_cancel_rechecks_permission_after_retirement() {
+    io().block_on(async {
+        let mut producer = Producer::new();
+        let bank = bank();
+        let owner = instance();
+        let mut prepared = definition(
+            &td(producer.address, None),
+            bank.clone(),
+            Arc::new(Policy::default()),
+            false,
+        )
+        .unwrap();
+        let cancel_policy = Arc::new(Policy::default());
+        let http = HttpConsumerConfig::for_cleartext_ip()
+            .unwrap()
+            .consumer_services();
+        prepared.1.cancel = Some(
+            ConsumerServiceOwner::retain_access(
+                Arc::new(Access(cancel_policy.clone(), http.access)),
+                &bank,
+            )
+            .ok()
+            .unwrap(),
+        );
+        let runtime = bind(prepared, &owner, bank.clone(), 1);
+        let invocation = runtime
+            .calls
+            .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
+            .ok()
+            .unwrap();
+        producer
+            .drive(&invocation, ConsumerActionState::Pending)
+            .await;
+        invocation.request_cancel(now()).unwrap();
+        let end = Instant::now() + Duration::from_secs(2);
+        loop {
+            producer.step();
+            if invocation.progress(&mut cx(), now()).unwrap() == ActionTurn::Advanced {
+                break;
+            }
+            assert!(Instant::now() < end);
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        assert_eq!(producer.counts.cancelled.get(), 1);
+        assert_eq!(invocation.state().unwrap(), ConsumerActionState::Cancelling);
+        let checks = cancel_policy.log.lock().unwrap().len();
+        cancel_policy.denied.store(true, Ordering::Relaxed);
+
+        assert_eq!(
+            invocation.progress(&mut cx(), now()).unwrap(),
+            ActionTurn::Advanced
+        );
+        assert_eq!(cancel_policy.log.lock().unwrap().len(), checks);
+        assert_eq!(
+            invocation.progress(&mut cx(), now()).unwrap(),
+            ActionTurn::Settled
+        );
+        assert_eq!(invocation.state().unwrap(), ConsumerActionState::Closed);
+        {
+            let log = cancel_policy.log.lock().unwrap();
+            assert_eq!(log.len(), checks + 1);
+            let (_, operation, target) = log.last().unwrap();
+            assert_eq!(*operation, Operation::CancelAction);
+            assert!(target.contains("/stop?id="));
+        }
+        cancel_policy.denied.store(false, Ordering::Relaxed);
+        assert!(matches!(
+            invocation.query(now()),
+            Err(CoreError::Security {
+                reason: SecurityFailureReason::AuthorizationDenied,
+                ..
+            })
+        ));
+        let settlement = invocation.take_settlement(now()).unwrap();
+        assert_eq!(
+            settlement.remote_cancellation(),
+            ConsumerActionCancellation::Requested
+        );
+        assert_eq!(settlement.effect(), ConsumerEffect::Unknown);
+        drop((settlement, invocation, runtime, owner));
+        clean(&bank);
+        producer.finish();
+    });
+}
+
+#[test]
+fn held_empty_http_query_settlement_releases_the_last_response_buffer() {
+    io().block_on(async {
+        let address = addr();
+        let mut text: Value = serde_json::from_str(&td(address, None)).unwrap();
+        text["actions"]["run"]
+            .as_object_mut()
+            .unwrap()
+            .remove("output");
+        let text: Arc<str> = Arc::from(text.to_string());
+        let counts = Rc::new(Counters::default());
+        counts.empty_output.set(true);
+        counts.complete.set(true);
+        let mut producer = Producer::from_text(address, text.clone(), counts);
+        let definition_bank = bank();
+        let prepared = definition(
+            &text,
+            definition_bank.clone(),
+            Arc::new(Policy::default()),
+            false,
+        )
+        .unwrap();
+        let response_bytes = prepared
+            .0
+            .input()
+            .query
+            .as_ref()
+            .unwrap()
+            .bounds
+            .response_bytes;
+        let response_quota = ResourceKind::BindingResponseBufferBytesGlobalMax;
+        let mut limits = limits();
+        assert!(limits.set(response_quota, Some(response_bytes)));
+        let execution_bank = Arc::new(HostResourceAccounts::new(&limits));
+        let owner = instance();
+        let runtime = bind(prepared, &owner, execution_bank.clone(), 1);
+
+        let mut held = Vec::new();
+        for _ in 0..2 {
+            let invocation = runtime
+                .calls
+                .invoke_action(&runtime.association, payload(b"12"), Deadline::NONE, now())
+                .ok()
+                .unwrap();
+            producer
+                .drive(&invocation, ConsumerActionState::Pending)
+                .await;
+            invocation.query(now()).unwrap();
+            assert_eq!(
+                execution_bank.account(response_quota).used(),
+                response_bytes
+            );
+            producer
+                .drive(&invocation, ConsumerActionState::Completed)
+                .await;
+            assert_eq!(execution_bank.account(response_quota).used(), 0);
+            held.push(invocation.take_settlement(now()).unwrap());
+        }
+        assert!(
+            held.iter()
+                .all(|settlement| settlement.result().unwrap().data().is_none())
+        );
+        assert_eq!(producer.counts.invoked.get(), 2);
+        assert_eq!(
+            execution_bank
+                .account(ResourceKind::PendingHandlerCallsGlobalMax)
+                .used(),
+            2
+        );
+        drop((held, runtime, owner));
+        clean(&execution_bank);
+        clean(&definition_bank);
+        producer.finish();
+    });
+}
+
 #[derive(Default)]
 struct RetirementProbe {
     blocked: AtomicBool,

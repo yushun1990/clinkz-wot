@@ -293,8 +293,8 @@ pub trait ActionDriver {
     fn finish_operation(&mut self);
 }
 
-/// Recheck actual destination permission before application handoff. Closed
-/// work remains available as raw evidence without calling access or a codec.
+/// Recheck actual destination permission before further use or application
+/// handoff. Closed work remains available as raw evidence.
 pub fn check_action_handoff(d: &mut impl ActionDriver) {
     d.fence();
     if d.progress().first_cause.is_none() {
@@ -378,40 +378,52 @@ fn observe(d: &mut impl ActionDriver) -> ActionTurn {
     }
     let operation = d.progress().operation;
     let observation = d.progress().observation;
-    match observation {
+    let next_state = match observation {
         Some(Complete) if operation != Operation::CancelAction => {
             if operation == Operation::InvokeAction {
                 d.progress().accepted = true;
             }
-            if d.progress().first_cause.is_none() {
-                if let Err(error) = d.validate_output() {
-                    d.progress().validation_error = Some(error.clone());
-                    d.close(error);
-                }
-                check_action_handoff(d);
+            if d.progress().first_cause.is_none()
+                && let Err(error) = d.validate_output()
+            {
+                d.progress().validation_error = Some(error.clone());
+                d.close(error);
             }
-            d.progress().state = S::Completed;
+            Some(S::Completed)
         }
         Some(Accepted) if operation == Operation::InvokeAction => {
             d.progress().accepted = true;
-            d.progress().state = S::Pending;
+            Some(S::Pending)
         }
-        Some(Pending) if operation == Operation::QueryAction => {
-            d.progress().state = S::Pending;
-        }
+        Some(Pending) if operation == Operation::QueryAction => Some(S::Pending),
         Some(CancelRequested) if operation == Operation::CancelAction => {
             d.progress().remote_cancel = ConsumerActionCancellation::Requested;
-            d.progress().state = S::Pending;
+            Some(S::Pending)
         }
         Some(AlreadyTerminal) if operation == Operation::CancelAction => {
             d.progress().remote_cancel = ConsumerActionCancellation::AlreadyTerminal;
-            d.progress().state = S::Pending;
+            Some(S::Pending)
         }
-        Some(Failed) => d.progress().state = S::Failed,
-        _ if d.progress().first_cause.is_none() => d.close(d.invalid_reply()),
-        _ => {}
+        Some(Failed) => Some(S::Failed),
+        _ => {
+            if d.progress().first_cause.is_none() {
+                d.close(d.invalid_reply());
+            }
+            None
+        }
+    };
+    // Check the returning operation while its actual destination is still
+    // retained. Restore Pending only after that check succeeds.
+    if matches!(next_state, Some(S::Pending | S::Completed)) {
+        check_action_handoff(d);
+    } else {
+        d.fence();
     }
-    d.fence();
+    if let Some(next_state) = next_state
+        && d.progress().first_cause.is_none()
+    {
+        d.progress().state = next_state;
+    }
     finish(d)
 }
 

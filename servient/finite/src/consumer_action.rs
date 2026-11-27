@@ -1257,7 +1257,10 @@ impl ActionDriver for HostActionDriver<'_> {
     fn finish_operation(&mut self) {
         let invocation = &mut self.invocation;
         invocation.scratch = None;
-        if !matches!(invocation.native_result, Some(Ok(_))) {
+        if !matches!(
+            &invocation.native_result,
+            Some(Ok(output)) if output.view().data().is_some()
+        ) {
             invocation.response_quota = None;
         }
         if invocation.progress.state.settlement_ready() {

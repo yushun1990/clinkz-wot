@@ -62,6 +62,7 @@ pub(crate) struct Counters {
     pub(crate) cancelled: Cell<usize>,
     pub(crate) closes: Cell<usize>,
     pub(crate) complete: Cell<bool>,
+    pub(crate) empty_output: Cell<bool>,
     pub(crate) first_pending: Cell<bool>,
     pub(crate) first_close_pending: Cell<bool>,
     pub(crate) close_error: RefCell<Option<CoreError>>,
@@ -133,6 +134,9 @@ impl RawActionWork for Work {
         self.0.polls.set(self.0.polls.get() + 1);
         if !self.0.complete.get() || self.0.first_pending.get() && self.1 == 1 {
             return Poll::Pending;
+        }
+        if self.0.empty_output.get() {
+            return Poll::Ready(Ok(InteractionOutput::empty()));
         }
         Poll::Ready(Ok(InteractionOutput::with_data(Payload::new(
             if let Some(output) = &*self.0.output.borrow() {
