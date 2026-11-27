@@ -15,7 +15,8 @@ use clinkz_wot_foundation::{
 };
 use clinkz_wot_td::{
     ValidatedPropertyReadEvent, ValidatedPropertyReadStep, ValidatedThingAdmissionConfig,
-    ValidatedThingCursor, ValidatedThingProgress, data_schema::DataSchema, thing::Thing,
+    ValidatedThingCursor, ValidatedThingProgress, context::Context, data_schema::DataSchema,
+    security_scheme::SecurityScheme, thing::Thing,
 };
 
 /// Owned startup output. Its program and meaning can be lent after the TD and
@@ -46,7 +47,9 @@ impl PreparedRead {
 }
 
 /// Compile one explicitly selected coordinate while the validated source is
-/// lent. Unconsumed work stays in the same bounded preparation job.
+/// lent. Unconsumed work stays in the same bounded preparation job. This
+/// integer datagram profile requires the standard TD 1.1 context as its sole
+/// root entry and refuses local contexts on the selected mapping.
 pub fn prepare(thing: &Thing, name: &str, form: u32, plan: PlanId) -> CoreResult<PreparedRead> {
     let config = ValidatedThingAdmissionConfig::try_from_limits(GatewayDefaultV1::LIMITS)
         .map_err(|_| unsupported())?;
@@ -80,6 +83,9 @@ pub fn prepare(thing: &Thing, name: &str, form: u32, plan: PlanId) -> CoreResult
             _ => return Err(unsupported()),
         }
     };
+    if thing.context != Context::new() || thing._extra_fields.contains_key("@context") {
+        return Err(unsupported());
+    }
     let property = thing
         .properties
         .as_ref()
@@ -105,6 +111,12 @@ pub fn prepare(thing: &Thing, name: &str, form: u32, plan: PlanId) -> CoreResult
             ValidatedPropertyReadStep::Ready(ValidatedPropertyReadEvent::Form(f))
                 if f.property_name() == name && f.original_index() == form =>
             {
+                let Some(SecurityScheme::NoSec(security)) = f
+                    .security_name()
+                    .and_then(|name| thing.security_definitions.get(name))
+                else {
+                    return Err(unsupported());
+                };
                 let target = f.resolved_href();
                 if name.len() > 64
                     || target.len() > 64
@@ -112,10 +124,8 @@ pub fn prepare(thing: &Thing, name: &str, form: u32, plan: PlanId) -> CoreResult
                     || target.contains('{')
                     || target.contains('}')
                     || f.security_scheme() != Some("nosec")
-                    || !matches!(
-                        f.security_name().and_then(|name| thing.security_definitions.get(name)),
-                        Some(clinkz_wot_td::security_scheme::SecurityScheme::NoSec(s)) if s._context.proxy.is_none()
-                    )
+                    || security._context.proxy.is_some()
+                    || security._context._extra_fields.contains_key("@context")
                     || f.content_type() != "application/x-test-number"
                     || f.content_coding().is_some()
                     || f.subprotocol().is_some()

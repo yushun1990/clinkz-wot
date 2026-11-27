@@ -40,9 +40,12 @@ The executable cases cover these ownership and execution boundaries.
 The optional `prepare` feature exercises a bounded source job using TD's
 portable validated Form loan. It prepares two explicitly selected non-first
 Forms, then drops the TD. The same typed runtime reads each original destination
-over real UDP with the prepared integer constraints. The fixture also runs with
-preparation disabled and explicitly supplied program and meaning. Both
-execute with deployment-supplied storage, time and authorization.
+over real UDP with the prepared integer constraints. The source profile requires
+the standard TD 1.1 context as its sole root entry. The regression verifies
+refusal of additional root entries and local contexts on the selected Property,
+Form and effective security definition. The fixture also runs with preparation
+disabled and explicitly supplied program and meaning. Both execute with
+deployment-supplied storage, time and authorization.
 
 Run from the repository root.
 

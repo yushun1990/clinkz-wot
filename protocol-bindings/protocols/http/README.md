@@ -937,11 +937,17 @@ the actual compiler/executor/configuration and JSON/type plus cleartext-IP acces
 services. Complete type-only schema and NoSec support is checked in preparation;
 codec/type validation runs on normal and late output. Unsupported schema/security
 meaning is reported unsupported instead of trusting result-shape sealing alone.
-For prepared-only Host execution, link HTTP with `default-features = false`
-and use the already prepared mapping with `ConsumerCalls`. The runtime-only
-registration is available through `try_consumer_execution`. The HTTP fixture
-exercises a prepared program over a real socket with the preparation feature
-disabled. HTTP SSE is not implemented.
+
+The downstream integration prepares HTTP and UDP mappings with preparation
+enabled, drops the TD and registry, and executes the original mappings through
+`ConsumerCalls` over real sockets. [Downstream handoff test](../../../tools/architecture-fixtures/open-consumer/tests/integration.rs)
+
+With HTTP's default features disabled, the Binding's test constructs a native
+program using private HTTP types. It registers the executor through
+`try_consumer_execution` and drives a real TCP Read through `ConsumerCalls`.
+[HTTP execution-only test](src/identity_tests.rs)
+
+HTTP SSE is not implemented.
 
 ## TD-driven continuing Consumer Actions
 

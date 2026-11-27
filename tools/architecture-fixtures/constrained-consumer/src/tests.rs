@@ -858,6 +858,50 @@ fn caller_owned_primary_read_refuses_lent_additional_response_meaning_before_nat
 
 #[cfg(feature = "prepare")]
 #[test]
+fn source_read_refuses_unsupported_contexts_in_the_selected_mapping() {
+    use clinkz_wot_td::context::WOT_CONTEXT_1_1;
+    use serde_json::json;
+
+    let source = json!({
+        "@context": WOT_CONTEXT_1_1,
+        "title": "datagrams", "id": "urn:source-read",
+        "security": ["default"],
+        "securityDefinitions": {"default": {"scheme": "nosec"}, "selected": {"scheme": "nosec"}},
+        "properties": {"value": {"type": "integer", "forms": [
+            {"href": "test-datagram:value", "contentType": "application/x-test-number", "security": ["selected"]},
+            {"href": "test-datagram:other", "contentType": "application/x-test-number"}
+        ]}}
+    });
+    let plan = PlanId::new(SlotIndex::new(0), Generation::INITIAL);
+    let prepare =
+        |source| preparation::prepare(&serde_json::from_value(source).unwrap(), "value", 0, plan);
+    assert!(prepare(source.clone()).is_ok());
+
+    let remote = "https://example.invalid/unknown-context";
+    for (scope, context) in [
+        ("", json!([WOT_CONTEXT_1_1, remote])),
+        ("", json!([WOT_CONTEXT_1_1, {"@vocab": "urn:other:"}])),
+        ("/properties/value", json!(remote)),
+        ("/properties/value/forms/0", json!(remote)),
+        ("/securityDefinitions/selected", json!(remote)),
+    ] {
+        let mut td = source.clone();
+        td.pointer_mut(scope).unwrap()["@context"] = context;
+        assert!(
+            matches!(prepare(td), Err(CoreError::UnsupportedOperation(_))),
+            "accepted an unsupported context at {scope:?}"
+        );
+    }
+
+    let mut td = source;
+    td["@context"] = json!([WOT_CONTEXT_1_1]);
+    td["properties"]["value"]["forms"][1]["@context"] = json!(remote);
+    td["securityDefinitions"]["default"]["@context"] = json!(remote);
+    assert!(prepare(td).is_ok());
+}
+
+#[cfg(feature = "prepare")]
+#[test]
 fn selected_source_forms_execute_in_typed_slots_after_the_td_is_dropped() {
     let thing: clinkz_wot_td::thing::Thing = serde_json::from_str(
         r#"{
