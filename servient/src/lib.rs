@@ -11,13 +11,11 @@ extern crate alloc;
 
 #[cfg(all(feature = "std", target_has_atomic = "ptr"))]
 pub mod consumer;
-pub mod consumer_property_read;
 mod error;
 #[cfg(feature = "std")]
 pub mod host_accounts;
 #[cfg(feature = "std")]
 pub mod host_producer;
-#[cfg(feature = "std")]
 #[cfg(feature = "std")]
 pub mod producer;
 #[cfg(feature = "std")]
@@ -31,6 +29,7 @@ mod property_read;
 #[cfg(feature = "std")]
 mod builder;
 
+pub use clinkz_wot_servient_finite::borrowed_consumer;
 pub use error::{ServientError, ServientResult};
 pub use property_read::{CompiledPlanSetState, ExposeState, StaticServient, StaticServientBuilder};
 

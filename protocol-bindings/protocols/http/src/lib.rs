@@ -27,7 +27,7 @@ mod finite_producer;
 pub use finite_listener::HttpFiniteListener;
 #[cfg(feature = "prepare")]
 pub use finite_preparation::{HttpFiniteProducer, HttpProducerEndpoint};
-#[cfg(all(test, feature = "prepare"))]
+#[cfg(test)]
 mod identity_tests;
 mod producer;
 use clinkz_wot_codec_json as producer_validation;
@@ -630,47 +630,18 @@ fn consumer_execution(
         BindingLifetimeFootprint::new(3, std::mem::size_of::<Client>() as u64 + 32),
         BindingLifetimeFootprint::new(16, 8192),
     )
-    .with_resource_contract(BindingResourceContract::ConsumerOwnedHostV2)
-    .with_consumer_result_limits(BODY, MEDIA)
     .with_transient(BindingTransientFootprint::new(16384));
     HostConsumerBindingRegistration::new(HostConsumerBindingRegistrationInput::new(
         identity,
-        BindingExecutionSupport::host_erased(),
         Box::new(Client {
             tls,
             config,
             busy: Arc::new(AtomicBool::new(false)),
         }),
         resources,
-        BindingStatusPolicy::new(2, 17),
     ))
     .map_err(|e| e.error().error().clone())
 }
-/// Pairs optional preparation with the exact runtime policy before any effects.
-#[cfg(feature = "prepare")]
-pub fn try_inline_consumer_registration(
-    config: HttpConsumerConfig,
-    binding_id: BindingId,
-    binding_generation: BindingGeneration,
-    diagnostic_ordinal: u32,
-) -> CoreResult<
-    clinkz_wot_planning::InlineConsumerCompilerRegistration<
-        clinkz_wot_planning::HostConsumerBindingPreparation,
-    >,
-> {
-    use clinkz_wot_planning::*;
-    let compiler = HostBindingCompilerRegistration::try_new_inline_semantic(
-        HttpCompiler::for_restricted_read(config),
-    )
-    .map_err(|e| e.error().error().clone())?;
-    let runtime =
-        try_consumer_execution(config, binding_id, binding_generation, diagnostic_ordinal)?;
-    HostConsumerBindingPreparation::try_pair(runtime, compiler)
-        .map_err(|e| e.error().error().clone())?
-        .try_into_inline_consumer_compiler()
-        .map_err(|e| e.error().error().clone())
-}
-
 #[cfg(test)]
 mod qualification {
     use super::*;
@@ -770,9 +741,7 @@ pub fn try_https_consumer_registration(
     })
 }
 impl HttpConsumerConfig {
-    /// Explicit native destination bound. The existing restricted inline Read
-    /// representation supports 64 bytes; modern finite execution can use up to
-    /// 256 without changing the shared meaning or recompiling per target.
+    /// Sets the maximum native destination size, up to 256 bytes.
     pub fn with_target_capacity(mut self, capacity: usize) -> CoreResult<Self> {
         if !(1..=256).contains(&capacity) {
             return Err(error(601, "unsupported HTTP target capacity"));

@@ -22,16 +22,17 @@ use std::any::Any;
 use crate::Operation;
 use clinkz_wot_foundation::{Generation, WorkBudget};
 
-use crate::ConsumerBindingConfiguration;
-#[cfg(feature = "std")]
-use crate::HostBindingArtifact;
-use crate::response::ConsumerResultSeal;
 use crate::{
     AffordanceTarget, BindingArtifactCompatibility, BindingArtifactEnvelope, BindingArtifactRef,
     BindingConfigurationDigest, BindingGeneration, BindingId, CleanupOperation, CleanupRecord,
     CleanupSlotId, CoreError, CoreResult, CorrelationId, Deadline, ErrorContext, ErrorPhase,
-    InteractionInput, InteractionOutput, OutboundRequest, PlanId, PlanSetGeneration, RetryClass,
-    StartStatus, ThingId,
+    InteractionInput, InteractionOutput, PlanId, PlanSetGeneration, RetryClass, StartStatus,
+    ThingId,
+};
+#[cfg(feature = "std")]
+use crate::{
+    ConsumerBindingConfiguration, HostBindingArtifact, OutboundRequest,
+    response::ConsumerResultSeal,
 };
 
 // ---------------------------------------------------------------------------
@@ -70,6 +71,7 @@ impl BindingLifetimeFootprint {
             && self.retained_bytes <= admitted.retained_bytes
     }
 
+    #[cfg(feature = "std")]
     const fn checked_add(self, other: Self) -> Option<Self> {
         let Some(retained_items) = self.retained_items.checked_add(other.retained_items) else {
             return None;
@@ -249,7 +251,6 @@ impl BindingRegistrationIdentity {
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct BindingRegistrationCapabilities {
     producer_property_read: bool,
-    consumer_property_read: bool,
 }
 
 impl BindingRegistrationCapabilities {
@@ -257,7 +258,6 @@ impl BindingRegistrationCapabilities {
     pub const fn new(producer_property_read: bool) -> Self {
         Self {
             producer_property_read,
-            consumer_property_read: false,
         }
     }
 
@@ -266,30 +266,9 @@ impl BindingRegistrationCapabilities {
         Self::new(true)
     }
 
-    /// Declares Consumer Property Read without a Producer role.
-    pub const fn consumer_property_read() -> Self {
-        Self {
-            producer_property_read: false,
-            consumer_property_read: true,
-        }
-    }
-
-    /// Declares the admitted dual-role Producer and Consumer Property Read bundle.
-    pub const fn producer_and_consumer_property_read() -> Self {
-        Self {
-            producer_property_read: true,
-            consumer_property_read: true,
-        }
-    }
-
     /// Returns whether Producer Property Read is advertised.
     pub const fn supports_producer_property_read(self) -> bool {
         self.producer_property_read
-    }
-
-    /// Returns whether Consumer Property Read invocation is advertised.
-    pub const fn supports_consumer_property_read(self) -> bool {
-        self.consumer_property_read
     }
 }
 
@@ -335,23 +314,9 @@ impl BindingExecutionSupport {
     }
 }
 
-/// Explicit interpretation of a complete binding's resource declarations.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub enum BindingResourceContract {
-    /// Original transitive maxima and nonallocating local disposal.
-    #[default]
-    StrictV1,
-    /// Consumer engine-held backing, binding-private policy, strict disposal.
-    ConsumerOwnedV2,
-    /// Consumer ownership with finite SDK-local Host disposal allocations.
-    ConsumerOwnedHostV2,
-}
-
 /// Registration-level declared and admitted retained-resource bounds.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct BindingResourceDeclarations {
-    contract: BindingResourceContract,
-    consumer_result: Option<(u64, u64)>,
     declared: BindingLifetimeFootprint,
     admitted: BindingLifetimeFootprint,
     route_state: BindingLifetimeFootprint,
@@ -367,8 +332,6 @@ impl BindingResourceDeclarations {
         admitted: BindingLifetimeFootprint,
     ) -> Self {
         Self {
-            contract: BindingResourceContract::StrictV1,
-            consumer_result: None,
             declared,
             admitted,
             route_state: admitted,
@@ -376,31 +339,6 @@ impl BindingResourceDeclarations {
             response_state: admitted,
             transient: BindingTransientFootprint::new(0),
         }
-    }
-
-    /// Selects an explicit resource/disposal contract; numbers imply no conversion.
-    #[must_use]
-    pub const fn with_resource_contract(mut self, contract: BindingResourceContract) -> Self {
-        self.contract = contract;
-        self
-    }
-    /// Returns the captured resource contract.
-    pub const fn resource_contract(&self) -> BindingResourceContract {
-        self.contract
-    }
-    /// Declares supported maximum body bytes and capacity of each media String.
-    #[must_use]
-    pub const fn with_consumer_result_limits(
-        mut self,
-        body_bytes: u64,
-        media_capacity: u64,
-    ) -> Self {
-        self.consumer_result = Some((body_bytes, media_capacity));
-        self
-    }
-    /// Returns the explicit complete result-backing limits, when declared.
-    pub const fn consumer_result_limits(&self) -> Option<(u64, u64)> {
-        self.consumer_result
     }
 
     /// Sets the three constrained-state retained ceilings.
@@ -1371,165 +1309,6 @@ pub enum BindingDeliveryOutcome {
     Failed(BindingOperationalError),
 }
 
-/// Caller-owned typed storage for one accepted Consumer request generation.
-#[derive(Debug)]
-pub struct ClientRequestSlot<S> {
-    request: Option<OutboundRequest>,
-    state: Option<S>,
-}
-
-impl<S> ClientRequestSlot<S> {
-    /// Creates one vacant admitted request slot.
-    pub const fn new() -> Self {
-        Self {
-            request: None,
-            state: None,
-        }
-    }
-
-    /// Transfers an accepted request and binding-private state into this slot.
-    ///
-    /// # Panics
-    ///
-    /// Panics when a prior generation remains live. The binding must finish
-    /// terminal acknowledgement before the caller clears and reuses the slot.
-    pub fn initialize(&mut self, request: OutboundRequest, state: S) {
-        assert!(
-            self.request.is_none() && self.state.is_none(),
-            "client request slot is live"
-        );
-        self.request = Some(request);
-        self.state = Some(state);
-    }
-
-    /// Returns the exact accepted request while this generation is live.
-    pub fn request(&self) -> &OutboundRequest {
-        self.request
-            .as_ref()
-            .expect("client request slot is vacant")
-    }
-
-    /// Returns mutable binding-private state for the live request.
-    pub fn state_mut(&mut self) -> &mut S {
-        self.state.as_mut().expect("client request slot is vacant")
-    }
-
-    /// Returns whether this slot owns no request or state.
-    pub const fn is_vacant(&self) -> bool {
-        self.request.is_none() && self.state.is_none()
-    }
-
-    /// Clears an acknowledged terminal generation in caller context.
-    pub fn clear(&mut self) {
-        assert!(
-            self.request.is_some() && self.state.is_some(),
-            "client request slot is vacant"
-        );
-        self.state = None;
-        self.request = None;
-    }
-}
-
-impl<S> Default for ClientRequestSlot<S> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum StaticConsumerCallState {
-    Vacant,
-    Running,
-    Cancelling,
-    Terminal,
-}
-
-/// Opaque complete-registration carrier for one Consumer Property Read call.
-///
-/// Raw [`ClientRequestSlot`] access remains available to binding authors, but
-/// installed runtime code receives only this carrier. It retains Core's
-/// single-use result authority across synchronous, pending, and cancellation
-/// exits and gates acknowledgement before caller-owned storage can be reused.
-pub struct StaticConsumerPropertyReadSlot<S> {
-    raw: ClientRequestSlot<S>,
-    seal: Option<ConsumerResultSeal>,
-    state: StaticConsumerCallState,
-}
-
-impl<S> StaticConsumerPropertyReadSlot<S> {
-    /// Creates one vacant complete-registration Consumer slot.
-    pub const fn new() -> Self {
-        Self {
-            raw: ClientRequestSlot::new(),
-            seal: None,
-            state: StaticConsumerCallState::Vacant,
-        }
-    }
-
-    /// Returns whether no accepted call or terminal acknowledgement is live.
-    pub const fn is_vacant(&self) -> bool {
-        matches!(self.state, StaticConsumerCallState::Vacant)
-            && self.seal.is_none()
-            && self.raw.is_vacant()
-    }
-
-    fn error(&self, code: u16, cause: &str) -> CoreError {
-        self.seal.as_ref().map_or_else(
-            || {
-                CoreError::Validation(
-                    ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
-                        .with_operation(Operation::ReadProperty)
-                        .with_redacted_cause(code, cause),
-                )
-            },
-            |seal| seal.validation_error(code, cause),
-        )
-    }
-
-    fn seal_synchronous(
-        &mut self,
-        result: CoreResult<InteractionOutput>,
-    ) -> CoreResult<InteractionOutput> {
-        match result {
-            Ok(output) => self
-                .seal
-                .take()
-                .expect("live Consumer slot retains its result seal")
-                .validate(output),
-            Err(error) => Err(error),
-        }
-    }
-
-    fn seal_against_live_request(
-        &mut self,
-        result: CoreResult<InteractionOutput>,
-    ) -> CoreResult<InteractionOutput> {
-        match result {
-            Ok(output) => self
-                .seal
-                .take()
-                .expect("live Consumer slot retains its result seal")
-                .validate_against_request(self.raw.request(), output),
-            Err(error) => Err(error),
-        }
-    }
-}
-
-impl<S> Default for StaticConsumerPropertyReadSlot<S> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<S> core::fmt::Debug for StaticConsumerPropertyReadSlot<S> {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_struct("StaticConsumerPropertyReadSlot")
-            .field("vacant", &self.is_vacant())
-            .finish_non_exhaustive()
-    }
-}
-
 /// Caller-owned typed storage for one server route generation.
 #[derive(Debug)]
 pub struct ServerRouteSlot<S> {
@@ -1821,70 +1600,6 @@ impl RouteActivationPermit<'_> {
 // Portable caller-owned server representation and complete registration
 // ---------------------------------------------------------------------------
 
-/// Application-static, manually progressed one-shot client binding contract.
-///
-/// The scoped artifact borrow is available only during `start_request`; every
-/// fact needed by pending work must be derived into the owned request state.
-/// Subscription associated state and methods are deliberately absent.
-pub trait PollClientBinding {
-    /// Source-free native program consumed by this client.
-    type Artifact;
-    /// Binding-private state for one accepted request.
-    type RequestState;
-
-    /// Passive, bounded, allocation-free metadata of the actual immutable policy.
-    /// Occupancy changes must not change this identity. No execution authority
-    /// or callback/destructor certification follows from returning a value.
-    fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
-        None
-    }
-
-    /// Returns the compatibility identity consumed by registration validation.
-    fn artifact_compatibility(&self) -> BindingArtifactCompatibility;
-    /// Declares the retained associated-state layout for one request.
-    fn request_state_layout(&self) -> BindingStateLayout;
-
-    /// Starts one checked request and transfers it only on acceptance.
-    fn start_request(
-        &mut self,
-        request: OutboundRequest,
-        artifact: &BindingArtifactEnvelope<Self::Artifact>,
-        slot: &mut ClientRequestSlot<Self::RequestState>,
-        budget: &mut WorkBudget,
-    ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>;
-
-    /// Polls one accepted pending request.
-    fn poll_request(
-        &mut self,
-        cx: &mut Context<'_>,
-        slot: &mut ClientRequestSlot<Self::RequestState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<InteractionOutput>>;
-
-    /// Starts explicit request cancellation with the complete cleanup phase.
-    fn start_cancel_request(
-        &mut self,
-        cx: &mut Context<'_>,
-        cleanup: CleanupPhaseContext,
-        slot: &mut ClientRequestSlot<Self::RequestState>,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>>;
-
-    /// Polls accepted request cancellation to explicit settlement.
-    fn poll_cancel_request(
-        &mut self,
-        cx: &mut Context<'_>,
-        slot: &mut ClientRequestSlot<Self::RequestState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>>;
-
-    /// Acknowledges terminal disposition before caller-owned storage is cleared.
-    fn acknowledge_request(
-        &mut self,
-        slot: &mut ClientRequestSlot<Self::RequestState>,
-    ) -> CoreResult<()>;
-}
-
 /// Application-static, manually progressed server binding contract.
 pub trait PollServerBinding {
     /// Source-free native program consumed by this server.
@@ -2086,273 +1801,6 @@ pub trait PollServerBinding {
     ) -> CoreResult<()>;
 }
 
-/// Typed Producer server and Consumer client sharing one native artifact type.
-///
-/// An installed registration may expose this value through its Producer
-/// projection, but the private Consumer half has no raw execution accessor:
-///
-/// ```compile_fail
-/// # use clinkz_wot_core::{PollClientBinding, PollServerBinding};
-/// # use clinkz_wot_core::{StaticBindingComponents, StaticBindingRegistration};
-/// # fn bypass<S, C>(
-/// #     registration: &mut StaticBindingRegistration<StaticBindingComponents<S, C>>,
-/// # ) where
-/// #     S: PollServerBinding,
-/// #     C: PollClientBinding<Artifact = S::Artifact>,
-/// # {
-/// let _raw_client = registration.server_mut().client_mut();
-/// # }
-/// ```
-pub struct StaticBindingComponents<S, C> {
-    server: S,
-    client: C,
-}
-
-impl<S, C> StaticBindingComponents<S, C> {
-    /// Creates one dual-role static component pair.
-    pub const fn new(server: S, client: C) -> Self {
-        Self { server, client }
-    }
-
-    /// Borrows the Producer server component.
-    pub const fn server(&self) -> &S {
-        &self.server
-    }
-}
-
-impl<S, C> PollServerBinding for StaticBindingComponents<S, C>
-where
-    S: PollServerBinding,
-    C: PollClientBinding<Artifact = S::Artifact>,
-{
-    type Artifact = S::Artifact;
-    type RouteState = S::RouteState;
-    type ReadinessState = S::ReadinessState;
-    type ResponseState = S::ResponseState;
-
-    fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
-        self.server.artifact_compatibility()
-    }
-
-    fn route_state_layout(&self) -> BindingStateLayout {
-        self.server.route_state_layout()
-    }
-
-    fn readiness_state_layout(&self) -> BindingStateLayout {
-        self.server.readiness_state_layout()
-    }
-
-    fn response_state_layout(&self) -> BindingStateLayout {
-        self.server.response_state_layout()
-    }
-
-    fn start_prepare(
-        &mut self,
-        input: PrepareInput,
-        artifact: &BindingArtifactEnvelope<Self::Artifact>,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        budget: &mut WorkBudget,
-    ) -> Result<StartStatus<RoutePrepareOutcome<()>>, BindingInputRejection<PrepareInput>> {
-        self.server.start_prepare(input, artifact, route, budget)
-    }
-
-    fn poll_prepare(
-        &mut self,
-        cx: &mut Context<'_>,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<RoutePrepareOutcome<()>> {
-        self.server.poll_prepare(cx, route, budget)
-    }
-
-    fn poll_cancel_prepare(
-        &mut self,
-        cx: &mut Context<'_>,
-        cleanup: &CleanupPhaseContext,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<BindingCallSettlement<RoutePrepareOutcome<()>, ()>>> {
-        self.server.poll_cancel_prepare(cx, cleanup, route, budget)
-    }
-
-    fn start_readiness(
-        &mut self,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        readiness: &mut RouteReadinessSlot<Self::ReadinessState>,
-        budget: &mut WorkBudget,
-    ) -> StartStatus<RouteReadinessOutcome<()>> {
-        self.server.start_readiness(route, readiness, budget)
-    }
-
-    fn poll_readiness(
-        &mut self,
-        cx: &mut Context<'_>,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        readiness: &mut RouteReadinessSlot<Self::ReadinessState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<RouteReadinessOutcome<()>> {
-        self.server.poll_readiness(cx, route, readiness, budget)
-    }
-
-    fn poll_cancel_readiness(
-        &mut self,
-        cx: &mut Context<'_>,
-        cleanup: &CleanupPhaseContext,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        readiness: &mut RouteReadinessSlot<Self::ReadinessState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<BindingCallSettlement<RouteReadinessOutcome<()>, ()>>> {
-        self.server
-            .poll_cancel_readiness(cx, cleanup, route, readiness, budget)
-    }
-
-    fn start_activate(
-        &mut self,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        budget: &mut WorkBudget,
-    ) -> StartStatus<RouteActivationOutcome<(), ()>> {
-        self.server.start_activate(route, budget)
-    }
-
-    fn poll_activate(
-        &mut self,
-        cx: &mut Context<'_>,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<RouteActivationOutcome<(), ()>> {
-        self.server.poll_activate(cx, route, budget)
-    }
-
-    fn poll_cancel_activate(
-        &mut self,
-        cx: &mut Context<'_>,
-        cleanup: &CleanupPhaseContext,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<BindingCallSettlement<RouteActivationOutcome<(), ()>, ()>>> {
-        self.server.poll_cancel_activate(cx, cleanup, route, budget)
-    }
-
-    fn start_commit(
-        &mut self,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        budget: &mut WorkBudget,
-    ) -> StartStatus<RouteCommitOutcome<(), ()>> {
-        self.server.start_commit(route, budget)
-    }
-
-    fn poll_commit(
-        &mut self,
-        cx: &mut Context<'_>,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<RouteCommitOutcome<(), ()>> {
-        self.server.poll_commit(cx, route, budget)
-    }
-
-    fn poll_cancel_commit(
-        &mut self,
-        cx: &mut Context<'_>,
-        cleanup: &CleanupPhaseContext,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<BindingCallSettlement<RouteCommitOutcome<(), ()>, ()>>> {
-        self.server.poll_cancel_commit(cx, cleanup, route, budget)
-    }
-
-    fn poll_accept(
-        &mut self,
-        cx: &mut Context<'_>,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        permit: RouteActivationPermit<'_>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<RouteAcceptEvent>> {
-        self.server.poll_accept(cx, route, permit, budget)
-    }
-
-    fn start_abort(
-        &mut self,
-        cleanup: CleanupPhaseContext,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        budget: &mut WorkBudget,
-    ) -> StartStatus<RouteCleanupOutcome> {
-        self.server.start_abort(cleanup, route, budget)
-    }
-
-    fn poll_abort(
-        &mut self,
-        cx: &mut Context<'_>,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<RouteCleanupOutcome> {
-        self.server.poll_abort(cx, route, budget)
-    }
-
-    fn start_shutdown(
-        &mut self,
-        cleanup: CleanupPhaseContext,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        budget: &mut WorkBudget,
-    ) -> StartStatus<RouteCleanupOutcome> {
-        self.server.start_shutdown(cleanup, route, budget)
-    }
-
-    fn poll_shutdown(
-        &mut self,
-        cx: &mut Context<'_>,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<RouteCleanupOutcome> {
-        self.server.poll_shutdown(cx, route, budget)
-    }
-
-    fn acknowledge_route(
-        &mut self,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-    ) -> CoreResult<()> {
-        self.server.acknowledge_route(route)
-    }
-
-    fn start_response(
-        &mut self,
-        response: RouteInboundResponse,
-        slot: &mut ServerResponseSlot<Self::ResponseState>,
-        budget: &mut WorkBudget,
-    ) -> Result<StartStatus<BindingDeliveryOutcome>, BindingInputRejection<RouteInboundResponse>>
-    {
-        self.server.start_response(response, slot, budget)
-    }
-
-    fn poll_response(
-        &mut self,
-        cx: &mut Context<'_>,
-        slot: &mut ServerResponseSlot<Self::ResponseState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<BindingDeliveryOutcome> {
-        self.server.poll_response(cx, slot, budget)
-    }
-
-    fn poll_cancel_response(
-        &mut self,
-        cx: &mut Context<'_>,
-        cleanup: &CleanupPhaseContext,
-        slot: &mut ServerResponseSlot<Self::ResponseState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<BindingCallSettlement<BindingDeliveryOutcome>>> {
-        self.server.poll_cancel_response(cx, cleanup, slot, budget)
-    }
-
-    fn acknowledge_response(
-        &mut self,
-        slot: &mut ServerResponseSlot<Self::ResponseState>,
-    ) -> CoreResult<()> {
-        self.server.acknowledge_response(slot)
-    }
-}
-
-/// Scoped, statically dispatched progress loan of a validated server.
-///
-/// Its private reference cannot be extracted or replaced. Swapping these loans
 /// never swaps the registered executors, including a private Consumer component.
 pub struct StaticServerProgress<'a, B: PollServerBinding> {
     server: &'a mut B,
@@ -2635,33 +2083,6 @@ where
     }
 }
 
-impl<S, C> StaticBindingRegistrationInput<StaticBindingComponents<S, C>>
-where
-    S: PollServerBinding,
-    C: PollClientBinding<Artifact = S::Artifact>,
-{
-    /// Assembles one dual-role Property Read input without protocol work.
-    #[allow(clippy::too_many_arguments)]
-    pub const fn producer_and_consumer_property_read(
-        identity: BindingRegistrationIdentity,
-        execution: BindingExecutionSupport,
-        components: StaticBindingComponents<S, C>,
-        resources: BindingResourceDeclarations,
-        ingress: BindingIngressPolicy,
-        status: BindingStatusPolicy,
-    ) -> Self {
-        Self {
-            identity,
-            capabilities: BindingRegistrationCapabilities::producer_and_consumer_property_read(),
-            execution,
-            server: components,
-            resources,
-            ingress,
-            status,
-        }
-    }
-}
-
 /// Validated complete application-static binding bundle.
 pub struct StaticBindingRegistration<B>
 where
@@ -2679,12 +2100,6 @@ where
         input: StaticBindingRegistrationInput<B>,
     ) -> Result<Self, BindingInputRejection<StaticBindingRegistrationInput<B>>> {
         let identity = input.identity;
-        if input.resources.resource_contract() != BindingResourceContract::StrictV1 {
-            return Err(BindingInputRejection::new(
-                input,
-                registration_error(identity, 300),
-            ));
-        }
         let expected = identity.artifact_compatibility();
         let server_compatibility = input.server.artifact_compatibility();
         let layouts_fit = input
@@ -2701,7 +2116,6 @@ where
                 .fits_within(input.resources.response_state());
 
         let valid = input.capabilities.supports_producer_property_read()
-            && !input.capabilities.supports_consumer_property_read()
             && input.execution.supports_application_static()
             && expected == server_compatibility
             && input.resources.is_valid()
@@ -2744,17 +2158,6 @@ where
     ///     core::mem::replace(registration.server_mut(), other);
     /// }
     /// ```
-    /// The private Consumer of a dual-role registration cannot be replaced either:
-    /// ```compile_fail,E0308
-    /// # use clinkz_wot_core::{PollClientBinding, PollServerBinding};
-    /// # use clinkz_wot_core::{StaticBindingComponents, StaticBindingRegistration};
-    /// fn replace<S, C>(
-    ///     registration: &mut StaticBindingRegistration<StaticBindingComponents<S, C>>,
-    ///     other: StaticBindingComponents<S, C>,
-    /// ) where S: PollServerBinding, C: PollClientBinding<Artifact = S::Artifact> {
-    ///     core::mem::replace(registration.server_mut(), other);
-    /// }
-    /// ```
     /// Ordinary progress still uses the original native server contract:
     /// ```
     /// # use clinkz_wot_core::{PollServerBinding, StaticBindingRegistration};
@@ -2790,23 +2193,7 @@ where
     }
 }
 
-fn complete_static_consumer_slot_fits<S>(
-    raw: BindingStateLayout,
-    resources: BindingResourceDeclarations,
-) -> bool {
-    // The validator moves an already-owned output through fixed fields and
-    // performs no allocation or variable scratch work, so its transient delta
-    // is exactly zero. The binding-authored transient maximum must still fit.
-    let transient_fits =
-        raw.transient_footprint().peak_bytes() <= resources.transient().peak_bytes();
-    let core_storage =
-        BindingLifetimeFootprint::new(1, size_of::<StaticConsumerPropertyReadSlot<S>>() as u64);
-    raw.lifetime_footprint()
-        .checked_add(core_storage)
-        .is_some_and(|complete| complete.fits_within(resources.admitted()))
-        && transient_fits
-}
-
+#[cfg(feature = "std")]
 fn consumer_request_matches_registration<A>(
     registration: BindingRegistrationIdentity,
     request: &OutboundRequest,
@@ -2822,6 +2209,7 @@ fn consumer_request_matches_registration<A>(
         && artifact.artifact().compatibility() == registration.artifact_compatibility()
 }
 
+#[cfg(feature = "std")]
 fn consumer_request_error(request: &OutboundRequest, code: u16, cause: &str) -> CoreError {
     CoreError::Validation(
         ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
@@ -2832,6 +2220,7 @@ fn consumer_request_error(request: &OutboundRequest, code: u16, cause: &str) -> 
     )
 }
 
+#[cfg(feature = "std")]
 fn reject_consumer_request(
     request: OutboundRequest,
     code: u16,
@@ -2839,334 +2228,6 @@ fn reject_consumer_request(
 ) -> BindingInputRejection<OutboundRequest> {
     let error = BindingOperationalError::new(consumer_request_error(&request, code, cause));
     BindingInputRejection::new(request, error)
-}
-
-impl<S, C> StaticBindingRegistration<StaticBindingComponents<S, C>>
-where
-    S: PollServerBinding,
-    C: PollClientBinding<Artifact = S::Artifact>,
-{
-    /// Validates one complete dual-role server/client bundle atomically.
-    pub fn producer_and_consumer_property_read(
-        input: StaticBindingRegistrationInput<StaticBindingComponents<S, C>>,
-    ) -> Result<
-        Self,
-        BindingInputRejection<StaticBindingRegistrationInput<StaticBindingComponents<S, C>>>,
-    > {
-        let identity = input.identity;
-        if input.resources.resource_contract() != BindingResourceContract::StrictV1
-            || input.server.client.consumer_configuration().is_some()
-        {
-            return Err(BindingInputRejection::new(
-                input,
-                registration_error(identity, 302),
-            ));
-        }
-        let expected = identity.artifact_compatibility();
-        let server_compatibility = input.server.server.artifact_compatibility();
-        let client_compatibility = input.server.client.artifact_compatibility();
-        let server_layouts_fit = input
-            .server
-            .server
-            .route_state_layout()
-            .fits_within(input.resources.route_state())
-            && input
-                .server
-                .server
-                .readiness_state_layout()
-                .fits_within(input.resources.readiness_state())
-            && input
-                .server
-                .server
-                .response_state_layout()
-                .fits_within(input.resources.response_state());
-        let request_layout_fits = input.server.client.request_state_layout();
-        let complete_request_slot_fits = complete_static_consumer_slot_fits::<C::RequestState>(
-            request_layout_fits,
-            input.resources,
-        );
-
-        let valid = input.capabilities.supports_producer_property_read()
-            && input.capabilities.supports_consumer_property_read()
-            && input.execution.supports_application_static()
-            && expected == server_compatibility
-            && expected == client_compatibility
-            && input.resources.is_valid()
-            && server_layouts_fit
-            && complete_request_slot_fits
-            && input.ingress.is_valid();
-        if !valid {
-            let error = registration_error(identity, 302);
-            return Err(BindingInputRejection::new(input, error));
-        }
-        Ok(Self { input })
-    }
-
-    /// Starts one installed Consumer Property Read through Core result sealing.
-    pub fn start_consumer_property_read(
-        &mut self,
-        request: OutboundRequest,
-        artifact: &BindingArtifactEnvelope<S::Artifact>,
-        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-        budget: &mut WorkBudget,
-    ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
-    {
-        start_static_consumer_property_read(
-            self.input.identity,
-            self.input.capabilities,
-            self.input.resources,
-            &mut self.input.server.client,
-            request,
-            artifact,
-            slot,
-            budget,
-        )
-    }
-
-    /// Polls one installed pending Consumer call and seals its result.
-    pub fn poll_consumer_property_read(
-        &mut self,
-        cx: &mut Context<'_>,
-        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<InteractionOutput>> {
-        poll_static_consumer_property_read(&mut self.input.server.client, cx, slot, budget)
-    }
-
-    /// Starts cancellation without admitting a static cleanup-transfer owner.
-    pub fn start_cancel_consumer_property_read(
-        &mut self,
-        cx: &mut Context<'_>,
-        cleanup: CleanupPhaseContext,
-        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        start_cancel_static_consumer_property_read(
-            &mut self.input.server.client,
-            cx,
-            cleanup,
-            slot,
-            budget,
-        )
-    }
-
-    /// Polls accepted cancellation to a sealed settlement.
-    pub fn poll_cancel_consumer_property_read(
-        &mut self,
-        cx: &mut Context<'_>,
-        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        poll_cancel_static_consumer_property_read(&mut self.input.server.client, cx, slot, budget)
-    }
-
-    /// Acknowledges only a sealed result or terminal cancellation disposition.
-    pub fn acknowledge_consumer_property_read(
-        &mut self,
-        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-    ) -> CoreResult<()> {
-        acknowledge_static_consumer_property_read(&mut self.input.server.client, slot)
-    }
-}
-
-fn start_static_consumer_property_read<C: PollClientBinding>(
-    identity: BindingRegistrationIdentity,
-    capabilities: BindingRegistrationCapabilities,
-    resources: BindingResourceDeclarations,
-    client: &mut C,
-    request: OutboundRequest,
-    artifact: &BindingArtifactEnvelope<C::Artifact>,
-    slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-    budget: &mut WorkBudget,
-) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>> {
-    if !slot.is_vacant()
-        || !capabilities.supports_consumer_property_read()
-        || request.operation() != Operation::ReadProperty
-        || !consumer_request_matches_registration(identity, &request, artifact)
-    {
-        return Err(reject_consumer_request(
-            request,
-            303,
-            "Consumer request does not match the installed registration",
-        ));
-    }
-
-    let accepted_contract_error = consumer_request_error(
-        &request,
-        304,
-        "accepted static Consumer request did not retain its exact slot identity",
-    );
-    let seal = ConsumerResultSeal::from_request(&request, resources.consumer_result_limits());
-    let started = client.start_request(request, artifact, &mut slot.raw, budget)?;
-
-    slot.seal = Some(seal);
-    match started {
-        StartStatus::Ready(result) => {
-            slot.state = StaticConsumerCallState::Terminal;
-            if !slot.raw.is_vacant() {
-                return Ok(StartStatus::Ready(Err(accepted_contract_error)));
-            }
-            Ok(StartStatus::Ready(slot.seal_synchronous(result)))
-        }
-        StartStatus::Pending => {
-            slot.state = StaticConsumerCallState::Running;
-            let accepted_exact_request = !slot.raw.is_vacant()
-                && slot
-                    .seal
-                    .as_ref()
-                    .is_some_and(|seal| seal.matches_request(slot.raw.request()));
-            if !accepted_exact_request {
-                slot.state = StaticConsumerCallState::Terminal;
-                return Ok(StartStatus::Ready(Err(accepted_contract_error)));
-            }
-            Ok(StartStatus::Pending)
-        }
-    }
-}
-
-fn poll_static_consumer_property_read<C: PollClientBinding>(
-    client: &mut C,
-    cx: &mut Context<'_>,
-    slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-    budget: &mut WorkBudget,
-) -> Poll<CoreResult<InteractionOutput>> {
-    if !matches!(slot.state, StaticConsumerCallState::Running) {
-        return Poll::Ready(Err(slot.error(
-            305,
-            "Consumer result poll requires a running installed call",
-        )));
-    }
-
-    match client.poll_request(cx, &mut slot.raw, budget) {
-        Poll::Pending => Poll::Pending,
-        Poll::Ready(result) => {
-            slot.state = StaticConsumerCallState::Terminal;
-            Poll::Ready(slot.seal_against_live_request(result))
-        }
-    }
-}
-
-fn start_cancel_static_consumer_property_read<C: PollClientBinding>(
-    client: &mut C,
-    cx: &mut Context<'_>,
-    cleanup: CleanupPhaseContext,
-    slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-    budget: &mut WorkBudget,
-) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-    if !matches!(slot.state, StaticConsumerCallState::Running) {
-        return Err(slot.error(
-            306,
-            "Consumer cancellation requires a running installed call",
-        ));
-    }
-    let cleanup = match cleanup.try_into_transfer_request() {
-        Err(cleanup) => cleanup,
-        Ok(_) => {
-            return Err(slot.error(307, "static Consumer cancellation has no transfer owner"));
-        }
-    };
-
-    slot.state = StaticConsumerCallState::Cancelling;
-    let started = client.start_cancel_request(cx, cleanup, &mut slot.raw, budget)?;
-    seal_static_cancellation(started, slot)
-}
-
-fn poll_cancel_static_consumer_property_read<C: PollClientBinding>(
-    client: &mut C,
-    cx: &mut Context<'_>,
-    slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-    budget: &mut WorkBudget,
-) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-    if !matches!(slot.state, StaticConsumerCallState::Cancelling) {
-        return Poll::Ready(Err(slot.error(
-            308,
-            "Consumer cancellation poll requires an accepted cancellation",
-        )));
-    }
-
-    match client.poll_cancel_request(cx, &mut slot.raw, budget) {
-        Poll::Pending => Poll::Pending,
-        Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
-        Poll::Ready(Ok(settlement)) => {
-            Poll::Ready(seal_static_cancellation_settlement(settlement, slot))
-        }
-    }
-}
-
-fn acknowledge_static_consumer_property_read<C: PollClientBinding>(
-    client: &mut C,
-    slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-) -> CoreResult<()> {
-    if !matches!(slot.state, StaticConsumerCallState::Terminal) {
-        return Err(slot.error(
-            309,
-            "Consumer acknowledgement requires a sealed terminal disposition",
-        ));
-    }
-
-    if !slot.raw.is_vacant() {
-        client.acknowledge_request(&mut slot.raw)?;
-        slot.raw.clear();
-    }
-    slot.seal = None;
-    slot.state = StaticConsumerCallState::Vacant;
-    Ok(())
-}
-
-fn seal_static_cancellation<S>(
-    started: StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>,
-    slot: &mut StaticConsumerPropertyReadSlot<S>,
-) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-    match started {
-        StartStatus::Pending => Ok(StartStatus::Pending),
-        StartStatus::Ready(settlement) => {
-            seal_static_cancellation_settlement(settlement, slot).map(StartStatus::Ready)
-        }
-    }
-}
-
-fn seal_static_cancellation_settlement<S>(
-    settlement: BindingCallSettlement<CoreResult<InteractionOutput>>,
-    slot: &mut StaticConsumerPropertyReadSlot<S>,
-) -> CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>> {
-    match settlement {
-        BindingCallSettlement::Returned(result) => {
-            slot.state = StaticConsumerCallState::Terminal;
-            Ok(BindingCallSettlement::Returned(
-                slot.seal_against_live_request(result),
-            ))
-        }
-        BindingCallSettlement::Cancelled {
-            retry_class,
-            disposition: BindingCancellationDisposition::Complete { successor },
-        } => {
-            slot.state = StaticConsumerCallState::Terminal;
-            Ok(BindingCallSettlement::Cancelled {
-                retry_class,
-                disposition: BindingCancellationDisposition::Complete { successor },
-            })
-        }
-        BindingCallSettlement::Cancelled {
-            retry_class,
-            disposition: BindingCancellationDisposition::ResidualExternalState { successor, record },
-        } => {
-            slot.state = StaticConsumerCallState::Terminal;
-            Ok(BindingCallSettlement::Cancelled {
-                retry_class,
-                disposition: BindingCancellationDisposition::ResidualExternalState {
-                    successor,
-                    record,
-                },
-            })
-        }
-        BindingCallSettlement::Cancelled {
-            disposition: BindingCancellationDisposition::TransferRequired(_),
-            ..
-        } => Err(slot.error(
-            310,
-            "static Consumer binding fabricated cleanup-transfer authority",
-        )),
-    }
 }
 
 fn registration_error(identity: BindingRegistrationIdentity, code: u16) -> BindingOperationalError {
@@ -3817,9 +2878,7 @@ pub trait ClientBinding: Send + Sync {
     fn supports_operation(&self, operation: Operation) -> bool;
     /// Passive metadata of the actual captured immutable Consumer policy.
     /// This bounded, allocation-free read must have no operational effects.
-    fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
-        None
-    }
+    fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration>;
     /// Returns the compatibility identity consumed at registration and call acceptance.
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility;
 
@@ -3831,9 +2890,8 @@ pub trait ClientBinding: Send + Sync {
     /// Pure bounded resolution, before authorization/credential issuance. The
     /// result is a protocol-opaque policy operand, not dispatch authority.
     /// Complete scratch fits the registration's transient declaration; returned
-    /// backing fits configuration.target_capacity(). No I/O, source TD, service
-    /// lookup or native resource acquisition is allowed. Runtime prepays one
-    /// BindingPolls credit. Native invoke must use/verify this exact destination.
+    /// backing fits configuration.target_capacity(). This callback acquires no
+    /// I/O or native resource. Native invoke must use or verify this exact destination.
     fn resolve_target(
         &self,
         target: &str,
@@ -3999,7 +3057,6 @@ pub struct HostBindingRegistrationInput {
     capabilities: BindingRegistrationCapabilities,
     execution: BindingExecutionSupport,
     server: Box<dyn RouteServerBinding>,
-    client: Option<Box<dyn ClientBinding>>,
     resources: BindingResourceDeclarations,
     ingress: BindingIngressPolicy,
     status: BindingStatusPolicy,
@@ -4023,7 +3080,6 @@ impl HostBindingRegistrationInput {
             capabilities,
             execution,
             server,
-            client: None,
             resources,
             ingress,
             status,
@@ -4039,43 +3095,11 @@ impl HostBindingRegistrationInput {
     pub fn server(&self) -> &dyn RouteServerBinding {
         &*self.server
     }
-
-    /// Assembles one dual-role Property Read input without protocol work.
-    #[allow(clippy::too_many_arguments)]
-    pub fn producer_and_consumer_property_read(
-        identity: BindingRegistrationIdentity,
-        execution: BindingExecutionSupport,
-        server: Box<dyn RouteServerBinding>,
-        client: Box<dyn ClientBinding>,
-        resources: BindingResourceDeclarations,
-        ingress: BindingIngressPolicy,
-        status: BindingStatusPolicy,
-    ) -> Self {
-        Self {
-            identity,
-            capabilities: BindingRegistrationCapabilities::producer_and_consumer_property_read(),
-            execution,
-            server,
-            client: Some(client),
-            resources,
-            ingress,
-            status,
-        }
-    }
 }
 
 #[cfg(feature = "std")]
 /// Validated complete host-erased binding bundle.
 ///
-/// The raw client remains an authoring component and is not projected after
-/// installation:
-///
-/// ```compile_fail
-/// # use clinkz_wot_core::HostBindingRegistration;
-/// # fn bypass(registration: &HostBindingRegistration) {
-/// let _raw_client = registration.client();
-/// # }
-/// ```
 pub struct HostBindingRegistration {
     input: HostBindingRegistrationInput,
 }
@@ -4087,30 +3111,10 @@ impl HostBindingRegistration {
         input: HostBindingRegistrationInput,
     ) -> Result<Self, BindingInputRejection<HostBindingRegistrationInput>> {
         let identity = input.identity;
-        if input.resources.resource_contract() != BindingResourceContract::StrictV1
-            || input
-                .client
-                .as_deref()
-                .is_some_and(|c| c.consumer_configuration().is_some())
-        {
-            return Err(BindingInputRejection::new(
-                input,
-                registration_error(identity, 301),
-            ));
-        }
         let expected = identity.artifact_compatibility();
-        let client_valid = match (
-            input.capabilities.supports_consumer_property_read(),
-            input.client.as_deref(),
-        ) {
-            (false, None) => true,
-            (true, Some(client)) => expected == client.artifact_compatibility(),
-            (false, Some(_)) | (true, None) => false,
-        };
         let valid = input.capabilities.supports_producer_property_read()
             && input.execution.supports_host_erased()
             && expected == input.server.artifact_compatibility()
-            && client_valid
             && input.resources.is_valid()
             && input.ingress.is_valid();
         if !valid {
@@ -4140,25 +3144,6 @@ impl HostBindingRegistration {
         &*self.input.server
     }
 
-    /// Starts one installed Consumer Property Read through Core result sealing.
-    pub fn start_consumer_property_read(
-        &self,
-        request: OutboundRequest,
-        artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
-    ) -> Result<
-        HostBindingCallBox<CoreResult<InteractionOutput>>,
-        BindingInputRejection<OutboundRequest>,
-    > {
-        start_host_consumer_property_read(
-            self.input.identity,
-            self.input.capabilities,
-            self.input.client.as_deref(),
-            self.input.resources,
-            request,
-            artifact,
-        )
-    }
-
     /// Returns validated retained-resource declarations.
     pub const fn resources(&self) -> BindingResourceDeclarations {
         self.input.resources
@@ -4181,341 +3166,24 @@ impl HostBindingRegistration {
 }
 
 #[cfg(feature = "std")]
-fn start_host_consumer_property_read(
-    identity: BindingRegistrationIdentity,
-    capabilities: BindingRegistrationCapabilities,
-    client: Option<&dyn ClientBinding>,
-    resources: BindingResourceDeclarations,
-    request: OutboundRequest,
-    artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
-) -> Result<HostBindingCallBox<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
-{
-    if !capabilities.supports_consumer_property_read()
-        || request.operation() != Operation::ReadProperty
-    {
-        return Err(reject_consumer_request(
-            request,
-            312,
-            "Consumer request does not match the installed registration",
-        ));
-    }
-
-    start_host_consumer_finite(identity, client, resources, request, artifact)
-}
-
-#[cfg(feature = "std")]
-fn start_host_consumer_finite(
-    identity: BindingRegistrationIdentity,
-    client: Option<&dyn ClientBinding>,
-    resources: BindingResourceDeclarations,
-    request: OutboundRequest,
-    artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
-) -> Result<HostBindingCallBox<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
-{
-    if !client.is_some_and(|c| c.supports_operation(request.operation())) {
-        return Err(reject_consumer_request(
-            request,
-            312,
-            "Consumer request does not match the installed registration",
-        ));
-    }
-    start_prepared_host_consumer_finite(identity, client, resources, request, artifact)
-}
-
-#[cfg(feature = "std")]
-fn start_prepared_host_consumer_finite(
-    identity: BindingRegistrationIdentity,
-    client: Option<&dyn ClientBinding>,
-    resources: BindingResourceDeclarations,
-    request: OutboundRequest,
-    artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
-) -> Result<HostBindingCallBox<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
-{
-    if !consumer_request_matches_registration(identity, &request, artifact) {
-        return Err(reject_consumer_request(
-            request,
-            312,
-            "Consumer request does not match the installed registration",
-        ));
-    }
-    let resource_error = consumer_request_error(
-        &request,
-        313,
-        "accepted Host Consumer call exceeds its admitted retained footprint",
-    );
-    let seal = ConsumerResultSeal::from_request(&request, resources.consumer_result_limits());
-    let mut envelope =
-        match crate::artifact::try_box(HostConsumerCallEnvelope { disposition: None }) {
-            Ok(envelope) => envelope,
-            Err(_) => {
-                let error = BindingOperationalError::new(CoreError::Backpressure(
-                    ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
-                        .with_operation(request.operation())
-                        .with_plan(request.plan_id())
-                        .with_binding(request.binding_id(), request.binding_generation())
-                        .with_redacted_cause(314, "Host Consumer call backing unavailable"),
-                ));
-                return Err(BindingInputRejection::new(request, error));
-            }
-        };
-    let client = client.expect("validated Consumer registration retains its private client");
-    let mut raw = client.invoke(request, artifact)?;
-    let raw_footprint = raw.as_pin_mut().lifetime_footprint();
-    let combined = raw_footprint.checked_add(SealedHostConsumerCall::overhead());
-
-    if let Some(footprint) = combined
-        && footprint.fits_within(resources.admitted())
-    {
-        envelope.disposition = Some(HostConsumerCallDisposition::Sealed(
-            SealedHostConsumerCall {
-                raw,
-                seal: Some(seal),
-                footprint,
-            },
-        ));
-        return Ok(HostBindingCallBox(Box::into_pin(envelope)));
-    }
-
-    let rejected_footprint = raw_footprint
-        .checked_add(RejectedAcceptedHostConsumerCall::overhead())
-        .unwrap_or(BindingLifetimeFootprint::new(u32::MAX, u64::MAX));
-    envelope.disposition = Some(HostConsumerCallDisposition::AcceptedOverrun(
-        RejectedAcceptedHostConsumerCall {
-            _raw: raw,
-            _seal: seal,
-            error: Some(resource_error),
-            reported_footprint: rejected_footprint,
-        },
-    ));
-    Ok(HostBindingCallBox(Box::into_pin(envelope)))
-}
-
-fn consumer_metadata_matches(
-    identity: BindingRegistrationIdentity,
-    resources: BindingResourceDeclarations,
-    client: Option<ConsumerBindingConfiguration>,
-) -> bool {
-    match (resources.resource_contract(), client) {
-        (BindingResourceContract::StrictV1, None) => true,
-        (BindingResourceContract::StrictV1, Some(_)) | (_, None) => false,
-        (contract, Some(actual)) => {
-            actual.resource_contract() == contract
-                && actual.configuration() == identity.configuration()
-                && resources.consumer_result_limits() == Some(actual.result_limits())
-        }
-    }
-}
-
-/// Recoverable author input for a complete Consumer-only static registration.
-pub struct StaticConsumerBindingRegistrationInput<C: PollClientBinding> {
-    identity: BindingRegistrationIdentity,
-    execution: BindingExecutionSupport,
-    client: C,
-    resources: BindingResourceDeclarations,
-    status: BindingStatusPolicy,
-}
-impl<C: PollClientBinding> StaticConsumerBindingRegistrationInput<C> {
-    /// Assembles the client-only input without performing protocol work.
-    pub const fn new(
-        identity: BindingRegistrationIdentity,
-        execution: BindingExecutionSupport,
-        client: C,
-        resources: BindingResourceDeclarations,
-        status: BindingStatusPolicy,
-    ) -> Self {
-        Self {
-            identity,
-            execution,
-            client,
-            resources,
-            status,
-        }
-    }
-    /// Returns the unchanged registration identity.
-    pub const fn identity(&self) -> BindingRegistrationIdentity {
-        self.identity
-    }
-
-    /// Borrows the authoring client, before installation or after recovery.
-    pub const fn client(&self) -> &C {
-        &self.client
-    }
-}
-
-/// Validated complete static Consumer owner, with a private installed client.
-///
-/// ```compile_fail
-/// # use clinkz_wot_core::{PollClientBinding, StaticConsumerBindingRegistration};
-/// # fn bypass<C: PollClientBinding>(r: &StaticConsumerBindingRegistration<C>) {
-/// let raw = r.client();
-/// # }
-/// ```
-/// ```compile_fail
-/// # use clinkz_wot_core::{PollClientBinding, StaticConsumerBindingRegistration};
-/// # fn mutate<C: PollClientBinding>(r: &mut StaticConsumerBindingRegistration<C>) {
-/// let compiler = r.compiler_mut();
-/// # }
-/// ```
-pub struct StaticConsumerBindingRegistration<C: PollClientBinding> {
-    input: StaticConsumerBindingRegistrationInput<C>,
-}
-impl<C: PollClientBinding> StaticConsumerBindingRegistration<C> {
-    /// Immutable policy of the captured executor.
-    pub fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
-        self.input.client.consumer_configuration()
-    }
-
-    /// Validates client compatibility and the complete retained slot.
-    /// Rejection preserves the exact complete input without protocol work.
-    pub fn new(
-        input: StaticConsumerBindingRegistrationInput<C>,
-    ) -> Result<Self, BindingInputRejection<StaticConsumerBindingRegistrationInput<C>>> {
-        let identity = input.identity;
-        if !consumer_metadata_matches(
-            identity,
-            input.resources,
-            input.client.consumer_configuration(),
-        ) {
-            return Err(BindingInputRejection::new(
-                input,
-                registration_error(identity, 324),
-            ));
-        }
-        let expected = identity.artifact_compatibility();
-        let client_compatibility = input.client.artifact_compatibility();
-        let slot_fits = complete_static_consumer_slot_fits::<C::RequestState>(
-            input.client.request_state_layout(),
-            input.resources,
-        );
-        if !(input.execution.supports_application_static()
-            && expected == client_compatibility
-            && input.resources.is_valid()
-            && slot_fits)
-        {
-            return Err(BindingInputRejection::new(
-                input,
-                registration_error(identity, 324),
-            ));
-        }
-        Ok(Self { input })
-    }
-    /// Returns the immutable complete identity.
-    pub const fn identity(&self) -> BindingRegistrationIdentity {
-        self.input.identity
-    }
-    /// Returns the Consumer-only capability metadata.
-    pub const fn capabilities(&self) -> BindingRegistrationCapabilities {
-        BindingRegistrationCapabilities::consumer_property_read()
-    }
-    /// Returns selected execution metadata.
-    pub const fn execution(&self) -> BindingExecutionSupport {
-        self.input.execution
-    }
-
-    /// Returns the validated declarations, without charging nonexistent owners.
-    pub const fn resources(&self) -> BindingResourceDeclarations {
-        self.input.resources
-    }
-    /// Returns the retained-status policy.
-    pub const fn status(&self) -> BindingStatusPolicy {
-        self.input.status
-    }
-    /// Recovers the complete input, including its original private client.
-    pub fn into_input(self) -> StaticConsumerBindingRegistrationInput<C> {
-        self.input
-    }
-
-    /// Starts one installed Consumer Property Read through Core result sealing.
-    pub fn start_consumer_property_read(
-        &mut self,
-        request: OutboundRequest,
-        artifact: &BindingArtifactEnvelope<C::Artifact>,
-        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-        budget: &mut WorkBudget,
-    ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
-    {
-        start_static_consumer_property_read(
-            self.input.identity,
-            self.capabilities(),
-            self.input.resources,
-            &mut self.input.client,
-            request,
-            artifact,
-            slot,
-            budget,
-        )
-    }
-
-    /// Polls one installed pending Consumer call and seals its result.
-    pub fn poll_consumer_property_read(
-        &mut self,
-        cx: &mut Context<'_>,
-        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<InteractionOutput>> {
-        poll_static_consumer_property_read(&mut self.input.client, cx, slot, budget)
-    }
-
-    /// Starts cancellation without admitting a static cleanup-transfer owner.
-    pub fn start_cancel_consumer_property_read(
-        &mut self,
-        cx: &mut Context<'_>,
-        cleanup: CleanupPhaseContext,
-        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        start_cancel_static_consumer_property_read(
-            &mut self.input.client,
-            cx,
-            cleanup,
-            slot,
-            budget,
-        )
-    }
-
-    /// Polls accepted cancellation to a sealed settlement.
-    pub fn poll_cancel_consumer_property_read(
-        &mut self,
-        cx: &mut Context<'_>,
-        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        poll_cancel_static_consumer_property_read(&mut self.input.client, cx, slot, budget)
-    }
-
-    /// Acknowledges only a sealed result or terminal cancellation disposition.
-    pub fn acknowledge_consumer_property_read(
-        &mut self,
-        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
-    ) -> CoreResult<()> {
-        acknowledge_static_consumer_property_read(&mut self.input.client, slot)
-    }
-}
-#[cfg(feature = "std")]
 /// Recoverable author input for a complete Consumer-only Host registration.
 pub struct HostConsumerBindingRegistrationInput {
     identity: BindingRegistrationIdentity,
-    execution: BindingExecutionSupport,
     client: Box<dyn ClientBinding>,
     resources: BindingResourceDeclarations,
-    status: BindingStatusPolicy,
 }
 #[cfg(feature = "std")]
 impl HostConsumerBindingRegistrationInput {
     /// Assembles the client-only input without protocol work or ingress state.
     pub fn new(
         identity: BindingRegistrationIdentity,
-        execution: BindingExecutionSupport,
         client: Box<dyn ClientBinding>,
         resources: BindingResourceDeclarations,
-        status: BindingStatusPolicy,
     ) -> Self {
         Self {
             identity,
-            execution,
             client,
             resources,
-            status,
         }
     }
     /// Returns the unchanged registration identity.
@@ -4575,26 +3243,16 @@ impl HostConsumerBindingRegistration {
         self.input.client.consumer_configuration()
     }
 
-    /// Validates the selected cell, client identity and declarations.
+    /// Checks the native format, actual configuration and retained bounds.
     pub fn new(
         input: HostConsumerBindingRegistrationInput,
     ) -> Result<Self, BindingInputRejection<HostConsumerBindingRegistrationInput>> {
         let identity = input.identity;
-        if !consumer_metadata_matches(
-            identity,
-            input.resources,
-            input.client.consumer_configuration(),
-        ) {
-            return Err(BindingInputRejection::new(
-                input,
-                registration_error(identity, 325),
-            ));
-        }
         let expected = identity.artifact_compatibility();
-        let client_compatibility = input.client.artifact_compatibility();
-        if !(input.execution.supports_host_erased()
-            && expected == client_compatibility
-            && input.resources.is_valid())
+        if input.client.consumer_configuration().is_none_or(|c| {
+            c.configuration() != identity.configuration() || c.native_compatibility() != expected
+        }) || input.client.artifact_compatibility() != expected
+            || !input.resources.is_valid()
         {
             return Err(BindingInputRejection::new(
                 input,
@@ -4607,25 +3265,9 @@ impl HostConsumerBindingRegistration {
     pub const fn identity(&self) -> BindingRegistrationIdentity {
         self.input.identity
     }
-    /// Returns the Consumer-only capability metadata.
-    pub fn capabilities(&self) -> BindingRegistrationCapabilities {
-        BindingRegistrationCapabilities {
-            producer_property_read: false,
-            consumer_property_read: self.supports_operation(Operation::ReadProperty),
-        }
-    }
-    /// Returns selected execution metadata.
-    pub const fn execution(&self) -> BindingExecutionSupport {
-        self.input.execution
-    }
-
     /// Returns the validated declarations, without charging nonexistent owners.
     pub const fn resources(&self) -> BindingResourceDeclarations {
         self.input.resources
-    }
-    /// Returns the retained-status policy.
-    pub const fn status(&self) -> BindingStatusPolicy {
-        self.input.status
     }
     /// Recovers the complete input, including its original private client.
     pub fn into_input(self) -> HostConsumerBindingRegistrationInput {
@@ -4641,13 +3283,18 @@ impl HostConsumerBindingRegistration {
         HostBindingCallBox<CoreResult<InteractionOutput>>,
         BindingInputRejection<OutboundRequest>,
     > {
-        start_host_consumer_finite(
-            self.input.identity,
-            Some(&*self.input.client),
-            self.input.resources,
-            request,
-            artifact,
-        )
+        let configuration = self.consumer_configuration().filter(|configuration| {
+            configuration.configuration() == self.identity().configuration()
+                && self.supports_operation(request.operation())
+        });
+        let Some(configuration) = configuration else {
+            return Err(reject_consumer_request(
+                request,
+                312,
+                "Consumer request does not match the installed registration",
+            ));
+        };
+        self.start_prepared_finite(request, artifact, configuration.result_limits())
     }
 
     // Only Core's ConsumerDefinition can carry preparation proof into dispatch.
@@ -4655,16 +3302,66 @@ impl HostConsumerBindingRegistration {
         &self,
         request: OutboundRequest,
         artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+        result_limits: (u64, u64),
     ) -> Result<
         HostBindingCallBox<CoreResult<InteractionOutput>>,
         BindingInputRejection<OutboundRequest>,
     > {
-        start_prepared_host_consumer_finite(
-            self.input.identity,
-            Some(&*self.input.client),
-            self.input.resources,
-            request,
-            artifact,
-        )
+        if !consumer_request_matches_registration(self.identity(), &request, artifact) {
+            return Err(reject_consumer_request(
+                request,
+                312,
+                "Consumer request does not match the installed registration",
+            ));
+        }
+        let resource_error = consumer_request_error(
+            &request,
+            313,
+            "accepted Host Consumer call exceeds its admitted retained footprint",
+        );
+        let seal = ConsumerResultSeal::from_request(&request, result_limits);
+        let mut envelope =
+            match crate::artifact::try_box(HostConsumerCallEnvelope { disposition: None }) {
+                Ok(envelope) => envelope,
+                Err(_) => {
+                    let error = BindingOperationalError::new(CoreError::Backpressure(
+                        ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
+                            .with_operation(request.operation())
+                            .with_plan(request.plan_id())
+                            .with_binding(request.binding_id(), request.binding_generation())
+                            .with_redacted_cause(314, "Host Consumer call backing unavailable"),
+                    ));
+                    return Err(BindingInputRejection::new(request, error));
+                }
+            };
+        let mut raw = self.input.client.invoke(request, artifact)?;
+        let raw_footprint = raw.as_pin_mut().lifetime_footprint();
+        let combined = raw_footprint.checked_add(SealedHostConsumerCall::overhead());
+
+        if let Some(footprint) = combined
+            && footprint.fits_within(self.input.resources.admitted())
+        {
+            envelope.disposition = Some(HostConsumerCallDisposition::Sealed(
+                SealedHostConsumerCall {
+                    raw,
+                    seal: Some(seal),
+                    footprint,
+                },
+            ));
+            return Ok(HostBindingCallBox(Box::into_pin(envelope)));
+        }
+
+        let rejected_footprint = raw_footprint
+            .checked_add(RejectedAcceptedHostConsumerCall::overhead())
+            .unwrap_or(BindingLifetimeFootprint::new(u32::MAX, u64::MAX));
+        envelope.disposition = Some(HostConsumerCallDisposition::AcceptedOverrun(
+            RejectedAcceptedHostConsumerCall {
+                _raw: raw,
+                _seal: seal,
+                error: Some(resource_error),
+                reported_footprint: rejected_footprint,
+            },
+        ));
+        Ok(HostBindingCallBox(Box::into_pin(envelope)))
     }
 }

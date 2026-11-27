@@ -196,7 +196,7 @@ registered evidence establish current capabilities. The retained baseline includ
 - TD/TM models, builders, extension-preserving round trips, validation and bounded
   borrowed semantic preparation for Properties, Actions, Events and security data;
 - Host HTTP Property Read Producer/Consumer execution and its real-I/O regressions;
-- protocol-neutral static Property Read runtimes and bounded ownership/cleanup;
+- caller-owned Property Read with typed result storage and bounded native progress;
 - explicitly composed HTTP/HTTPS TD-server and Directory clients, with bounded
   pagination, TD admission and separate Engine interaction authorization;
 - payload codecs, logical clocks, resource accounting and portable shared layers.
@@ -211,7 +211,7 @@ original native set through acknowledged retirement. Production Action/Event Bin
 general schema/security services and broad deployment qualification remain open.
 
 Legacy Core event fan-out, queue/merge subscriptions, `SubscriptionAcceptance`,
-payload-bearing `InteractionOptions`, old form-selection/template helpers, and
+`InteractionOptions`, the restricted Consumer Read runtime and inline compiler, and
 the Zenoh transport/session/pico APIs are removed without compatibility wrappers.
 General Property write/observation, Action and Event execution, subscriptions,
 secure transport and embedded production remain product objectives; the removed

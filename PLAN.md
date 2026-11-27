@@ -40,17 +40,15 @@ and individually retired replies. Its Host preparation and composed participants
 still use legacy accounting. The remaining dependencies determine the order.
 [Accepted migration](workspace/0133-resource-management-proposal.md#disposition-of-308-and-the-roadmap) · [Owner and progress contracts](docs/spec/foundation.md)
 
-1. **Finite Consumer execution.** The composed Host path now drives named,
-   bound and collection operations through one bounded native poll in Core.
-   The caller-owned Read holds a typed result slot through disposal. Both can
-   retire the original exchange under cancellation while its result remains
-   held. The Host still shares outstanding-call, response, scratch and cleanup
-   accounts with other families. Native registration still reports footprints
-   to the restricted Host Read. Migrate that Read and its source-enabled and
-   prepared-only Host/static callers, façade exports, fixtures and workload
-   drivers. Retire the restricted Read policy with that façade. The Producer
-   and preparation paths below also consume plan-set and route-stage artifacts.
-   Their last use releases the shared adapters and frozen schema-2 checks.
+1. **Finite Consumer Read convergence.** Host Reads use the same finite calls
+   as Write and the collection operations. Source-enabled Host preparation and
+   source-free mappings share that execution path. Caller-owned Reads lend
+   prepared meaning and keep their typed result slot through disposal. The
+   restricted Read façade, schema-2 policy and inline compiler are retired.
+   Shared Host outstanding-call, response, scratch and cleanup accounts still
+   cover multiple families. Host registration and preparation still consume
+   footprint and artifact declarations. The remaining route-stage plan adapter
+   serves Producer paths.
    [Host execution](servient/finite/src/consumer.rs) · [Caller-owned evidence](docs/evidence/constrained-finite-execution.md)
 2. **Continuing and published work.** Migrate Consumer Invoke/Query/Cancel and
    notification conversations, then Producer candidate, invocation, delivery and
@@ -65,6 +63,7 @@ still use legacy accounting. The remaining dependencies determine the order.
    per-turn visits and cumulative work through exhaustion. Preserve page, byte,
    deadline and input ownership limits. This also releases dependencies of the
    finite Producer staging and Consumer registration paths.
+   [Independent Preparation and Execution](#independent-preparation-and-execution)
 4. **Shared quotas and final removal.** At each cutover identify the promised
    participants, unit and last holder. Conserve any retained aggregate across
    old and new participants, including taken results, through their final
@@ -85,6 +84,29 @@ For each continuing shared ceiling, test last-unit contention with a held result
 Review that evidence and the execution-only dependency graph at one revision.
 [Runtime safety](docs/spec/runtime-safety.md) · [Integration obligations](docs/work-packages/WP-700-integration.md)
 
+### Independent Preparation and Execution
+
+Remove mandatory live executor and current access-service dependencies from
+Preparation. Use bounded work and storage, shared TD interpretation and
+caller-supplied capabilities to produce immutable WoT meaning and a Binding-owned
+program. A lowerer that recognizes a Form identifies a candidate. Static
+qualification requires the target configuration, Binding support for the selected
+operation and controls, codec and validator support for every selected response
+alternative, and support for the required security scheme and parameters.
+Report that support independently of live authorization and available call capacity.
+
+Installation checks compatibility and attaches the executor, services and
+execution funding. Each call needs current instance and destination permission,
+required credentials and capacity before effect. For a Producer, qualify the
+exact final TD after closed setup determines the advertised endpoints. Each
+advertised Form needs a ready mapping and behavior before publication.
+
+Prepare once without a live executor or current access service, drop the TD and
+capability inputs, and bind the same definition to two compatible instances.
+Revoking one leaves the other callable without recompilation. Incompatible
+configuration must fail before I/O.
+[Ownership split](docs/ADRs/0025-semantic-engine-and-binding-runtimes.org) · [Selection and reuse](docs/spec/planning.md)
+
 ### Qualify the interaction through its first effect
 
 From one admitted TD, let an application choose a named finite operation,
@@ -93,19 +115,18 @@ the first complete viable mapping or control tuple under one effective
 configuration. Ambiguity on a later unused Form or a different affordance
 leaves a uniquely selected operation callable without a pin. If multiple owners
 qualify at the preferred viable choice, selecting that operation or explicitly
-requiring a set that includes it returns ambiguity. Default admission requires
-at least one statically supported interaction and reports support per operation.
-A separately funded inventory locates assessed ambiguity by affordance,
-operation and Form. It distinguishes coarse or deferred answers from qualified
-support. Unsupported meaning, selected ambiguity, exhausted search limits and live
-denial have distinct outcomes.
+requiring a set that includes it returns ambiguity. Default Consumer preparation
+requires at least one statically supported interaction and reports support per
+operation. A separately funded inventory locates assessed ambiguity by
+affordance, operation and Form. It distinguishes coarse or deferred answers from
+qualified support. Unsupported meaning, selected ambiguity, exhausted search
+limits and live denial have distinct outcomes.
 [Finite preparation](planning/src/open_consumer.rs) · [Deferred and continuing preparation](docs/spec/planning.md)
 
-Lend resolved meaning to the actual Binding, codec and access service for all
-required controls, response branches and security operands. A competitor
-arriving after selection leaves the original association usable while its
-services and permission remain valid. An uncertain effect precludes automatic
-replay. Correct the 2019/2022 context-pair defect in the shared TD resolver.
+A new provider can arrive after selection while the original association remains
+usable under its valid services and permission. An uncertain effect precludes
+automatic replay. Correct the 2019/2022 context-pair defect in the shared TD
+resolver.
 
 Carry the generating party and data role into validation. For the same object
 bytes, a Consumer must accept a permitted additional field on Read and refuse to

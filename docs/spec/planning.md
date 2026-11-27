@@ -165,23 +165,16 @@ mapping and actual validation/security services to the qualified final TD.
 Closed installation verifies that exact pairing. The concrete supported subset is owned by
 [the MQTT README](../../protocol-bindings/protocols/mqtt/README.md).
 
-The previous 2,180-line plan-set/API projection is superseded; its exact revision
-is available at the v5.1 basis in the authority map. Current Planning Property
-Read APIs remain restricted: the borrowed aggregate has eager all-bounds-first
-ordering and the Host adapter accepts Copy atomic output. Their tests keep those
-narrow claims. They MUST NOT constrain the successor compiler or be multiplied
-per interaction family as its implementation. The authority migration itself implemented no replacement compiler or first-use
-coordinator. The open finite Consumer path now uses the portable
-`ConsumerCompiler` contract and generic owned Host erasure; the old support
-carrier and sealed aggregate are explicitly named `InlineConsumer*`. The Host
-Producer now also has a whole-Thing selector: each advertised Form/effective
-operation asks the actual linked capability registrations for independently
-owned concrete definitions. Missing Forms, ambiguous support and missing
-behaviors refuse before native setup. Final qualification checks the complete
-retained TD against those definitions and all eligible registrations. Opaque owned definitions are not
-a universal program/session ABI; native readiness and collisions remain separate
-Binding obligations. Consumer first-use coordination and broader service,
-schema and security implementations remain outstanding.
+Host finite Consumer preparation passes source-free definitions to Servient.
+Caller-owned Read execution accepts the operation meaning and a typed native
+program from the deployment. A source-enabled caller can lend a selected Form
+from TD validation to its concrete program builder. Prepared-only callers can
+supply either representation directly. The remaining Property Read plan-set
+projection builds Producer routes. The Host Producer's whole-Thing selector evaluates each advertised Form/effective
+operation against the linked registrations for independently owned concrete
+definitions. Missing Forms, ambiguous support and missing behaviors refuse
+before native setup. Final qualification checks the complete retained TD
+against those definitions and all eligible registrations.
 
 Final whole-Thing checking walks the complete common meaning and compares each
 original definition at its exact scope/Form/operation and actual registration.
@@ -202,10 +195,9 @@ inside that funded bound; no allocation-free compiler representation is imposed.
 `open_consumer::ConsumerRegistry` captures actual startup compiler/executor and
 codec/validation/access service owners. Each compiler bounds its actual
 construction, scratch and disposal. Incremental and owned output are eligible.
-General typed/static pairing
-uses the same actual configuration contract without compiler-name tests. The
-restricted `InlineConsumerCompilerSupport` is neither consulted nor issued by
-open admission. Its old general public names and conversion methods are removed.
+The pairing checks the native format and actual configuration before keeping
+the compiler and execution owners. The source-free caller-owned facet takes an
+explicitly qualified program and shared meaning.
 
 Basic admission and the existing common whole-description Form walk are reused
 without Producer publication qualification. One bounded semantic arena per Form
@@ -235,7 +227,8 @@ Read and Write select independently on the same Property, including one Form
 with default or explicit multiple operations. A Write captures the complete
 supported Property value schema as input and no response value role. Property
 readOnly/writeOnly declarations constrain eligibility even when a Form explicitly
-contradicts them. Unsupported value assertions, effective security or concrete
+contradicts them. String-valued `rdfs:label` remains descriptive metadata on a schema.
+Unsupported value assertions, effective security or concrete
 Binding response mappings remain reported Consumer alternatives; a selector
 cannot weaken them. Complete Producer qualification still requires every retained
 effective operation, actual behavior and mapping. It cannot keep a Read while

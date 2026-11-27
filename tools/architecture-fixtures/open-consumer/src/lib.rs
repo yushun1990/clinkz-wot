@@ -321,16 +321,12 @@ pub fn execution(id: u16, probe: Arc<Probe>) -> HostConsumerBindingRegistration 
             FORMAT,
             u32::from(id),
         ),
-        BindingExecutionSupport::host_erased(),
         Box::new(Client { probe }),
         BindingResourceDeclarations::new(
             BindingLifetimeFootprint::new(4, 1024),
             BindingLifetimeFootprint::new(16, 16384),
         )
-        .with_resource_contract(BindingResourceContract::ConsumerOwnedHostV2)
-        .with_consumer_result_limits(1024, 16)
         .with_transient(BindingTransientFootprint::new(2048)),
-        BindingStatusPolicy::new(2, 17),
     ))
     .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
@@ -695,108 +691,5 @@ pub mod prepare {
             preparation,
             services: services(probe),
         }
-    }
-}
-
-/// Typed finite facet of the same downstream native implementation. No server
-/// or notification methods are required for this Consumer-only registration.
-#[cfg(feature = "prepare")]
-pub struct StaticClient {
-    pub probe: Arc<Probe>,
-}
-#[cfg(feature = "prepare")]
-impl clinkz_wot_planning::PrepareClientBinding for StaticClient {
-    type Compiler = prepare::Compiler;
-}
-#[cfg(feature = "prepare")]
-impl PollClientBinding for StaticClient {
-    type Artifact = Program;
-    type RequestState = Call;
-    fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
-        FORMAT
-    }
-    fn consumer_configuration(&self) -> Option<ConsumerBindingConfiguration> {
-        Some(configuration())
-    }
-    fn request_state_layout(&self) -> BindingStateLayout {
-        BindingStateLayout::of::<Call>(BindingLifetimeFootprint::new(4, 8192))
-            .with_transient(BindingTransientFootprint::new(2048))
-    }
-    fn start_request(
-        &mut self,
-        request: OutboundRequest,
-        artifact: &BindingArtifactEnvelope<Program>,
-        slot: &mut ClientRequestSlot<Call>,
-        budget: &mut WorkBudget,
-    ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>
-    {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Err(reject(request));
-        }
-        let program = artifact.artifact().payload();
-        let selected = (
-            request.binding_id(),
-            request.binding_generation(),
-            request.plan_id(),
-        );
-        let mut bytes = Vec::new();
-        if bytes.try_reserve_exact(program.request.len()).is_err() {
-            return Err(reject(request));
-        }
-        bytes.extend_from_slice(&program.request);
-        slot.initialize(
-            request,
-            Call {
-                selected,
-                request: None,
-                address: program.address,
-                bytes,
-                socket: None,
-                sent: false,
-                probe: self.probe.clone(),
-                write_schema: program.write_schema.clone(),
-            },
-        );
-        Ok(StartStatus::Pending)
-    }
-    fn poll_request(
-        &mut self,
-        _: &mut Context<'_>,
-        slot: &mut ClientRequestSlot<Call>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<InteractionOutput>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
-        slot.state_mut().result()
-    }
-    fn start_cancel_request(
-        &mut self,
-        _: &mut Context<'_>,
-        _: CleanupPhaseContext,
-        slot: &mut ClientRequestSlot<Call>,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Ok(StartStatus::Pending);
-        }
-        match slot.state_mut().cancel() {
-            Poll::Pending => Ok(StartStatus::Pending),
-            Poll::Ready(r) => r.map(StartStatus::Ready),
-        }
-    }
-    fn poll_cancel_request(
-        &mut self,
-        _: &mut Context<'_>,
-        slot: &mut ClientRequestSlot<Call>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>> {
-        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
-            return Poll::Pending;
-        }
-        slot.state_mut().cancel()
-    }
-    fn acknowledge_request(&mut self, _: &mut ClientRequestSlot<Call>) -> CoreResult<()> {
-        Ok(())
     }
 }

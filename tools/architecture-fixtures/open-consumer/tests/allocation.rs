@@ -105,7 +105,13 @@ fn action_input_box_refusal_recovers_original_payload_and_empty_read_needs_no_al
     assert!(Arc::ptr_eq(&returned.body, &original.body));
     assert_eq!(returned, original);
     FAIL_AFTER.with(|n| n.set(Some(0)));
-    let read = OutboundRequest::property_read(artifact, Default::default(), None);
+    let read = OutboundRequest::finite(
+        artifact,
+        Operation::ReadProperty,
+        None,
+        Default::default(),
+        None,
+    );
     FAIL_AFTER.with(|n| {
         assert_eq!(n.get(), Some(0));
         n.set(None);

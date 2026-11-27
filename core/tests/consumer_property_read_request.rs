@@ -58,8 +58,10 @@ fn generation_mismatched_artifact_ref() -> BindingArtifactRef {
 fn request() -> clinkz_wot_core::OutboundRequest {
     let mut uri_variables = BTreeMap::new();
     uri_variables.insert(String::from("room"), String::from("west"));
-    clinkz_wot_core::OutboundRequest::property_read(
+    clinkz_wot_core::OutboundRequest::finite(
         artifact_ref(BindingArtifactRole::ConsumerCall),
+        Operation::ReadProperty,
+        None,
         uri_variables,
         Some(Deadline::at(MonotonicInstant::new(ClockId::new(3), 29))),
     )
@@ -133,22 +135,26 @@ fn request_rejects_non_consumer_artifacts_and_generation_mismatches() {
         BindingArtifactRole::ProducerRoute,
         BindingArtifactRole::ProducerPublication,
     ] {
-        let error = clinkz_wot_core::OutboundRequest::property_read(
+        let error = clinkz_wot_core::OutboundRequest::finite(
             artifact_ref(role),
+            Operation::ReadProperty,
+            None,
             BTreeMap::new(),
             None,
         )
         .expect_err("only ConsumerCall artifacts are admitted");
-        assert!(matches!(error, CoreError::Validation(_)));
+        assert!(matches!(error.error().error(), CoreError::Validation(_)));
     }
 
-    let error = clinkz_wot_core::OutboundRequest::property_read(
+    let error = clinkz_wot_core::OutboundRequest::finite(
         generation_mismatched_artifact_ref(),
+        Operation::ReadProperty,
+        None,
         BTreeMap::new(),
         None,
     )
     .expect_err("a plan id from another plan-set generation is structurally invalid");
-    assert!(matches!(error, CoreError::Validation(_)));
+    assert!(matches!(error.error().error(), CoreError::Validation(_)));
 }
 
 #[test]

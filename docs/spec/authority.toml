@@ -1027,16 +1027,8 @@ path = "docs/amendments"
 scope = "restricted-implementation-except-time"
 
 [[scoped_source]]
-path = "docs/spec/consumer-resource-ownership.md"
-scope = "existing-read-adapter-until-last-consumer"
-
-[[scoped_source]]
 path = "docs/resource-limits.csv"
 scope = "existing-profile-readers-until-removal"
-
-[[scoped_source]]
-path = "docs/resource-contracts/consumer-ownership-v2.toml"
-scope = "existing-read-adapter-until-last-consumer"
 
 [[scoped_source]]
 path = "docs/evidence"

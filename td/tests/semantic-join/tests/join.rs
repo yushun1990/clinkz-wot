@@ -230,7 +230,7 @@ fn production_cursor_yields_owned_core_plans_and_concrete_artifacts() {
     assert!(
         registration
             .capabilities()
-            .supports_consumer_property_read()
+            .supports_producer_property_read()
     );
     let calls = Calls::default();
     let observation = support::start(None);

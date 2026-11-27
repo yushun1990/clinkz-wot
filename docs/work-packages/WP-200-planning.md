@@ -184,7 +184,7 @@ supports Property Read/Write and ReadAllProperties meaning across actual HTTP
 endpoints, with borrowed
 qualification and separate native compilation. Data/access services and native
 registration backing keep their original explicit startup bank; content/mapping
-leases and instance accounts remain separate. `servient-finite::consumer::ConsumerRuntime` owns only finite logical calls,
+leases and instance accounts remain separate. `servient-finite::consumer::ConsumerCalls` owns finite logical calls,
 current authority, captured definitions, native calls, unread/late outcomes and
 original leases. Its normal dependency graph contains Core and Foundation only.
 Independently composed finite registries can import explicit original service
@@ -196,12 +196,10 @@ and policy revisions, normal/late HTTP results and exact final release. This
 does not extend retained-owner import to continuing Action or Producer
 preparation. Notification composition now imports those same physical owners
 through its notification registry, as described below.
-The HTTP example uses this path; method/header/context/framing and prior finite
-ownership regressions continue on the explicitly restricted inline helper.
-`InlineConsumerCompilerSupport`, `InlineConsumerCompilerRegistration`,
-`InlineConsumerPropertyReadRegistration`, `try_into_inline_consumer_compiler` and
-`try_inline_consumer_registration` replace their misleading general public names;
-there are no compatibility aliases for those removed names.
+The HTTP Read example and method, header, context and framing cases use this
+path. Prepared-only Host and caller-owned execution enter directly through their
+respective execution owners. The restricted aggregate and inline compiler have
+retired.
 
 The standalone [downstream crate](../../tools/architecture-fixtures/open-consumer/README.md)
 is outside workspace membership and supplies its own real datagram finite

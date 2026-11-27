@@ -78,8 +78,7 @@ permits cleartext IP access; `try_consumer_registration` constructs one complete
 Consumer-only registration without I/O. Its native compiler implements the
 bounded NoSec / effective `application/json` Property Read/Write mapping from
 TD-resolved semantic input. The [composed Write subset](#composed-property-readwrite)
-uses separate input and completion roles. The retained `ConsumerPropertyReadRuntime`
-uses `try_inline_consumer_registration` and remains a restricted Read adapter.
+uses separate input and completion roles.
 
 For explicit native compilation reuse, construct `HttpDefinitionCompiler::new`
 with a bank for physical instruction ownership and call its `registration`
@@ -230,11 +229,9 @@ driver before releasing occupancy. Retained terminal results keep their original
 services, definitions and funding independently; destroying an old result cannot
 release a successor's occupancy. Each read owns a fresh connection and its driver.
 The selected immutable artifact supplies the exact path/query and Host authority.
-The restricted Read path declines URI variables; the modern finite Property
-facet supports the bounded dynamic profile below. The restricted registration
-marks templates unsupported during preparation, so default Form selection can
-reach a supported static alternative. Unsupported targets return the
-original request before raw acceptance. No TD rescan, DNS, native connection pool, redirect, retry, decompression,
+The finite Property facet supports the bounded dynamic profile below.
+A caller can pin a literal alternative during preparation. Native admission
+verifies the original destination and returns the request on refusal. No TD rescan, DNS, native connection pool, redirect, retry, decompression,
 upgrade, background task or detached driver is involved.
 
 The Consumer tranche is complete within its independently accepted scope; its
@@ -940,9 +937,17 @@ the actual compiler/executor/configuration and JSON/type plus cleartext-IP acces
 services. Complete type-only schema and NoSec support is checked in preparation;
 codec/type validation runs on normal and late output. Unsupported schema/security
 meaning is reported unsupported instead of trusting result-shape sealing alone.
-The lower-level `try_inline_consumer_registration` exists for the retained
-restricted aggregate regression/measurement path. HTTP SSE is not implemented.
 
+The downstream integration prepares HTTP and UDP mappings with preparation
+enabled, drops the TD and registry, and executes the original mappings through
+`ConsumerCalls` over real sockets. [Downstream handoff test](../../../tools/architecture-fixtures/open-consumer/tests/integration.rs)
+
+With HTTP's default features disabled, the Binding's test constructs a native
+program using private HTTP types. It registers the executor through
+`try_consumer_execution` and drives a real TCP Read through `ConsumerCalls`.
+[HTTP execution-only test](src/identity_tests.rs)
+
+HTTP SSE is not implemented.
 
 ## TD-driven continuing Consumer Actions
 

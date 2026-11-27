@@ -1,5 +1,7 @@
 #![cfg(feature = "prepare")]
 //! Actual HTTP I/O through the shared logical owner, not the installation ABI.
+#[path = "support/consumer_read.rs"]
+mod consumer_read;
 use clinkz_wot_binding_http::*;
 use clinkz_wot_core::{finite::*, producer::*, *};
 use clinkz_wot_foundation::*;
@@ -1342,16 +1344,9 @@ fn partial_http_write(expire: bool) {
 
 #[test]
 fn public_consumer_reads_the_shared_http_participant_after_sources_are_dropped() {
-    use clinkz_wot_servient::{consumer_property_read::*, host_accounts::HostResourceAccounts};
-    struct Clock;
-    impl RuntimeClock for Clock {
-        fn now(&self) -> MonotonicInstant {
-            now(0)
-        }
-        fn ticks_per_second(&self) -> std::num::NonZeroU64 {
-            std::num::NonZeroU64::new(1000).unwrap()
-        }
-    }
+    use clinkz_wot_core::host_accounts::HostResourceAccounts;
+    use clinkz_wot_servient_finite::consumer::ConsumerCalls;
+
     let io = tokio::runtime::Builder::new_current_thread()
         .enable_io()
         .enable_time()
@@ -1362,48 +1357,33 @@ fn public_consumer_reads_the_shared_http_participant_after_sources_are_dropped()
         let mut owner = owner(authority, Rc::new(Application::default()));
         let mut server = runtime(native(addr, key, 1, "integer"), &owner, FiniteValidation::Required);
         ready(&mut owner, &mut server);
-        let policy = ConsumerPropertyReadPolicy::try_new_owned(
-            BindingResourceContract::ConsumerOwnedHostV2, ResourceProfileId::GATEWAY_DEFAULT_V1,
-            GatewayDefaultV1::LIMITS.clone(), BindingLifetimeFootprint::new(8, 8192),
-            BindingLifetimeFootprint::new(8, 4096), [1, 64, 64, 64], [4096, 32],
-            [2, 2, 1, 1, 1, 1, 1], [30_000, 1000], 65536).unwrap();
-        let bank = Arc::new(HostResourceAccounts::try_from_accounts(policy.parent_accounts()).unwrap());
-        let registration = try_inline_consumer_registration(HttpConsumerConfig::for_cleartext_ip().unwrap(),
-            BindingId::new(2), BindingGeneration::INITIAL, 0).unwrap();
-        let (client, observer) = accepted(ConsumerPropertyReadRuntime::try_new(registration, policy, Arc::new(Clock), bank.clone()));
+        let bank = Arc::new(HostResourceAccounts::new(GatewayDefaultV1::LIMITS));
+        let calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
         let td: Thing = serde_json::from_value(serde_json::json!({
             "@context":"https://www.w3.org/2022/wot/td/v1.1", "title":"client", "id":"urn:finite:client",
             "securityDefinitions":{"n":{"scheme":"nosec"}}, "security":["n"],
             "properties":{"level":{"forms":[{"href":format!("http://{addr}/value")}]}}
         })).unwrap();
-        let handle = match client.consume(&td, &mut work(1_000_000), |build| {
-            for _ in 0..10000 { build.step(&mut work(1_000_000)); if build.is_finished() { return; } }
-            panic!("consume stalled");
-        }).unwrap() { StartStatus::Ready(handle) => handle, _ => panic!("client not ready") };
+        let (instance, client) = consumer_read::prepare_consumer(
+            &td, &bank, consumer_read::http_registration(), Default::default()
+        ).unwrap();
+        let handle = client.handle();
         drop(td);
         for value in 1..=3 {
-            let mut call = handle.read_property("level", InteractionOptions::new(), &mut work(1_000_000)).unwrap();
+            let mut call = handle.read_property(&calls, "level", Deadline::NONE, now(0)).unwrap();
             let start = Instant::now();
             let output = loop {
                 assert!(start.elapsed() < Duration::from_secs(3));
                 step(&mut owner, &mut server);
-                call.step(&mut cx(), &mut work(1_000_000));
-                if let Some(result) = call.try_take(&mut work(1_000_000)).unwrap() { break result.unwrap(); }
+                if let std::task::Poll::Ready(result) = call.poll(&mut cx(), now(0)) { break result.unwrap(); }
                 tokio::time::sleep(Duration::from_millis(1)).await;
             };
-            assert_eq!(output.data().unwrap().body.as_ref(), value.to_string().as_bytes());
+            assert_eq!(output.result().unwrap().data().unwrap().body, value.to_string().as_bytes());
             assert!(server.take_settlement().unwrap().result.is_ok());
         }
-        drop(handle);
-        let start = Instant::now();
-        loop {
-            if let StartStatus::Ready(outcome) = client.shutdown(&mut cx(), &mut work(1_000_000)) {
-                assert!(outcome.is_complete()); break;
-            }
-            assert!(start.elapsed() < Duration::from_secs(3), "Consumer cleanup stalled");
-        }
-        drop(client); drop(observer);
-        assert!(bank.snapshot(ConsumerPropertyReadPolicy::PARENT_KINDS).iter().all(|a| a.used() == 0));
+        assert!(calls.is_idle());
+        drop((handle, calls, client, instance));
+        assert!(ResourceKind::ALL.into_iter().all(|kind| bank.account(kind).used() == 0));
         close(&mut server);
     });
 }

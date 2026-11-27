@@ -90,12 +90,12 @@ current permission. Report the enforcing scope, phase,
 limit and safely known amount, retry disposition and effect certainty. Provide a
 bounded fallback when diagnostic storage is full.
 
-The [numeric profiles](../resource-limits.csv) and [schema-2 Read format](consumer-resource-ownership.md)
-describe callers still using their original interpretation. Migrate the source
-and prepared-only Read entries, then delete the overlay, generator, frozen
-digests and schema-wide checks with their last consumers. Keep benchmark inputs
-with their workload. The target has no exhaustive public limit schema, generic
-admission receipt or registration-wide footprint declaration.
+The [numeric profiles](../resource-limits.csv) still supply shared Host quotas,
+preparation limits and legacy Producer staging bounds. The Host finite Consumer
+takes the result bounds from the native configuration and keeps shared charges
+through disposal. Caller-owned Reads use typed slots with exclusive backing
+and a bounded native poll. The target has no exhaustive public limit schema,
+generic admission receipt or registration-wide footprint declaration.
 
 ## Host allocation and environment failure scope
 

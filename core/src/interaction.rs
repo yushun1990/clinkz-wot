@@ -5,9 +5,10 @@
 //! traits in [`crate::handler`] operate on [`InteractionInput`] /
 //! [`InteractionOutput`].
 
-use alloc::{collections::BTreeMap, string::String, vec::Vec};
+#[cfg(target_has_atomic = "ptr")]
+use alloc::collections::BTreeMap;
+use alloc::{string::String, vec::Vec};
 
-use core::time::Duration;
 #[cfg(target_has_atomic = "ptr")]
 use core::{alloc::Layout, mem::size_of};
 
@@ -151,87 +152,6 @@ impl InteractionInput {
             data: Some(data),
             ..Self::default()
         }
-    }
-}
-
-/// Caller-facing selection and control options for a consumed interaction.
-///
-/// The Consumer Property Read selection/control surface carries URI-template
-/// variables, an optional form index, and optional timeout intent. Payload is
-/// separate from selection/control state.
-///
-/// ```compile_fail,E0639
-/// use clinkz_wot_core::InteractionOptions;
-/// use std::collections::BTreeMap;
-///
-/// let _ = InteractionOptions {
-///     uri_variables: BTreeMap::new(),
-///     form_index: None,
-///     timeout: None,
-/// };
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[non_exhaustive]
-pub struct InteractionOptions {
-    /// URI-template variables to expand into the selected form's target.
-    pub uri_variables: BTreeMap<String, String>,
-    /// Explicit original form index in the compiled plan set. A pinned form
-    /// without an executable artifact yields a
-    /// [`CoreError::Selection`](crate::CoreError::Selection) with
-    /// `StrictSelectionMismatch`.
-    pub form_index: Option<usize>,
-    /// Timeout intent interpreted against the runtime's supplied logical clock.
-    pub timeout: Option<Duration>,
-}
-
-impl InteractionOptions {
-    /// Creates empty interaction options.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Builder-style setter for a single URI-template variable. Chains:
-    ///
-    /// ```
-    /// use clinkz_wot_core::InteractionOptions;
-    /// let opts = InteractionOptions::new().with_uri_variable("brightness", "75")
-    ///     .with_uri_variable("zone", "north");
-    /// ```
-    ///
-    /// Consumes and returns self; for non-chaining use, set
-    /// [`uri_variables`](Self::uri_variables) directly.
-    pub fn with_uri_variable(mut self, key: &str, value: &str) -> Self {
-        self.uri_variables.insert(key.into(), value.into());
-        self
-    }
-
-    /// Selects one form from the immutable consumed plan set by its source index.
-    #[must_use]
-    pub fn with_form_index(mut self, form_index: usize) -> Self {
-        self.form_index = Some(form_index);
-        self
-    }
-
-    /// Sets the caller's timeout intent for this interaction.
-    #[must_use]
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = Some(timeout);
-        self
-    }
-
-    /// Returns the owned URI-template variables supplied by the caller.
-    pub fn uri_variables(&self) -> &BTreeMap<String, String> {
-        &self.uri_variables
-    }
-
-    /// Returns the explicitly selected form index, when present.
-    pub const fn form_index(&self) -> Option<usize> {
-        self.form_index
-    }
-
-    /// Returns the caller's timeout intent, when present.
-    pub const fn timeout(&self) -> Option<Duration> {
-        self.timeout
     }
 }
 

@@ -21,7 +21,6 @@ cargo check --locked -p clinkz-wot-td --no-default-features --target "$TARGET"
 cargo check --locked -p clinkz-wot-foundation --no-default-features --target "$TARGET"
 cargo check --locked -p clinkz-wot-core --no-default-features --target "$TARGET"
 cargo check --locked -p clinkz-wot-planning --no-default-features --target "$TARGET"
-cargo check --locked --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features --target "$TARGET"
 cargo check --locked -p clinkz-wot-discovery --no-default-features --target "$TARGET"
 cargo check --locked -p clinkz-wot-servient --no-default-features --target "$TARGET"
 cargo check --locked -p clinkz-wot-codec-cbor --no-default-features --target "$TARGET"
@@ -30,10 +29,10 @@ cargo check --locked -p clinkz-wot --no-default-features --target "$TARGET"
 echo "--- no_std + alloc + async ---"
 cargo check --locked -p clinkz-wot-core --no-default-features --features async --target "$TARGET"
 cargo check --locked -p clinkz-wot-planning --no-default-features --features async --target "$TARGET"
-cargo check --locked --manifest-path planning/tests/normal-dependency/Cargo.toml --no-default-features --features async --target "$TARGET"
 cargo check --locked -p clinkz-wot-servient --no-default-features --features async --target "$TARGET"
 
 echo "--- TD tooling and modern finite execution without pointer atomics ---"
 rustup target add thumbv6m-none-eabi
 cargo check --locked -p clinkz-wot-td --no-default-features --features validated-thing --target thumbv6m-none-eabi
 cargo check --locked -p clinkz-wot-constrained-consumer-fixture --target thumbv6m-none-eabi
+cargo check --locked -p clinkz-wot-constrained-consumer-fixture --features prepare --target thumbv6m-none-eabi

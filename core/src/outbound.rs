@@ -133,48 +133,6 @@ impl OutboundRequest {
         self.responses
     }
 
-    /// Constructs one structurally valid selected name-free Property Read
-    /// request.
-    ///
-    /// Binding, binding-generation, configuration, plan-set, plan,
-    /// compatibility, and role identities derive from the captured artifact
-    /// reference; they are not independently supplied fields that may
-    /// disagree. Construction fails when the artifact is not a `ConsumerCall`
-    /// artifact or when the plan id's generation differs from the artifact's
-    /// plan-set generation.
-    ///
-    /// ```compile_fail
-    /// # use std::collections::BTreeMap;
-    /// # use clinkz_wot_core::{AffordanceTarget, BindingArtifactRef, OutboundRequest, ThingId};
-    /// # fn no_legacy_constructor_shape(
-    /// #     thing_id: ThingId,
-    /// #     target: AffordanceTarget,
-    /// #     artifact: BindingArtifactRef,
-    /// # ) -> clinkz_wot_core::CoreResult<OutboundRequest> {
-    /// OutboundRequest::property_read(
-    ///     thing_id,
-    ///     target,
-    ///     artifact,
-    ///     BTreeMap::new(),
-    ///     None,
-    /// )
-    /// # }
-    /// ```
-    pub fn property_read(
-        artifact: BindingArtifactRef,
-        uri_variables: BTreeMap<String, String>,
-        deadline: Option<Deadline>,
-    ) -> CoreResult<Self> {
-        Self::finite(
-            artifact,
-            Operation::ReadProperty,
-            None,
-            uri_variables,
-            deadline,
-        )
-        .map_err(|e| e.error().error().clone())
-    }
-
     /// Selected finite application intent. This carrier has no selection or
     /// logical authority. Continuing Action/notification controls have separate
     /// owners and cannot be encoded as an initiating finite result here.

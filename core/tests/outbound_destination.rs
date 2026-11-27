@@ -23,8 +23,10 @@ fn destination_bytes_and_original_reservation_follow_the_last_native_request() {
         BindingArtifactCompatibility::new([1; 16]),
         BindingArtifactRole::ConsumerCall,
     );
-    let request = OutboundRequest::property_read(
+    let request = OutboundRequest::finite(
         BindingArtifactRef::new(identity, SlotIndex::new(0)),
+        Operation::ReadProperty,
+        None,
         Default::default(),
         None,
     )

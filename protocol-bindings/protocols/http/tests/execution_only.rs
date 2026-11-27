@@ -46,14 +46,18 @@ fn runtime_registration_rejects_foreign_native_data_without_an_io_runtime() {
         ),
     )
     .unwrap();
-    let request = OutboundRequest::property_read(
+    let request = OutboundRequest::finite(
         BindingArtifactRef::new(identity, SlotIndex::new(0)),
+        Operation::ReadProperty,
+        None,
         Default::default(),
         None,
     )
     .unwrap();
-    let original = OutboundRequest::property_read(
+    let original = OutboundRequest::finite(
         BindingArtifactRef::new(identity, SlotIndex::new(0)),
+        Operation::ReadProperty,
+        None,
         Default::default(),
         None,
     )

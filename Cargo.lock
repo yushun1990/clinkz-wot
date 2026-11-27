@@ -241,26 +241,6 @@ dependencies = [
  "clinkz-wot-core",
  "clinkz-wot-foundation",
  "clinkz-wot-servient-finite",
-]
-
-[[package]]
-name = "clinkz-wot-consumer-property-read-binding-fixture"
-version = "0.0.0"
-dependencies = [
- "clinkz-wot-core",
- "clinkz-wot-foundation",
- "clinkz-wot-planning",
-]
-
-[[package]]
-name = "clinkz-wot-consumer-property-read-runtime-runner"
-version = "0.0.0"
-dependencies = [
- "clinkz-wot-consumer-property-read-binding-fixture",
- "clinkz-wot-core",
- "clinkz-wot-foundation",
- "clinkz-wot-planning",
- "clinkz-wot-servient",
  "clinkz-wot-td",
  "serde_json",
 ]
@@ -325,7 +305,6 @@ dependencies = [
 name = "clinkz-wot-planning"
 version = "0.1.0"
 dependencies = [
- "clinkz-wot-consumer-property-read-binding-fixture",
  "clinkz-wot-core",
  "clinkz-wot-foundation",
  "clinkz-wot-td",
@@ -358,7 +337,6 @@ dependencies = [
 name = "clinkz-wot-servient"
 version = "0.1.0"
 dependencies = [
- "clinkz-wot-consumer-property-read-binding-fixture",
  "clinkz-wot-core",
  "clinkz-wot-foundation",
  "clinkz-wot-planning",

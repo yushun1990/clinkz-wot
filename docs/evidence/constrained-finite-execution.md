@@ -1,8 +1,7 @@
 # Modern finite execution with caller-owned storage
 
 This evidence concerns one NoSec Property Read representation on the modern
-value/prepared-content boundary. It does not use the historical static Read
-runtime, PlanSet or either historical architecture gate as proof.
+value and prepared-content boundary.
 
 Core shares `ValueExecution`, `ValueSchemas`/`PreparedSchema`, borrowed output,
 the finite identity/shape check and `FiniteCallState`. The existing Host finite
@@ -38,13 +37,24 @@ The executable cases cover these ownership and execution boundaries.
 - socket reuse at acknowledgement while the result is held, and finite local
   disposal of unacknowledged work.
 
-Reproduce from the repository root:
+The optional `prepare` feature exercises a bounded source job using TD's
+portable validated Form loan. It prepares two explicitly selected non-first
+Forms, then drops the TD. The same typed runtime reads each original destination
+over real UDP with the prepared integer constraints. The source profile requires
+the standard TD 1.1 context as its sole root entry. The regression verifies
+refusal of additional root entries and local contexts on the selected Property,
+Form and effective security definition. The fixture also runs with preparation
+disabled and explicitly supplied program and meaning. Both execute with
+deployment-supplied storage, time and authorization.
+
+Run from the repository root.
 
 ```sh
 cargo test --locked -p clinkz-wot-constrained-consumer-fixture
-cargo test --locked -p clinkz-wot-constrained-consumer-fixture --features host-meaning
+cargo test --locked -p clinkz-wot-constrained-consumer-fixture --features host-meaning,prepare
 cargo test --locked -p clinkz-wot-servient-finite --no-default-features --doc
 cargo check --locked -p clinkz-wot-constrained-consumer-fixture --target thumbv6m-none-eabi
+cargo check --locked -p clinkz-wot-constrained-consumer-fixture --features prepare --target thumbv6m-none-eabi
 cargo test --locked -p clinkz-wot-core -p clinkz-wot-servient-finite
 cargo test --locked --manifest-path tools/architecture-fixtures/open-consumer/Cargo.toml
 ```
@@ -53,7 +63,7 @@ The fixture's normal dependency graph selects no std features. The `thumbv6m`
 check builds Core, Foundation, the real alternative Servient owner and the test
 Binding/codec/output contracts for a target lacking pointer atomics. Executable
 host tests provide state-transition/I/O evidence alongside this compilation;
-neither alone establishes a hardware/runtime qualification. The separate
+hardware qualification has its own evidence requirements. The separate
 `host-meaning` feature intentionally enables the Host content owner for its
 loan test and is not used in the no-atomic compilation.
 
@@ -62,11 +72,8 @@ prepared meaning and inline work/output require no Engine allocation. General
 structured-schema capture still uses the existing alloc-backed representation;
 caller-provided arbitrary schema arenas are not demonstrated. Host account
 banks, Arc payloads, boxed/pinned calls, Rc registries, existing synchronization
-and native SDKs remain legitimate Host implementations. Modern TD-driven
-Planning/registration, notifications, Producer publication,
-credential composition, concrete Embedded transports and automatic schedulers
-are not ported by this proof. All previously scoped Host evidence retains its
-obligations; no package, milestone, gate or production profile is accepted here.
+and native SDKs remain legitimate Host implementations. General caller-owned TD preparation, notifications, Producer publication,
+credential composition and concrete embedded transports have separate evidence.
 
 Continuing Actions now have a separate
 [cross-representation increment](continuing-action-runtime-independence.md).
