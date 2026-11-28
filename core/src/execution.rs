@@ -255,11 +255,12 @@ pub trait ValueValidator {
     fn content_type(&self) -> &str;
     fn supports(&self, schema: &PreparedSchema) -> bool;
     fn body_bytes(&self) -> usize;
-    /// Consumed by the continuing Action driver during its credit-based migration.
-    fn work(&self) -> u64;
     fn available(&self) -> bool {
         true
     }
+    /// One bounded validation. Use bounded stack or workspace already owned
+    /// by the service. Admitted result delivery cannot depend on ordinary
+    /// scratch acquisition.
     fn validate(&self, schema: &PreparedSchema, payload: PayloadView<'_>) -> CoreResult<()>;
 }
 

@@ -350,6 +350,23 @@ independently authorized effect.
 [Public caller-owned cancellation control](../tools/architecture-fixtures/constrained-consumer/src/action/tests.rs#L1033-L1046) ·
 [Producer cleanup control](../servient/finite/src/action/validation_work_tests.rs#L232-L250)
 
+**Continuing Consumer Action cutover.** Reserving the largest exchange and
+codec allowances at Invoke overstates what a pending invocation owns. A
+Query or Cancel is a separate authorized effect, so it can acquire its own
+native and result backing when requested. A refused control keeps the
+original invocation and continuation. A typed result cell covers normal
+and late handoff in the portable path. In the Host HTTP path real native
+buffers move into the owner of the returned value, under the same shared
+quotas as coexisting paths. Keeping the token after terminal settlement
+would pin continuation backing for as long as a caller holds an unrelated
+result. Keeping the actual expanded destination allows it to retire while
+fresh result permission remains checkable. A close poll and normal validation
+are separate turns, so a fenced invocation can release its exchange and
+retain raw evidence without re-entering validation. The
+[Action execution evidence](../docs/evidence/continuing-action-runtime-independence.md)
+covers this choice. Full separation of Host preparation registration and
+execution services remains part of independent Preparation and Execution.
+
 Manual driving means the caller can perform one bounded step and stop. Observing status or
 a recorded fence invokes no linked callback. A variable-size operation may accept a batch
 count in its own units. Zero is passive. Retain the cursor on yield. Divide or refuse a

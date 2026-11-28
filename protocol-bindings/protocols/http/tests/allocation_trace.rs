@@ -120,6 +120,208 @@ include!("support/application.rs");
 include!("support/runtime_cases.rs");
 
 #[test]
+fn continuing_action_backs_the_reply_before_io_and_shares_the_last_outstanding_call() {
+    use clinkz_wot_binding_http::{HttpActionConsumer, HttpConsumerConfig};
+    use clinkz_wot_core::consumer::{ConsumerServiceOwner, RetainedConsumerServices};
+    use clinkz_wot_planning::open_consumer::{
+        ConsumerActionRegistration, ConsumerActionRegistry, ConsumerActionSelectors,
+    };
+    use clinkz_wot_servient_finite::consumer_action::*;
+    use std::rc::Rc;
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let output = "x".repeat(512);
+    let complete = format!(r#"{{"status":"completed","output":"{output}"}}"#);
+    let peer = std::thread::spawn(move || {
+        for (line, code, response) in [
+            (
+                "POST /run HTTP/1.1",
+                202,
+                r#"{"status":"accepted","id":"0123456789abcdef-1"}"#,
+            ),
+            (
+                "GET /status?id=0123456789abcdef-1 HTTP/1.1",
+                200,
+                complete.as_str(),
+            ),
+            ("GET /reading HTTP/1.1", 200, "7"),
+        ] {
+            let (mut socket, _) = listener.accept().unwrap();
+            assert_eq!(request(&mut socket).lines().next(), Some(line));
+            write!(socket, "HTTP/1.1 {code} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).unwrap();
+        }
+    });
+    let td = serde_json::from_value(serde_json::json!({
+        "@context": "https://www.w3.org/2022/wot/td/v1.1", "title": "reply backing",
+        "security": ["n"], "securityDefinitions": {"n":{"scheme":"nosec"}},
+        "properties": {"reading": {"type":"integer", "readOnly":true, "forms":[
+            {"href":format!("http://{address}/reading")}
+        ]}},
+        "actions": {"run":{"output":{"type":"string","minLength":512},
+            "uriVariables":{"id":{"type":"string"}},"forms":[
+            {"href":format!("http://{address}/run"),"op":"invokeaction","htv:methodName":"POST"},
+            {"href":format!("http://{address}/status{{?id}}"),"op":"queryaction","htv:methodName":"GET"}
+        ]}}
+    })).unwrap();
+    let mut limits = GatewayDefaultV1::LIMITS.clone();
+    assert!(limits.set(ResourceKind::PendingHandlerCallsGlobalMax, Some(1)));
+    assert!(limits.set(ResourceKind::PlanCompileWorkUnitsPerStepMax, Some(4096)));
+    let bank = Arc::new(HostResourceAccounts::new(&limits));
+    let (read_owner, read) =
+        prepare_consumer(&td, &bank, http_registration(), ConsumerSelector::default()).unwrap();
+    let calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
+    let config = HttpConsumerConfig::for_cleartext_ip().unwrap();
+    let services = config.consumer_services();
+    let services = RetainedConsumerServices {
+        data: ConsumerServiceOwner::retain_data(services.data, &bank)
+            .ok()
+            .unwrap(),
+        access: ConsumerServiceOwner::retain_access(services.access, &bank)
+            .ok()
+            .unwrap(),
+    };
+    let registry = ConsumerActionRegistry::try_new_fixed(vec![ConsumerActionRegistration {
+        preparation: Box::new(HttpActionConsumer::new(
+            config,
+            BindingId::new(601),
+            BindingGeneration::INITIAL,
+            601,
+        )),
+        services: services.clone(),
+    }])
+    .unwrap();
+    let definition = registry
+        .prepare_action(
+            &td,
+            "run",
+            ConsumerActionSelectors::default(),
+            &limits,
+            bank.clone(),
+            &mut consumer_read::work(),
+        )
+        .unwrap();
+    let association = ConsumerActionAssociation::try_new(
+        read_owner.reference(),
+        Rc::new(definition),
+        ConsumerActionAccess {
+            invoke: services.access.clone(),
+            query: Some(services.access),
+            cancel: None,
+        },
+        bank.clone(),
+    )
+    .ok()
+    .unwrap();
+    drop((registry, td, services.data));
+    let actions = ConsumerActions::try_new(1, bank.clone()).unwrap();
+
+    recipe().block_on(async {
+        let action = actions
+            .invoke_action(&association, None, Deadline::NONE, now())
+            .ok()
+            .unwrap();
+        let mut cx = Context::from_waker(Waker::noop());
+        let end = Instant::now() + Duration::from_secs(5);
+        while action.state().unwrap() != ConsumerActionState::Pending {
+            action.progress(&mut cx, now()).unwrap();
+            assert!(Instant::now() < end);
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        let before = usage(&bank);
+        BODY_REFUSALS.with(|count| count.set(0));
+        DENY_NEXT_BODY.with(|deny| deny.set(true));
+        assert!(matches!(
+            action.query(now()),
+            Err(CoreError::Backpressure(_))
+        ));
+        assert_eq!(BODY_REFUSALS.with(Cell::get), 1);
+        assert_eq!(action.state().unwrap(), ConsumerActionState::Pending);
+        assert_eq!(usage(&bank), before);
+        action.query(now()).unwrap();
+        let pressure = [
+            ResourceKind::EngineLiveBytesGlobalMax,
+            ResourceKind::CleanupBytesMax,
+            ResourceKind::BindingResponseBufferBytesGlobalMax,
+            ResourceKind::BindingPollTemporaryBytesGlobalMax,
+        ]
+        .map(|kind| {
+            let account = bank.account(kind);
+            bank.reserve(kind, account.limit() - account.used())
+                .unwrap()
+        });
+        loop {
+            let progress = action.progress(&mut cx, now()).unwrap();
+            if progress == ActionTurn::Advanced {
+                break;
+            }
+            assert_eq!(progress, ActionTurn::Waiting);
+            assert!(Instant::now() < end);
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        assert_eq!(
+            action.progress(&mut cx, now()).unwrap(),
+            ActionTurn::Advanced
+        ); // Close.
+        TRACE.with(|trace| {
+            *trace.borrow_mut() = Trace {
+                armed: true,
+                ..EMPTY
+            }
+        });
+        let observed = action.progress(&mut cx, now()); // Validate the borrowed JSON string.
+        let settlement = action.take_settlement(now());
+        let large_allocations = TRACE.with(|trace| {
+            let mut trace = trace.borrow_mut();
+            trace.armed = false;
+            trace
+                .sizes
+                .iter()
+                .filter(|(size, _)| *size >= 512)
+                .map(|(_, count)| count)
+                .sum::<usize>()
+        });
+        assert_eq!(observed.unwrap(), ActionTurn::Settled);
+        assert_eq!(large_allocations, 0);
+        let settlement = settlement.unwrap();
+        let body = settlement.result().unwrap().data().unwrap().body;
+        assert_eq!(body.len(), 514);
+        assert!(body[1..513].iter().all(|byte| *byte == b'x'));
+        drop(pressure);
+        assert!(actions.is_idle());
+        assert!(matches!(
+            read.read_property(&calls, "reading", Deadline::NONE, now())
+                .err()
+                .unwrap(),
+            CoreError::LimitExceeded {
+                resource: ResourceKind::PendingHandlerCallsGlobalMax,
+                ..
+            }
+        ));
+        drop(settlement);
+        let mut read = read
+            .read_property(&calls, "reading", Deadline::NONE, now())
+            .unwrap();
+        assert_eq!(
+            take(&mut read)
+                .await
+                .unwrap()
+                .result()
+                .unwrap()
+                .data()
+                .unwrap()
+                .body,
+            b"7"
+        );
+    });
+    peer.join().unwrap();
+    drop((association, actions, read, read_owner, calls));
+    for kind in ResourceKind::ALL {
+        assert_eq!(bank.account(kind).used(), 0, "{kind:?}");
+    }
+}
+
+#[test]
 fn raw_call_allocation_refusal_recovers_input_and_releases_binding_occupancy() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();

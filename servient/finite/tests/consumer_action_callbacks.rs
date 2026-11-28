@@ -1,5 +1,6 @@
 //! Public continuing Action ownership under deterministic linked-code reentry.
 //! Actual HTTP and downstream datagram lifecycle tests supply transport evidence.
+use clinkz_wot_core::execution::ValueValidator;
 use clinkz_wot_core::{
     consumer::*, consumer_action::*, data_schema::PreparedSchema, host_accounts::*, *,
 };
@@ -52,11 +53,6 @@ fn fire(edge: Edge) {
 fn fired() {
     HOOK.with(|h| assert!(h.borrow().is_none()));
 }
-fn work() -> WorkBudget {
-    WorkClass::ALL
-        .into_iter()
-        .fold(WorkBudget::new(), |b, w| b.with_remaining(w, 1_000_000))
-}
 fn at(t: u64) -> MonotonicInstant {
     MonotonicInstant::new(ClockId::new(109), t)
 }
@@ -94,7 +90,34 @@ struct Probe {
     wake_in_poll: AtomicBool,
 }
 struct Data(Arc<Probe>);
+impl ValueValidator for Data {
+    fn content_type(&self) -> &str {
+        ConsumerDataService::content_type(self)
+    }
+    fn supports(&self, schema: &PreparedSchema) -> bool {
+        ConsumerDataService::supports_schema(self, schema)
+    }
+    fn body_bytes(&self) -> usize {
+        self.policy().body_bytes as usize
+    }
+    fn available(&self) -> bool {
+        ConsumerDataService::available(self)
+    }
+    fn validate(&self, _: &PreparedSchema, p: PayloadView<'_>) -> CoreResult<()> {
+        self.0.validates.fetch_add(1, Ordering::Relaxed);
+        fire(Edge::Validate);
+        if p.body == b"12" || p.body == b"24" {
+            Ok(())
+        } else {
+            Err(invalid())
+        }
+    }
+}
 impl ConsumerDataService for Data {
+    fn action_validator(&self) -> Option<&dyn ValueValidator> {
+        Some(self)
+    }
+
     fn qualification_revision(&self) -> u64 {
         0
     }
@@ -114,14 +137,8 @@ impl ConsumerDataService for Data {
     fn available(&self) -> bool {
         !self.0.unavailable.load(Ordering::Relaxed)
     }
-    fn validate(&self, _: &PreparedSchema, p: &Payload) -> CoreResult<()> {
-        self.0.validates.fetch_add(1, Ordering::Relaxed);
-        fire(Edge::Validate);
-        if p.body.as_ref() == b"12" || p.body.as_ref() == b"24" {
-            Ok(())
-        } else {
-            Err(invalid())
-        }
+    fn validate(&self, schema: &PreparedSchema, p: &Payload) -> CoreResult<()> {
+        ValueValidator::validate(self, schema, p.view())
     }
 }
 struct Access;
@@ -185,7 +202,6 @@ impl ConsumerActionMapping for Mapping {
             temporary_bytes: 64,
             continuation_bytes: 64,
             response_bytes: 512,
-            poll_work: 4,
         }
     }
     fn native_definition(&self) -> &dyn Any {
@@ -200,6 +216,7 @@ impl ConsumerActionMapping for Mapping {
     }
     fn start(
         &self,
+        _destination: &str,
         input: Option<&Payload>,
         continuation: Option<&dyn Any>,
     ) -> CoreResult<Box<dyn ConsumerActionExchange>> {
@@ -226,14 +243,17 @@ struct Native {
 }
 impl Native {
     fn output(&self) -> ConsumerActionReply {
-        ConsumerActionReply::Complete(InteractionOutput::with_data(Payload::new(
-            if self.probe.invalid_output.load(Ordering::Relaxed) {
-                b"bad".as_slice()
-            } else {
-                b"24".as_slice()
-            },
-            "application/json",
-        )))
+        ConsumerActionReply::Complete(
+            InteractionOutput::with_data(Payload::new(
+                if self.probe.invalid_output.load(Ordering::Relaxed) {
+                    b"bad".as_slice()
+                } else {
+                    b"24".as_slice()
+                },
+                "application/json",
+            ))
+            .into(),
+        )
     }
 }
 impl ConsumerActionExchange for Native {
@@ -334,7 +354,8 @@ fn harness(slots: usize) -> Harness {
             endpoint: "test://action".into(),
             form: 0,
             data: data.clone(),
-            data_policy: data.policy(),
+            body_bytes: data.policy().body_bytes,
+            validation_scratch_bytes: data.policy().temporary_bytes,
             content_type: "application/json".into(),
             bounds,
             identity,
@@ -350,7 +371,6 @@ fn harness(slots: usize) -> Harness {
         invoke: op(Operation::InvokeAction),
         query: Some(op(Operation::QueryAction)),
         cancel: Some(op(Operation::CancelAction)),
-        bank: bank.clone(),
         funding: vec![],
     })
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
@@ -364,7 +384,6 @@ fn harness(slots: usize) -> Harness {
             cancel: Some(access),
         },
         bank.clone(),
-        &mut work(),
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let rt = Rc::new(TestClient {
@@ -385,14 +404,22 @@ fn invoke(rt: &TestClient) -> Result<ConsumerActionHandle, BindingInputRejection
         Some(Payload::new(b"12".as_slice(), "application/json")),
         Deadline::NONE,
         at(1),
-        &mut work(),
     )
 }
 fn start(h: &Harness) -> Rc<ConsumerActionHandle> {
     Rc::new(invoke(&h.rt).unwrap_or_else(|e| panic!("{:?}", e.error())))
 }
 fn progress(h: &ConsumerActionHandle) -> ConsumerActionState {
-    h.progress(&mut cx(), at(1), &mut work()).unwrap()
+    for _ in 0..4 {
+        if h.progress(&mut cx(), at(1)).unwrap() != ActionTurn::Advanced {
+            break;
+        }
+        let state = h.state().unwrap();
+        if state == ConsumerActionState::Pending {
+            return state;
+        }
+    }
+    h.state().unwrap()
 }
 fn dispose(h: Harness) {
     let Harness {
@@ -413,7 +440,7 @@ fn last_idle_association_view_disposes_access_without_polling_a_sibling() {
     let rt = sibling.rt.clone();
     hook(Edge::AccessDrop, move || {
         assert!(matches!(
-            rt.calls.step(&mut cx(), at(1), &mut work()),
+            rt.calls.step(&mut cx(), at(1)),
             Err(CoreError::Lifecycle(_))
         ))
     });
@@ -441,7 +468,7 @@ fn admission_callbacks_reserve_capacity_and_observe_close_before_effects() {
                 CoreError::Lifecycle(_)
             ));
             assert!(matches!(
-                rt.calls.step(&mut cx(), at(1), &mut work()),
+                rt.calls.step(&mut cx(), at(1)),
                 Err(CoreError::Lifecycle(_))
             ));
             rt.calls.begin_close();
@@ -451,7 +478,7 @@ fn admission_callbacks_reserve_capacity_and_observe_close_before_effects() {
         if edge == Edge::Start {
             let call = result.ok().unwrap();
             progress(&call);
-            let s = call.take_settlement(at(1), &mut work()).unwrap();
+            let s = call.take_settlement(at(1)).unwrap();
             assert!(matches!(s.result(), Err(CoreError::StaleHandle(_))));
             assert_eq!(h.probe.polls.load(Ordering::Relaxed), 0);
             assert_eq!(s.effect(), ConsumerEffect::Unknown);
@@ -479,14 +506,15 @@ fn query_and_cancel_authorization_reentry_cannot_start_after_local_cancellation(
             nested.cancel_local();
         });
         let result = if cancel {
-            call.request_cancel(at(1), &mut work())
+            call.request_cancel(at(1))
         } else {
-            call.query(at(1), &mut work())
+            call.query(at(1))
         };
         fired();
         assert!(result.is_err());
         assert_eq!(h.probe.starts.load(Ordering::Relaxed), 1);
-        let s = call.take_settlement(at(1), &mut work()).unwrap();
+        assert_eq!(progress(&call), ConsumerActionState::Closed);
+        let s = call.take_settlement(at(1)).unwrap();
         assert!(matches!(s.result(), Err(CoreError::Cancelled(_))));
         assert_eq!(
             s.remote_cancellation(),
@@ -507,27 +535,24 @@ fn progress_callback(edge: Edge) {
     hook(edge, move || {
         assert!(nested.identity().is_ok());
         assert!(!rt.calls.is_idle());
+        assert!(matches!(nested.query(at(1)), Err(CoreError::Lifecycle(_))));
         assert!(matches!(
-            nested.query(at(1), &mut work()),
-            Err(CoreError::Lifecycle(_))
-        ));
-        assert!(matches!(
-            nested.take_settlement(at(1), &mut work()),
+            nested.take_settlement(at(1)),
             Err(CoreError::Lifecycle(_))
         ));
         nested.cancel_local();
         assert!(matches!(
-            nested.progress(&mut cx(), at(1), &mut work()),
+            nested.progress(&mut cx(), at(1)),
             Err(CoreError::Lifecycle(_))
         ));
         assert!(matches!(
-            rt.calls.step(&mut cx(), at(1), &mut work()),
+            rt.calls.step(&mut cx(), at(1)),
             Err(CoreError::Lifecycle(_))
         ));
     });
     progress(&call);
     fired();
-    let s = call.take_settlement(at(1), &mut work()).unwrap();
+    let s = call.take_settlement(at(1)).unwrap();
     assert!(matches!(s.result(), Err(CoreError::Cancelled(_))));
     assert_eq!(
         h.probe.polls.load(Ordering::Relaxed),
@@ -575,7 +600,7 @@ fn settlement_access_close_fences_validated_unread_success() {
     assert_eq!(progress(&call), ConsumerActionState::Completed);
     let rt = h.rt.clone();
     hook(Edge::Access, move || rt.calls.begin_close());
-    let s = call.take_settlement(at(1), &mut work()).unwrap();
+    let s = call.take_settlement(at(1)).unwrap();
     fired();
     assert!(matches!(s.result(), Err(CoreError::StaleHandle(_))));
     assert!(s.native_result().unwrap().is_ok());
@@ -592,10 +617,11 @@ fn abandoned_token_destruction_runs_outside_registry() {
     drop(call);
     let rt = h.rt.clone();
     hook(Edge::TokenDrop, move || {
-        assert!(rt.calls.is_idle());
+        assert!(!rt.calls.is_idle());
         rt.calls.begin_close();
     });
-    h.rt.calls.step(&mut cx(), at(1), &mut work()).unwrap();
+    h.rt.calls.step(&mut cx(), at(1)).unwrap();
+    assert!(h.rt.calls.is_idle());
     fired();
     dispose(h);
 }
@@ -610,7 +636,7 @@ fn callback_admission_returns_its_input_and_the_next_turn_can_use_the_free_slot(
         assert!(matches!(error.error(), CoreError::Lifecycle(_)));
         assert_eq!(input.unwrap().body.as_ref(), b"12");
         assert!(matches!(
-            rt.calls.step(&mut cx(), at(1), &mut work()),
+            rt.calls.step(&mut cx(), at(1)),
             Err(CoreError::Lifecycle(_))
         ));
     });
@@ -627,8 +653,8 @@ fn callback_admission_returns_its_input_and_the_next_turn_can_use_the_free_slot(
     assert!(invoke(&h.rt).is_err());
     assert_eq!(progress(&call), ConsumerActionState::Completed);
     assert_eq!(progress(&sibling), ConsumerActionState::Completed);
-    let s = call.take_settlement(at(1), &mut work()).unwrap();
-    let other = sibling.take_settlement(at(1), &mut work()).unwrap();
+    let s = call.take_settlement(at(1)).unwrap();
+    let other = sibling.take_settlement(at(1)).unwrap();
     assert!(s.result().is_ok());
     assert!(other.result().is_ok());
     assert_eq!(h.probe.starts.load(Ordering::Relaxed), 2);
@@ -638,7 +664,7 @@ fn callback_admission_returns_its_input_and_the_next_turn_can_use_the_free_slot(
     call.cancel_local();
     drop(call);
     assert_eq!(progress(&replacement), ConsumerActionState::Completed);
-    drop(replacement.take_settlement(at(1), &mut work()).unwrap());
+    drop(replacement.take_settlement(at(1)).unwrap());
     drop(replacement);
     drop(sibling);
     drop(s);
@@ -654,16 +680,16 @@ fn control_start_reentry_preserves_returned_exchange_and_remote_cancel_uncertain
         assert_eq!(progress(&call), ConsumerActionState::Pending);
         let nested = call.clone();
         hook(Edge::Start, move || {
-            assert!(nested.request_cancel(at(1), &mut work()).is_err());
+            assert!(nested.request_cancel(at(1)).is_err());
             nested.cancel_local();
         });
         if cancel {
-            call.request_cancel(at(1), &mut work()).unwrap();
+            call.request_cancel(at(1)).unwrap();
         } else {
-            call.query(at(1), &mut work()).unwrap();
+            call.query(at(1)).unwrap();
         }
         assert_eq!(progress(&call), ConsumerActionState::Closed);
-        let s = call.take_settlement(at(1), &mut work()).unwrap();
+        let s = call.take_settlement(at(1)).unwrap();
         assert_eq!(
             s.remote_cancellation(),
             if cancel {
@@ -694,7 +720,7 @@ fn cancelled_failed_query_retains_late_invalid_output_and_failed_retirement_unde
     let h = harness(1);
     let call = start(&h);
     assert_eq!(progress(&call), ConsumerActionState::Pending);
-    call.query(at(1), &mut work()).unwrap();
+    call.query(at(1)).unwrap();
     h.probe.fail_poll.store(true, Ordering::Relaxed);
     h.probe.fail_close.store(true, Ordering::Relaxed);
     h.probe.close_pending.store(true, Ordering::Relaxed);
@@ -702,7 +728,7 @@ fn cancelled_failed_query_retains_late_invalid_output_and_failed_retirement_unde
     hook(Edge::Poll, move || nested.cancel_local());
     assert_eq!(progress(&call), ConsumerActionState::Closing);
     assert!(call.cleanup_error().unwrap().is_some());
-    assert!(call.take_settlement(at(1), &mut work()).is_err());
+    assert!(call.take_settlement(at(1)).is_err());
     assert!(invoke(&h.rt).is_err());
     assert_eq!(h.probe.drops.load(Ordering::Relaxed), 1);
     h.probe.late.store(true, Ordering::Relaxed);
@@ -711,10 +737,9 @@ fn cancelled_failed_query_retains_late_invalid_output_and_failed_retirement_unde
         h.probe.closes.load(Ordering::Relaxed),
         h.codecs[1].validates.load(Ordering::Relaxed),
     );
-    call.progress(&mut cx(), at(1), &mut WorkBudget::new())
-        .unwrap();
+    call.progress(&mut cx(), at(1)).unwrap();
     assert_eq!(
-        counts,
+        (counts.0 + 1, counts.1),
         (
             h.probe.closes.load(Ordering::Relaxed),
             h.codecs[1].validates.load(Ordering::Relaxed)
@@ -722,16 +747,16 @@ fn cancelled_failed_query_retains_late_invalid_output_and_failed_retirement_unde
     );
     h.probe.close_pending.store(false, Ordering::Relaxed);
     assert_eq!(progress(&call), ConsumerActionState::Closed);
-    let s = call.take_settlement(at(1), &mut work()).unwrap();
+    let s = call.take_settlement(at(1)).unwrap();
     assert!(matches!(s.first_cause(), Some(CoreError::Cancelled(_))));
     assert!(s.native_error().is_some());
     assert!(s.cleanup_error().is_some());
-    assert!(s.validation_error().is_some());
+    assert!(s.validation_error().is_none());
     assert!(s.native_result().unwrap().is_ok());
     assert!(s.result().is_err());
     assert_eq!(s.effect(), ConsumerEffect::Unknown);
     assert_eq!(h.probe.validates.load(Ordering::Relaxed), 1);
-    assert_eq!(h.codecs[1].validates.load(Ordering::Relaxed), 1);
+    assert_eq!(h.codecs[1].validates.load(Ordering::Relaxed), 0);
     assert_eq!(h.probe.drops.load(Ordering::Relaxed), 2);
     let Harness {
         rt, owner, bank, ..
@@ -797,9 +822,9 @@ fn close_and_cancellation_during_waker_replacement_reach_the_new_waiter() {
         let call = start(&h);
         let (old, wakes) = wake_counter();
         assert_eq!(
-            call.progress(&mut Context::from_waker(&old), at(1), &mut work())
+            call.progress(&mut Context::from_waker(&old), at(1))
                 .unwrap(),
-            ConsumerActionState::Invoking
+            ActionTurn::Waiting
         );
 
         let cancel = call.clone();
@@ -815,19 +840,15 @@ fn close_and_cancellation_during_waker_replacement_reach_the_new_waiter() {
             hook(Edge::Wake, move || seen.set(true));
         });
         assert_eq!(
-            call.progress(
-                &mut Context::from_waker(&linked_waker()),
-                at(1),
-                &mut work()
-            )
-            .unwrap(),
-            ConsumerActionState::Closed
+            call.progress(&mut Context::from_waker(&linked_waker()), at(1),)
+                .unwrap(),
+            ActionTurn::Settled
         );
         fired();
         assert_eq!(wakes.load(Ordering::Relaxed), 1);
         assert!(notified.get());
         assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
-        let result = call.take_settlement(at(1), &mut work()).unwrap();
+        let result = call.take_settlement(at(1)).unwrap();
         if close {
             assert!(matches!(
                 result.first_cause(),
@@ -845,27 +866,28 @@ fn close_and_cancellation_during_waker_replacement_reach_the_new_waiter() {
 }
 
 #[test]
-fn collected_action_guards_its_continuation_destructor() {
+fn continuation_retires_under_the_turn_before_result_disposal() {
     let original = harness(1);
     let call = start(&original);
     assert_eq!(progress(&call), ConsumerActionState::Pending);
-    call.query(at(1), &mut work()).unwrap();
-    assert_eq!(progress(&call), ConsumerActionState::Completed);
-    let result = call.take_settlement(at(1), &mut work()).unwrap();
-    drop((call, original.rt, original.owner));
+    call.query(at(1)).unwrap();
 
     let sibling = harness(1);
     let next = start(&sibling);
     let rt = sibling.rt.clone();
     hook(Edge::TokenDrop, move || {
         assert!(matches!(
-            rt.calls.step(&mut cx(), at(1), &mut work()),
+            rt.calls.step(&mut cx(), at(1)),
             Err(CoreError::Lifecycle(_))
-        ))
+        ));
     });
-    drop(result);
+    assert_eq!(progress(&call), ConsumerActionState::Completed);
     fired();
+    let result = call.take_settlement(at(1)).unwrap();
+    drop((call, original.rt, original.owner));
     assert_eq!(sibling.probe.polls.load(Ordering::Relaxed), 0);
+    assert_eq!(result.result().unwrap().data().unwrap().body, b"24");
+    drop(result);
     clean(&original.bank);
     assert_eq!(progress(&next), ConsumerActionState::Pending);
     drop(next);
@@ -879,9 +901,11 @@ fn close_fences_all_siblings_before_inline_wake_and_drop_never_wakes() {
     let a = start(&h);
     let b = start(&h);
     let (waker, count) = wake_counter();
-    h.rt.calls
-        .step(&mut Context::from_waker(&waker), at(1), &mut work())
-        .unwrap();
+    for _ in 0..2 {
+        h.rt.calls
+            .step(&mut Context::from_waker(&waker), at(1))
+            .unwrap();
+    }
     let sibling = b.clone();
     hook(Edge::Wake, move || {
         sibling.cancel_local();
@@ -899,7 +923,7 @@ fn close_fences_all_siblings_before_inline_wake_and_drop_never_wakes() {
     assert_eq!(count.load(Ordering::Relaxed), 2);
     drop(a);
     drop(b);
-    h.rt.calls.step(&mut cx(), at(1), &mut work()).unwrap();
+    h.rt.calls.step(&mut cx(), at(1)).unwrap();
     drop(waker);
     dispose(h);
 
@@ -907,7 +931,7 @@ fn close_fences_all_siblings_before_inline_wake_and_drop_never_wakes() {
     h.probe.pending.store(true, Ordering::Relaxed);
     let call = start(&h);
     let (waker, count) = wake_counter();
-    call.progress(&mut Context::from_waker(&waker), at(1), &mut work())
+    call.progress(&mut Context::from_waker(&waker), at(1))
         .unwrap();
     let Harness {
         rt,
@@ -931,21 +955,21 @@ fn replacing_a_registered_waker_may_reenter_and_close_the_checked_out_invocation
     h.probe.pending.store(true, Ordering::Relaxed);
     let call = start(&h);
     let (waker, _) = wake_counter();
-    call.progress(&mut Context::from_waker(&waker), at(1), &mut work())
+    call.progress(&mut Context::from_waker(&waker), at(1))
         .unwrap();
     drop(waker);
     let rt = h.rt.clone();
     hook(Edge::WakerDrop, move || {
         rt.calls.begin_close();
         assert!(matches!(
-            rt.calls.step(&mut cx(), at(1), &mut work()),
+            rt.calls.step(&mut cx(), at(1)),
             Err(CoreError::Lifecycle(_))
         ));
     });
     assert_eq!(progress(&call), ConsumerActionState::Closed);
     fired();
     assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
-    drop(call.take_settlement(at(1), &mut work()).unwrap());
+    drop(call.take_settlement(at(1)).unwrap());
     drop(call);
     dispose(h);
 }
@@ -966,7 +990,7 @@ fn callback_can_drop_the_original_handle_or_runtime_without_losing_native_owners
             } = h;
             hook(Edge::Poll, move || drop(rt));
             assert_eq!(progress(&call), ConsumerActionState::Closed);
-            let s = call.take_settlement(at(1), &mut work()).unwrap();
+            let s = call.take_settlement(at(1)).unwrap();
             assert!(matches!(s.result(), Err(CoreError::StaleHandle(_))));
             assert!(s.native_result().unwrap().is_ok());
             drop(s);
@@ -976,7 +1000,15 @@ fn callback_can_drop_the_original_handle_or_runtime_without_losing_native_owners
             clean(&bank);
         } else {
             hook(Edge::Poll, move || drop(call));
-            h.rt.calls.step(&mut cx(), at(1), &mut work()).unwrap();
+            assert_eq!(
+                h.rt.calls.step(&mut cx(), at(1)).unwrap(),
+                ActionTurn::Advanced
+            );
+            assert!(!h.rt.calls.is_idle());
+            assert_eq!(
+                h.rt.calls.step(&mut cx(), at(1)).unwrap(),
+                ActionTurn::Settled
+            );
             assert!(h.rt.calls.is_idle());
             assert_eq!(h.probe.drops.load(Ordering::Relaxed), 1);
             dispose(h);
@@ -990,75 +1022,62 @@ fn independent_action_turns_fence_clock_regressions_and_domain_changes() {
     let h = harness(2);
     let a = start(&h);
     let b = start(&h);
-    h.rt.calls.step(&mut cx(), at(2), &mut work()).unwrap();
+    h.rt.calls.step(&mut cx(), at(2)).unwrap();
     assert!(a.first_cause().unwrap().is_none());
     assert!(b.first_cause().unwrap().is_none());
-    a.progress(&mut cx(), at(1), &mut work()).unwrap();
+    a.progress(&mut cx(), at(1)).unwrap();
     assert!(matches!(
         a.first_cause().unwrap(),
         Some(CoreError::Validation(_))
     ));
-    b.progress(
-        &mut cx(),
-        MonotonicInstant::new(ClockId::new(110), 3),
-        &mut work(),
-    )
-    .unwrap();
+    b.progress(&mut cx(), MonotonicInstant::new(ClockId::new(110), 3))
+        .unwrap();
     assert!(matches!(
         b.first_cause().unwrap(),
         Some(CoreError::Validation(_))
     ));
-    drop(a.take_settlement(at(2), &mut work()).unwrap());
-    drop(b.take_settlement(at(2), &mut work()).unwrap());
+    drop(a.take_settlement(at(2)).unwrap());
+    drop(b.take_settlement(at(2)).unwrap());
     drop(a);
     drop(b);
     dispose(h);
 }
 
 #[test]
-fn short_work_or_capacity_refuses_before_callbacks_and_preserves_input_and_slot() {
+fn full_host_quota_refuses_before_callbacks_and_preserves_input_and_slot() {
     let h = harness(1);
-    let before = usage(&h.bank);
     let entered = Rc::new(Cell::new(false));
     let seen = entered.clone();
     hook(Edge::Access, move || seen.set(true));
+    let k = ResourceKind::EngineLiveBytesGlobalMax;
+    let account = h.bank.account(k);
+    let held = h.bank.reserve(k, account.limit() - account.used()).unwrap();
+    let before = usage(&h.bank);
     let input = Payload::new(b"12".as_slice(), "application/json");
     let original = input.body.clone();
-    let refusal =
+    let (input, error) =
         h.rt.calls
-            .invoke_action(
-                &h.rt.association,
-                Some(input),
-                Deadline::NONE,
-                at(1),
-                &mut work().with_remaining(WorkClass::CodecInputBytes, 0),
-            )
+            .invoke_action(&h.rt.association, Some(input), Deadline::NONE, at(1))
             .err()
-            .unwrap();
-    let (input, _) = refusal.into_parts();
+            .unwrap()
+            .into_parts();
+    assert!(matches!(error.error(), CoreError::LimitExceeded { resource, .. } if *resource == k));
     assert!(Arc::ptr_eq(&original, &input.unwrap().body));
     assert!(!entered.get());
     assert!(h.rt.calls.is_idle());
     assert_eq!(before, usage(&h.bank));
-    let k = ResourceKind::EngineLiveBytesGlobalMax;
-    let account = h.bank.account(k);
-    let held = h.bank.reserve(k, account.limit() - account.used()).unwrap();
-    assert!(invoke(&h.rt).is_err());
-    assert!(!entered.get());
-    assert!(h.rt.calls.is_idle());
     drop(held);
+    h.probe.complete_invoke.store(true, Ordering::Relaxed);
     let call = start(&h);
     assert!(entered.get());
-    h.probe.complete_invoke.store(true, Ordering::Relaxed);
-    progress(&call);
-    assert!(call.take_settlement(at(1), &mut WorkBudget::new()).is_err());
-    assert!(invoke(&h.rt).is_err());
-    assert!(
-        call.take_settlement(at(1), &mut work())
-            .unwrap()
-            .result()
-            .is_ok()
+    assert_eq!(
+        call.progress(&mut cx(), at(1)).unwrap(),
+        ActionTurn::Advanced
     );
+    assert!(call.take_settlement(at(1)).is_err());
+    assert!(invoke(&h.rt).is_err());
+    assert_eq!(progress(&call), ConsumerActionState::Completed);
+    assert!(call.take_settlement(at(1)).unwrap().result().is_ok());
     drop(call);
     dispose(h);
 }
@@ -1075,7 +1094,7 @@ fn unwind_restores_occupied_owner_and_retains_native_evidence_before_validator_e
         assert!(invoke(&h.rt).is_err());
         call.cancel_local();
         progress(&call);
-        let s = call.take_settlement(at(1), &mut work()).unwrap();
+        let s = call.take_settlement(at(1)).unwrap();
         assert!(s.result().is_err());
         if edge == Edge::Validate {
             assert!(s.native_result().unwrap().is_ok());
@@ -1123,7 +1142,7 @@ fn replacement_during_authorization_already_refuses_before_native_start() {
 #[test]
 fn retired_invoke_codec_loss_does_not_revoke_independent_control_or_query_output() {
     for cancel in [false, true] {
-        let h = harness(1);
+        let h = harness(2);
         let call = start(&h);
         assert_eq!(progress(&call), ConsumerActionState::Pending);
         let p = h.probe.clone();
@@ -1131,9 +1150,9 @@ fn retired_invoke_codec_loss_does_not_revoke_independent_control_or_query_output
             p.unavailable.store(true, Ordering::Relaxed)
         });
         let result = if cancel {
-            call.request_cancel(at(1), &mut work())
+            call.request_cancel(at(1))
         } else {
-            call.query(at(1), &mut work())
+            call.query(at(1))
         };
         result.unwrap();
         assert_eq!(h.probe.starts.load(Ordering::Relaxed), 2);
@@ -1143,10 +1162,10 @@ fn retired_invoke_codec_loss_does_not_revoke_independent_control_or_query_output
         drop(refused);
         if cancel {
             assert_eq!(progress(&call), ConsumerActionState::Pending);
-            call.query(at(1), &mut work()).unwrap();
+            call.query(at(1)).unwrap();
         }
         assert_eq!(progress(&call), ConsumerActionState::Completed);
-        let s = call.take_settlement(at(1), &mut work()).unwrap();
+        let s = call.take_settlement(at(1)).unwrap();
         assert!(s.result().is_ok());
         assert_eq!(h.probe.validates.load(Ordering::Relaxed), 1);
         assert_eq!(h.codecs[1].validates.load(Ordering::Relaxed), 1);
@@ -1174,15 +1193,15 @@ fn selected_query_codec_loss_refuses_before_effects_without_revoking_original_wo
     hook(Edge::Access, move || {
         query.unavailable.store(true, Ordering::Relaxed)
     });
-    assert!(call.query(at(1), &mut work()).is_err());
+    assert!(call.query(at(1)).is_err());
     assert_eq!(h.probe.starts.load(Ordering::Relaxed), 1);
-    assert!(call.query(at(1), &mut work()).is_err());
-    call.request_cancel(at(1), &mut work()).unwrap();
+    assert!(call.query(at(1)).is_err());
+    call.request_cancel(at(1)).unwrap();
     assert_eq!(progress(&call), ConsumerActionState::Pending);
     h.codecs[1].unavailable.store(false, Ordering::Relaxed);
-    call.query(at(1), &mut work()).unwrap();
+    call.query(at(1)).unwrap();
     assert_eq!(progress(&call), ConsumerActionState::Completed);
-    let s = call.take_settlement(at(1), &mut work()).unwrap();
+    let s = call.take_settlement(at(1)).unwrap();
     assert!(s.result().is_ok());
     assert_eq!(
         s.remote_cancellation(),
@@ -1204,34 +1223,26 @@ fn native_inline_wake_cannot_repoll_or_advance_the_action_clock() {
     let seen = cloned.clone();
     hook(Edge::Wake, move || {
         hook(Edge::WakerClone, move || seen.set(true));
-        let result = nested.progress(
-            &mut Context::from_waker(&linked_waker()),
-            at(9),
-            &mut work(),
-        );
+        let result = nested.progress(&mut Context::from_waker(&linked_waker()), at(9));
         assert!(matches!(result, Err(CoreError::Lifecycle(error))
             if error.phase() == ErrorPhase::Readiness && error.retry_class() == RetryClass::Never));
     });
-    call.progress(&mut Context::from_waker(&waker), at(1), &mut work())
+    call.progress(&mut Context::from_waker(&waker), at(1))
         .unwrap();
     assert!(!cloned.get());
     assert_eq!(count.load(Ordering::Relaxed), 1);
     assert_eq!(h.probe.polls.load(Ordering::Relaxed), 1);
     assert_eq!(
-        call.progress(
-            &mut Context::from_waker(&linked_waker()),
-            at(1),
-            &mut work()
-        )
-        .unwrap(),
-        ConsumerActionState::Invoking
+        call.progress(&mut Context::from_waker(&linked_waker()), at(1),)
+            .unwrap(),
+        ActionTurn::Waiting
     );
     assert!(cloned.get());
     fired();
     assert_eq!(h.probe.polls.load(Ordering::Relaxed), 2);
     call.cancel_local();
     progress(&call);
-    drop(call.take_settlement(at(1), &mut work()).unwrap());
+    drop(call.take_settlement(at(1)).unwrap());
     drop(waker);
     drop(call);
     dispose(h);
@@ -1301,7 +1312,6 @@ fn operation_association(h: &Harness) -> (ConsumerActionAssociation, [Arc<Operat
             cancel: Some(cancel),
         },
         h.bank.clone(),
-        &mut work(),
     )
     .ok()
     .unwrap();
@@ -1321,7 +1331,6 @@ fn unused_query_revision_cannot_revoke_original_invoke_completion_or_handoff() {
                     Some(Payload::new(b"12".as_slice(), "application/json")),
                     Deadline::NONE,
                     at(1),
-                    &mut work(),
                 )
                 .ok()
                 .unwrap();
@@ -1332,7 +1341,7 @@ fn unused_query_revision_cannot_revoke_original_invoke_completion_or_handoff() {
         services[1].revision.store(1, Ordering::Relaxed);
         assert_eq!(progress(&call), ConsumerActionState::Completed);
         assert!(call.first_cause().unwrap().is_none());
-        let settlement = call.take_settlement(at(1), &mut work()).unwrap();
+        let settlement = call.take_settlement(at(1)).unwrap();
         assert_eq!(settlement.identity(), &identity);
         assert_eq!(settlement.result().unwrap().data().unwrap().body, b"24");
         assert_eq!(services[1].authorizations.load(Ordering::Relaxed), 0);
@@ -1352,7 +1361,7 @@ fn unused_query_revision_cannot_revoke_original_invoke_completion_or_handoff() {
                 .used(),
             1
         );
-        drop(settlement);
+        drop((settlement, identity));
         dispose(h);
     }
 }
@@ -1369,16 +1378,15 @@ fn selected_control_revision_fences_owned_exchange_and_retains_late_cleanup() {
                     Some(Payload::new(b"12".as_slice(), "application/json")),
                     Deadline::NONE,
                     at(1),
-                    &mut work(),
                 )
                 .ok()
                 .unwrap();
         let identity = call.identity().unwrap();
         assert_eq!(progress(&call), ConsumerActionState::Pending);
         if operation == 1 {
-            call.query(at(1), &mut work()).unwrap();
+            call.query(at(1)).unwrap();
         } else {
-            call.request_cancel(at(1), &mut work()).unwrap();
+            call.request_cancel(at(1)).unwrap();
         }
         h.probe.close_pending.store(true, Ordering::Relaxed);
         h.probe.late.store(operation == 1, Ordering::Relaxed);
@@ -1400,17 +1408,16 @@ fn selected_control_revision_fences_owned_exchange_and_retains_late_cleanup() {
         );
         let closes = h.probe.closes.load(Ordering::Relaxed);
         assert_eq!(
-            call.progress(&mut cx(), at(1), &mut WorkBudget::new())
-                .unwrap(),
-            ConsumerActionState::Closing
+            call.progress(&mut cx(), at(1)).unwrap(),
+            ActionTurn::Waiting
         );
-        assert_eq!(h.probe.closes.load(Ordering::Relaxed), closes);
+        assert_eq!(h.probe.closes.load(Ordering::Relaxed), closes + 1);
         // Adversarial restoration cannot erase the violation already observed.
         services[operation].revision.store(0, Ordering::Relaxed);
-        assert!(call.query(at(1), &mut work()).is_err());
+        assert!(call.query(at(1)).is_err());
         h.probe.close_pending.store(false, Ordering::Relaxed);
         assert_eq!(progress(&call), ConsumerActionState::Closed);
-        let settlement = call.take_settlement(at(1), &mut work()).unwrap();
+        let settlement = call.take_settlement(at(1)).unwrap();
         assert_eq!(settlement.identity(), &identity);
         assert!(matches!(settlement.result(), Err(CoreError::Validation(_))));
         assert_eq!(
@@ -1433,10 +1440,10 @@ fn selected_control_revision_fences_owned_exchange_and_retains_late_cleanup() {
                 b"24"
             );
             assert_eq!(h.probe.validates.load(Ordering::Relaxed), 1);
-            assert_eq!(h.codecs[1].validates.load(Ordering::Relaxed), 1);
+            assert_eq!(h.codecs[1].validates.load(Ordering::Relaxed), 0);
         }
         assert_eq!(h.probe.drops.load(Ordering::Relaxed), 2);
-        drop((call, association, services, settlement));
+        drop((call, association, services, settlement, identity));
         dispose(h);
     }
 }
@@ -1457,7 +1464,7 @@ fn worker_exit_retires_a_parked_action() {
         |(h, call)| {
             call.cancel_local();
             assert_eq!(progress(&call), ConsumerActionState::Closed);
-            let report = call.take_settlement(at(1), &mut work()).unwrap();
+            let report = call.take_settlement(at(1)).unwrap();
             assert!(matches!(report.result(), Err(CoreError::Cancelled(_))));
             assert_eq!(h.probe.closes.load(Ordering::Relaxed), 1);
             assert_eq!(h.probe.drops.load(Ordering::Relaxed), 1);

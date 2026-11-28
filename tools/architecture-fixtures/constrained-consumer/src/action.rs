@@ -26,7 +26,8 @@ pub struct Statistics {
     pub close_error: Cell<bool>,
     pub poll_error_with_late: Cell<bool>,
     pub fail_start: Cell<bool>,
-    pub query_work: Cell<u64>,
+    pub query_mapping_changed: Cell<bool>,
+    pub query_target: Cell<Option<&'static str>>,
     pub output_views: Cell<usize>,
     pub output_variant: Cell<OutputVariant>,
     pub select_after_validation: Cell<Option<OutputVariant>>,
@@ -47,7 +48,7 @@ pub struct Program<'a> {
     pub target: &'a str,
 }
 pub struct Binding<'a, S> {
-    pub open: &'a dyn Fn() -> CoreResult<S>,
+    pub open: &'a dyn Fn(&str) -> CoreResult<S>,
     pub stats: &'a Statistics,
     pub configuration: u32,
     pub query_media: &'static str,
@@ -74,9 +75,6 @@ impl ActionInput for Input<'_> {
             content_coding: None,
         }
     }
-    fn backing_bytes(&self) -> u64 {
-        0
-    } // The input's original backing is borrowed.
 }
 impl Drop for Input<'_> {
     fn drop(&mut self) {
@@ -148,6 +146,7 @@ impl<'a, S: TestDatagrams> ActionBinding for Binding<'a, S> {
     type Program = Program<'a>;
     type Configuration = u32;
     type Exchange = Exchange<'a, S>;
+    type Destination = &'a str;
     fn configuration(&self) -> &u32 {
         &self.configuration
     }
@@ -160,37 +159,33 @@ impl<'a, S: TestDatagrams> ActionBinding for Binding<'a, S> {
             binding: BindingId::new(if op == Operation::InvokeAction {
                 71
             } else {
-                72
+                72 + u32::from(
+                    op == Operation::QueryAction && self.stats.query_mapping_changed.get(),
+                )
             }),
             generation: BindingGeneration::INITIAL,
             target: p.target,
         })
     }
-    fn destination<'b>(
-        &'b self,
-        p: &'b Self::Program,
+    fn destination(
+        &self,
+        p: &Self::Program,
         op: Operation,
-        _: Option<&'b Token<'a>>,
-    ) -> CoreResult<ActionMapping<'b>> {
-        self.mapping(p, op).ok_or_else(failed)
+        _: Option<&Token<'a>>,
+    ) -> CoreResult<Self::Destination> {
+        Ok(match op {
+            Operation::QueryAction => self.stats.query_target.get().unwrap_or(p.target),
+            _ => p.target,
+        })
     }
     fn supports(&self, _: &Self::Program, m: ValueExecution<'_>) -> bool {
         m.operation() == Operation::InvokeAction
     }
-    fn poll_work(&self, op: Operation) -> u64 {
-        if op == Operation::QueryAction {
-            2 + self.stats.query_work.get()
-        } else {
-            2
-        }
-    }
-    fn backing_bytes(&self) -> u64 {
-        0
-    } // All Engine-visible work/results are inline.
     fn start(
         &self,
         _: &Self::Program,
         op: Operation,
+        destination: &Self::Destination,
         input: Option<PayloadView<'_>>,
         token: Option<&Token<'a>>,
         _: Deadline,
@@ -226,7 +221,7 @@ impl<'a, S: TestDatagrams> ActionBinding for Binding<'a, S> {
             }
             _ => return Err(failed()),
         };
-        let socket = (self.open)()?;
+        let socket = (self.open)(destination)?;
         bump(&self.stats.starts);
         Ok(Exchange {
             socket,
@@ -345,9 +340,6 @@ impl ValueValidator for Codec<'_> {
     fn body_bytes(&self) -> usize {
         self.number.body_bytes()
     }
-    fn work(&self) -> u64 {
-        self.number.work()
-    }
     fn available(&self) -> bool {
         self.number.available()
     }
@@ -363,6 +355,7 @@ pub struct Permission<'a> {
     pub revision: Cell<u64>,
     pub checks: Cell<usize>,
     pub denied: Cell<bool>,
+    pub allowed_target: Option<&'a str>,
     pub rotate_on_check: Cell<bool>,
     pub revoke: Option<&'a LocalConsumerInstance>,
     pub callback: Option<&'a dyn Fn()>,
@@ -371,14 +364,11 @@ impl ActionAccess for Permission<'_> {
     fn revision(&self) -> u64 {
         self.revision.get()
     }
-    fn work(&self) -> u64 {
-        1
-    }
     fn authorize(
         &self,
         _: clinkz_wot_core::execution::read::LocalConsumerRef<'_>,
         _: Operation,
-        _: ActionMapping<'_>,
+        mapping: ActionMapping<'_>,
     ) -> CoreResult<()> {
         bump(&self.checks);
         if let Some(c) = self.callback {
@@ -390,7 +380,11 @@ impl ActionAccess for Permission<'_> {
         if self.rotate_on_check.replace(false) {
             self.revision.set(self.revision.get() + 1);
         }
-        if self.denied.get() {
+        if self.denied.get()
+            || self
+                .allowed_target
+                .is_some_and(|target| target != mapping.target)
+        {
             Err(CoreError::Security {
                 reason: clinkz_wot_core::SecurityFailureReason::AuthorizationDenied,
                 context: context(),

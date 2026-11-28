@@ -6,7 +6,6 @@ use crate::{
     BindingGeneration, BindingId, CoreError, CoreResult, Deadline, InteractionOutputView,
     Operation, PayloadView,
 };
-use clinkz_wot_foundation::{WorkBudget, WorkClass as W};
 use core::task::{Context, Poll};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -36,6 +35,7 @@ pub enum ConsumerActionCancellation {
 
 /// Only the semantic observation kind crosses this boundary. Actual tokens,
 /// values and failures have already moved into their original driver's storage.
+#[derive(Clone, Copy)]
 pub enum ActionObservation {
     Invalid,
     Accepted,
@@ -58,6 +58,33 @@ pub enum ActionReply<C, O> {
     CancelRequested,
     AlreadyTerminal,
 }
+
+/// Store the original owners before semantic observation or a linked callback.
+pub fn retain_action_reply<C, O>(
+    operation: Operation,
+    reply: ActionReply<C, O>,
+    continuation: &mut Option<C>,
+    result: &mut Option<CoreResult<O>>,
+) -> ActionObservation {
+    match reply {
+        ActionReply::Accepted(token) if operation == Operation::InvokeAction => {
+            *continuation = Some(token);
+            ActionObservation::Accepted
+        }
+        ActionReply::Accepted(_) => ActionObservation::Invalid,
+        ActionReply::Complete(output) => {
+            *result = Some(Ok(output));
+            ActionObservation::Complete
+        }
+        ActionReply::Failed(error) => {
+            *result = Some(Err(error));
+            ActionObservation::Failed
+        }
+        ActionReply::Pending => ActionObservation::Pending,
+        ActionReply::CancelRequested => ActionObservation::CancelRequested,
+        ActionReply::AlreadyTerminal => ActionObservation::AlreadyTerminal,
+    }
+}
 pub trait ActionOutput {
     /// One bounded local view-adapter operation, with no native progress. Safe
     /// interior mutability may select different immutable backing between calls.
@@ -67,12 +94,10 @@ pub trait ActionOutput {
 }
 pub trait ActionInput {
     /// Lend encoded input through a bounded local view adapter. Admission
-    /// captures one view after complete prepayment, before fresh permission,
+    /// captures one view after claiming its result slot, before fresh permission,
     /// then reuses that loan for validation and start.
     /// A later view is not proof of the previously validated bytes or metadata.
     fn view(&self) -> PayloadView<'_>;
-    /// Indirect original input backing beyond this owner's inline layout.
-    fn backing_bytes(&self) -> u64;
 }
 /// Drop performs finite local disposal without waiting for a remote peer.
 /// Ready/error does not waive close. Close errors retain the original owner.
@@ -105,30 +130,35 @@ pub trait ActionBinding {
     type Program;
     type Configuration: Eq;
     type Exchange: ActionExchange;
+    /// A bounded owned or program-borrowed destination. Every `as_ref` call
+    /// lends the same exact target text from resolution until this value is
+    /// dropped, including after exchange and continuation retirement, across
+    /// settlement handoff and during every validated result loan. Access and
+    /// disposal are bounded local operations.
+    type Destination: AsRef<str>;
     fn configuration(&self) -> &Self::Configuration;
     fn mapping<'a>(
         &'a self,
         program: &'a Self::Program,
         operation: Operation,
     ) -> Option<ActionMapping<'a>>;
-    /// Pure actual destination, checked before policy; start must use this same
-    /// destination. Redirects need equivalent explicit policy coverage.
-    fn destination<'a>(
-        &'a self,
-        program: &'a Self::Program,
+    /// Resolve the actual destination without effects before authorization.
+    /// `start` must use this same operand. Redirects need equivalent explicit
+    /// policy coverage.
+    fn destination(
+        &self,
+        program: &Self::Program,
         operation: Operation,
-        continuation: Option<&'a <Self::Exchange as ActionExchange>::Continuation>,
-    ) -> CoreResult<ActionMapping<'a>>;
+        continuation: Option<&<Self::Exchange as ActionExchange>::Continuation>,
+    ) -> CoreResult<Self::Destination>;
     fn supports(&self, program: &Self::Program, meaning: ValueExecution<'_>) -> bool;
-    /// Complete poll + close work per step, including pure destination work.
-    fn poll_work(&self, operation: Operation) -> u64;
-    /// Complete indirect Engine work, input/result, token and retirement backing
-    /// beyond inline owner layout. Private native resources have their own owner.
-    fn backing_bytes(&self) -> u64;
+    /// Secure native correlation, reply and retirement backing before an
+    /// effect. The exchange owns its concrete types and any indirect backing.
     fn start(
         &self,
         program: &Self::Program,
         operation: Operation,
+        destination: &Self::Destination,
         input: Option<PayloadView<'_>>,
         continuation: Option<&<Self::Exchange as ActionExchange>::Continuation>,
         deadline: Deadline,
@@ -138,7 +168,6 @@ pub trait ActionBinding {
 /// revision without reuse, including changes made inside linked callbacks.
 pub trait ActionAccess {
     fn revision(&self) -> u64;
-    fn work(&self) -> u64;
     fn authorize(
         &self,
         consumer: LocalConsumerRef<'_>,
@@ -158,175 +187,264 @@ pub fn action_output_shape(output: InteractionOutputView<'_>) -> bool {
         && output.metadata().property_write_report().is_none()
 }
 
+/// A bounded Action turn polls the exchange or its retirement at most once.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ActionTurn {
+    Idle,
+    Advanced,
+    Waiting,
+    RetirementBlocked,
+    Settled,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Phase {
+    Poll,
+    Retire,
+    Observe,
+    Idle,
+}
+
 pub struct ActionProgress {
     pub state: ConsumerActionState,
-    pub retiring: bool,
     pub first_cause: Option<CoreError>,
     pub cleanup_error: Option<CoreError>,
     pub validation_error: Option<CoreError>,
     pub accepted: bool,
     pub remote_cancel: ConsumerActionCancellation,
+    operation: Operation,
+    phase: Phase,
+    observation: Option<ActionObservation>,
 }
 impl Default for ActionProgress {
     fn default() -> Self {
         Self {
             state: ConsumerActionState::Invoking,
-            retiring: false,
             first_cause: None,
             cleanup_error: None,
             validation_error: None,
             accepted: false,
             remote_cancel: ConsumerActionCancellation::NotRequested,
+            operation: Operation::InvokeAction,
+            phase: Phase::Poll,
+            observation: None,
         }
     }
 }
 impl ActionProgress {
-    pub fn close(&mut self, cause: CoreError, has_exchange: bool) {
-        self.first_cause.get_or_insert(cause);
-        self.retiring = has_exchange;
-        self.state = if has_exchange {
-            ConsumerActionState::Closing
-        } else {
-            ConsumerActionState::Closed
+    pub fn operation(&self) -> Operation {
+        self.operation
+    }
+    pub fn can_control(&self) -> bool {
+        self.state == ConsumerActionState::Pending && self.phase == Phase::Idle
+    }
+    pub fn start_control(&mut self, operation: Operation) {
+        debug_assert!(self.can_control());
+        self.operation = operation;
+        self.phase = Phase::Poll;
+        self.state = match operation {
+            Operation::QueryAction => ConsumerActionState::Querying,
+            Operation::CancelAction => {
+                self.remote_cancel = ConsumerActionCancellation::Uncertain;
+                ConsumerActionState::Cancelling
+            }
+            _ => unreachable!("continuing Action control"),
         };
     }
-}
-
-/// Original complete callback allowances; no declaration is refreshed at use.
-pub struct ActionWork {
-    pub access: u64,
-    pub native: u64,
-    pub validation: u64,
-}
-impl ActionWork {
-    pub fn prepay(&self, budget: &mut WorkBudget) -> bool {
-        self.access.checked_mul(2).is_some_and(|access| {
-            budget.consume(W::ProviderProbes, access).is_ok()
-                && budget.consume(W::BindingPolls, self.native).is_ok()
-                && budget.consume(W::CleanupItems, 1).is_ok()
-                && budget.consume(W::CodecInputBytes, self.validation).is_ok()
-        })
+    pub fn close(&mut self, cause: CoreError) {
+        self.first_cause.get_or_insert(cause);
+        if self.phase == Phase::Poll {
+            self.phase = Phase::Retire;
+        }
+        self.state = if self.phase == Phase::Idle && self.state.settlement_ready() {
+            ConsumerActionState::Closed
+        } else {
+            ConsumerActionState::Closing
+        };
+    }
+    fn settle(&mut self) {
+        self.phase = Phase::Idle;
+        self.observation = None;
+        if self.first_cause.is_some() {
+            self.state = ConsumerActionState::Closed;
+        }
     }
 }
 
-/// Representation-specific edges. Callbacks are bounded cooperative work.
-/// The driver retains original owners on Pending, error, late reply and unwind.
-/// Inspection/fencing is passive. Poll/close share the prepaid native allowance;
-/// its declaration must cover both edges and finite local disposal.
+/// Representation-specific edges. Each callback is bounded cooperative work.
+/// Passive fences call no policy, codec or native I/O. Pending and error leave
+/// native backing with its original owner until acknowledgement.
 pub trait ActionDriver {
     fn progress(&mut self) -> &mut ActionProgress;
-    fn operation(&self) -> Operation;
-    fn has_exchange(&self) -> bool;
-    fn work(&self) -> ActionWork;
-    /// Check time, original authority and live dependencies, preserving first cause.
+    /// Observe time, instance and cancellation without entering linked code.
+    fn fence_local(&mut self);
+    /// Also observe the current operation's original service dependencies.
     fn fence(&mut self);
     fn close(&mut self, cause: CoreError);
     fn invalid_reply(&self) -> CoreError;
     fn check_current(&mut self) -> CoreResult<()>;
-    fn refresh_access(&mut self, budget: &mut WorkBudget) -> CoreResult<()>;
-    /// Retain the reply before returning Ready(Ok). Retain native poll errors
-    /// separately before returning Err; a later close may still produce output.
+    /// Retain the reply or native failure before returning. A later close can
+    /// supply an original observation even when the normal poll failed.
     fn poll_exchange(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>>;
-    /// Only acknowledged local close removes the exchange. Retain an original
-    /// late observation if none was already returned. Errors retain all owners.
+    /// On acknowledgement retain any late observation and release the exchange.
     fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>>;
-    /// Move the stored observation into original continuation/result storage
-    /// BEFORE returning its kind, in particular before any validator callback.
+    /// Move the observation into original continuation/result storage.
     fn retain_reply(&mut self) -> Option<ActionObservation>;
     fn validate_output(&mut self) -> CoreResult<()>;
-    /// A retired nonterminal control no longer owns live dependencies.
-    fn reset_operation(&mut self);
+    /// Release per-operation backing on a nonterminal reply, or the now
+    /// unusable continuation on settlement. Retain original result owners.
+    fn finish_operation(&mut self);
 }
 
-/// One common continuing algorithm for independently owned representations.
-/// Query/Cancel initiation and successful result handoff remain explicit edges.
-pub fn step_action(d: &mut impl ActionDriver, cx: &mut Context<'_>, budget: &mut WorkBudget) {
+/// Recheck actual destination permission before further use or application
+/// handoff. Closed work remains available as raw evidence.
+pub fn check_action_handoff(d: &mut impl ActionDriver) {
     d.fence();
-    if d.progress().state.settlement_ready() {
-        let _ = d.refresh_access(budget);
+    if d.progress().first_cause.is_none() {
+        if let Err(error) = d.check_current() {
+            d.close(error);
+        }
         d.fence();
-        return;
     }
-    if !d.work().prepay(budget) {
-        return;
-    }
-    if d.progress().first_cause.is_none()
-        && let Err(e) = d.check_current()
-    {
-        d.close(e);
-    }
-    d.fence();
-    if d.has_exchange() && !d.progress().retiring {
-        match d.poll_exchange(cx) {
+}
+
+/// One phase of the common continuing algorithm. The application schedules a
+/// locally runnable turn, native readiness, or maintenance after failed close.
+pub fn step_action(d: &mut impl ActionDriver, cx: &mut Context<'_>) -> ActionTurn {
+    use ActionTurn::*;
+    d.fence_local();
+    let phase = d.progress().phase;
+    match phase {
+        Phase::Idle if d.progress().state.settlement_ready() => {
+            check_action_handoff(d);
+            Settled
+        }
+        Phase::Idle if d.progress().first_cause.is_none() => {
+            check_action_handoff(d);
+            if d.progress().first_cause.is_some() {
+                finish(d)
+            } else {
+                Idle
+            }
+        }
+        Phase::Idle => finish(d),
+        Phase::Poll => {
+            check_action_handoff(d);
+            if d.progress().phase != Phase::Poll {
+                return Advanced;
+            }
+            let polled = d.poll_exchange(cx);
+            match polled {
+                Poll::Ready(Ok(())) => d.progress().phase = Phase::Retire,
+                Poll::Ready(Err(error)) => d.close(error),
+                Poll::Pending => {}
+            }
+            d.fence();
+            if d.progress().phase == Phase::Poll {
+                Waiting
+            } else {
+                Advanced
+            }
+        }
+        Phase::Retire => match d.poll_close(cx) {
             Poll::Pending => {
-                d.fence();
-                if d.progress().first_cause.is_none() {
-                    return;
+                d.fence_local();
+                Waiting
+            }
+            Poll::Ready(Err(error)) => {
+                d.progress().cleanup_error.get_or_insert(error);
+                d.fence_local();
+                RetirementBlocked
+            }
+            Poll::Ready(Ok(())) => {
+                d.progress().phase = Phase::Observe;
+                d.fence_local();
+                if d.progress().first_cause.is_some() {
+                    observe(d)
+                } else {
+                    Advanced
                 }
             }
-            Poll::Ready(Ok(())) => d.progress().retiring = true,
-            Poll::Ready(Err(e)) => d.close(e),
+        },
+        Phase::Observe => {
+            d.fence();
+            observe(d)
         }
     }
-    d.fence();
-    if d.has_exchange() {
-        match d.poll_close(cx) {
-            Poll::Pending => {
-                d.fence();
-                return;
-            }
-            Poll::Ready(Err(e)) => {
-                d.progress().cleanup_error.get_or_insert(e);
-                d.fence();
-                return;
-            }
-            Poll::Ready(Ok(())) => {}
-        }
+}
+
+fn observe(d: &mut impl ActionDriver) -> ActionTurn {
+    use ActionObservation::*;
+    use ConsumerActionState as S;
+    if d.progress().observation.is_none() {
+        d.progress().observation = d.retain_reply();
     }
-    d.fence();
-    if let Some(reply) = d.retain_reply() {
-        let operation = d.operation();
-        match reply {
-            ActionObservation::Complete if operation != Operation::CancelAction => {
-                if let Err(e) = d.validate_output() {
-                    d.progress().validation_error = Some(e.clone());
-                    d.close(e);
-                }
-                if operation == Operation::InvokeAction {
-                    d.progress().accepted = true;
-                }
-                d.progress().state = ConsumerActionState::Completed;
-            }
-            ActionObservation::Accepted if operation == Operation::InvokeAction => {
+    let operation = d.progress().operation;
+    let observation = d.progress().observation;
+    let next_state = match observation {
+        Some(Complete) if operation != Operation::CancelAction => {
+            if operation == Operation::InvokeAction {
                 d.progress().accepted = true;
-                d.progress().state = ConsumerActionState::Pending;
             }
-            ActionObservation::Pending if operation == Operation::QueryAction => {
-                d.progress().state = ConsumerActionState::Pending;
+            if d.progress().first_cause.is_none()
+                && let Err(error) = d.validate_output()
+            {
+                d.progress().validation_error = Some(error.clone());
+                d.close(error);
             }
-            ActionObservation::CancelRequested if operation == Operation::CancelAction => {
-                d.progress().remote_cancel = ConsumerActionCancellation::Requested;
-                d.progress().state = ConsumerActionState::Pending;
-            }
-            ActionObservation::AlreadyTerminal if operation == Operation::CancelAction => {
-                d.progress().remote_cancel = ConsumerActionCancellation::AlreadyTerminal;
-                d.progress().state = ConsumerActionState::Pending;
-            }
-            ActionObservation::Failed => d.progress().state = ConsumerActionState::Failed,
-            _ => d.close(d.invalid_reply()),
+            Some(S::Completed)
         }
+        Some(Accepted) if operation == Operation::InvokeAction => {
+            d.progress().accepted = true;
+            Some(S::Pending)
+        }
+        Some(Pending) if operation == Operation::QueryAction => Some(S::Pending),
+        Some(CancelRequested) if operation == Operation::CancelAction => {
+            d.progress().remote_cancel = ConsumerActionCancellation::Requested;
+            Some(S::Pending)
+        }
+        Some(AlreadyTerminal) if operation == Operation::CancelAction => {
+            d.progress().remote_cancel = ConsumerActionCancellation::AlreadyTerminal;
+            Some(S::Pending)
+        }
+        Some(Failed) => Some(S::Failed),
+        _ => {
+            if d.progress().first_cause.is_none() {
+                d.close(d.invalid_reply());
+            }
+            None
+        }
+    };
+    // Check the returning operation while its actual destination is still
+    // retained. Restore Pending only after that check succeeds.
+    if matches!(next_state, Some(S::Pending | S::Completed)) {
+        check_action_handoff(d);
+    } else {
         d.fence();
-        if d.progress().first_cause.is_none()
-            && let Err(e) = d.check_current()
-        {
-            d.close(e);
-        }
     }
+    if let Some(next_state) = next_state
+        && d.progress().first_cause.is_none()
+    {
+        d.progress().state = next_state;
+    }
+    finish(d)
+}
+
+fn finish(d: &mut impl ActionDriver) -> ActionTurn {
+    d.progress().settle();
+    if d.progress().state == ConsumerActionState::Pending {
+        d.progress().operation = Operation::InvokeAction;
+    }
+    d.finish_operation();
     d.fence();
-    if d.progress().first_cause.is_some() {
-        d.progress().state = ConsumerActionState::Closed;
-    } else if d.progress().state == ConsumerActionState::Pending {
-        d.reset_operation();
+    if d.progress().state == ConsumerActionState::Closing {
+        d.progress().settle();
+        d.finish_operation();
     }
-    d.progress().retiring = false;
+    d.progress().settle();
+    if d.progress().state.settlement_ready() {
+        ActionTurn::Settled
+    } else {
+        ActionTurn::Advanced
+    }
 }

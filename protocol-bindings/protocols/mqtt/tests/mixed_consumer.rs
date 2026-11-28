@@ -304,7 +304,6 @@ impl Engine {
                 cancel: Some(owners[1].clone()),
             },
             self.bank.clone(),
-            &mut budget(),
         )
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let notification = ConsumerNotificationAssociation::try_new(
@@ -331,7 +330,7 @@ impl Engine {
         if drive_finite {
             self.calls.step(cx, now).unwrap();
         }
-        self.actions.step(cx, now, &mut budget()).unwrap();
+        self.actions.step(cx, now).unwrap();
         self.notifications.step(cx, &mut budget()).unwrap();
         self.calls.is_idle()
             && self.actions.is_idle()
@@ -400,7 +399,6 @@ impl Engine {
                 Some(Payload::new(b"12".as_slice(), "application/json")),
                 Deadline::NONE,
                 self.now(),
-                &mut budget(),
             )
             .unwrap_or_else(|e| panic!("{:?}", e.error()))
     }
@@ -445,7 +443,7 @@ fn authorization_callbacks_cannot_drive_captured_handles_across_families() {
                 Poll::Ready(Err(CoreError::Lifecycle(_)))
             ));
         })));
-        action.progress(&mut cx, now, &mut budget()).unwrap();
+        action.progress(&mut cx, now).unwrap();
         assert!(ON_INSTANCE_ACCESS.take().is_none());
         assert_eq!(
             original.access[0].calls.load(Ordering::Relaxed),
@@ -455,11 +453,7 @@ fn authorization_callbacks_cannot_drive_captured_handles_across_families() {
         let nested = action.clone();
         ON_INSTANCE_ACCESS.set(Some(Box::new(move || {
             assert!(matches!(
-                nested.progress(
-                    &mut Context::from_waker(std::task::Waker::noop()),
-                    now,
-                    &mut budget()
-                ),
+                nested.progress(&mut Context::from_waker(std::task::Waker::noop()), now,),
                 Err(CoreError::Lifecycle(_))
             ));
         })));
@@ -481,12 +475,12 @@ fn authorization_callbacks_cannot_drive_captured_handles_across_families() {
                 .body,
             b"7"
         );
-        action.query(e.now(), &mut budget()).unwrap();
+        action.query(e.now()).unwrap();
         e.until(true, |_, _| {
             action.state().unwrap() == ConsumerActionState::Completed
         })
         .await;
-        let result = action.take_settlement(e.now(), &mut budget()).unwrap();
+        let result = action.take_settlement(e.now()).unwrap();
         assert_eq!(result.result().unwrap().data().unwrap().body, b"24");
         drop((result, read, action, original, e));
         clean(&bank);
@@ -518,7 +512,6 @@ fn finite_and_continuing_results_contend_for_one_outstanding_unit_through_dispos
                 Some(input.clone()),
                 Deadline::NONE,
                 e.now(),
-                &mut budget(),
             )
             .err()
             .unwrap();
@@ -534,12 +527,12 @@ fn finite_and_continuing_results_contend_for_one_outstanding_unit_through_dispos
             action.state().unwrap() == ConsumerActionState::Pending
         })
         .await;
-        action.query(e.now(), &mut budget()).unwrap();
+        action.query(e.now()).unwrap();
         e.until(true, |_, _| {
             action.state().unwrap() == ConsumerActionState::Completed
         })
         .await;
-        let result = action.take_settlement(e.now(), &mut budget()).unwrap();
+        let result = action.take_settlement(e.now()).unwrap();
         assert_eq!(result.result().unwrap().data().unwrap().body, b"24");
         drop(action);
         assert!(e.read(&original).is_err());
@@ -638,12 +631,12 @@ fn managed_mixed_turns_keep_authorization_progress_and_reports_independent() {
         let finite_result = finite_result.unwrap();
         assert_eq!(finite_result.consumer(), &b.instance.consumer());
         assert_eq!(finite_result.result().unwrap().data().unwrap().body, b"7");
-        action.query(e.now(), &mut budget()).unwrap();
+        action.query(e.now()).unwrap();
         e.until(true, |_, _| {
             action.state().unwrap() == ConsumerActionState::Completed
         })
         .await;
-        let action_result = action.take_settlement(e.now(), &mut budget()).unwrap();
+        let action_result = action.take_settlement(e.now()).unwrap();
         assert_eq!(action_result.identity().consumer(), &a.instance.consumer());
         assert_eq!(action_result.result().unwrap().data().unwrap().body, b"24");
         assert!(action_result.first_cause().is_none());
@@ -653,7 +646,7 @@ fn managed_mixed_turns_keep_authorization_progress_and_reports_independent() {
             cancel.state().unwrap() == ConsumerActionState::Pending
         })
         .await;
-        cancel.request_cancel(e.now(), &mut budget()).unwrap();
+        cancel.request_cancel(e.now()).unwrap();
         e.until(true, |_, _| {
             cancel.remote_cancellation().unwrap() == ConsumerActionCancellation::Requested
         })
@@ -663,12 +656,12 @@ fn managed_mixed_turns_keep_authorization_progress_and_reports_independent() {
             ConsumerActionState::Pending,
             "cancel acknowledgement is not completion"
         );
-        cancel.query(e.now(), &mut budget()).unwrap();
+        cancel.query(e.now()).unwrap();
         e.until(true, |_, _| {
             cancel.state().unwrap() == ConsumerActionState::Completed
         })
         .await;
-        let cancelled = cancel.take_settlement(e.now(), &mut budget()).unwrap();
+        let cancelled = cancel.take_settlement(e.now()).unwrap();
         assert_eq!(
             cancelled.remote_cancellation(),
             ConsumerActionCancellation::Requested
@@ -754,7 +747,7 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
         .await;
         let mut publisher = Peer::new(&broker);
         publisher.publish_raw("mixed/alarm", b"9", false);
-        action.query(e.now(), &mut budget()).unwrap();
+        action.query(e.now()).unwrap();
         e.until(true, |e, _| {
             action.state().unwrap() == ConsumerActionState::Completed
                 && peer.observed.closed.load(Ordering::Acquire) == 3
@@ -786,18 +779,16 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
             a.notification.definition(),
             successor.notification.definition()
         ));
-        e.actions
-            .step(&mut cx(), e.now(), &mut WorkBudget::new())
-            .unwrap();
+        e.actions.step(&mut cx(), e.now()).unwrap();
         e.notifications
             .step(&mut cx(), &mut WorkBudget::new())
             .unwrap();
         assert_eq!(action.state().unwrap(), ConsumerActionState::Closed);
         assert!(matches!(
-            action.query(e.now(), &mut budget()),
+            action.query(e.now()),
             Err(CoreError::StaleHandle(_))
         ));
-        let action_result = action.take_settlement(e.now(), &mut budget()).unwrap();
+        let action_result = action.take_settlement(e.now()).unwrap();
         assert_eq!(action_result.identity().consumer(), &a.instance.consumer());
         assert!(matches!(
             action_result.first_cause(),
@@ -876,9 +867,7 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
             replacement_action.state().unwrap() == ConsumerActionState::Closed
         })
         .await;
-        let replacement_result = replacement_action
-            .take_settlement(e.now(), &mut budget())
-            .unwrap();
+        let replacement_result = replacement_action.take_settlement(e.now()).unwrap();
         assert!(matches!(
             replacement_result.first_cause(),
             Some(CoreError::Cancelled(_))
@@ -1029,7 +1018,6 @@ fn deployment_timer_observes_finite_and_action_deadlines_while_mqtt_stays_usable
                 Some(Payload::new(b"12".as_slice(), "application/json")),
                 deadline,
                 e.now(),
-                &mut budget(),
             )
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         let mut cursor = e.subscribe(&b);
@@ -1057,7 +1045,7 @@ fn deployment_timer_observes_finite_and_action_deadlines_while_mqtt_stays_usable
             result.as_ref().unwrap().first_cause(),
             Some(CoreError::TimedOut(_))
         ));
-        let action_result = action.take_settlement(e.now(), &mut budget()).unwrap();
+        let action_result = action.take_settlement(e.now()).unwrap();
         assert!(matches!(
             action_result.first_cause(),
             Some(CoreError::TimedOut(_))

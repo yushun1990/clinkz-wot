@@ -1,6 +1,5 @@
-//! Caller-owned continuing Consumer Action. Borrowed source-free dependencies,
-//! concrete native owners and exclusive progress require no shared container,
-//! reference counting, atomics, synchronization or executor.
+//! Caller-owned continuing Consumer Action over a concrete native exchange,
+//! a deployment drive cell and an exclusive typed result slot.
 use clinkz_wot_core::{
     CoreError, CoreResult, Deadline, ErrorContext, ErrorPhase, InteractionOutputView, Operation,
     PayloadView, RetryClass,
@@ -8,10 +7,12 @@ use clinkz_wot_core::{
     execution::{ValueExecution, ValueValidator, action::*, read::LocalConsumerRef},
     security::SecurityRequirement,
 };
-use clinkz_wot_foundation::{
-    MonotonicInstant, ResourceKind, ResourceReservation, WorkBudget, WorkClass as W,
+use clinkz_wot_foundation::MonotonicInstant;
+use core::{
+    cell::{RefCell, RefMut},
+    cmp::Ordering,
+    task::{Context, Poll},
 };
-use core::{cmp::Ordering, task::Context};
 
 const OPERATIONS: [Operation; 3] = [
     Operation::InvokeAction,
@@ -33,7 +34,6 @@ type Reply<B> = ActionReply<Token<B>, Output<B>>;
 #[derive(Clone, Copy)]
 struct Data<'a> {
     service: &'a dyn ValueValidator,
-    work: u64,
     body: usize,
     media: &'a str,
 }
@@ -41,15 +41,12 @@ impl<'a> Data<'a> {
     fn capture(service: &'a dyn ValueValidator) -> Self {
         Self {
             service,
-            work: service.work(),
             body: service.body_bytes(),
             media: service.content_type(),
         }
     }
     fn check(&self, schema: &PreparedSchema) -> CoreResult<()> {
-        if self.work == 0
-            || !self.service.available()
-            || self.service.work() != self.work
+        if !self.service.available()
             || self.service.body_bytes() != self.body
             || self.service.content_type() != self.media
             || !self.service.supports(schema)
@@ -72,94 +69,123 @@ impl<'a> Data<'a> {
     }
 }
 
-/// Qualified source-free meaning and actual native dependencies. Construction
-/// grants no TD admission, permission, instance identity or execution capacity.
-/// Only static NoSec Action meaning with primary application output is supported.
-pub struct ActionDefinition<'a, B: ActionBinding> {
+/// Source-free meaning and a native program. Installation supplies live
+/// services separately and qualifies the exact program and configuration.
+pub struct ActionDefinition<'a, P, C> {
     meaning: ValueExecution<'a>,
-    binding: &'a B,
-    program: &'a B::Program,
-    configuration: B::Configuration,
-    mappings: [Option<ActionMapping<'a>>; 3],
-    native_work: [u64; 3],
-    data: [Option<Data<'a>>; 2],
-    backing: u64,
+    program: &'a P,
+    configuration: C,
 }
-impl<'a, B: ActionBinding> ActionDefinition<'a, B> {
+impl<'a, P, C> ActionDefinition<'a, P, C> {
     pub fn try_new(
         meaning: ValueExecution<'a>,
-        binding: &'a B,
-        program: &'a B::Program,
-        configuration: B::Configuration,
-        invoke_data: Option<&'a dyn ValueValidator>,
-        query_data: Option<&'a dyn ValueValidator>,
-    ) -> Result<Self, (B::Configuration, CoreError)> {
-        let d = Self {
+        program: &'a P,
+        configuration: C,
+    ) -> Result<Self, (C, CoreError)> {
+        if meaning.operation() != Operation::InvokeAction
+            || *meaning.security() != SecurityRequirement::NOSEC
+            || meaning.uri_variables().is_some_and(|v| v.is_dynamic())
+            || meaning.responses().is_some()
+        {
+            return Err((configuration, invalid()));
+        }
+        Ok(Self {
             meaning,
-            binding,
             program,
             configuration,
-            mappings: OPERATIONS.map(|op| binding.mapping(program, op)),
-            native_work: OPERATIONS.map(|op| binding.poll_work(op)),
-            data: [
-                invoke_data.map(Data::capture),
-                query_data.map(Data::capture),
-            ],
-            backing: binding.backing_bytes(),
-        };
-        let checked = (|| {
-            if meaning.operation() != Operation::InvokeAction
-                || *meaning.security() != SecurityRequirement::NOSEC
-                || meaning.uri_variables().is_some_and(|v| v.is_dynamic())
-                || meaning.responses().is_some()
-                || d.mappings[0].is_none()
-                || !binding.supports(program, meaning)
-            {
-                return Err(invalid());
-            }
-            d.qualify()
-        })();
-        match checked {
-            Ok(()) => Ok(d),
-            Err(e) => Err((d.configuration, e)),
-        }
+        })
     }
-    fn check_native(&self, op: Operation) -> CoreResult<()> {
-        let i = index(op);
-        if *self.binding.configuration() != self.configuration
-            || self.binding.backing_bytes() != self.backing
-            || self.mappings[i].is_none()
-            || self.native_work[i] == 0
-            || self.binding.mapping(self.program, op) != self.mappings[i]
-            || self.binding.poll_work(op) != self.native_work[i]
+}
+
+struct Association<'a, B: ActionBinding> {
+    definition: &'a ActionDefinition<'a, B::Program, B::Configuration>,
+    binding: &'a B,
+    consumer: LocalConsumerRef<'a>,
+    mappings: [Option<ActionMapping<'a>>; 3],
+    data: [Option<Data<'a>>; 2],
+    access: [Option<&'a dyn ActionAccess>; 3],
+    revisions: [u64; 3],
+}
+impl<B: ActionBinding> Copy for Association<'_, B> {}
+impl<B: ActionBinding> Clone for Association<'_, B> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<B: ActionBinding> Association<'_, B> {
+    fn qualify(&self) -> CoreResult<()> {
+        if self.mappings[0].is_none()
+            || !self
+                .binding
+                .supports(self.definition.program, self.definition.meaning)
         {
             return Err(invalid());
         }
-        Ok(())
-    }
-    fn check_data(&self, op: Operation, schema: Option<&PreparedSchema>) -> CoreResult<()> {
-        if let Some(schema) = schema {
-            self.data
-                .get(index(op))
-                .and_then(|d| *d)
-                .ok_or_else(invalid)?
-                .check(schema)?;
-        }
-        Ok(())
-    }
-    fn qualify(&self) -> CoreResult<()> {
         for op in OPERATIONS {
             if self.mappings[index(op)].is_some() {
-                self.check_native(op)?;
-                if op != Operation::CancelAction {
-                    self.check_data(op, self.meaning.schemas().output.as_ref())?;
-                }
+                self.dependencies(op, self.output_schema(op))?;
             }
         }
         self.check_data(
             Operation::InvokeAction,
-            self.meaning.schemas().input.as_ref(),
+            self.definition.meaning.schemas().input.as_ref(),
         )
+    }
+    fn output_schema(&self, op: Operation) -> Option<&PreparedSchema> {
+        match op {
+            Operation::InvokeAction | Operation::QueryAction => {
+                self.definition.meaning.schemas().output.as_ref()
+            }
+            _ => None,
+        }
+    }
+    fn check_data(&self, op: Operation, schema: Option<&PreparedSchema>) -> CoreResult<()> {
+        if let Some(schema) = schema {
+            self.data[index(op)].ok_or_else(invalid)?.check(schema)?;
+        }
+        Ok(())
+    }
+    fn dependencies(&self, op: Operation, schema: Option<&PreparedSchema>) -> CoreResult<()> {
+        if !self.consumer.is_current() {
+            return Err(stale());
+        }
+        if self.binding.configuration() != &self.definition.configuration {
+            return Err(invalid());
+        }
+        let original = [Operation::InvokeAction, op];
+        for selected in original
+            .into_iter()
+            .take(if index(op) == 0 { 1 } else { 2 })
+        {
+            let i = index(selected);
+            let mapping = self.mappings[i].ok_or_else(unsupported)?;
+            if self.binding.mapping(self.definition.program, selected) != Some(mapping)
+                || self.access[i].ok_or_else(unsupported)?.revision() != self.revisions[i]
+            {
+                return Err(invalid());
+            }
+        }
+        self.check_data(op, schema)
+    }
+    fn authorize(
+        &self,
+        op: Operation,
+        schema: Option<&PreparedSchema>,
+        destination: &B::Destination,
+    ) -> CoreResult<()> {
+        self.dependencies(op, schema)?;
+        let i = index(op);
+        let mapping = self.mappings[i].expect("checked Action mapping");
+        let result = self.access[i].expect("checked Action access").authorize(
+            self.consumer,
+            op,
+            ActionMapping {
+                target: destination.as_ref(),
+                ..mapping
+            },
+        );
+        self.dependencies(op, schema)?;
+        result
     }
     fn validate(
         &self,
@@ -175,102 +201,32 @@ impl<'a, B: ActionBinding> ActionDefinition<'a, B> {
             _ => Err(invalid()),
         }
     }
-    fn validation_work(&self, op: Operation, schema: Option<&PreparedSchema>) -> u64 {
-        if schema.is_some() {
-            self.data[index(op)].map_or(0, |d| d.work)
-        } else {
-            0
-        }
-    }
-    fn validate_output_view(
-        &self,
-        op: Operation,
-        output: InteractionOutputView<'_>,
-    ) -> CoreResult<()> {
+    fn validate_output(&self, op: Operation, output: InteractionOutputView<'_>) -> CoreResult<()> {
         if !action_output_shape(output) {
             return Err(invalid());
         }
-        self.validate(op, self.meaning.schemas().output.as_ref(), output.data())
+        self.validate(op, self.output_schema(op), output.data())
     }
 }
 
-struct Association<'a, B: ActionBinding> {
-    definition: &'a ActionDefinition<'a, B>,
-    consumer: LocalConsumerRef<'a>,
-    access: [Option<&'a dyn ActionAccess>; 3],
-    revisions: [u64; 3],
-    access_work: [u64; 3],
-}
-impl<B: ActionBinding> Copy for Association<'_, B> {}
-impl<B: ActionBinding> Clone for Association<'_, B> {
-    fn clone(&self) -> Self {
-        *self
+/// Actual normal or late result storage. A settlement keeps its exclusive
+/// loan across runtime reuse, until the result has been disposed.
+pub struct ActionResultSlot<O>(RefCell<Option<CoreResult<O>>>);
+impl<O> ActionResultSlot<O> {
+    pub const fn new() -> Self {
+        Self(RefCell::new(None))
     }
 }
-impl<B: ActionBinding> Association<'_, B> {
-    fn qualify(&self) -> CoreResult<()> {
-        self.definition.qualify()?;
-        for op in OPERATIONS {
-            if self.definition.mappings[index(op)].is_some() {
-                self.dependencies(op, None)?;
-            }
-        }
-        Ok(())
-    }
-    fn dependencies(&self, op: Operation, schema: Option<&PreparedSchema>) -> CoreResult<()> {
-        if !self.consumer.is_current() {
-            return Err(stale());
-        }
-        let d = self.definition;
-        d.check_native(Operation::InvokeAction)?;
-        d.check_native(op)?;
-        d.check_data(op, schema)?;
-        // Original Invoke permission remains an invocation dependency; a retired
-        // input codec or unused control is not a live output dependency.
-        for i in [0, index(op)] {
-            let access = self.access[i].ok_or_else(unsupported)?;
-            if access.revision() != self.revisions[i]
-                || access.work() != self.access_work[i]
-                || self.access_work[i] == 0
-                || self.access_work[i].checked_mul(2).is_none()
-            {
-                return Err(invalid());
-            }
-        }
-        Ok(())
-    }
-    fn check(
-        &self,
-        op: Operation,
-        schema: Option<&PreparedSchema>,
-        token: Option<&Token<B>>,
-    ) -> CoreResult<()> {
-        self.dependencies(op, schema)?;
-        let d = self.definition;
-        let destination = d.binding.destination(d.program, op, token)?;
-        let mapping = d.mappings[index(op)].unwrap();
-        if destination.binding != mapping.binding || destination.generation != mapping.generation {
-            return Err(invalid());
-        }
-        self.dependencies(op, schema)?;
-        let result = self.access[index(op)]
-            .unwrap()
-            .authorize(self.consumer, op, destination);
-        self.dependencies(op, schema)?;
-        result
-    }
-    fn work(&self, op: Operation, schema: Option<&PreparedSchema>) -> ActionWork {
-        ActionWork {
-            access: self.access_work[index(op)],
-            native: self.definition.native_work[index(op)],
-            validation: self.definition.validation_work(op, schema),
-        }
+impl<O> Default for ActionResultSlot<O> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
-/// One separately funded invocation opportunity. Dropping a copyable handle
-/// drives no cleanup; the exclusive slot owner supplies turns or local disposal.
+/// One caller-owned invocation opportunity. All siblings in a manual driver
+/// borrow the same drive cell, including entry from a codec or destructor.
 pub struct ActionSlot<'a, B: ActionBinding, I: ActionInput> {
+    driving: &'a RefCell<()>,
     association: Association<'a, B>,
     work: Option<Invocation<'a, B, I>>,
     closed: bool,
@@ -281,114 +237,108 @@ pub struct ActionHandle<'a> {
     sequence: u64,
 }
 struct Invocation<'a, B: ActionBinding, I: ActionInput> {
+    driving: &'a RefCell<()>,
     progress: ActionProgress,
     association: Association<'a, B>,
     sequence: u64,
-    operation: Operation,
     deadline: Deadline,
     last_time: MonotonicInstant,
+    invoke_destination: Option<B::Destination>,
+    control_destination: Option<B::Destination>,
     native_error: Option<CoreError>,
     exchange: Option<B::Exchange>,
     reply: Option<Reply<B>>,
     token: Option<Token<B>>,
-    result: Option<CoreResult<Output<B>>>,
+    result: RefMut<'a, Option<CoreResult<Output<B>>>>,
     input: Option<I>,
-    // Last: original native work, token, input and result die before funding.
-    funding: ResourceReservation<'a>,
 }
 impl<'a, B: ActionBinding, I: ActionInput> ActionSlot<'a, B, I> {
-    pub fn try_new(
-        definition: &'a ActionDefinition<'a, B>,
+    pub fn bind(
+        driving: &'a RefCell<()>,
+        definition: &'a ActionDefinition<'a, B::Program, B::Configuration>,
+        binding: &'a B,
         consumer: LocalConsumerRef<'a>,
+        data: [Option<&'a dyn ValueValidator>; 2],
         access: [Option<&'a dyn ActionAccess>; 3],
     ) -> CoreResult<Self> {
-        definition.qualify()?;
+        let _turn = driving.try_borrow_mut().map_err(|_| reentry())?;
         let association = Association {
             definition,
+            binding,
             consumer,
+            mappings: OPERATIONS.map(|op| binding.mapping(definition.program, op)),
+            data: data.map(|service| service.map(Data::capture)),
             access,
             revisions: access.map(|a| a.map_or(0, ActionAccess::revision)),
-            access_work: access.map(|a| a.map_or(0, ActionAccess::work)),
         };
-        for op in OPERATIONS {
-            if definition.mappings[index(op)].is_some() {
-                association.dependencies(op, None)?;
-            }
-        }
+        association.qualify()?;
         Ok(Self {
+            driving,
             association,
             work: None,
             closed: false,
         })
     }
-    /// Complete inline work/result opportunity plus declared indirect backing.
-    /// Input owners declare any additional backing separately at admission.
-    pub fn required_bytes(&self, input: Option<&I>) -> CoreResult<u64> {
-        (core::mem::size_of::<Invocation<'a, B, I>>() as u64)
-            .checked_add(self.association.definition.backing)
-            .and_then(|n| n.checked_add(input.map_or(0, ActionInput::backing_bytes)))
-            .ok_or_else(invalid)
-    }
+
+    /// Admission claims the original result cell before linked code or native
+    /// effects. On refusal the caller recovers the identical input.
+    #[allow(clippy::type_complexity)]
     pub fn invoke(
         &mut self,
         input: Option<I>,
-        funding: ResourceReservation<'a>,
+        result: &'a ActionResultSlot<Output<B>>,
         deadline: Deadline,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
-    ) -> Result<ActionHandle<'a>, (Option<I>, ResourceReservation<'a>, CoreError)> {
+    ) -> Result<ActionHandle<'a>, (Option<I>, CoreError)> {
         let a = self.association;
         let d = a.definition;
-        let checked = (|| {
+        let _turn = match self.driving.try_borrow_mut() {
+            Ok(turn) => turn,
+            Err(_) => return Err((input, reentry())),
+        };
+        let started = (|| {
             if self.closed || !a.consumer.is_current() {
                 return Err(stale());
             }
             if self.work.is_some() {
                 return Err(busy());
             }
-            if funding.kind() != ResourceKind::EngineLiveBytesGlobalMax
-                || funding.owner() != (a.consumer.slot().slot(), a.consumer.slot().generation())
-                || funding.bytes() < self.required_bytes(input.as_ref())?
-            {
-                return Err(invalid());
-            }
             check_time(deadline, now)?;
+            let result = result.0.try_borrow_mut().map_err(|_| busy())?;
             a.qualify()?;
+            let operation = Operation::InvokeAction;
             let schema = d.meaning.schemas().input.as_ref();
-            if !a.work(Operation::InvokeAction, schema).prepay(budget) {
-                return Err(busy());
-            }
-            // Keep one loan across authorization, validation and native start.
-            // A new view may select different bytes or revoke the issuer.
             let payload = input.as_ref().map(ActionInput::view);
-            a.check(Operation::InvokeAction, schema, None)?;
-            d.validate(Operation::InvokeAction, schema, payload)?;
-            a.check(Operation::InvokeAction, schema, None)?;
+            let destination = a.binding.destination(d.program, operation, None)?;
+            a.authorize(operation, schema, &destination)?;
+            a.validate(operation, schema, payload)?;
+            a.authorize(operation, schema, &destination)?;
             a.qualify()?;
             let sequence = a.consumer.reserve_sequence()?;
             let exchange =
-                d.binding
-                    .start(d.program, Operation::InvokeAction, payload, None, deadline)?;
-            Ok((sequence, exchange))
+                a.binding
+                    .start(d.program, operation, &destination, payload, None, deadline)?;
+            Ok((sequence, exchange, result, destination))
         })();
-        let (sequence, exchange) = match checked {
+        let (sequence, exchange, result, destination) = match started {
             Ok(v) => v,
-            Err(e) => return Err((input, funding, e)),
+            Err(error) => return Err((input, error)),
         };
         let mut work = Invocation {
+            driving: self.driving,
             progress: ActionProgress::default(),
             association: a,
             sequence,
-            operation: Operation::InvokeAction,
             deadline,
             last_time: now,
+            invoke_destination: Some(destination),
+            control_destination: None,
             native_error: None,
             exchange: Some(exchange),
             reply: None,
             token: None,
-            result: None,
+            result,
             input,
-            funding,
         };
         work.fence();
         self.work = Some(work);
@@ -404,27 +354,21 @@ impl<'a, B: ActionBinding, I: ActionInput> ActionSlot<'a, B, I> {
             .ok_or_else(stale)
     }
     pub fn state(&mut self, handle: ActionHandle<'_>) -> CoreResult<ConsumerActionState> {
-        let w = self.original(handle)?;
-        w.fence();
-        Ok(w.progress.state)
+        let work = self.original(handle)?;
+        work.fence_local();
+        Ok(work.progress.state)
     }
-    pub fn query(
-        &mut self,
-        handle: ActionHandle<'_>,
-        now: MonotonicInstant,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<()> {
-        self.original(handle)?
-            .control(Operation::QueryAction, now, budget)
+    pub fn query(&mut self, handle: ActionHandle<'_>, now: MonotonicInstant) -> CoreResult<()> {
+        let _turn = self.driving.try_borrow_mut().map_err(|_| reentry())?;
+        self.original(handle)?.control(Operation::QueryAction, now)
     }
     pub fn request_cancel(
         &mut self,
         handle: ActionHandle<'_>,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> CoreResult<()> {
-        self.original(handle)?
-            .control(Operation::CancelAction, now, budget)
+        let _turn = self.driving.try_borrow_mut().map_err(|_| reentry())?;
+        self.original(handle)?.control(Operation::CancelAction, now)
     }
     pub fn cancel_local(&mut self, handle: ActionHandle<'_>) -> CoreResult<()> {
         self.original(handle)?
@@ -433,76 +377,53 @@ impl<'a, B: ActionBinding, I: ActionInput> ActionSlot<'a, B, I> {
     }
     pub fn begin_close(&mut self) {
         self.closed = true;
-        if let Some(w) = &mut self.work {
-            w.close(stale());
+        if let Some(work) = &mut self.work {
+            work.close(stale());
         }
     }
     pub fn is_idle(&self) -> bool {
         self.work.is_none()
     }
-    pub fn step(&mut self, cx: &mut Context<'_>, now: MonotonicInstant, budget: &mut WorkBudget) {
-        if let Some(w) = &mut self.work {
-            w.observe_time(now);
-            step_action(w, cx, budget);
-        }
+    pub fn step(&mut self, cx: &mut Context<'_>, now: MonotonicInstant) -> CoreResult<ActionTurn> {
+        let _turn = self.driving.try_borrow_mut().map_err(|_| reentry())?;
+        let Some(work) = &mut self.work else {
+            return Ok(ActionTurn::Idle);
+        };
+        work.observe_time(now);
+        Ok(step_action(work, cx))
     }
-    /// Fresh paid owner/permission transfer. Short credit retains the original
-    /// occupied slot. Application payload loans require their own exact-view
-    /// validation at `ActionSettlement::result`; failed settlements retain native evidence.
+    /// Transfer the original retired invocation under current permission.
+    /// The settlement keeps the returning operation's destination and the
+    /// original exclusive result slot.
     pub fn take_settlement(
         &mut self,
         handle: ActionHandle<'_>,
         now: MonotonicInstant,
-        budget: &mut WorkBudget,
     ) -> CoreResult<ActionSettlement<'a, B, I>> {
-        let w = self.original(handle)?;
-        w.observe_time(now);
-        w.fence();
-        if !w.progress.state.settlement_ready() || budget.consume(W::CleanupItems, 1).is_err() {
+        let _turn = self.driving.try_borrow_mut().map_err(|_| reentry())?;
+        let work = self.original(handle)?;
+        work.observe_time(now);
+        work.fence_local();
+        if !work.progress.state.settlement_ready() {
             return Err(busy());
         }
-        w.refresh_access(budget)?;
-        w.fence();
+        check_action_handoff(work);
         Ok(ActionSettlement(self.work.take().unwrap()))
     }
 }
 
-/// Original owners survive slot reuse. Result/input views cannot detach their
-/// backing or outlive this settlement; only explicit copies acquire new owners.
+/// Lends the original input and result without releasing the slot that backs
+/// them. Raw evidence and a freshly validated loan have separate access paths.
 ///
 /// ```compile_fail,E0515
 /// use clinkz_wot_core::execution::action::{ActionBinding, ActionInput};
 /// use clinkz_wot_servient_finite::borrowed_action::ActionSettlement;
 /// fn escape<B: ActionBinding, I: ActionInput>(mut s: ActionSettlement<'_, B, I>) -> &'static [u8] {
-///     s.result(&mut clinkz_wot_foundation::WorkBudget::new()).unwrap().data().unwrap().body
-/// }
-/// ```
-///
-/// ```compile_fail,E0505
-/// use clinkz_wot_core::execution::action::{ActionBinding, ActionInput};
-/// use clinkz_wot_servient_finite::borrowed_action::ActionSettlement;
-/// fn refund_while_borrowed<B: ActionBinding, I: ActionInput>(mut s: ActionSettlement<'_, B, I>,
-///     budget: &mut clinkz_wot_foundation::WorkBudget) {
-///     let view = s.result(budget).unwrap();
-///     let _funding = s.into_funding();
-///     let _bytes = view.data().unwrap().body;
-/// }
-/// ```
-///
-/// ```compile_fail,E0505
-/// use clinkz_wot_core::execution::action::{ActionBinding, ActionInput};
-/// use clinkz_wot_servient_finite::borrowed_action::ActionSettlement;
-/// fn refund_while_evidence_borrowed<B: ActionBinding, I: ActionInput>(s: ActionSettlement<'_, B, I>,
-///     budget: &mut clinkz_wot_foundation::WorkBudget) {
-///     let evidence = s.native_result(budget).unwrap().unwrap().unwrap();
-///     let _funding = s.into_funding();
-///     let _bytes = evidence.data().unwrap().body;
+///     s.result().unwrap().data().unwrap().body
 /// }
 /// ```
 pub struct ActionSettlement<'a, B: ActionBinding, I: ActionInput>(Invocation<'a, B, I>);
 impl<B: ActionBinding, I: ActionInput> ActionSettlement<'_, B, I> {
-    /// Matches the Host continuing Action's conservative effect evidence.
-    /// Local completion/cancellation/retirement supplies no rollback proof.
     pub fn effect(&self) -> clinkz_wot_core::execution::ConsumerEffect {
         clinkz_wot_core::execution::ConsumerEffect::Unknown
     }
@@ -533,103 +454,95 @@ impl<B: ActionBinding, I: ActionInput> ActionSettlement<'_, B, I> {
     pub fn native_error(&self) -> Option<&CoreError> {
         self.0.native_error.as_ref()
     }
-    /// Current view supplied by the original retained input owner. This calls
-    /// `ActionInput::view` again; bytes/media/coding may differ from the exact
-    /// view used for admission and dispatch. No dispatch snapshot is retained.
-    /// A present input requires one HandlerSteps adapter unit. Short credit
-    /// enters no callback and retains all evidence, state and funding.
-    pub fn input(&self, budget: &mut WorkBudget) -> CoreResult<Option<PayloadView<'_>>> {
+    /// Inspection lends the input owner's current view. It may differ from
+    /// the view passed to start.
+    pub fn input(&self) -> CoreResult<Option<PayloadView<'_>>> {
         let Some(input) = self.0.input.as_ref() else {
             return Ok(None);
         };
-        budget.consume(W::HandlerSteps, 1).map_err(|_| busy())?;
+        let _turn = self.0.driving.try_borrow_mut().map_err(|_| reentry())?;
         Ok(Some(input.view()))
     }
-    /// Current native evidence, including rejected or late output. This view
-    /// carries no application-validation claim and may differ on another call.
-    /// Prepay one HandlerSteps unit before a present output's adapter callback.
-    /// Absence and retained native errors are passive and need no credit. The
-    /// outer error reports short adapter credit; the inner result preserves the
-    /// original native disposition. No codec, authority or native progress runs.
+    /// Raw evidence can include rejected or late output. Its adapter is
+    /// bounded and cannot drive a sibling Action or Read.
     pub fn native_result(
         &self,
-        budget: &mut WorkBudget,
     ) -> CoreResult<Option<Result<InteractionOutputView<'_>, &CoreError>>> {
-        Ok(match &self.0.result {
+        Ok(match self.0.result.as_ref() {
             Some(Ok(output)) => {
-                budget.consume(W::HandlerSteps, 1).map_err(|_| busy())?;
+                let _turn = self.0.driving.try_borrow_mut().map_err(|_| reentry())?;
                 Some(Ok(output.view()))
             }
             Some(Err(error)) => Some(Err(error)),
             None => None,
         })
     }
-    /// Capture, validate and return one exact application loan. Native output
-    /// owners may select different views between calls; prior validation grants
-    /// no certificate for a new loan. Prepay one HandlerSteps adapter operation
-    /// and the original returning operation's complete codec allowance before
-    /// obtaining a view. Short credit retains all owners without recording a
-    /// failure; invalid output records a sticky first cause and validation error.
-    /// Ownership/current permission was transferred at `take_settlement`; this
-    /// does no new authorization, native progress or remote-effect inference.
-    pub fn result(&mut self, budget: &mut WorkBudget) -> CoreResult<InteractionOutputView<'_>> {
-        if let Some(e) = &self.0.progress.first_cause {
-            return Err(e.clone());
+    /// Each application loan validates the exact view it returns and checks
+    /// permission for the original destination before and after validation.
+    pub fn result(&mut self) -> CoreResult<InteractionOutputView<'_>> {
+        let work = &mut self.0;
+        let _turn = work.driving.try_borrow_mut().map_err(|_| reentry())?;
+        check_action_handoff(work);
+        if let Some(error) = &work.progress.first_cause {
+            return Err(error.clone());
         }
-        let output = match &self.0.result {
-            Some(Ok(output)) if self.state() == ConsumerActionState::Completed => output,
-            Some(Err(e)) => return Err(e.clone()),
+        let output = match work.result.as_ref() {
+            Some(Ok(output)) if work.progress.state == ConsumerActionState::Completed => output,
+            Some(Err(error)) => return Err(error.clone()),
             _ => return Err(invalid()),
         };
-        let d = self.0.association.definition;
-        let work = d.validation_work(self.0.operation, d.meaning.schemas().output.as_ref());
-        if budget.consume(W::HandlerSteps, 1).is_err()
-            || budget.consume(W::CodecInputBytes, work).is_err()
-        {
-            return Err(busy());
-        }
         let view = output.view();
-        if let Err(error) = d.validate_output_view(self.0.operation, view) {
-            self.0.progress.validation_error = Some(error.clone());
-            // Owner transfer already required acknowledged exchange retirement.
-            self.0.progress.close(error.clone(), false);
-            return Err(error);
+        let operation = work.progress.operation();
+        let association = work.association;
+        let schema = association.output_schema(operation);
+        let destination = work
+            .control_destination
+            .as_ref()
+            .or(work.invoke_destination.as_ref())
+            .expect("retained Action destination");
+        let validated = association.dependencies(operation, schema).and_then(|()| {
+            let validated = association.validate_output(operation, view);
+            if let Err(error) = &validated {
+                work.progress.validation_error = Some(error.clone());
+            }
+            association.authorize(operation, schema, destination)?;
+            validated
+        });
+        if let Err(error) = &validated {
+            work.progress.close(error.clone());
         }
-        Ok(view)
+        validated.map(|()| view)
     }
 }
-impl<'a, B: ActionBinding, I: ActionInput> ActionSettlement<'a, B, I> {
-    pub fn into_funding(self) -> ResourceReservation<'a> {
-        let Invocation {
-            exchange,
-            reply,
-            token,
-            result,
-            input,
-            funding,
-            ..
-        } = self.0;
-        drop(exchange);
-        drop(reply);
-        drop(token);
-        drop(result);
-        drop(input);
-        funding
+
+impl<B: ActionBinding, I: ActionInput> Drop for Invocation<'_, B, I> {
+    fn drop(&mut self) {
+        let _turn = self.driving.try_borrow_mut().ok();
+        drop((
+            self.exchange.take(),
+            self.reply.take(),
+            self.token.take(),
+            self.result.take(),
+            self.input.take(),
+            self.control_destination.take(),
+            self.invoke_destination.take(),
+        ));
     }
 }
 impl<B: ActionBinding, I: ActionInput> Invocation<'_, B, I> {
-    fn output_schema(&self) -> Option<&PreparedSchema> {
-        if self.operation != Operation::CancelAction
-            && (self.exchange.is_some()
-                || matches!(self.reply, Some(ActionReply::Complete(_)))
-                || matches!(self.result, Some(Ok(_))))
+    fn destination(&self) -> &B::Destination {
+        self.control_destination
+            .as_ref()
+            .or(self.invoke_destination.as_ref())
+            .expect("admitted Action destination")
+    }
+    fn live_schema(&self) -> Option<&PreparedSchema> {
+        let operation = self.progress.operation();
+        if self.exchange.is_some()
+            || matches!(self.reply, Some(ActionReply::Complete(_)))
+            || matches!(*self.result, Some(Ok(_)))
         {
-            self.association
-                .definition
-                .meaning
-                .schemas()
-                .output
-                .as_ref()
+            self.association.output_schema(operation)
         } else {
             None
         }
@@ -640,57 +553,58 @@ impl<B: ActionBinding, I: ActionInput> Invocation<'_, B, I> {
             _ => self.close(invalid()),
         }
     }
-    fn control(
-        &mut self,
-        op: Operation,
-        now: MonotonicInstant,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<()> {
+    fn fence_local(&mut self) {
+        if let Err(e) = check_time(self.deadline, self.last_time) {
+            self.progress.close(e);
+        }
+        if !self.association.consumer.is_current() {
+            self.progress.close(stale());
+        }
+    }
+    fn check_cause(&self) -> CoreResult<()> {
+        self.progress.first_cause.clone().map_or(Ok(()), Err)
+    }
+    fn control(&mut self, op: Operation, now: MonotonicInstant) -> CoreResult<()> {
         self.observe_time(now);
         self.fence();
-        if let Some(e) = &self.progress.first_cause {
-            return Err(e.clone());
-        }
-        if self.progress.state != ConsumerActionState::Pending || self.exchange.is_some() {
+        self.check_cause()?;
+        if !self.progress.can_control() {
             return Err(busy());
         }
         let a = self.association;
-        let d = a.definition;
-        if d.mappings[index(op)].is_none() {
-            return Err(unsupported());
-        }
-        let schema = if op == Operation::QueryAction {
-            d.meaning.schemas().output.as_ref()
-        } else {
-            None
-        };
-        if !a.work(op, None).prepay(budget) {
-            return Err(busy());
-        }
-        let preflight = a.check(op, schema, self.token.as_ref());
+        let binding = a.binding;
+        let program = a.definition.program;
+        let schema = a.output_schema(op);
+        let prepared = (|| {
+            a.dependencies(op, schema)?;
+            let token = self.token.as_ref().ok_or_else(invalid)?;
+            let destination = binding.destination(program, op, Some(token))?;
+            a.authorize(op, schema, &destination)?;
+            Ok(destination)
+        })();
         self.fence();
-        if let Some(e) = &self.progress.first_cause {
-            return Err(e.clone());
-        }
-        preflight?;
-        let started = d
-            .binding
-            .start(d.program, op, None, self.token.as_ref(), self.deadline);
-        self.fence();
-        match started {
-            Err(e) => Err(self.progress.first_cause.clone().unwrap_or(e)),
+        self.check_cause()?;
+        let destination = prepared?;
+        let exchange = binding.start(
+            program,
+            op,
+            &destination,
+            None,
+            self.token.as_ref(),
+            self.deadline,
+        );
+        match exchange {
             Ok(exchange) => {
                 self.exchange = Some(exchange);
-                self.operation = op;
-                self.progress.retiring = false;
-                self.progress.state = if op == Operation::QueryAction {
-                    ConsumerActionState::Querying
-                } else {
-                    self.progress.remote_cancel = ConsumerActionCancellation::Uncertain;
-                    ConsumerActionState::Cancelling
-                };
+                self.control_destination = Some(destination);
+                self.progress.start_control(op);
                 self.fence();
                 Ok(())
+            }
+            Err(error) => {
+                self.fence();
+                self.check_cause()?;
+                Err(error)
             }
         }
     }
@@ -699,60 +613,34 @@ impl<B: ActionBinding, I: ActionInput> ActionDriver for Invocation<'_, B, I> {
     fn progress(&mut self) -> &mut ActionProgress {
         &mut self.progress
     }
-    fn operation(&self) -> Operation {
-        self.operation
-    }
-    fn has_exchange(&self) -> bool {
-        self.exchange.is_some()
-    }
-    fn work(&self) -> ActionWork {
-        self.association.work(self.operation, self.output_schema())
-    }
     fn close(&mut self, cause: CoreError) {
-        self.progress.close(cause, self.exchange.is_some());
+        self.fence_local();
+        self.progress.close(cause);
+    }
+    fn fence_local(&mut self) {
+        Invocation::fence_local(self);
     }
     fn invalid_reply(&self) -> CoreError {
         invalid()
     }
     fn fence(&mut self) {
-        if let Err(e) = check_time(self.deadline, self.last_time) {
-            self.close(e);
-        }
-        if !self.association.consumer.is_current() {
-            self.close(stale());
-        }
+        self.fence_local();
         if self.progress.first_cause.is_none()
-            && let Err(e) = self
+            && let Err(error) = self
                 .association
-                .dependencies(self.operation, self.output_schema())
+                .dependencies(self.progress.operation(), self.live_schema())
         {
-            self.close(e);
+            self.close(error);
         }
     }
     fn check_current(&mut self) -> CoreResult<()> {
-        self.association
-            .check(self.operation, self.output_schema(), self.token.as_ref())
+        self.association.authorize(
+            self.progress.operation(),
+            self.live_schema(),
+            self.destination(),
+        )
     }
-    fn refresh_access(&mut self, budget: &mut WorkBudget) -> CoreResult<()> {
-        if self.progress.first_cause.is_some() {
-            return Ok(());
-        }
-        let i = index(self.operation);
-        if budget
-            .consume(W::ProviderProbes, self.association.access_work[i])
-            .is_err()
-            || budget
-                .consume(W::BindingPolls, self.association.definition.native_work[i])
-                .is_err()
-        {
-            return Err(busy());
-        }
-        if let Err(e) = self.check_current() {
-            self.close(e);
-        }
-        Ok(())
-    }
-    fn poll_exchange(&mut self, cx: &mut Context<'_>) -> core::task::Poll<CoreResult<()>> {
+    fn poll_exchange(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>> {
         self.exchange
             .as_mut()
             .unwrap()
@@ -762,57 +650,48 @@ impl<B: ActionBinding, I: ActionInput> ActionDriver for Invocation<'_, B, I> {
                     self.reply = Some(reply);
                     Ok(())
                 }
-                Err(e) => {
-                    self.native_error.get_or_insert_with(|| e.clone());
-                    self.result = Some(Err(e.clone()));
-                    Err(e)
+                Err(error) => {
+                    self.native_error = Some(error.clone());
+                    *self.result = Some(Err(error.clone()));
+                    Err(error)
                 }
             })
     }
-    fn poll_close(&mut self, cx: &mut Context<'_>) -> core::task::Poll<CoreResult<()>> {
-        self.exchange
-            .as_mut()
-            .unwrap()
-            .poll_close(cx)
-            .map(|result| {
-                result.map(|late| {
-                    if self.reply.is_none() {
-                        self.reply = late;
-                    }
-                    self.exchange = None;
-                })
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<CoreResult<()>> {
+        let Some(exchange) = self.exchange.as_mut() else {
+            return Poll::Ready(Ok(()));
+        };
+        exchange.poll_close(cx).map(|result| {
+            result.map(|late| {
+                if self.reply.is_none() {
+                    self.reply = late;
+                }
+                drop(self.exchange.take());
             })
+        })
     }
     fn retain_reply(&mut self) -> Option<ActionObservation> {
-        Some(match self.reply.take()? {
-            ActionReply::Accepted(token) if self.operation == Operation::InvokeAction => {
-                self.token = Some(token);
-                ActionObservation::Accepted
-            }
-            ActionReply::Accepted(_) => ActionObservation::Invalid,
-            ActionReply::Complete(output) => {
-                self.result = Some(Ok(output));
-                ActionObservation::Complete
-            }
-            ActionReply::Failed(e) => {
-                self.result = Some(Err(e));
-                ActionObservation::Failed
-            }
-            ActionReply::Pending => ActionObservation::Pending,
-            ActionReply::CancelRequested => ActionObservation::CancelRequested,
-            ActionReply::AlreadyTerminal => ActionObservation::AlreadyTerminal,
-        })
+        Some(retain_action_reply(
+            self.progress.operation(),
+            self.reply.take()?,
+            &mut self.token,
+            &mut self.result,
+        ))
     }
     fn validate_output(&mut self) -> CoreResult<()> {
         let output = self.result.as_ref().unwrap().as_ref().unwrap().view();
         self.association
-            .definition
-            .validate_output_view(self.operation, output)
+            .validate_output(self.progress.operation(), output)
     }
-    fn reset_operation(&mut self) {
-        self.operation = Operation::InvokeAction;
+    fn finish_operation(&mut self) {
+        if self.progress.state.settlement_ready() {
+            drop(self.token.take());
+        } else {
+            drop(self.control_destination.take());
+        }
     }
 }
+
 fn check_time(deadline: Deadline, now: MonotonicInstant) -> CoreResult<()> {
     match deadline.checked_is_elapsed_at(now) {
         Some(false) => Ok(()),
@@ -834,4 +713,7 @@ fn busy() -> CoreError {
 }
 fn unsupported() -> CoreError {
     CoreError::UnsupportedOperation(context())
+}
+fn reentry() -> CoreError {
+    CoreError::Lifecycle(ErrorContext::new(ErrorPhase::Readiness, RetryClass::Never))
 }

@@ -438,19 +438,20 @@ their actual validation services during publication, not at individual ingress.
 ### Continuing execution across representations
 
 Core's `execution::action::step_action` owns the common continuing Consumer
-transitions. `ActionProgress` is per-invocation semantic state only: it owns no
-native work, continuation, output, service, account, wake or registry. Host and
-caller-owned drivers retain those actual owners separately. Both execute the
-same acceptance/pending/control/completion, first-cause and retirement algorithm.
-Native poll error remains independent of a later output and failed cleanup.
-Pending/error close cannot remove an exchange; acknowledged close may retain its
-original late observation. Output moves into original result storage before
-validation. Cancel acknowledgement means requested cancellation, never rollback.
-An unread validated completion still requires fresh permission at handoff.
+transitions. `ActionProgress` holds semantic state only. Host and caller-owned
+drivers retain their own native exchanges, continuations, result storage,
+authority and wakes. A turn polls the exchange or its retirement at most once.
+`ActionTurn` distinguishes an idle invocation, a runnable transition, waiting
+on native readiness, a failed close that needs a maintenance turn, and local
+settlement. Poll errors and failed close preserve the original owner and first
+cause. Acknowledged close releases the exchange and preserves any original
+observation before validation or result disposal. Closed work can settle raw
+evidence with neither a permission nor a codec callback. Cancellation
+acknowledges the requested disposition and leaves remote rollback uncertain.
 
 `ValueExecution` lends the shared Action input/output schemas; Query validates
 completed application values against that same output meaning using its own
-captured media/body/work service. `ValueValidator`, also used by finite Read,
+captured media and bounded validation service. `ValueValidator`, also used by finite Read,
 supplies decoding evidence to Core's schema evaluator without imposing a payload
 owner. Native artifact, token and exchange types need not match across profiles.
 The typed Core Action facet and the Host erased facet are separate native
@@ -474,22 +475,22 @@ silently specialize it for a different endpoint.
 `ConsumerActionAssociation` binds that shared definition to one original Consumer,
 explicit per-operation retained access services and an instance resource domain.
 Clones are passive non-revoking views; dropping them does not cancel admitted work.
-Access services are newly qualified at this explicit binding, with captured work
-and security revisions, rather than carried as permission in the definition.
+Access services are installed at this binding with captured security revisions
+and freshly checked for each actual operation.
 `ConsumerActions` supplies separately funded bounded execution capacity for many
 associations. It owns no idle association or definition. One association may use
 independent capacities; closing a capacity fences only work admitted there.
 
-Each admitted invocation owns its association, unique local handle/control,
-opaque native continuation and normal/late evidence through settlement and
-cleanup. The Binding's token never becomes logical authority. Invoke acceptance
+Each admitted invocation owns its association and unique local handle/control.
+Its native continuation survives until terminal settlement. The result owner
+retains normal or late evidence through disposal. The Binding's token never becomes logical authority. Invoke acceptance
 exposes Pending, not a completed result. Explicit query/cancel can use different
 actual mappings and independently bound access services. One immutable Action
 input/output schema pair defines value meaning across those mappings. Invoke's
 captured data service validates its input. For validated delivery, use the
 service of the operation that returned the value, including Query when its
 output arrived during retirement. Each uses its own original media,
-body/scratch/work policy and native result bound. The value need not fit Invoke's
+body and scratch policy and native result bound. The value need not fit Invoke's
 representation or resource allowance when it arrives through Query. No common
 codec, conversion to Invoke bytes or codec selection from untrusted media is
 implied. Settlement lends the original returning operation's bytes and media.
