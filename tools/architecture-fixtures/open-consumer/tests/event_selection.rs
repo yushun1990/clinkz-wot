@@ -463,14 +463,15 @@ fn preferred_stream_and_later_coded_datagram_reach_their_peers_in_either_registr
             assert!(matches!(b.first_cause, Some(CoreError::Cancelled(_))));
             assert_eq!(b.remote_cancellation, RemoteCancellation::Unknown);
             drop(UdpSocket::bind(destination).expect("datagram lease ended"));
-            assert!(
-                plans.account(ResourceKind::EngineLiveBytesGlobalMax).used() > 0,
-                "reports retain original definitions"
-            );
-            drop((a, b));
             clean(&plans);
             clean(&active);
             clean(&original_services);
+            for report in [&a, &b] {
+                assert_eq!(
+                    report.target(),
+                    clinkz_wot_core::thing::AffordanceSite::Event("alarm")
+                );
+            }
         }
     });
 }

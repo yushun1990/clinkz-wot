@@ -86,6 +86,8 @@ struct Bus {
     close: Mode,
     send: Mode,
     retire: Mode,
+    retire_after: Option<std::sync::Weak<[u8]>>,
+    reject_prepare: bool,
     retain_idle: bool,
     on_next: Option<Box<dyn FnOnce()>>,
     on_send: Option<Box<dyn FnOnce()>>,
@@ -115,6 +117,8 @@ impl Bus {
             close: Mode::Ready,
             send: Mode::Ready,
             retire: Mode::Ready,
+            retire_after: None,
+            reject_prepare: false,
             retain_idle: false,
             on_next: None,
             on_send: None,
@@ -233,7 +237,17 @@ impl NotificationResponse for Reply {
         let mode = {
             let mut bus = self.bus.borrow_mut();
             bus.reply_retire_polls += 1;
-            bus.retire
+            if bus.retire_after.as_ref().is_some_and(|earlier| {
+                earlier.strong_count() > 0
+                    && self
+                        .event_body
+                        .as_ref()
+                        .is_some_and(|body| !earlier.ptr_eq(&Arc::downgrade(body)))
+            }) {
+                Mode::Pending
+            } else {
+                bus.retire
+            }
         };
         match mode {
             Mode::Pending => Poll::Pending,
@@ -428,7 +442,7 @@ impl ConsumerNotificationBinding for Binding {
         let mut bus = self.bus.borrow_mut();
         // Bound local private construction, independent of Engine item credit.
         bus.endpoints.retain(|e| e.strong_count() > 0);
-        if bus.endpoints.len() == 16 {
+        if bus.endpoints.len() == 16 || bus.reject_prepare {
             return Err(BindingInputRejection::new(
                 program,
                 BindingOperationalError::new(binding_error()),
@@ -459,6 +473,7 @@ impl ConsumerNotificationBinding for Binding {
 struct Policy {
     denied: Rc<Cell<u8>>,
     probes: Rc<Cell<usize>>,
+    last_establish: Rc<RefCell<Option<NotificationIdentity>>>,
     on_maintain: PolicyHook,
     on_item: PolicyHook,
     reject_alarm: Rc<Cell<bool>>,
@@ -470,6 +485,7 @@ impl Policy {
         Self {
             denied: Rc::new(Cell::new(0)),
             probes: Rc::new(Cell::new(0)),
+            last_establish: Rc::default(),
             on_maintain: Rc::new(RefCell::new(None)),
             on_item: Rc::new(RefCell::new(None)),
             reject_alarm: Rc::new(Cell::new(false)),
@@ -493,6 +509,9 @@ impl NotificationAuthorizer for Policy {
     ) -> CoreResult<NotificationDecision> {
         let p = request.permission;
         self.probes.set(self.probes.get() + 1);
+        if p == NotificationPermission::Establish {
+            self.last_establish.replace(Some(request.recipient.clone()));
+        }
         if p == NotificationPermission::Maintain {
             let hook = self.on_maintain.borrow_mut().take();
             if let Some(hook) = hook {
@@ -1081,6 +1100,7 @@ fn event_control_data_response_and_delivery_have_distinct_owners() {
     assert!(root.advance(&mut cursor).is_err());
     bus.borrow_mut().send = Mode::Ready;
     step(&mut root, &id);
+    step(&mut root, &id);
     assert_eq!(
         root.front(&mut cursor).unwrap().unwrap().response,
         EventResponseState::Delivered
@@ -1343,6 +1363,58 @@ fn response_overflow_keeps_all_reply_jobs_even_under_drop_newest_policy() {
 }
 
 #[test]
+fn closing_rotates_staged_and_all_queued_replies() {
+    for queue_items in [1, 2] {
+        let bus = Bus::new();
+        let (mut root, _, _) = root(
+            &bus,
+            RawNotificationLimits {
+                subscriptions: 1,
+                queue_items,
+                reports: 1,
+                ..limits()
+            },
+        );
+        let cursor = subscribe(&mut root, event(true), Program::event());
+        let id = cursor.identity();
+        step(&mut root, id);
+        for _ in 1..queue_items {
+            Bus::publish(&bus, ("sensor", 1), Some(payload("queued waiter")));
+            step(&mut root, id);
+        }
+        let ready = payload("releases the other replies");
+        let backing = Arc::downgrade(&ready.body);
+        Bus::publish(&bus, ("sensor", 1), Some(ready));
+        step(&mut root, id);
+        Bus::publish(&bus, ("sensor", 1), Some(payload("staged waiter")));
+        assert_eq!(step(&mut root, id), NotificationState::Closing);
+        assert!(root.status(id).unwrap().has_retained_handoff);
+        bus.borrow_mut().retire_after = Some(backing.clone());
+
+        let mut cx = Context::from_waker(Waker::noop());
+        for _ in 0..24 {
+            let polls = bus.borrow().reply_retire_polls + bus.borrow().close_polls;
+            let turn = root.step(&mut cx).unwrap();
+            assert!(bus.borrow().reply_retire_polls + bus.borrow().close_polls <= polls + 1);
+            if turn == NotificationTurn::Closed {
+                break;
+            }
+        }
+        assert_eq!(bus.borrow().completed_closes, 1);
+        let report = root
+            .take_settlement(id)
+            .expect("every original reply retires");
+        assert!(matches!(
+            report.first_cause,
+            Some(CoreError::Backpressure(_))
+        ));
+        assert!(backing.upgrade().is_none());
+        assert!(bus.borrow().physical.is_empty());
+        assert_eq!(bus.borrow().reply_aborts, 0);
+    }
+}
+
+#[test]
 fn native_loss_has_bounded_out_of_band_saturating_status() {
     let bus = Bus::new();
     let (mut root, _, _) = root(&bus, limits());
@@ -1564,6 +1636,54 @@ fn failed_response_retains_original_bytes_and_reports_uncertain_delivery_after_s
     assert_eq!(report.responses_uncertain, 1);
     assert_eq!(report.responses_delivered, 0);
     assert!(weak.upgrade().is_none());
+}
+
+#[test]
+fn a_refused_notification_identity_cannot_collect_a_successor() {
+    let bus = Bus::new();
+    let (mut root, policy, _) = root(
+        &bus,
+        RawNotificationLimits {
+            subscriptions: 1,
+            reports: 1,
+            ..limits()
+        },
+    );
+    policy.denied.set(bit(NotificationPermission::Establish));
+    assert!(root.subscribe(event(false), Program::event()).is_err());
+    let denied = policy.last_establish.take().unwrap();
+    policy.denied.set(0);
+    bus.borrow_mut().reject_prepare = true;
+    assert!(root.subscribe(event(false), Program::event()).is_err());
+    let refused = policy.last_establish.take().unwrap();
+    bus.borrow_mut().reject_prepare = false;
+    assert_eq!(root.retained_subscriptions(), 0);
+
+    let cursor = subscribe(
+        &mut root,
+        property(NotificationOverflow::Terminate),
+        Program::property(),
+    );
+    let original = cursor.identity();
+    assert_eq!(denied.subscription().slot(), original.subscription().slot());
+    assert_eq!(
+        refused.subscription().slot(),
+        original.subscription().slot()
+    );
+    step(&mut root, original);
+    root.stop(&cursor, None).unwrap_or_else(|_| panic!());
+    for _ in 0..4 {
+        step(&mut root, original);
+    }
+    for leaked in [&denied, &refused] {
+        assert!(matches!(
+            root.take_settlement(leaked),
+            Err(CoreError::StaleHandle(_))
+        ));
+    }
+    assert_ne!(denied, refused);
+    let report = root.take_settlement(original).unwrap();
+    assert_eq!(report.identity, *original);
 }
 
 #[test]
@@ -2062,6 +2182,69 @@ fn stop_intent_precedes_later_owner_revocation_and_pairing_errors_are_not_capaci
 }
 
 #[test]
+fn stop_and_instance_loss_preserve_their_order_with_or_without_progress() {
+    #[derive(Clone, Copy, Debug)]
+    enum Stop {
+        Cursor,
+        Handle,
+        Abandon,
+        Capacity,
+    }
+    for stop in [Stop::Cursor, Stop::Handle, Stop::Abandon, Stop::Capacity] {
+        for revoke_first in [false, true] {
+            for drive_between in [false, true] {
+                let bus = Bus::new();
+                let (mut root, policy, _) = root(&bus, limits());
+                let mut cursor = Some(subscribe(
+                    &mut root,
+                    property(NotificationOverflow::Terminate),
+                    Program::property(),
+                ));
+                let handle = cursor.as_ref().unwrap().stop_handle();
+                let id = cursor.as_ref().unwrap().identity().clone();
+                step(&mut root, &id);
+                Bus::publish(&bus, ("sensor", 1), Some(payload("buffered")));
+                step(&mut root, &id);
+                for revoke in [revoke_first, !revoke_first] {
+                    let probes = policy.probes.get();
+                    if revoke {
+                        root._instance.revoke();
+                    } else {
+                        match stop {
+                            Stop::Cursor => root
+                                .stop(cursor.as_ref().unwrap(), None)
+                                .unwrap_or_else(|_| panic!()),
+                            Stop::Handle => handle.request_stop(),
+                            Stop::Abandon => drop(cursor.take()),
+                            Stop::Capacity => root.begin_close(),
+                        }
+                    }
+                    assert_eq!(policy.probes.get(), probes);
+                    assert_eq!(root.status(&id).unwrap().state, NotificationState::Closing);
+                    if drive_between && revoke == revoke_first {
+                        step(&mut root, &id);
+                    }
+                }
+                let report = settle(&mut root, &id);
+                let expected = if revoke_first {
+                    CoreError::StaleHandle(ErrorContext::new(
+                        ErrorPhase::Delivery,
+                        RetryClass::Never,
+                    ))
+                } else {
+                    CoreError::Cancelled(ErrorContext::new(ErrorPhase::Cleanup, RetryClass::Never))
+                };
+                assert_eq!(
+                    report.first_cause,
+                    Some(expected),
+                    "{stop:?}, {drive_between}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn optional_event_response_can_be_declined_and_later_notifications_consumed_without_a_send() {
     let bus = Bus::new();
     let (mut root, policy, _) = root(&bus, limits());
@@ -2102,6 +2285,7 @@ fn optional_event_response_can_be_declined_and_later_notifications_consumed_with
     assert!(weak.upgrade().is_some());
     bus.borrow_mut().retire = Mode::Ready;
     assert_eq!(step(&mut root, &id), NotificationState::Active);
+    assert_eq!(step(&mut root, &id), NotificationState::Active);
     assert_eq!(
         root.front(&mut cursor).unwrap().unwrap().response,
         EventResponseState::Declined
@@ -2124,6 +2308,57 @@ fn optional_event_response_can_be_declined_and_later_notifications_consumed_with
     assert_eq!(report.delivered_items, 2);
     assert_eq!(report.responses_delivered, 0);
     assert_eq!(report.responses_uncertain, 0);
+}
+
+#[test]
+fn active_ingress_reports_failure_while_an_optional_reply_waits() {
+    let bus = Bus::new();
+    let (mut root, _, _) = root(
+        &bus,
+        RawNotificationLimits {
+            subscriptions: 1,
+            ..limits()
+        },
+    );
+    let mut cursor = subscribe(&mut root, event(false), Program::event());
+    let id = cursor.identity().clone();
+    step(&mut root, &id);
+    let original = payload("original");
+    let backing = Arc::downgrade(&original.body);
+    Bus::publish(&bus, ("sensor", 1), Some(original));
+    step(&mut root, &id);
+    assert_eq!(data(&mut root, &mut cursor), b"original");
+    root.decline_response(&mut cursor).unwrap();
+    bus.borrow_mut().retire = Mode::Pending;
+    let mut cx = Context::from_waker(Waker::noop());
+    assert_eq!(root.step(&mut cx).unwrap(), NotificationTurn::Waiting);
+    assert_eq!(bus.borrow().reply_retire_polls, 1);
+
+    Bus::publish(&bus, ("sensor", 1), Some(payload("native input")));
+    bus.borrow_mut().receive_error = true;
+    for _ in 0..4 {
+        let polls = bus.borrow().receive_polls + bus.borrow().reply_retire_polls;
+        root.step(&mut cx).unwrap();
+        assert_eq!(
+            bus.borrow().receive_polls + bus.borrow().reply_retire_polls,
+            polls + 1
+        );
+        if root.status(&id).unwrap().state == NotificationState::Closing {
+            break;
+        }
+    }
+    let status = root.status(&id).unwrap();
+    assert_eq!(status.state, NotificationState::Closing);
+    assert_eq!(status.native_error, Some(&binding_error()));
+    assert_eq!(status.first_cause, status.native_error);
+    assert!(backing.upgrade().is_some());
+    assert!(root.take_settlement(&id).is_err());
+
+    bus.borrow_mut().retire = Mode::Ready;
+    let report = settle(&mut root, &id);
+    assert_eq!(report.first_cause, Some(binding_error()));
+    assert_eq!(report.native_error, report.first_cause);
+    assert!(backing.upgrade().is_none());
 }
 
 #[test]
@@ -2292,6 +2527,7 @@ fn required_or_already_submitted_event_responses_cannot_be_declined() {
         bus.borrow_mut().send = Mode::Ready;
         step(&mut root, &id);
         step(&mut root, &id);
+        step(&mut root, &id);
         assert!(root.decline_response(&mut cursor).is_err());
         root.advance(&mut cursor).unwrap();
         assert!(
@@ -2450,6 +2686,7 @@ fn occurrence_slice_and_name_loans_keep_exact_owners_until_advance_or_reply_clea
         bus.borrow_mut().retire = Mode::Ready;
         step(&mut root, &id);
         if advance {
+            step(&mut root, &id);
             root.advance(&mut cursor).unwrap();
             assert!(body.upgrade().is_none());
             assert!(name.upgrade().is_none());
@@ -2483,7 +2720,13 @@ fn occurrence_refusal_retires_required_reply_without_revoking_the_conversation()
         RejectAt::ResponseSend,
     ] {
         let bus = Bus::new();
-        let (mut root, policy, _) = root(&bus, limits());
+        let (mut root, policy, _) = root(
+            &bus,
+            RawNotificationLimits {
+                subscriptions: 1,
+                ..limits()
+            },
+        );
         let mut request = event(true);
         request.target = AffordanceTarget::Thing;
         request.kind = NotificationKind::SubscribeAllEvents;
@@ -2555,7 +2798,7 @@ fn occurrence_refusal_retires_required_reply_without_revoking_the_conversation()
         assert_eq!(bus.borrow().reply_send_polls, 0);
         assert_eq!(bus.borrow().close_polls, 0);
         bus.borrow_mut().retire = Mode::Ready;
-        root.progress(&id, &mut Context::from_waker(Waker::noop()))
+        root.step_cleanup(&mut Context::from_waker(Waker::noop()))
             .unwrap();
         assert_eq!(bus.borrow().physical[&("sensor", 1)].jobs, 0);
         assert!(
@@ -2565,7 +2808,7 @@ fn occurrence_refusal_retires_required_reply_without_revoking_the_conversation()
         if let Some(ref weak) = response_input {
             assert!(weak.upgrade().is_none());
         }
-        root.progress(&id, &mut Context::from_waker(Waker::noop()))
+        root.step_cleanup(&mut Context::from_waker(Waker::noop()))
             .unwrap();
         assert!(weak.upgrade().is_none());
         if let Some(weak) = response_input {
@@ -2744,7 +2987,7 @@ impl NotificationValidation for ValidationProbe {
 }
 
 #[test]
-fn raw_validator_final_release_refuses_sibling_receive_for_idle_context_and_report() {
+fn raw_validator_retires_under_the_consumer_turn_independently_of_a_named_report() {
     for admit in [false, true] {
         let bus = Bus::new();
         let (mut sibling, _, _) = root(&bus, limits());
@@ -2782,19 +3025,26 @@ fn raw_validator_final_release_refuses_sibling_receive_for_idle_context_and_repo
         )
         .unwrap_or_else(|_| panic!("raw context rejected"));
         if admit {
+            let name: Arc<str> = Arc::from("original report coordinate");
+            let backing = Arc::downgrade(&name);
+            let request = RawNotificationRequest {
+                target: AffordanceTarget::Property(name),
+                ..property(NotificationOverflow::Terminate)
+            };
             let sub = original
                 .inner
-                .subscribe(
-                    property(NotificationOverflow::Terminate),
-                    Program::property(),
-                    context,
-                )
+                .subscribe(request, Program::property(), context)
                 .unwrap_or_else(|_| panic!("raw subscription rejected"));
             original.begin_close();
             let report = settle(&mut original, sub.identity());
-            drop(original);
-            assert!(!fired.get());
+            assert!(fired.get(), "report collection releases the validator");
+            assert_eq!(
+                report.target(),
+                clinkz_wot_core::thing::AffordanceSite::Property("original report coordinate")
+            );
+            assert!(backing.upgrade().is_some());
             drop(report);
+            assert!(backing.upgrade().is_none());
         } else {
             drop(context);
         }

@@ -820,7 +820,7 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
         };
         assert_eq!(original.data().unwrap().body, b"7");
         let report = e.notifications.take_settlement(ca.identity()).unwrap();
-        assert_eq!(report.identity.consumer, a.instance.consumer());
+        assert_eq!(report.identity.consumer(), &a.instance.consumer());
         assert!(matches!(
             report.first_cause,
             Some(CoreError::StaleHandle(_))

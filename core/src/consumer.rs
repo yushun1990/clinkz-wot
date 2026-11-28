@@ -211,7 +211,7 @@ pub trait ConsumerAccessService: Send + Sync {
         request: crate::notification::NotificationAuthorization<'_>,
     ) -> CoreResult<crate::notification::NotificationDecision> {
         self.authorize_instance(
-            &request.recipient.consumer,
+            request.recipient.consumer(),
             binding,
             endpoint,
             request.operation(),

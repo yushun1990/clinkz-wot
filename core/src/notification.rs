@@ -20,11 +20,28 @@ use crate::{
 
 /// A retained issuer distinguishes even identical slots in different roots.
 /// Copying an identity grants neither delivery permission nor shutdown power.
+/// An observed identity always names the original admission attempt.
+///
+/// ```compile_fail,E0616
+/// use clinkz_wot_core::notification::NotificationIdentity;
+/// use clinkz_wot_core::SubscriptionId;
+/// fn retarget(mut original: NotificationIdentity, other: SubscriptionId) {
+///     original.subscription = other;
+/// }
+/// ```
 #[derive(Clone)]
 pub struct NotificationIdentity {
     issuer: Rc<()>,
-    pub consumer: ConsumerInstanceRef,
-    pub subscription: SubscriptionId,
+    consumer: ConsumerInstanceRef,
+    subscription: SubscriptionId,
+}
+impl NotificationIdentity {
+    pub fn consumer(&self) -> &ConsumerInstanceRef {
+        &self.consumer
+    }
+    pub fn subscription(&self) -> SubscriptionId {
+        self.subscription
+    }
 }
 impl PartialEq for NotificationIdentity {
     fn eq(&self, other: &Self) -> bool {
@@ -420,13 +437,13 @@ pub trait NotificationParticipation {
         cx: &mut Context<'_>,
         max_payload_backing: usize,
     ) -> Poll<CoreResult<NotificationSignal<Self::Response>>>;
-    /// None requests local removal without authority to start a mapped cancel.
-    /// A previously attempted cancel can still yield its original evidence.
-    /// Some lends the same accepted input with current mapped authority for this
-    /// poll. If a later poll withdraws the loan, the caller still keeps the
-    /// accepted input backed through local close or abort. Pending/error retains
-    /// the entire participant. Ready(Ok) means complete LOCAL disposal,
-    /// not physical shutdown or necessarily confirmed remote cancellation.
+    /// Some lends the same input with current mapped authority for this poll.
+    /// The Binding can accept a command into its own backing during that loan.
+    /// None requests local removal without authority to accept a new mapped
+    /// cancel. Previously accepted work can still complete and yield original
+    /// evidence. The caller keeps input backing through local close or abort.
+    /// Pending/error retains the participant. Ready(Ok) acknowledges complete
+    /// local disposal and reports the remote evidence observed at that point.
     fn poll_close(
         &mut self,
         cx: &mut Context<'_>,

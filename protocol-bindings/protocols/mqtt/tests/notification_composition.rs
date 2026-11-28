@@ -177,7 +177,7 @@ impl ConsumerAccessService for Access {
         }
         if let Some(AffordanceTarget::Event(name)) = r.occurrence {
             if let Some(expected) = &*self.expected.lock().unwrap() {
-                assert_eq!(&r.recipient.consumer, expected);
+                assert_eq!(r.recipient.consumer(), expected);
             }
             match &**name {
                 "alarm" => self.alarm_seen.store(true, Ordering::Relaxed),
@@ -338,16 +338,12 @@ fn original_services_are_charged_once_across_definitions_and_banks() {
     let report = work.step_cleanup(&mut cx()).unwrap().unwrap();
     assert!(!report.native_started);
     drop(work);
-    assert!(
-        original
-            .account(ResourceKind::EngineLiveBytesGlobalMax)
-            .used()
-            > 0,
-        "retained report keeps original prepared owners"
-    );
-    drop((report, data));
     assert_empty(&original);
     assert_empty(&maps);
+    assert_eq!(
+        report.target(),
+        clinkz_wot_core::thing::AffordanceSite::Thing
+    );
     assert!(!s.connected());
 }
 
@@ -583,6 +579,55 @@ fn one_compilation_many_associations_two_slots_and_one_native_interest_keep_inde
         drop(work);
         assert_empty(&original);
         assert_empty(&maps);
+    });
+}
+
+#[cfg(feature = "broker-tests")]
+#[test]
+fn held_thing_report_allows_preparation_at_the_original_peak() {
+    broker::runtime().block_on(async {
+        let broker = broker::Broker::start();
+        let service = service(broker.address);
+        let b = binding(&service);
+        let preparation = |bank: &Arc<HostResourceAccounts>, access: Arc<Access>| {
+            let services = retained(Arc::new(Data::new(32)), access, bank);
+            let mapping = definition(&b, services.clone(), bank, broker.address);
+            (mapping, services)
+        };
+        let measurement = bank();
+        drop(preparation(&measurement, Arc::new(Access::default())));
+        let kind = ResourceKind::EngineLiveBytesGlobalMax;
+        let peak = measurement.account(kind).peak();
+        assert!(peak > 0);
+        let mut budget_limits = GatewayDefaultV1::LIMITS.clone();
+        assert!(budget_limits.set(kind, Some(peak)));
+        let bank = Arc::new(HostResourceAccounts::new(&budget_limits));
+
+        let access = Arc::new(Access::default());
+        let original_access = Arc::downgrade(&access);
+        let (mapping, services) = preparation(&bank, access);
+        let instance = owner(1);
+        let association = associate(&instance, mapping, services.access.clone());
+        let mut work = ConsumerNotifications::try_new(limits(1)).unwrap();
+        let cursor = subscribe(&mut work, &association).unwrap_or_else(|_| panic!());
+        drive(&mut work, &cursor, true).await;
+        work.stop(&cursor, Some(CancellationInput(None)))
+            .unwrap_or_else(|_| panic!());
+        drive(&mut work, &cursor, false).await;
+        let report = work.take_settlement(cursor.identity()).unwrap();
+        drop((cursor, instance, association, services));
+        assert_eq!(work.retained_subscriptions(), 0);
+        assert!(!service.connected());
+
+        let successor = preparation(&bank, Arc::new(Access::default()));
+        assert!(original_access.upgrade().is_none());
+        assert_eq!(
+            report.target(),
+            clinkz_wot_core::thing::AffordanceSite::Thing
+        );
+        assert_eq!(report.remote_cancellation, RemoteCancellation::Confirmed);
+        drop(successor);
+        assert_empty(&bank);
     });
 }
 

@@ -33,10 +33,15 @@ owns those controls, distribution, the socket and physical participation.
 In the cancellation attribution test, the original lease requests mapped stop
 while SUBACK is outstanding. A same-filter successor joins, receives a value and
 stops locally. The broker observes one housekeeping UNSUBSCRIBE. The original
-lease still reports `NotAttempted`. During broker loss after a mapped command
-starts, the closing lease keeps `Cancelled` and remote `Unknown`, and the
-service owner retains the fault. Affected live leases receive the native fault
-on progress. [Mosquitto lifecycle cases](../../protocol-bindings/protocols/mqtt/tests/support/consumer_notifications.rs)
+lease still reports `NotAttempted`. A mapped removal accepted while another
+filter occupies the writer reports the same broker acknowledgement from
+lease-driven and service-driven schedules. Withdrawal after acceptance permits
+that command to finish on the service's backing. A completed original lease
+retires while a successor on the same filter is writing its own UNSUBSCRIBE.
+During broker loss after a mapped command starts, the closing lease keeps
+`Cancelled` and remote `Unknown`, and the service owner retains the fault.
+Affected live leases receive the native fault on progress.
+[Mosquitto lifecycle cases](../../protocol-bindings/protocols/mqtt/tests/support/consumer_notifications.rs)
 
 A second broker test fills the Binding's 32 participation slots using one
 connected subscriber and 31 locally acquired interests. A separate capacity
@@ -77,8 +82,11 @@ independently constructed registries. A fixture allocates 60,000 bytes of data
 service backing and retains its one original bank charge while two mappings each
 add the same separate record/program/schema charge at another bank. That per-map
 charge is smaller than the service backing; physical service backing is not added
-to either mapping. Work/instance/report lifetimes retain the original owners and
-all account reservations reach zero after final disposal. These assertions measure
+to either mapping. Live definitions and conversations retain the original owners.
+A collected report owns its evidence, identity, coordinate and report slot. A
+Thing-root report can be held while the original access service is released
+and the identical mapping is prepared at the measured one-preparation peak.
+These assertions measure
 reservation topology; they are not an allocator/RSS or throughput benchmark.
 Raw startup adoption separately recognizes same-object aliases within one registry;
 sharing across registry roots requires explicitly propagating retained owners.
@@ -94,16 +102,23 @@ bound inside the JSON callback for both accepted and refused payloads.
 Ordinary malformed input returns the original input and leaves the conversation
 Active. An observed dependency violation fences it even when validation fails.
 Pending cleanup retains the exact occurrence and reply and sends no dataResponse.
-The downstream UDP fixture tests final report and idle association disposal
-against an attempted callback-driven Read. A later independent turn can send
-the Read. [Mixed execution evidence](consumer-execution-composition.md)
+The downstream UDP fixture holds a report while an idle association's final
+disposal attempts a callback-driven Read. The service release occurs inside
+the Consumer turn. A later independent turn can send the Read.
+[Mixed execution evidence](consumer-execution-composition.md)
 
 The [raw lifecycle suite](../../servient/finite/tests/notification.rs) drives
 one original slot per aggregate turn. It exercises bounded refusal, queue and
 handoff ownership, pending and failed retirement, local abort, and first cause
-when a native outcome arrives late. A withdrawn continuing grant fences an
-active conversation during a pending reply retirement. Local close releases
-the participation while the reply and payload remain held. A pending mapped
+when a native outcome arrives late. A stale identity from a refused Event
+admission cannot collect a later Property report in the same slot. Stop and
+instance revocation retain their actual order across direct, passive and
+abandonment paths with or without intervening progress.
+A native terminal failure or a withdrawn continuing grant can fence an active
+conversation during a pending reply. Local close releases the participation
+while the reply and payload remain held. The staged and queued replies each
+get retirement turns after fencing, including when a later queued reply must
+release the backing on which an earlier reply waits. A pending mapped
 stop loses permission to lend its accepted input and retains that exact backing
 through local close. A held report separately saturates report admission and
 returns its unit through disposal. Zero-size local capacity and oversized inputs refuse before native

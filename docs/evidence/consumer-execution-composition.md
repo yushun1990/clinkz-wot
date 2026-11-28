@@ -115,7 +115,7 @@ terminal reports through collection, and collected reports keep their own
 slots through disposal. [Notification execution and MQTT evidence](consumer-notification-composition.md)
 
 The downstream observation Binding attempts a finite Read from its receive
-callback and from final service release by a report or idle view. Each attempt
+callback and from final service release by an idle association. Each attempt
 returns a lifecycle error. The UDP peer has received zero bytes when the
 callback returns, then receives the request and answers the independently
 driven Read. [Downstream composition fixture](../../tools/architecture-fixtures/open-consumer/tests/support/composition.rs)

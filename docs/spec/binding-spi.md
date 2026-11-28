@@ -644,17 +644,20 @@ matching, distribution, compatibility, response cardinality and physical lease
 retirement. `prepare` secures the original participation and rollback backing
 before native start. Each native poll and its synchronous callbacks fit a bounded
 turn. Reply rights retain their own native backing through retirement even after
-the participant closes. A local close poll without mapped cancellation authority
-can still report evidence from an earlier authorized attempt. The Engine policy
+the participant closes. A mapped poll lends permission and the cancellation
+operand. A Binding can accept a backed command during that poll and drive its
+original native work independently. A local close poll can still report that
+work's observed evidence. Local retirement snapshots the report at release.
+The Engine policy
 receives logical occurrence coordinates from the
 original candidate, without treating an MQTT topic or NoSec payload as verified
 sender evidence. Rich source-provenance support requires separately qualified
 mapping/verification and original trust/dependency ownership; neither this facet
 nor compatible topic sharing establishes it.
 Individual policy refusal does not issue native unsubscribe or response data.
-The original reply owner may need retirement before another item can proceed;
-its native contract decides actual completion/failure, without duplicating reply
-rights or granting physical-service shutdown to the Engine.
+Retiring an original reply may delay cursor advance. The participation can
+still progress while there is backing for a new handoff. The native reply
+contract determines actual completion and failure of each original opportunity.
 
 
 Thing-root ObserveAllProperties retains one logical participation and its

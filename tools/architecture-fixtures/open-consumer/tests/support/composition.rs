@@ -764,7 +764,7 @@ impl NotificationAuthorizer for Access {
         &self,
         request: NotificationAuthorization<'_>,
     ) -> CoreResult<NotificationDecision> {
-        assert!(request.recipient.consumer.is_current());
+        assert!(request.recipient.consumer().is_current());
         if self.0.deny.get() {
             Err(invalid())
         } else {
@@ -959,7 +959,7 @@ fn one_consumer_fences_calls_and_notifications_without_retargeting_replacement_o
     let mut sibling = observations(&sibling_owner, hub.clone());
     let mut a = subscribe(&mut first);
     let mut b = subscribe(&mut sibling);
-    assert_eq!(a.identity().consumer, rt.0.consumer());
+    assert_eq!(a.identity().consumer(), &rt.0.consumer());
     assert_eq!(progress(&mut first, &a), NotificationState::Active);
     assert_eq!(progress(&mut sibling, &b), NotificationState::Active);
     assert!(
@@ -1206,7 +1206,7 @@ fn prepared_observations(
 }
 
 #[test]
-fn notification_report_and_last_idle_view_guard_service_disposal_against_udp_read() {
+fn last_idle_notification_view_guards_service_disposal_even_with_a_held_report() {
     for collect_report in [true, false] {
         let notify_peer = UdpSocket::bind("127.0.0.1:0").unwrap();
         let hub = hub(notify_peer.local_addr().unwrap());
@@ -1260,22 +1260,16 @@ fn notification_report_and_last_idle_view_guard_service_disposal_against_udp_rea
         })));
         drop(root.association);
         assert!(!fired.get());
+        drop(view);
+        assert!(fired.get());
+        assert_eq!(root.work.retained_subscriptions(), 0);
+        drop(root.work);
         if let Some(report) = report {
-            drop(view);
-            drop(root.work);
-            assert!(!fired.get());
             assert!(matches!(
                 report.target(),
                 clinkz_wot_core::thing::AffordanceSite::Property(_)
             ));
-            drop(report.identity);
-            assert!(!fired.get());
-        } else {
-            drop(view);
-            assert_eq!(root.work.retained_subscriptions(), 0);
-            drop(root.work);
         }
-        assert!(fired.get());
         peer.set_nonblocking(true).unwrap();
         assert_eq!(
             peer.peek_from(&mut [0; 64]).unwrap_err().kind(),

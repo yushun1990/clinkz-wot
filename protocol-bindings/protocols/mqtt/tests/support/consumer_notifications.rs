@@ -946,6 +946,92 @@ fn same_filter_housekeeping_cannot_confirm_an_unissued_mapped_cancel() {
 }
 
 #[test]
+fn mapped_cancel_accepted_behind_another_filter_keeps_its_owner_on_any_driver() {
+    runtime().block_on(async {
+        for (service_drives, withdraw_after_handoff) in [(false, false), (true, false), (true, true)] {
+            let broker = Broker::start();
+            let bank = bank();
+            let mut service = service(&broker, 1);
+            let a_owner = consumer_owner(1);
+            let b_owner = consumer_owner(2);
+            let access = Arc::new(Access::default());
+            let mut a = consumer(&service, &broker, "writer/a", &a_owner, &bank, access.clone(), 4);
+            let ca = subscribe(&mut a, NotificationOverflow::Terminate);
+            active(&mut a, &ca).await;
+            let mut b = consumer(
+                &service, &broker, "writer/b", &b_owner, &bank, Arc::new(Access::default()), 4,
+            );
+            let mut cb = subscribe(&mut b, NotificationOverflow::Terminate);
+            assert_eq!(b.progress(cb.identity(), &mut cx()).unwrap(), NotificationTurn::Waiting);
+            assert_eq!(broker.logs().matches("Received SUBSCRIBE from cr").count(), 1);
+
+            a.stop(&ca, Some(CancellationInput(None))).unwrap_or_else(|_| panic!());
+            assert_eq!(a.progress(ca.identity(), &mut cx()).unwrap(), NotificationTurn::Waiting);
+            assert!(!broker.logs().contains("Received UNSUBSCRIBE from cr"));
+            if withdraw_after_handoff {
+                access.deny_cancel.store(true, Ordering::Relaxed);
+                assert_eq!(a.progress(ca.identity(), &mut cx()).unwrap(), NotificationTurn::Waiting);
+            }
+            if service_drives {
+                let end = Instant::now() + Duration::from_secs(3);
+                while !broker.logs().contains("Sending UNSUBACK to cr") {
+                    service.step(&mut cx());
+                    assert!(Instant::now() < end, "service did not complete the accepted control");
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
+            }
+            let report = settled(&mut a, &ca).await;
+            assert_eq!(report.remote_cancellation, RemoteCancellation::Confirmed);
+            assert_eq!(report.cancellation_error.is_some(), withdraw_after_handoff);
+            assert_eq!(broker.logs().matches("Received UNSUBSCRIBE from cr").count(), 1);
+            active(&mut b, &cb).await;
+            let mut peer = Peer::new(&broker);
+            peer.publish_raw("writer/b", b"53", false);
+            value(&mut b, &mut cb, b"53").await;
+        }
+    });
+}
+
+#[test]
+fn acknowledged_unsubscribe_retires_while_its_same_filter_successor_is_closing() {
+    runtime().block_on(async {
+        let broker = Broker::start();
+        let bank = bank();
+        let service = service(&broker, 1);
+        let original = consumer_owner(1);
+        let successor = consumer_owner(2);
+        let topic = "retire/shared";
+        let mut a = consumer(
+            &service, &broker, topic, &original, &bank, Arc::new(Access::default()), 4,
+        );
+        let ca = subscribe(&mut a, NotificationOverflow::Terminate);
+        active(&mut a, &ca).await;
+        a.stop(&ca, Some(CancellationInput(None))).unwrap_or_else(|_| panic!());
+        assert_eq!(a.progress(ca.identity(), &mut cx()).unwrap(), NotificationTurn::Waiting);
+
+        let mut b = consumer(
+            &service, &broker, topic, &successor, &bank, Arc::new(Access::default()), 4,
+        );
+        let cb = subscribe(&mut b, NotificationOverflow::Terminate);
+        active(&mut b, &cb).await;
+        assert_eq!(broker.logs().matches("Received SUBSCRIBE from cr").count(), 2);
+        assert_eq!(broker.logs().matches("Sending UNSUBACK to cr").count(), 1);
+        b.stop(&cb, Some(CancellationInput(None))).unwrap_or_else(|_| panic!());
+        assert_eq!(b.progress(cb.identity(), &mut cx()).unwrap(), NotificationTurn::Waiting);
+
+        assert_eq!(a.progress(ca.identity(), &mut cx()).unwrap(), NotificationTurn::Closed);
+        let report = a.take_settlement(ca.identity()).unwrap();
+        assert_eq!(report.remote_cancellation, RemoteCancellation::Confirmed);
+        assert!(b.take_settlement(cb.identity()).is_err());
+        assert!(service.connected());
+        let successor_report = settled(&mut b, &cb).await;
+        assert_eq!(successor_report.remote_cancellation, RemoteCancellation::Confirmed);
+        assert_eq!(broker.logs().matches("Received UNSUBSCRIBE from cr").count(), 2);
+        assert!(!service.connected());
+    });
+}
+
+#[test]
 fn root_drop_aborts_local_receive_owners_and_preserves_other_topic_until_final_disposal() {
     runtime().block_on(async {
         let b = Broker::start();

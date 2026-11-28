@@ -1,8 +1,12 @@
 //! Caller-driven raw Host notification capacity. Each admitted conversation
 //! retains its original logical association. Native infrastructure, persistent
 //! association count and execution capacity have independent lifetimes.
-use super::{ConsumerOwned, ConsumerTurn};
-use alloc::{collections::VecDeque, rc::Rc, vec::Vec};
+use super::ConsumerTurn;
+use alloc::{
+    collections::VecDeque,
+    rc::{Rc, Weak},
+    vec::Vec,
+};
 use clinkz_wot_core::consumer::ConsumerInstanceRef;
 use clinkz_wot_core::thing::AffordanceSite;
 use clinkz_wot_core::{notification::*, *};
@@ -57,32 +61,52 @@ pub struct NotificationCursor {
     identity: NotificationIdentity,
     control: Rc<NotificationControl>,
 }
-#[derive(Default)]
 struct NotificationControl {
+    consumer: ConsumerInstanceRef,
     stopped: Cell<bool>,
     abandoned: Cell<bool>,
+}
+impl NotificationControl {
+    fn request_stop(&self) {
+        // Once revoked, the original instance stays revoked. Record a stop
+        // only while it can precede that loss of authority.
+        if self.consumer.is_current() {
+            self.stopped.set(true);
+        }
+    }
+    fn passive_cause(&self) -> Option<CoreError> {
+        if self.stopped.get() {
+            Some(cancelled())
+        } else if !self.consumer.is_current() {
+            Some(stale())
+        } else {
+            None
+        }
+    }
 }
 impl NotificationCursor {
     pub fn identity(&self) -> &NotificationIdentity {
         &self.identity
     }
     pub fn stop_handle(&self) -> NotificationStop {
-        NotificationStop(self.control.clone())
+        NotificationStop(Rc::downgrade(&self.control))
     }
 }
 impl Drop for NotificationCursor {
     fn drop(&mut self) {
         self.control.abandoned.set(true);
-        self.control.stopped.set(true);
+        self.control.request_stop();
     }
 }
 /// Cloneable cancellation intent only; it confers no receive/response or native
 /// infrastructure-shutdown authority. No user/native callback runs here.
 #[derive(Clone)]
-pub struct NotificationStop(Rc<NotificationControl>);
+pub struct NotificationStop(Weak<NotificationControl>);
 impl NotificationStop {
     pub fn request_stop(&self) {
-        self.0.stopped.set(true);
+        if let Some(control) = self.0.upgrade() {
+            control.request_stop();
+        }
     }
 }
 
@@ -213,9 +237,6 @@ pub struct NotificationSettlement {
     pub delivered_items: u64,
     pub responses_delivered: u64,
     pub responses_uncertain: u64,
-    // Composed reports can retain original coordinate backing. Keep its
-    // original prepared/association owners until this report is disposed.
-    _validation: Option<ConsumerOwned<Rc<dyn NotificationValidation>>>,
     _report: ReportSlot,
 }
 impl NotificationSettlement {
@@ -278,8 +299,10 @@ struct Entry<B: ConsumerNotificationBinding, A: NotificationAuthorizer> {
     support: NotificationSupport,
     participant: Option<B::Participation>,
     native_started: bool,
+    receive_next: bool,
     close_started: bool,
     close_next: bool,
+    queued_next: bool,
     queue: VecDeque<Item<B>>,
     staged: Option<Item<B>>,
     queue_bytes: usize,
@@ -299,34 +322,22 @@ struct Entry<B: ConsumerNotificationBinding, A: NotificationAuthorizer> {
 }
 impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Entry<B, A> {
     fn fence(&mut self, cause: CoreError) {
-        if self.state == NotificationState::Closed {
-            return;
-        }
-        // Stop intent linearizes at the shared flag, even if a later revoke or
-        // callback failure is the next operation that observes this entry.
-        let cause = if self.control.stopped.get() {
-            cancelled()
-        } else {
-            cause
-        };
-        self.first_cause.get_or_insert(cause);
-        self.control.stopped.set(true);
-        self.state = NotificationState::Closing;
+        self.sync_stop(Some(cause));
     }
-    fn sync_stop(&mut self) {
-        if self.control.stopped.get() {
-            self.fence(cancelled());
-        }
-        if !self.identity.consumer.is_current() {
-            self.fence(stale());
+    fn sync_stop(&mut self, cause: Option<CoreError>) {
+        if self.is_live()
+            && let Some(cause) = self.control.passive_cause().or(cause)
+        {
+            self.first_cause = Some(cause);
+            self.state = NotificationState::Closing;
         }
     }
     fn observe_live(&mut self) {
-        self.sync_stop();
+        self.sync_stop(None);
         if self.is_live() && !self.context.paired() {
             self.fence(stale());
         }
-        self.sync_stop();
+        self.sync_stop(None);
     }
     fn is_live(&self) -> bool {
         matches!(
@@ -342,14 +353,9 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Entry<B, A> {
             Err(self.first_cause.clone().unwrap_or_else(cancelled))
         }
     }
-    fn rejected_item(&self) -> Option<Position> {
-        if self.staged.as_ref().is_some_and(|v| v.rejected) {
-            Some(Position::Staged)
-        } else if self.queue.front().is_some_and(|v| v.rejected) {
-            Some(Position::Front)
-        } else {
-            None
-        }
+    fn has_rejected_item(&self) -> bool {
+        self.staged.as_ref().is_some_and(|item| item.rejected)
+            || self.queue.front().is_some_and(|item| item.rejected)
     }
     fn item(&self, position: Position) -> &Item<B> {
         match position {
@@ -386,7 +392,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Drop for Entry<B
     }
 }
 struct Slot<B: ConsumerNotificationBinding, A: NotificationAuthorizer> {
-    generation: Option<Generation>,
+    next_generation: Option<Generation>,
     entry: Option<Entry<B, A>>,
 }
 
@@ -556,7 +562,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             .try_reserve_exact(limits.subscriptions)
             .map_err(|_| capacity())?;
         slots.resize_with(limits.subscriptions, || Slot {
-            generation: Some(Generation::INITIAL),
+            next_generation: Some(Generation::INITIAL),
             entry: None,
         });
         Ok(Self {
@@ -577,7 +583,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
     }
 
     fn index(&self, identity: &NotificationIdentity) -> CoreResult<usize> {
-        let i = identity.subscription.slot().get() as usize;
+        let i = identity.subscription().slot().get() as usize;
         self.slots
             .get(i)
             .and_then(|s| s.entry.as_ref())
@@ -653,16 +659,21 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             let i = self
                 .slots
                 .iter()
-                .position(|s| s.entry.is_none() && s.generation.is_some())
+                .position(|s| s.entry.is_none() && s.next_generation.is_some())
                 .ok_or_else(capacity)?;
             let report = ReportSlot::claim(&self.reports, limits.reports)?;
-            let identity = self.issuer.identity(
-                context.consumer.clone(),
-                SubscriptionId::new(SlotIndex::new(i as u32), self.slots[i].generation.unwrap()),
-            );
             if !context.paired() {
                 return Err(stale());
             }
+            // Policy and Binding may retain an admission identity. Spend it
+            // before the first such callback, including on refusal or unwind.
+            let slot = &mut self.slots[i];
+            let generation = slot.next_generation.unwrap();
+            slot.next_generation = generation.checked_next();
+            let identity = self.issuer.identity(
+                context.consumer.clone(),
+                SubscriptionId::new(SlotIndex::new(i as u32), generation),
+            );
             require_subscription(context.authorizer.authorize(NotificationAuthorization {
                 recipient: &identity,
                 target: &request.target,
@@ -698,7 +709,11 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             Err(error) => return Err(reject((request, program, context), error)),
         };
 
-        let control = Rc::new(NotificationControl::default());
+        let control = Rc::new(NotificationControl {
+            consumer: identity.consumer().clone(),
+            stopped: Cell::new(false),
+            abandoned: Cell::new(false),
+        });
         let participant = match context.binding.prepare(program, &identity) {
             Ok(participant) => participant,
             Err(e) => {
@@ -723,8 +738,10 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             state: NotificationState::Establishing,
             participant: Some(participant),
             native_started: false,
+            receive_next: false,
             close_started: false,
             close_next: false,
+            queued_next: false,
             queue,
             staged: None,
             queue_bytes: 0,
@@ -779,7 +796,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         // A policy error already fences this entry. Aggregate driving leaves
         // the original error with the work and continues rotation.
         let turn = entry
-            .progress(self.limits, self.current, cx)
+            .progress(Some(self.limits), self.current, cx)
             .unwrap_or(NotificationTurn::Advanced);
         if entry.state == NotificationState::Closed && entry.control.abandoned.get() {
             drop(self.take_closed(i)?);
@@ -802,11 +819,11 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         let Some(entry) = &mut self.slots[i].entry else {
             return Ok(None);
         };
-        entry.sync_stop();
-        if entry.is_live() && entry.rejected_item().is_none() {
+        entry.sync_stop(None);
+        if entry.is_live() && !entry.has_rejected_item() {
             return Ok(None);
         }
-        entry.progress(self.limits, self.current, cx)?;
+        entry.progress(None, self.current, cx)?;
         if entry.state == NotificationState::Closed {
             self.take_closed(i).map(Some)
         } else {
@@ -878,8 +895,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
 
     pub fn status(&self, identity: &NotificationIdentity) -> CoreResult<NotificationStatus<'_>> {
         let e = self.slots[self.index(identity)?].entry.as_ref().unwrap();
-        let state = if e.is_live() && (e.control.stopped.get() || !e.identity.consumer.is_current())
-        {
+        let state = if e.is_live() && e.control.passive_cause().is_some() {
             NotificationState::Closing
         } else {
             e.state
@@ -992,7 +1008,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
         let _turn = ConsumerTurn::enter()?;
         let i = self.index(cursor.identity())?;
         let e = self.slots[i].entry.as_mut().unwrap();
-        e.sync_stop();
+        e.sync_stop(None);
         if e.state != NotificationState::Active {
             return Err(cancelled());
         }
@@ -1036,11 +1052,11 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             .entry
             .as_mut()
             .unwrap()
-            .progress(self.limits, self.current, cx)
+            .progress(Some(self.limits), self.current, cx)
     }
 
-    /// Acknowledgement frees the conversation. The returned report retains its
-    /// own slot and original coordinate owner through disposal.
+    /// Acknowledgement frees the conversation and its execution context.
+    /// The report retains the original evidence and coordinate in its own slot.
     pub fn take_settlement(
         &mut self,
         identity: &NotificationIdentity,
@@ -1055,7 +1071,6 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             return Err(CoreError::Lifecycle(context(ErrorPhase::Cleanup)));
         }
         let mut e = slot.entry.take().unwrap();
-        slot.generation = slot.generation.and_then(|g| g.checked_next());
         self.retained -= 1;
         Ok(NotificationSettlement {
             identity: e.identity.clone(),
@@ -1071,7 +1086,6 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             delivered_items: e.delivered,
             responses_delivered: e.responses_delivered,
             responses_uncertain: e.responses_uncertain,
-            _validation: e.context.validation.take().map(ConsumerOwned::new),
             _report: e.report.take().unwrap(),
         })
     }
@@ -1141,7 +1155,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Entry<B, A> {
 
     fn progress(
         &mut self,
-        limits: RawNotificationLimits,
+        delivery: Option<RawNotificationLimits>,
         current: bool,
         cx: &mut Context<'_>,
     ) -> CoreResult<NotificationTurn> {
@@ -1158,31 +1172,45 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Entry<B, A> {
         // Observe the continuing grant even while a reply waits. After a
         // fence, cleanup can advance both owners without another Maintain check.
         self.authorize(NotificationPermission::Maintain, None)?;
-        if let Some(item) = self.rejected_item() {
-            return Ok(self.retire_item(item, cx));
-        }
-        if self.queue.front().is_some_and(|item| {
-            item.native.response.is_some()
-                && matches!(
-                    item.response_state,
-                    EventResponseState::Delivered | EventResponseState::Declining
-                )
-        }) {
-            return Ok(self.retire_item(Position::Front, cx));
-        }
-        if self
-            .queue
-            .front()
-            .is_some_and(|item| item.response_state == EventResponseState::Pending)
+        // A pending front reply gives the ingress lane the next turn. A
+        // retained staged item occupies that lane until it retires. The queue
+        // itself stays in delivery order until the conversation is fenced.
+        let ingress = self.staged.is_some() || delivery.is_some();
+        if (!self.receive_next || !ingress)
+            && let Some(item) = self.queue.front().filter(|item| {
+                item.rejected
+                    || delivery.is_some()
+                        && item.native.response.is_some()
+                        && matches!(
+                            item.response_state,
+                            EventResponseState::Pending
+                                | EventResponseState::Delivered
+                                | EventResponseState::Declining
+                        )
+            })
         {
-            if self.authorize(NotificationPermission::Respond, Some(Position::Front))?
-                == NotificationDecision::RejectOccurrence
-            {
-                return Ok(NotificationTurn::Advanced);
-            }
-            return Ok(self.poll_response(cx));
+            let turn = if !item.rejected && item.response_state == EventResponseState::Pending {
+                if self.authorize(NotificationPermission::Respond, Some(Position::Front))?
+                    == NotificationDecision::RejectOccurrence
+                {
+                    NotificationTurn::Advanced
+                } else {
+                    self.poll_response(cx)
+                }
+            } else {
+                self.retire_item(Position::Front, cx)
+            };
+            self.receive_next = turn == NotificationTurn::Waiting;
+            return Ok(turn);
         }
-        Ok(self.poll_receive(limits, cx))
+        self.receive_next = false;
+        Ok(if self.staged.is_some() {
+            self.retire_item(Position::Staged, cx)
+        } else if let Some(limits) = delivery {
+            self.poll_receive(limits, cx)
+        } else {
+            NotificationTurn::Idle
+        })
     }
 
     fn poll_start(&mut self, cx: &mut Context<'_>) -> NotificationTurn {
@@ -1404,7 +1432,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Entry<B, A> {
 
     fn cleanup(&mut self, current: bool, cx: &mut Context<'_>) -> NotificationTurn {
         self.request.subscription.0.take();
-        let item = if self.staged.is_some() {
+        let item = if self.staged.is_some() && (!self.queued_next || self.queue.is_empty()) {
             Some(Position::Staged)
         } else {
             self.queue.front().map(|_| Position::Front)
@@ -1412,7 +1440,15 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Entry<B, A> {
         let turn = match item {
             Some(position) if self.participant.is_none() || !self.close_next => {
                 self.close_next = true;
-                self.retire_item(position, cx)
+                self.queued_next = matches!(position, Position::Staged);
+                let queued = self.queue.len();
+                let turn = self.retire_item(position, cx);
+                // Fenced data can no longer be exposed. Even a blocked front
+                // must give every other queued owner its own retirement turn.
+                if matches!(position, Position::Front) && self.queue.len() == queued {
+                    self.queue.rotate_left(1);
+                }
+                turn
             }
             _ if self.participant.is_some() => {
                 self.close_next = false;

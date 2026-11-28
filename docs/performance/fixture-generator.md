@@ -106,16 +106,16 @@ section are independent maximum inputs; an adapter constructs the baseline and
 then substitutes exactly one named axis section at a time. It must not
 concatenate every maximum into one document while claiming
 `vary_one_axis_at_a_time`. The v3 generator validates document, payload,
-string, extension, form, page, binding, schema, security, subscription,
+string, extension, form, page, binding, schema, security, collection-source,
 TD-node, and URI-template recipe values against the selected named profile.
 
 For the handler workloads, `handler_slots` provides stable handler-slot,
 callback, and replacement identities and is checked against
 `handler_slots_per_thing_max`. Generic `actors` remains available for process,
 caller, or contention identities that are not handler slots. `subscribers`
-provides stable Producer subscription identities. The operation-mode,
-cancellation, replacement, and transaction case matrices remain explicit
-manifest inputs; they do not introduce an implicit fixture-generator default.
+provides stable Producer subscription identities sized by the locked fixture's
+declared cohort. The operation-mode, cancellation, replacement, and transaction
+case matrices are explicit manifest inputs.
 
 The handler closure uses these locked v3 bundles:
 

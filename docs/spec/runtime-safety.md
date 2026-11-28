@@ -311,6 +311,10 @@ report slot counts the evidence from admission through final report disposal.
 The Binding acquires its original participation and local rollback before the
 first native start poll. The validator supplies its bounded workspace. Exhausted
 slots or a refused native acquisition return original inputs before effects.
+Each identity exposed to Establish policy or the Binding names one admission
+attempt. The slot advances its generation before the first exposure. Refusal
+returns unused capacity while the exposed identity remains stale. Generation
+exhaustion retires the slot once vacant.
 Each accepted conversation can finish local retirement under saturation.
 
 The queue is for logical delivery after the Binding's native handoff. The
@@ -326,32 +330,41 @@ up to 32 conversations and 32 queued items per conversation. Zero conversations,
 reports or queue items disables admission. A zero byte limit admits only
 zero backing at that boundary. Property observations require value backing.
 
-Participation and per-delivery reply retirement run on separate turns. While both
-remain, alternate between them. Keep each original owner across Pending or failed
-close. Completed close releases the participation and cancel input. Completed
-reply retirement releases its response input and reply right. Delivery data
-lasts through cursor advance or bounded disposal. The setup input is released
-when establishment finishes or its local close starts.
+Active delivery retains FIFO exposure. A pending front reply gives ingress a
+turn while a handoff slot is available. An occupied handoff can retire on that
+turn. Once delivery is fenced, alternate participation close with delivery
+retirement. Rotate between the staged handoff and the queued owners and give
+each queued owner a turn, including while an earlier reply waits or fails.
+Keep each original owner across Pending or failed close. Completed close
+releases the participation and cancel input. Completed reply retirement
+releases its response input and reply right. Delivery data lasts through
+cursor advance or bounded disposal. The setup input is released when
+establishment finishes or its local close starts.
 
 Local close removes the delivery queue once its owners have retired.
-Acknowledgement releases the conversation slot. A taken report keeps its own
-slot and original prepared/association owners through disposal. Its target is a
-borrowed coordinate. The local limits apply to that capacity, across its original
-Consumers. Native lease limits continue to apply at the Binding. Capacity Drop
-performs qualified bounded local abort. Passive revocation and cursor loss need
-application-supplied turns to finish retirement.
+Acknowledgement releases the conversation slot and its execution context.
+A taken report owns its evidence, original identity, bounded target coordinate
+and report slot through disposal. The coordinate is lent as a view. A Thing
+coordinate needs no name backing. The local limits apply to that capacity
+across its original Consumers. Native lease limits continue to apply at the
+Binding. Capacity Drop performs qualified bounded local abort. Passive
+revocation and cursor loss need application-supplied turns to finish retirement.
 
-The Host holds the shared Consumer turn through the final release of a raw
-context, a report's retained validator and an idle association's captured services.
+The Host holds the shared Consumer turn through final release of the
+conversation context and an idle association's captured services.
 
 `RawNotificationServient::step` and `ConsumerNotifications::step` visit one slot
 in rotation. Direct `progress` visits the identified conversation. A visit
 performs at most one native poll or one delivery disposal, using bounded access
 and validation callbacks. `NotificationTurn` reports advancement, native wait,
 retirement failure or closure. A vacant visit is idle. Continue rotation for
-siblings and the other retirement lane when one native poll waits. Passive
-`status` observes stop and instance loss without linked callbacks. Mapped stop
-and application responses remain explicit decisions.
+siblings and the other work owners when one native poll waits. Passive
+`status` observes stop and instance loss without linked callbacks.
+A passive stop records whether the original Consumer still has authority.
+Revocation before stop records stale authority, and a stop while current
+preserves cancellation through later revocation. Direct stop and capacity
+close observe the same order before fencing. Mapped stop and application
+responses remain explicit decisions.
 
 An active turn checks the continuing grant even while a reply waits. Grant
 withdrawal fences the conversation and lets its participation close while the
@@ -364,8 +377,10 @@ separately authorized input reaches each poll that may execute mapped
 cancellation. If permission or pairing fails during close, end the loan and
 poll local retirement with `None`. The conversation retains the accepted input
 through the original participation's local close or abort. Preserve evidence
-from earlier accepted work on its original operation. Passive stop remains
-available inside callbacks.
+from earlier accepted work on its original operation. A Binding with command
+backing can accept mapped work during an authorized poll and continue it after
+the loan ends. Local settlement snapshots the evidence available at release.
+Passive stop remains available inside callbacks.
 Reports preserve first cause, observed native and cleanup failures of the work,
 cancellation failure and remote outcome independently. A Binding can acknowledge
 completed local retirement with remote uncertainty and expose a shared service
@@ -387,6 +402,9 @@ admission and applicable delayed handoffs. Availability, schema, access and conf
 dependencies refuse or fence the original obligation. Cleanup retains its
 original owner even when those dependencies are unusable. Changed services
 require explicit qualification.
+The prepared notification context authorizes the captured selected endpoint.
+A separately resolved control destination needs its own qualified mapping and
+destination authorization.
 
 Validation MUST preserve an observed dependency violation separately from ordinary
 caller-input refusal. Both scalar and collection validators recheck

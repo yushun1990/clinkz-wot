@@ -329,27 +329,33 @@ this Consumer subset. Local stop remains available otherwise. Cancellation is
 reauthorized before native control acceptance using the original target's stop
 operation. Establishment and delivery authorize ObserveProperty or SubscribeEvent
 respectively, without crossing schema or authority families. A live sibling
-keeps the shared filter. After the last live interest ends, the service can
-issue UNSUBSCRIBE as housekeeping. An authorized close poll that starts its own
-filter removal attaches that lease to the specific native command.
+keeps the shared filter. An authorized close of the last live lease on an
+active filter accepts its removal into the service's existing topic slot, even
+while another filter occupies the writer. The slot owns the filter and holds a
+weak receipt for the exact closing lease. Any driver can write and observe
+the accepted command. Authority withdrawal prevents a new mapped command.
+Stopping during SUBSCRIBE may wait for that original setup. Later filter
+housekeeping carries no mapped cancellation authority.
 
-- `NotAttempted` means the lease issued no mapped command. Shared-filter release
-  and housekeeping fall in this category.
-- `Unknown` means the lease started a mapped command and its report has no
-  matching acknowledgement.
+- `NotAttempted` means the service accepted no mapped command for the lease.
+  Shared-filter release and housekeeping fall in this category.
+- `Unknown` means the service accepted the lease's mapped command and its
+  report has no matching acknowledgement.
 - `Confirmed` means the broker acknowledged the specific command issued by that
   lease. MQTT also acknowledges an already absent filter. The evidence concerns
   broker receipt, with Thing-side acceptance outside this mapping. [MQTT 3.1.1 §§3.10.4–3.11](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718076)
 
-Control frames remain owned by the native service if their initiating logical
-owner drops. Siblings can finish the original frame without inheriting its
-outcome. Connection or protocol failure is terminal and reaches affected live
-subscriptions. A close interrupted during its mapped command can still finish
-locally with its original first cause and `Unknown`. The associated service fault
-is available from `MqttConsumerService::first_failure()` after settlement.
-There is no retry,
-reconnect, replay or idle pool. Last actual participation disposal closes the
-socket even while service objects, definitions or settlements remain retained.
+The native service retains accepted commands across lease release. A same-filter
+successor can drive the original frame and establish fresh broker interest.
+An earlier lease can retire once its own work completes, or while a live
+sibling drives the shared service. The report records evidence observed by
+local release. Connection or protocol failure is terminal and reaches affected
+live subscriptions. A close interrupted during its mapped command can still
+finish locally with its original first cause and `Unknown`. The associated
+service fault is available from `MqttConsumerService::first_failure()` after
+settlement. There is no automatic retry, reconnect, replay or idle pool.
+Last actual participation disposal closes the socket even while service
+objects, definitions or settlements remain retained.
 A later explicit subscription may start a fresh clean connection on a healthy
 service; it resumes no old conversation or queue. A failed service requires a
 fresh service owner. Root Drop aborts

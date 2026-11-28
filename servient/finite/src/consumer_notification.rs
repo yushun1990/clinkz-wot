@@ -30,7 +30,7 @@ impl<B: ConsumerNotificationBinding> NotificationAuthorizer for CapturedAuthoriz
         let captured = &self.association;
         captured.check_dependencies()?;
         let input = captured.definition.input();
-        if request.recipient.consumer != captured.consumer
+        if request.recipient.consumer() != &captured.consumer
             || !captured.consumer.is_current()
             || request.target != &input.target
             || request.kind != input.schemas.kind()

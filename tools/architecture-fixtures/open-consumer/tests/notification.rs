@@ -767,6 +767,7 @@ fn td_prepared_optional_response_can_retire_and_advance_without_sending_or_stopp
     );
     responses.pending_retirement.set(false);
     step(&mut root, &cursor);
+    step(&mut root, &cursor);
     assert_eq!(
         root.front(&mut cursor).unwrap().unwrap().response,
         EventResponseState::Declined
@@ -1078,8 +1079,10 @@ fn exercise_collection_responses(source: serde_json::Value, expected_form: u32) 
         assert!(root.advance(&mut cursor).is_err());
         assert!(body.upgrade().is_some());
         responses.pending_retirement.set(false);
-        root.progress(cursor.identity(), &mut Context::from_waker(Waker::noop()))
-            .unwrap();
+        for _ in 0..2 {
+            root.progress(cursor.identity(), &mut Context::from_waker(Waker::noop()))
+                .unwrap();
+        }
         root.advance(&mut cursor).unwrap();
         assert!(body.upgrade().is_none());
     }

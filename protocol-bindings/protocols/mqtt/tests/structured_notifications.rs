@@ -685,7 +685,7 @@ fn structured_engine_producer_to_consumers_preserves_sharing_and_original_retain
             two.revoke();
             assert!(second.front(&mut b).is_err());
             let s = settled(&mut second, &b).await;
-            assert_eq!(s.identity.consumer, two.reference());
+            assert_eq!(s.identity.consumer(), &two.reference());
             drop(s);
             assert!(!service.connected());
             exposure.begin_close();
