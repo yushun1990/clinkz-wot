@@ -80,6 +80,7 @@ struct Bus {
     reply_retire_polls: usize,
     reply_send_polls: usize,
     control_inputs: Vec<Vec<u8>>,
+    close_payloads: Vec<Option<usize>>,
     response_inputs: Vec<Vec<u8>>,
     response_bodies: Vec<usize>,
     close: Mode,
@@ -108,6 +109,7 @@ impl Bus {
             reply_retire_polls: 0,
             reply_send_polls: 0,
             control_inputs: vec![],
+            close_payloads: vec![],
             response_inputs: vec![],
             response_bodies: vec![],
             close: Mode::Ready,
@@ -362,6 +364,11 @@ impl NotificationParticipation for Participation {
         let mode = {
             let mut bus = self.bus.borrow_mut();
             bus.close_polls += 1;
+            bus.close_payloads.push(
+                input
+                    .and_then(|input| input.0.as_ref())
+                    .map(|p| p.body.as_ptr() as usize),
+            );
             bus.close
         };
         match mode {
@@ -1449,6 +1456,47 @@ fn cancellation_is_reauthorized_before_each_native_control_poll() {
 }
 
 #[test]
+fn withdrawn_cancellation_lends_no_more_input_but_retains_backing_through_close() {
+    let bus = Bus::new();
+    let (mut root, _, configuration) = root(&bus, limits());
+    let cursor = subscribe(&mut root, event(false), Program::event());
+    let id = cursor.identity().clone();
+    step(&mut root, &id);
+    let input = payload("original cancellation");
+    let address = input.body.as_ptr() as usize;
+    let weak = Arc::downgrade(&input.body);
+    root.stop(&cursor, Some(CancellationInput(Some(input))))
+        .unwrap_or_else(|_| panic!());
+
+    bus.borrow_mut().close = Mode::Pending;
+    step(&mut root, &id);
+    assert_eq!(bus.borrow().close_payloads, [Some(address)]);
+    configuration.set(2);
+    step(&mut root, &id);
+    assert_eq!(bus.borrow().close_payloads, [Some(address), None]);
+    assert_eq!(bus.borrow().completed_closes, 0);
+    assert!(weak.upgrade().is_some());
+
+    configuration.set(1);
+    step(&mut root, &id);
+    assert_eq!(bus.borrow().close_payloads, [Some(address), None, None]);
+    assert!(weak.upgrade().is_some());
+    bus.borrow_mut().close = Mode::Ready;
+    let report = settle(&mut root, &id);
+    assert_eq!(
+        bus.borrow().close_payloads,
+        [Some(address), None, None, None]
+    );
+    assert_eq!(bus.borrow().completed_closes, 1);
+    assert!(weak.upgrade().is_none());
+    assert!(matches!(report.first_cause, Some(CoreError::Cancelled(_))));
+    assert!(matches!(
+        report.cancellation_error,
+        Some(CoreError::StaleHandle(_))
+    ));
+}
+
+#[test]
 fn callback_cannot_drive_mapped_stop_but_can_fence_local_delivery() {
     let (mut driver, policy, _) = root(&Bus::new(), limits());
     let driving = subscribe(&mut driver, event(false), Program::event());
@@ -2076,6 +2124,63 @@ fn optional_event_response_can_be_declined_and_later_notifications_consumed_with
     assert_eq!(report.delivered_items, 2);
     assert_eq!(report.responses_delivered, 0);
     assert_eq!(report.responses_uncertain, 0);
+}
+
+#[test]
+fn continuing_grant_loss_closes_participation_while_reply_retirement_waits() {
+    for sent in [false, true] {
+        let bus = Bus::new();
+        let (mut root, policy, _) = root(
+            &bus,
+            RawNotificationLimits {
+                subscriptions: 1,
+                ..limits()
+            },
+        );
+        let mut cursor = subscribe(&mut root, event(false), Program::event());
+        let id = cursor.identity().clone();
+        step(&mut root, &id);
+        let original = payload("original occurrence");
+        let weak = Arc::downgrade(&original.body);
+        Bus::publish(&bus, ("sensor", 1), Some(original));
+        step(&mut root, &id);
+        assert_eq!(data(&mut root, &mut cursor), b"original occurrence");
+        if sent {
+            root.respond(&mut cursor, EventDataResponse(None))
+                .unwrap_or_else(|_| panic!());
+            step(&mut root, &id);
+        } else {
+            root.decline_response(&mut cursor).unwrap();
+        }
+        let mut cx = Context::from_waker(Waker::noop());
+        bus.borrow_mut().retire = Mode::Pending;
+        assert_eq!(root.step(&mut cx).unwrap(), NotificationTurn::Waiting);
+        assert_eq!(root.status(&id).unwrap().state, NotificationState::Active);
+
+        policy.denied.set(bit(NotificationPermission::Maintain));
+        root.step(&mut cx).unwrap();
+        assert_eq!(root.status(&id).unwrap().state, NotificationState::Closing);
+        let probes = policy.probes.get();
+        for _ in 0..4 {
+            root.step(&mut cx).unwrap();
+        }
+        assert_eq!(policy.probes.get(), probes);
+        assert_eq!(bus.borrow().completed_closes, 1);
+        assert_eq!(bus.borrow().physical[&("sensor", 1)].jobs, 1);
+        assert!(weak.upgrade().is_some());
+        assert!(root.take_settlement(&id).is_err());
+
+        bus.borrow_mut().retire = Mode::Ready;
+        let report = settle(&mut root, &id);
+        assert_eq!(policy.probes.get(), probes);
+        assert!(matches!(
+            report.first_cause,
+            Some(CoreError::Security { .. })
+        ));
+        assert_eq!(report.responses_delivered, u64::from(sent));
+        assert!(weak.upgrade().is_none());
+        assert!(bus.borrow().physical.is_empty());
+    }
 }
 
 #[test]

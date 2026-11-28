@@ -734,14 +734,15 @@ fn broker_failure_is_terminal_shared_failure_and_final_cleanup_is_local() {
         b.stop();
         pump(&mut a, &ca, 20).await;
         pump(&mut z, &cz, 2).await;
+        let failure = s.first_failure().expect("shared service failure");
         for (c, cursor) in [(&mut a, &ca), (&mut z, &cz)] {
             let result = settled(c, cursor).await;
             assert!(matches!(result.first_cause, Some(CoreError::Binding(_))));
+            assert_eq!(result.native_error.as_ref(), Some(&failure));
             assert!(result.cleanup_error.is_none());
             assert_eq!(result.delivered_items, 0);
         }
         assert!(!s.connected());
-        assert!(s.first_failure().is_some());
         assert!(
             a.subscribe(
                 SubscriptionInput(None),
@@ -883,6 +884,10 @@ fn broker_loss_during_partial_unsubscribe_retains_stop_cause_and_reports_unknown
         let result = settled(&mut c, &ca).await;
         assert!(matches!(result.first_cause, Some(CoreError::Cancelled(_))));
         assert_eq!(result.remote_cancellation, RemoteCancellation::Unknown);
+        assert!(matches!(s.first_failure(), Some(CoreError::Binding(_))));
+        assert!(result.native_error.is_none());
+        assert!(result.cleanup_error.is_none());
+        assert!(result.cancellation_error.is_none());
         assert_eq!(
             bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
             funded
@@ -890,6 +895,52 @@ fn broker_loss_during_partial_unsubscribe_retains_stop_cause_and_reports_unknown
         assert!(!s.connected());
         drop(c);
         drop(result);
+        assert_empty(&bank);
+    });
+}
+
+#[test]
+fn same_filter_housekeeping_cannot_confirm_an_unissued_mapped_cancel() {
+    runtime().block_on(async {
+        let broker = Broker::start();
+        let bank = bank();
+        let service = service(&broker, 1);
+        let topic = "cancel/shared";
+        let original = consumer_owner(1);
+        let mut a = consumer(
+            &service, &broker, topic, &original, &bank, Arc::new(Access::default()), 4,
+        );
+        let ca = subscribe(&mut a, NotificationOverflow::Terminate);
+        let end = Instant::now() + Duration::from_secs(3);
+        while !broker.logs().contains("Received SUBSCRIBE from cr") {
+            a.progress(ca.identity(), &mut cx()).unwrap();
+            assert!(Instant::now() < end, "broker did not observe SUBSCRIBE");
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        assert_eq!(a.status(ca.identity()).unwrap().state, NotificationState::Establishing);
+        a.stop(&ca, Some(CancellationInput(None))).unwrap_or_else(|_| panic!());
+        assert_eq!(a.progress(ca.identity(), &mut cx()).unwrap(), NotificationTurn::Waiting);
+
+        let successor = consumer_owner(2);
+        let mut b = consumer(
+            &service, &broker, topic, &successor, &bank, Arc::new(Access::default()), 4,
+        );
+        let mut cb = subscribe(&mut b, NotificationOverflow::Terminate);
+        active(&mut b, &cb).await;
+        let mut peer = Peer::new(&broker);
+        peer.publish_raw(topic, b"17", false);
+        value(&mut b, &mut cb, b"17").await;
+
+        b.stop(&cb, None).unwrap_or_else(|_| panic!());
+        let housekeeping = settled(&mut b, &cb).await;
+        assert_eq!(housekeeping.remote_cancellation, RemoteCancellation::NotAttempted);
+        assert_eq!(broker.logs().matches("Received UNSUBSCRIBE from cr").count(), 1);
+
+        let report = settled(&mut a, &ca).await;
+        assert_eq!(report.remote_cancellation, RemoteCancellation::NotAttempted);
+        assert!(matches!(report.first_cause, Some(CoreError::Cancelled(_))));
+        assert!(!service.connected());
+        drop((a, b, report, housekeeping));
         assert_empty(&bank);
     });
 }

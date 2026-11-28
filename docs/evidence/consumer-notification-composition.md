@@ -10,10 +10,10 @@ and [Foundation](../spec/foundation.md). Decision alternatives are recorded in
 [topic 0123](../../workspace/0123-consumer-notification-association-capacity.md).
 
 The [public MQTT fixture](../../protocol-bindings/protocols/mqtt/tests/notification_composition.rs)
-uses one actual MQTT registration and program. Its wrapper counts the real pure
+uses one loopback MQTT registration and program. Its wrapper counts the pure
 compilation callback while delegating preparation, support and native participation
-to the production Binding. One TD admission/compilation produces one immutable
-endpoint-specialized definition; eight independent Consumer associations retain
+to the hand-written Binding fixture. One TD admission and compilation produces an
+immutable endpoint-specialized definition. Eight independent Consumer associations retain
 it, with separately selected policies. Binding those existing
 facts does not repeat TD admission/schema preparation/native lowering. This is not
 compatibility checking for a newly supplied TD or a changed endpoint, and is not
@@ -29,6 +29,14 @@ interest. The fixture exercises withdrawal of a continuing grant, denial of
 mapped cancellation, passive view loss and final release with partial native
 writes. Mosquitto observes one SUBSCRIBE and one final UNSUBSCRIBE. The Binding
 owns those controls, distribution, the socket and physical participation.
+
+In the cancellation attribution test, the original lease requests mapped stop
+while SUBACK is outstanding. A same-filter successor joins, receives a value and
+stops locally. The broker observes one housekeeping UNSUBSCRIBE. The original
+lease still reports `NotAttempted`. During broker loss after a mapped command
+starts, the closing lease keeps `Cancelled` and remote `Unknown`, and the
+service owner retains the fault. Affected live leases receive the native fault
+on progress. [Mosquitto lifecycle cases](../../protocol-bindings/protocols/mqtt/tests/support/consumer_notifications.rs)
 
 A second broker test fills the Binding's 32 participation slots using one
 connected subscriber and 31 locally acquired interests. A separate capacity
@@ -93,11 +101,12 @@ the Read. [Mixed execution evidence](consumer-execution-composition.md)
 The [raw lifecycle suite](../../servient/finite/tests/notification.rs) drives
 one original slot per aggregate turn. It exercises bounded refusal, queue and
 handoff ownership, pending and failed retirement, local abort, and first cause
-when a native outcome arrives late. In the closing case, the physical
-participation can retire while the reply is pending. A pending mapped stop
-loses permission on a later poll and still completes local retirement. A held
-report separately saturates report admission and returns its unit through
-disposal. Zero-size local capacity and oversized inputs refuse before native
+when a native outcome arrives late. A withdrawn continuing grant fences an
+active conversation during a pending reply retirement. Local close releases
+the participation while the reply and payload remain held. A pending mapped
+stop loses permission to lend its accepted input and retains that exact backing
+through local close. A held report separately saturates report admission and
+returns its unit through disposal. Zero-size local capacity and oversized inputs refuse before native
 construction. The legacy global/per-Thing subscription accounts and execution
 work factories have no callers on this path.
 

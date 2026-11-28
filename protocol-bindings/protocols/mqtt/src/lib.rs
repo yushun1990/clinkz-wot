@@ -1,4 +1,4 @@
-//! Bounded Host MQTT 3.1.1 Producer and Consumer Property/Event mappings.
+//! Bounded Host architecture fixture for loopback MQTT 3.1.1 notifications.
 //! Native sharing/distribution stays here; each Engine conversation is separate.
 //! No reconnect/replay or reciprocal data responses are supplied.
 mod native;

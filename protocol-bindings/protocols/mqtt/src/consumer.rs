@@ -139,12 +139,13 @@ impl MqttConsumerService {
     pub fn connected(&self) -> bool {
         self.binding.session.borrow().stream.is_some()
     }
+    /// First terminal fault of this shared service, retained after local close.
     pub fn first_failure(&self) -> Option<CoreError> {
         self.binding.session.borrow().failed.clone()
     }
     /// Native progress may fill native queues; it never dispatches applications.
     pub fn step(&mut self, cx: &mut Context<'_>) {
-        self.binding.session.borrow_mut().step(cx, LEASES);
+        self.binding.session.borrow_mut().step(cx, LEASES, None);
     }
     pub fn shutdown(&mut self) {
         self.binding.session.borrow_mut().fail(io_error());
@@ -192,6 +193,8 @@ struct Control {
     frame: [u8; MAX_TOPIC_BYTES + 8],
     len: usize,
     written: usize,
+    // The command can outlive the exact lease whose close submitted it.
+    mapped_cancel: Option<Weak<RefCell<Interest>>>,
     timer: Pin<Box<Sleep>>,
 }
 struct Interest {
@@ -202,7 +205,6 @@ struct Interest {
     slot: usize,
     started: bool,
     closing: bool,
-    authorized_cancel: bool,
     remote: RemoteCancellation,
     queue: VecDeque<Occurrence>,
     loss: u64,
@@ -245,7 +247,12 @@ impl ConsumerSession {
             i.started && !i.closing && i.recipient.consumer.is_current() && &*i.topic == topic
         })
     }
-    fn step(&mut self, caller: &mut Context<'_>, slot: usize) {
+    fn step(
+        &mut self,
+        caller: &mut Context<'_>,
+        slot: usize,
+        mapped_cancel: Option<&Rc<RefCell<Interest>>>,
+    ) {
         self.wakes.0.lock().unwrap()[slot] = Some(caller.waker().clone());
         let waker = Waker::from(self.wakes.clone());
         let cx = &mut Context::from_waker(&waker);
@@ -334,7 +341,7 @@ impl ConsumerSession {
                 }
             }
             ConnectionPhase::Ready => {
-                self.control_step(cx);
+                self.control_step(cx, mapped_cancel);
                 if self.phase == ConnectionPhase::Ready {
                     self.read_step(cx);
                 }
@@ -342,7 +349,11 @@ impl ConsumerSession {
             ConnectionPhase::Failed => {}
         }
     }
-    fn control_step(&mut self, cx: &mut Context<'_>) {
+    fn control_step(
+        &mut self,
+        cx: &mut Context<'_>,
+        mapped_cancel: Option<&Rc<RefCell<Interest>>>,
+    ) {
         if self.control.is_none() {
             let next = self
                 .topics
@@ -373,14 +384,17 @@ impl ConsumerSession {
                 } else {
                     TopicPhase::Unsubscribing
                 };
-                if !subscribe {
-                    for i in self.interests.iter().filter_map(Weak::upgrade) {
-                        let mut i = i.borrow_mut();
-                        if i.topic == topic && i.closing && i.authorized_cancel {
-                            i.remote = RemoteCancellation::Unknown;
-                        }
+                let mapped_cancel = mapped_cancel.and_then(|origin| {
+                    let mut interest = origin.borrow_mut();
+                    if subscribe
+                        || interest.topic != topic
+                        || interest.remote != RemoteCancellation::NotAttempted
+                    {
+                        return None;
                     }
-                }
+                    interest.remote = RemoteCancellation::Unknown;
+                    Some(Rc::downgrade(origin))
+                });
                 self.control = Some(Control {
                     topic,
                     subscribe,
@@ -388,6 +402,7 @@ impl ConsumerSession {
                     frame,
                     len: header + body_len,
                     written: 0,
+                    mapped_cancel,
                     timer: Box::pin(tokio::time::sleep(Duration::from_secs(2))),
                 });
             }
@@ -487,13 +502,8 @@ impl ConsumerSession {
             } else {
                 TopicPhase::New
             };
-            if !c.subscribe {
-                for i in self.interests.iter().filter_map(Weak::upgrade) {
-                    let mut i = i.borrow_mut();
-                    if i.topic == topic && i.remote == RemoteCancellation::Unknown {
-                        i.remote = RemoteCancellation::Confirmed;
-                    }
-                }
+            if let Some(origin) = c.mapped_cancel.as_ref().and_then(Weak::upgrade) {
+                origin.borrow_mut().remote = RemoteCancellation::Confirmed;
             }
             self.control = None;
             return;
@@ -679,7 +689,6 @@ impl ConsumerNotificationBinding for MqttNotificationConsumer {
                 slot,
                 started: false,
                 closing: false,
-                authorized_cancel: false,
                 remote: RemoteCancellation::NotAttempted,
                 queue,
                 loss: 0,
@@ -710,7 +719,7 @@ impl NotificationParticipation for MqttSubscription {
             i.slot
         };
         let mut s = self.session.borrow_mut();
-        s.step(cx, slot);
+        s.step(cx, slot, None);
         if let Some(e) = &s.failed {
             return Poll::Ready(Err(e.clone()));
         }
@@ -730,7 +739,7 @@ impl NotificationParticipation for MqttSubscription {
     ) -> Poll<CoreResult<NotificationSignal<Infallible>>> {
         let slot = self.interest.borrow().slot;
         let mut s = self.session.borrow_mut();
-        s.step(cx, slot);
+        s.step(cx, slot, None);
         if let Some(e) = &s.failed {
             return Poll::Ready(Err(e.clone()));
         }
@@ -763,7 +772,6 @@ impl NotificationParticipation for MqttSubscription {
         }
         let (slot, topic) = {
             let mut i = self.interest.borrow_mut();
-            i.authorized_cancel = input.is_some();
             i.closing = true;
             i.queue.clear();
             (i.slot, i.topic.clone())
@@ -773,7 +781,7 @@ impl NotificationParticipation for MqttSubscription {
         // matching lease sends UNSUBSCRIBE, without granting global shutdown.
         let shared = s.live(&topic);
         if !shared && s.phase == ConnectionPhase::Ready {
-            s.step(cx, slot);
+            s.step(cx, slot, input.map(|_| &self.interest));
         }
         let pending = !shared
             && s.phase == ConnectionPhase::Ready

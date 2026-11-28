@@ -423,8 +423,9 @@ pub trait NotificationParticipation {
     /// None requests local removal without authority to start a mapped cancel.
     /// A previously attempted cancel can still yield its original evidence.
     /// Some lends the same accepted input with current mapped authority for this
-    /// poll. Retirement must work if a later poll withdraws it. Pending/error
-    /// retains the entire participant. Ready(Ok) means complete LOCAL disposal,
+    /// poll. If a later poll withdraws the loan, the caller still keeps the
+    /// accepted input backed through local close or abort. Pending/error retains
+    /// the entire participant. Ready(Ok) means complete LOCAL disposal,
     /// not physical shutdown or necessarily confirmed remote cancellation.
     fn poll_close(
         &mut self,

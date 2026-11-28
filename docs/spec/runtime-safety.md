@@ -353,14 +353,23 @@ siblings and the other retirement lane when one native poll waits. Passive
 `status` observes stop and instance loss without linked callbacks. Mapped stop
 and application responses remain explicit decisions.
 
+An active turn checks the continuing grant even while a reply waits. Grant
+withdrawal fences the conversation and lets its participation close while the
+original reply still retires. Once fenced, local retirement proceeds without a
+continuing grant or another `Maintain` callback.
+
 Mapped stop enters the same exclusive application turn as a response. It
 fences local delivery first, then validates the caller's mapped input. A
 separately authorized input reaches each poll that may execute mapped
-cancellation. If permission or pairing fails during close, withdraw the input
-and keep driving local retirement. Preserve evidence from any earlier attempt
-without granting it authority over a successor. Passive stop remains available
-inside callbacks. Reports preserve first cause, native failure, cleanup failure,
-cancellation failure and observed remote outcomes independently.
+cancellation. If permission or pairing fails during close, end the loan and
+poll local retirement with `None`. The conversation retains the accepted input
+through the original participation's local close or abort. Preserve evidence
+from earlier accepted work on its original operation. Passive stop remains
+available inside callbacks.
+Reports preserve first cause, observed native and cleanup failures of the work,
+cancellation failure and remote outcome independently. A Binding can acknowledge
+completed local retirement with remote uncertainty and expose a shared service
+fault through its service owner.
 
 A live cursor retains queued values and its closed unread report. Cursor Drop
 records abandonment separately from stop intent. Aggregate progress disposes an

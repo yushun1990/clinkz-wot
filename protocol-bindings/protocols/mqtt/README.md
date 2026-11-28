@@ -1,13 +1,15 @@
-# MQTT Producer and Consumer notifications
+# Loopback MQTT notification fixture
 
-This bounded Host mapping joins observable Properties and Events declared in a
-TD to actual MQTT value/data delivery between Engine roles. Pure preparation,
-closed native setup, complete final qualification and one logical publication
-capture the actual sources, mappings and services. A TD-selected Consumer owns
-establishment, validated delivery, stop/unobserve or unsubscribe and final
-physical cleanup. Property values retain their own DataSchema; Event data and
-control/response roles stay distinct. This does not establish complete family,
-production, security or constrained-profile qualification.
+The hand-written MQTT 3.1.1 client is a bounded Host architecture fixture. It
+exercises TD-selected Property and Event delivery, filter sharing, independent
+retirement and interrupted I/O with a real loopback broker. Its evidence covers
+the declared anonymous clean-session QoS 0 subset. The v1 production target is
+Host HTTP/HTTPS. [Roadmap](../../../PLAN.md)
+
+Future Host MQTT integration will qualify a maintained SDK. A separate assessment
+will compare the SPI with the SDK-backed path and a Thing-issued cancellation
+mapping. [SDK-backed Binding](https://github.com/yushun1990/clinkz-wot/issues/317) ·
+[Notification SPI assessment](https://github.com/yushun1990/clinkz-wot/issues/318)
 
 The [MQTT Binding draft](https://w3c.github.io/wot-binding-templates/bindings/protocols/mqtt/index.html)
 is an evolving work in progress, not a W3C Recommendation. This implementation
@@ -326,17 +328,26 @@ Form also includes `unobserveproperty` / `unsubscribeevent` respectively
 this Consumer subset. Local stop remains available otherwise. Cancellation is
 reauthorized before native control acceptance using the original target's stop
 operation. Establishment and delivery authorize ObserveProperty or SubscribeEvent
-respectively, without crossing schema or authority families. Native lease cleanup releases
-interest without application control data: the final topic interest sends
-UNSUBSCRIBE and waits for UNSUBACK, while a sibling retains the shared interest.
-`Confirmed` refers to that original mapped removal's ACK, `Unknown` preserves an
-attempt without a known ACK, and `NotAttempted` covers local-only cleanup or a
-shared interest that required no mapped broker unsubscribe. Infrastructure
-housekeeping alone never claims authorized application cancellation.
+respectively, without crossing schema or authority families. A live sibling
+keeps the shared filter. After the last live interest ends, the service can
+issue UNSUBSCRIBE as housekeeping. An authorized close poll that starts its own
+filter removal attaches that lease to the specific native command.
+
+- `NotAttempted` means the lease issued no mapped command. Shared-filter release
+  and housekeeping fall in this category.
+- `Unknown` means the lease started a mapped command and its report has no
+  matching acknowledgement.
+- `Confirmed` means the broker acknowledged the specific command issued by that
+  lease. MQTT also acknowledges an already absent filter. The evidence concerns
+  broker receipt, with Thing-side acceptance outside this mapping. [MQTT 3.1.1 §§3.10.4–3.11](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718076)
 
 Control frames remain owned by the native service if their initiating logical
-owner drops; siblings can finish them without corrupting framing. Connection/
-protocol failure is terminal and is propagated to dependents. There is no retry,
+owner drops. Siblings can finish the original frame without inheriting its
+outcome. Connection or protocol failure is terminal and reaches affected live
+subscriptions. A close interrupted during its mapped command can still finish
+locally with its original first cause and `Unknown`. The associated service fault
+is available from `MqttConsumerService::first_failure()` after settlement.
+There is no retry,
 reconnect, replay or idle pool. Last actual participation disposal closes the
 socket even while service objects, definitions or settlements remain retained.
 A later explicit subscription may start a fresh clean connection on a healthy
@@ -513,11 +524,9 @@ on separate connections. A staged successor may
 reuse its original slot's topics with fresh mapping identity and original-work
 fencing. One Thing's leaf/root mappings may coexist.
 
-Stop fences local delivery first. Shared siblings retain their native interest;
-only the last interest sends the original UNSUBSCRIBE and waits for UNSUBACK.
-`Confirmed` describes that mapped ACK, not global subscriber removal or successful
-Event delivery. Partial/failed control preserves `Unknown`; local-only or shared
-removal remains `NotAttempted`. Pending controls, late candidates, original
+Stop fences local delivery first. Shared siblings retain their native interest.
+The same [cancellation reporting rules](#td-selected-consumer) apply to the root
+filter and its original command. Pending controls, late candidates, original
 publication work and unread settlements keep their original owners and funding.
 Last actual native disposal closes the socket while service objects may remain.
 There is no automatic retry, reconnect, replay, initial Event or wire backpressure.

@@ -285,6 +285,7 @@ struct Entry<B: ConsumerNotificationBinding, A: NotificationAuthorizer> {
     queue_bytes: usize,
     report: Option<ReportSlot>,
     cancellation: Option<CancellationInput>,
+    cancellation_withdrawn: bool,
     first_cause: Option<CoreError>,
     native_error: Option<CoreError>,
     cleanup_error: Option<CoreError>,
@@ -729,6 +730,7 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> RawNotificationS
             queue_bytes: 0,
             report: Some(report),
             cancellation: None,
+            cancellation_withdrawn: false,
             first_cause: None,
             native_error: None,
             cleanup_error: None,
@@ -1153,11 +1155,12 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Entry<B, A> {
             }
             NotificationState::Active => {}
         }
+        // Observe the continuing grant even while a reply waits. After a
+        // fence, cleanup can advance both owners without another Maintain check.
+        self.authorize(NotificationPermission::Maintain, None)?;
         if let Some(item) = self.rejected_item() {
             return Ok(self.retire_item(item, cx));
         }
-        // Retirement of a submitted or declined reply is local and needs no
-        // new authorization, even if the continuing grant has changed.
         if self.queue.front().is_some_and(|item| {
             item.native.response.is_some()
                 && matches!(
@@ -1167,7 +1170,6 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Entry<B, A> {
         }) {
             return Ok(self.retire_item(Position::Front, cx));
         }
-        self.authorize(NotificationPermission::Maintain, None)?;
         if self
             .queue
             .front()
@@ -1433,19 +1435,21 @@ impl<B: ConsumerNotificationBinding, A: NotificationAuthorizer> Entry<B, A> {
             self.cancellation.take();
             return NotificationTurn::Advanced;
         }
-        if self.cancellation.is_some() {
-            if let Err(error) = self.authorize_cancel(current) {
-                self.cancellation_error.get_or_insert(error);
-                self.cancellation.take();
-            }
-        }
-        self.close_started = true;
-        match self
-            .participant
-            .as_mut()
-            .unwrap()
-            .poll_close(cx, self.cancellation.as_ref())
+        if self.cancellation.is_some()
+            && !self.cancellation_withdrawn
+            && let Err(error) = self.authorize_cancel(current)
         {
+            self.cancellation_error.get_or_insert(error);
+            // Revoke the loan, keeping its backing with the original close.
+            self.cancellation_withdrawn = true;
+        }
+        let input = if self.cancellation_withdrawn {
+            None
+        } else {
+            self.cancellation.as_ref()
+        };
+        self.close_started = true;
+        match self.participant.as_mut().unwrap().poll_close(cx, input) {
             Poll::Ready(Ok(remote)) => {
                 self.remote = remote;
                 drop(self.participant.take());
