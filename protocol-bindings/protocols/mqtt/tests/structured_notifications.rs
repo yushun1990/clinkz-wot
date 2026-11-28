@@ -136,7 +136,7 @@ fn raw_limits() -> RawNotificationLimits {
         payload_backing_bytes: 4608,
         control_backing_bytes: 4608,
         target_name_bytes: 64,
-        engine_bytes: 100_000,
+        reports: 8,
     }
 }
 
@@ -593,10 +593,10 @@ async fn active(c: &mut Consumer, cursor: &NotificationCursor) {
     use std::time::{Duration, Instant};
     let end = Instant::now() + Duration::from_secs(3);
     loop {
-        if c.progress(cursor.identity(), &mut cx(), &mut budget())
-            .unwrap()
-            == NotificationState::Active
-        {
+        if {
+            c.progress(cursor.identity(), &mut cx()).unwrap();
+            c.status(cursor.identity()).unwrap().state == NotificationState::Active
+        } {
             return;
         }
         assert!(Instant::now() < end);
@@ -608,8 +608,7 @@ async fn queued(c: &mut Consumer, cursor: &NotificationCursor) {
     use std::time::{Duration, Instant};
     let end = Instant::now() + Duration::from_secs(3);
     while c.status(cursor.identity()).unwrap().queued_items == 0 {
-        c.progress(cursor.identity(), &mut cx(), &mut budget())
-            .unwrap();
+        c.progress(cursor.identity(), &mut cx()).unwrap();
         assert!(Instant::now() < end);
         tokio::time::sleep(Duration::from_millis(1)).await;
     }
@@ -619,7 +618,7 @@ async fn settled(c: &mut Consumer, cursor: &NotificationCursor) -> NotificationS
     use std::time::{Duration, Instant};
     let end = Instant::now() + Duration::from_secs(3);
     while c.status(cursor.identity()).unwrap().state != NotificationState::Closed {
-        let _ = c.progress(cursor.identity(), &mut cx(), &mut budget());
+        let _ = c.progress(cursor.identity(), &mut cx());
         assert!(Instant::now() < end);
         tokio::time::sleep(Duration::from_millis(1)).await;
     }
@@ -644,17 +643,17 @@ fn structured_engine_producer_to_consumers_preserves_sharing_and_original_retain
             let one = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
             let two = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(2), Generation::INITIAL));
             let make = |consumer: &ConsumerInstance| Consumer::try_new(consumer.reference(),
-                definition(&service, v.clone(), kind, &bank, Arc::new(Access::default()), Arc::new(MqttJsonData), &preparation_limits(), &mut budget()).unwrap(), Arc::new(Access::default()), raw_limits())
+                definition(&service, v.clone(), kind, &bank, Arc::new(Access::default()), Arc::new(MqttJsonData), &preparation_limits(), &mut budget()).unwrap(), Arc::new(Access::default()), raw_limits(), &bank,)
                 .unwrap_or_else(|_| panic!("runtime"));
             let mut first = make(&one);
             let mut second = make(&two);
             drop(v);
-            let mut a = first.subscribe(SubscriptionInput(None), ResponseRequirement::None, NotificationOverflow::DropNewest, &mut budget()).ok().unwrap();
-            let mut b = second.subscribe(SubscriptionInput(None), ResponseRequirement::None, NotificationOverflow::DropNewest, &mut budget()).ok().unwrap();
+            let mut a = first.subscribe(SubscriptionInput(None), ResponseRequirement::None, NotificationOverflow::DropNewest).ok().unwrap();
+            let mut b = second.subscribe(SubscriptionInput(None), ResponseRequirement::None, NotificationOverflow::DropNewest).ok().unwrap();
             active(&mut first, &a).await;
             active(&mut second, &b).await;
             assert_eq!(broker.logs().matches("Received SUBSCRIBE from cr").count(), 1);
-            assert!(first.front(&mut a, &mut budget()).unwrap().is_none());
+            assert!(first.front(&mut a).unwrap().is_none());
             let key = exposure.key();
             let valid = br#"{"reading":{"level":42.00,"label":"\ud83d\ude00","enabled":true},"unknown":null}"#;
             let before = ps.locally_published();
@@ -672,22 +671,19 @@ fn structured_engine_producer_to_consumers_preserves_sharing_and_original_retain
             let mut work = o.publish_notification(native(&mut exposure), key, target(kind), publication(kind, valid), Deadline::NONE, now(), &mut budget()).ok().unwrap();
             finish(&mut work).await;
             assert_eq!(work.settlement().unwrap().native.effect, PublicationEffect::LocallyPublished);
-            let mut short = budget().with_remaining(WorkClass::CodecInputBytes, MqttJsonData.policy().validation_work - 1);
-            assert!(first.progress(a.identity(), &mut cx(), &mut short).is_err());
-            assert_eq!(first.status(a.identity()).unwrap().queued_items, 0);
             queued(&mut first, &a).await;
             queued(&mut second, &b).await;
-            let view = first.front(&mut a, &mut budget()).unwrap().unwrap();
+            let view = first.front(&mut a).unwrap().unwrap();
             assert_eq!(view.data.unwrap().body, valid);
             assert_eq!(view.response, EventResponseState::Unavailable);
-            first.advance(&mut a, &mut budget()).unwrap();
-            first.stop(&a, Some(CancellationInput(None)), &mut budget()).ok().unwrap();
+            first.advance(&mut a).unwrap();
+            first.stop(&a, Some(CancellationInput(None))).ok().unwrap();
             settled(&mut first, &a).await;
             assert!(service.connected());
             assert_eq!(broker.logs().matches("Received UNSUBSCRIBE from cr").count(), 0);
             // Replacement/revocation cannot hand a buffered original value to a successor.
             two.revoke();
-            assert!(second.front(&mut b, &mut budget()).is_err());
+            assert!(second.front(&mut b).is_err());
             let s = settled(&mut second, &b).await;
             assert_eq!(s.identity.consumer, two.reference());
             drop(s);
@@ -731,7 +727,7 @@ fn independent_native_peer_cannot_deliver_invalid_nested_data_or_bypass_fresh_po
             let mut p = MqttJsonData.policy();
             p.retained_bytes = std::mem::size_of::<Self>() as u64;
             if self.0.load(Ordering::Relaxed) {
-                p.validation_work += 1;
+                p.body_bytes -= 1;
             }
             p
         }
@@ -770,14 +766,14 @@ fn independent_native_peer_cannot_deliver_invalid_nested_data_or_bypass_fresh_po
                     &mut budget(),
                 )
                 .unwrap();
-                let mut c = Consumer::try_new(owner.reference(), d, access.clone(), raw_limits())
-                    .unwrap_or_else(|_| panic!());
+                let mut c =
+                    Consumer::try_new(owner.reference(), d, access.clone(), raw_limits(), &bank)
+                        .unwrap_or_else(|_| panic!());
                 let mut cursor = c
                     .subscribe(
                         SubscriptionInput(None),
                         ResponseRequirement::None,
                         NotificationOverflow::Terminate,
-                        &mut budget(),
                     )
                     .ok()
                     .unwrap();
@@ -798,7 +794,7 @@ fn independent_native_peer_cannot_deliver_invalid_nested_data_or_bypass_fresh_po
                 } else {
                     assert!(matches!(result.first_cause, Some(CoreError::Validation(_))));
                 }
-                assert!(c.front(&mut cursor, &mut budget()).is_err());
+                assert!(c.front(&mut cursor).is_err());
                 drop(c);
                 assert!(!s.connected());
                 drop(result);

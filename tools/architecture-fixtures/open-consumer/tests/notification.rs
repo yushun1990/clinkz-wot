@@ -338,23 +338,20 @@ fn runtime_with_data(
             payload_backing_bytes: 256,
             control_backing_bytes: 256,
             target_name_bytes: 64,
-            engine_bytes: 32768,
+            reports: 8,
         },
+        bank,
     )
     .unwrap_or_else(|e| panic!("{:?}", e));
     (owner, runtime)
 }
 fn step(root: &mut Runtime, cursor: &NotificationCursor) -> NotificationState {
-    root.progress(
-        cursor.identity(),
-        &mut Context::from_waker(Waker::noop()),
-        &mut work(),
-    )
-    .unwrap()
+    root.progress(cursor.identity(), &mut Context::from_waker(Waker::noop()))
+        .unwrap();
+    root.status(cursor.identity()).unwrap().state
 }
 fn finish(root: &mut Runtime, cursor: &NotificationCursor) -> NotificationSettlement {
-    root.stop(cursor, None, &mut work())
-        .unwrap_or_else(|_| panic!());
+    root.stop(cursor, None).unwrap_or_else(|_| panic!());
     for _ in 0..8 {
         if step(root, cursor) == NotificationState::Closed {
             return root.take_settlement(cursor.identity()).unwrap();
@@ -498,8 +495,9 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
             payload_backing_bytes: 256,
             control_backing_bytes: 256,
             target_name_bytes: 64,
-            engine_bytes: 32768,
+            reports: 8,
         },
+        &bank,
     )
     .unwrap_or_else(|_| panic!());
     let payload = |s: &'static [u8]| Some(Payload::new(s, "application/json"));
@@ -510,7 +508,6 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
             SubscriptionInput(Some(original)),
             ResponseRequirement::Required,
             NotificationOverflow::Terminate,
-            &mut work(),
         )
         .err()
         .unwrap()
@@ -525,7 +522,6 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
             SubscriptionInput(Some(wrong_media.clone())),
             ResponseRequirement::Required,
             NotificationOverflow::Terminate,
-            &mut work(),
         )
         .err()
         .unwrap()
@@ -537,7 +533,6 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
             SubscriptionInput(payload(br#"{"filter":1}"#)),
             ResponseRequirement::Required,
             NotificationOverflow::Terminate,
-            &mut work(),
         )
         .ok()
         .unwrap();
@@ -545,12 +540,7 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
     step(&mut root, &cursor);
     assert_eq!(responses.starts.get(), 1);
     assert_eq!(
-        root.front(&mut cursor, &mut work())
-            .unwrap()
-            .unwrap()
-            .data
-            .unwrap()
-            .body,
+        root.front(&mut cursor).unwrap().unwrap().data.unwrap().body,
         br#"{"reading":{"level":1}}"#
     );
     let body = responses.last_body.borrow_mut().take().unwrap();
@@ -558,16 +548,7 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
     assert!(
         root.respond(
             &mut cursor,
-            EventDataResponse(payload(br#"{"reading":{"level":1}}"#)),
-            &mut work()
-        )
-        .is_err()
-    );
-    assert!(
-        root.respond(
-            &mut cursor,
-            EventDataResponse(payload(br#"{"accepted":true}"#)),
-            &mut WorkBudget::new()
+            EventDataResponse(payload(br#"{"reading":{"level":1}}"#))
         )
         .is_err()
     );
@@ -575,19 +556,18 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
     root.respond(
         &mut cursor,
         EventDataResponse(payload(br#"{"accepted":true}"#)),
-        &mut work(),
     )
     .ok()
     .unwrap();
     responses.pending_retirement.set(true);
     step(&mut root, &cursor);
     assert_eq!(responses.sends.get(), 1);
-    assert!(root.advance(&mut cursor, &mut work()).is_err());
+    assert!(root.advance(&mut cursor).is_err());
     assert!(body.upgrade().is_some());
     let funded = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
     responses.pending_retirement.set(false);
     step(&mut root, &cursor);
-    root.advance(&mut cursor, &mut work()).unwrap();
+    root.advance(&mut cursor).unwrap();
     assert!(body.upgrade().is_none());
     assert_eq!(
         bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
@@ -598,8 +578,7 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
     assert!(
         root.stop(
             &cursor,
-            Some(CancellationInput(payload(br#"{"reason":"x"}"#))),
-            &mut work()
+            Some(CancellationInput(payload(br#"{"reason":"x"}"#)))
         )
         .is_err()
     );
@@ -608,11 +587,7 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
         "application/octet-stream",
     );
     let refused = root
-        .stop(
-            &cursor,
-            Some(CancellationInput(Some(wrong_media.clone()))),
-            &mut work(),
-        )
+        .stop(&cursor, Some(CancellationInput(Some(wrong_media.clone()))))
         .err()
         .unwrap()
         .into_input();
@@ -620,7 +595,6 @@ fn downstream_binding_uses_shared_structured_meaning_for_four_distinct_event_rol
     root.stop(
         &cursor,
         Some(CancellationInput(payload(br#"{"reason":"done"}"#))),
-        &mut work(),
     )
     .ok()
     .unwrap();
@@ -687,17 +661,13 @@ fn a_dual_format_codec_cannot_send_a_binary_response_on_the_selected_json_form()
             SubscriptionInput(None),
             ResponseRequirement::Required,
             NotificationOverflow::Terminate,
-            &mut work(),
         )
         .ok()
         .unwrap();
     step(&mut root, &cursor);
     step(&mut root, &cursor);
     assert_eq!(
-        root.front(&mut cursor, &mut work())
-            .unwrap()
-            .unwrap()
-            .response,
+        root.front(&mut cursor).unwrap().unwrap().response,
         EventResponseState::Awaiting
     );
     let binary = Payload::new(7_i64.to_be_bytes().as_slice(), BINARY);
@@ -709,7 +679,7 @@ fn a_dual_format_codec_cannot_send_a_binary_response_on_the_selected_json_form()
         .unwrap();
     let original = Arc::downgrade(&binary.body);
     let refused = root
-        .respond(&mut cursor, EventDataResponse(Some(binary)), &mut work())
+        .respond(&mut cursor, EventDataResponse(Some(binary)))
         .err()
         .expect("the Form selects JSON");
     assert!(matches!(refused.error().error(), CoreError::Validation(_)));
@@ -730,7 +700,6 @@ fn a_dual_format_codec_cannot_send_a_binary_response_on_the_selected_json_form()
     root.respond(
         &mut cursor,
         EventDataResponse(Some(Payload::new(b"7".as_slice(), "application/json"))),
-        &mut work(),
     )
     .ok()
     .unwrap();
@@ -755,48 +724,37 @@ fn td_prepared_optional_response_can_retire_and_advance_without_sending_or_stopp
             SubscriptionInput(None),
             ResponseRequirement::None,
             NotificationOverflow::Terminate,
-            &mut work(),
         )
         .unwrap_or_else(|_| panic!());
     assert_eq!(step(&mut root, &cursor), NotificationState::Active);
     step(&mut root, &cursor);
-    let first = root.front(&mut cursor, &mut work()).unwrap().unwrap();
+    let first = root.front(&mut cursor).unwrap().unwrap();
     assert_eq!(first.response, EventResponseState::Awaiting);
     let original = responses.last_body.borrow_mut().take().unwrap();
     assert_eq!(
         first.data.unwrap().body.as_ptr(),
         original.as_ptr() as *const u8
     );
-    assert!(root.advance(&mut cursor, &mut work()).is_err());
+    assert!(root.advance(&mut cursor).is_err());
     // Reproduce the admitted optional opportunity waiting for an explicit choice.
     for _ in 0..3 {
         step(&mut root, &cursor);
     }
     assert_eq!(responses.retire_polls.get(), 0);
-    assert!(
-        root.decline_response(&mut cursor, &mut WorkBudget::new())
-            .is_err()
-    );
     assert_eq!(
-        root.front(&mut cursor, &mut work())
-            .unwrap()
-            .unwrap()
-            .response,
+        root.front(&mut cursor).unwrap().unwrap().response,
         EventResponseState::Awaiting
     );
     let funded = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
     let bytes = root.status(cursor.identity()).unwrap().queued_payload_bytes;
     responses.pending_retirement.set(true);
-    root.decline_response(&mut cursor, &mut work()).unwrap();
+    root.decline_response(&mut cursor).unwrap();
     assert_eq!(step(&mut root, &cursor), NotificationState::Active);
     assert_eq!(
-        root.front(&mut cursor, &mut work())
-            .unwrap()
-            .unwrap()
-            .response,
+        root.front(&mut cursor).unwrap().unwrap().response,
         EventResponseState::Declining
     );
-    assert!(root.advance(&mut cursor, &mut work()).is_err());
+    assert!(root.advance(&mut cursor).is_err());
     assert!(original.upgrade().is_some());
     assert_eq!(responses.releases.get(), 0);
     assert_eq!(
@@ -810,20 +768,17 @@ fn td_prepared_optional_response_can_retire_and_advance_without_sending_or_stopp
     responses.pending_retirement.set(false);
     step(&mut root, &cursor);
     assert_eq!(
-        root.front(&mut cursor, &mut work())
-            .unwrap()
-            .unwrap()
-            .response,
+        root.front(&mut cursor).unwrap().unwrap().response,
         EventResponseState::Declined
     );
-    root.advance(&mut cursor, &mut work()).unwrap();
+    root.advance(&mut cursor).unwrap();
     assert!(original.upgrade().is_none());
-    let next = root.front(&mut cursor, &mut work()).unwrap().unwrap();
+    let next = root.front(&mut cursor).unwrap().unwrap();
     assert_eq!(next.sequence, 1);
     assert_eq!(next.data.unwrap().body, b"2");
-    root.decline_response(&mut cursor, &mut work()).unwrap();
+    root.decline_response(&mut cursor).unwrap();
     step(&mut root, &cursor);
-    root.advance(&mut cursor, &mut work()).unwrap();
+    root.advance(&mut cursor).unwrap();
     assert_eq!(responses.releases.get(), 2);
     assert_eq!(responses.sends.get(), 0);
     assert_eq!(responses.closes.get(), 0);
@@ -847,25 +802,23 @@ fn composed_decline_rejects_required_and_already_submitted_responses() {
                 SubscriptionInput(None),
                 requirement,
                 NotificationOverflow::Terminate,
-                &mut work(),
             )
             .unwrap_or_else(|_| panic!());
         step(&mut root, &cursor);
         step(&mut root, &cursor);
-        root.front(&mut cursor, &mut work()).unwrap().unwrap();
+        root.front(&mut cursor).unwrap().unwrap();
         if requirement == ResponseRequirement::Required {
-            assert!(root.decline_response(&mut cursor, &mut work()).is_err());
+            assert!(root.decline_response(&mut cursor).is_err());
         }
         root.respond(
             &mut cursor,
             EventDataResponse(Some(Payload::new(b"7".as_slice(), "application/json"))),
-            &mut work(),
         )
         .unwrap_or_else(|_| panic!());
-        assert!(root.decline_response(&mut cursor, &mut work()).is_err());
+        assert!(root.decline_response(&mut cursor).is_err());
         step(&mut root, &cursor);
         step(&mut root, &cursor);
-        root.advance(&mut cursor, &mut work()).unwrap();
+        root.advance(&mut cursor).unwrap();
         assert_eq!(responses.sends.get(), 1);
         assert_eq!(finish(&mut root, &cursor).responses_delivered, 1);
         drop(root);
@@ -1014,6 +967,7 @@ fn collection_runtime(
     owner: &ConsumerInstance,
     definition: ConsumerNotificationDefinition<CollectionBinding>,
     access: Arc<CollectionAccess>,
+    bank: &Arc<HostResourceAccounts>,
 ) -> NotificationFixture<CollectionBinding> {
     NotificationFixture::try_new(
         owner.reference(),
@@ -1026,8 +980,9 @@ fn collection_runtime(
             payload_backing_bytes: 256,
             control_backing_bytes: 256,
             target_name_bytes: 64,
-            engine_bytes: 32768,
+            reports: 8,
         },
+        bank,
     )
     .unwrap()
 }
@@ -1075,35 +1030,27 @@ fn exercise_collection_responses(source: serde_json::Value, expected_form: u32) 
     assert_eq!(definition.input().form, expected_form);
     assert_eq!(&*definition.input().endpoint, COLLECTION_ENDPOINT);
     let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
-    let mut root = collection_runtime(&owner, definition, access);
+    let mut root = collection_runtime(&owner, definition, access, &bank);
     let mut cursor = root
         .subscribe(
             SubscriptionInput(None),
             ResponseRequirement::None,
             NotificationOverflow::Terminate,
-            &mut work(),
         )
         .unwrap_or_else(|_| panic!());
     let step = |r: &mut NotificationFixture<CollectionBinding>| {
-        r.progress(
-            cursor.identity(),
-            &mut Context::from_waker(Waker::noop()),
-            &mut work(),
-        )
-        .unwrap()
+        r.progress(cursor.identity(), &mut Context::from_waker(Waker::noop()))
+            .unwrap();
+        r.status(cursor.identity()).unwrap().state
     };
     assert_eq!(step(&mut root), NotificationState::Active);
     for (name, bad, good) in [
         ("alarm", b"7".as_slice(), br#""ack""#.as_slice()),
         ("ready", br#""ack""#, b"7"),
     ] {
-        root.progress(
-            cursor.identity(),
-            &mut Context::from_waker(Waker::noop()),
-            &mut work(),
-        )
-        .unwrap();
-        let item = root.front(&mut cursor, &mut work()).unwrap().unwrap();
+        root.progress(cursor.identity(), &mut Context::from_waker(Waker::noop()))
+            .unwrap();
+        let item = root.front(&mut cursor).unwrap().unwrap();
         assert_eq!(
             item.target,
             clinkz_wot_core::thing::AffordanceSite::Event(name)
@@ -1113,7 +1060,7 @@ fn exercise_collection_responses(source: serde_json::Value, expected_form: u32) 
         let wrong = Payload::new(bad, "application/json");
         let original = wrong.body.clone();
         let returned = root
-            .respond(&mut cursor, EventDataResponse(Some(wrong)), &mut work())
+            .respond(&mut cursor, EventDataResponse(Some(wrong)))
             .err()
             .unwrap()
             .into_input();
@@ -1121,44 +1068,33 @@ fn exercise_collection_responses(source: serde_json::Value, expected_form: u32) 
         root.respond(
             &mut cursor,
             EventDataResponse(Some(Payload::new(good, "application/json"))),
-            &mut work(),
         )
         .unwrap_or_else(|_| panic!());
         responses.pending_retirement.set(true);
         for _ in 0..2 {
-            root.progress(
-                cursor.identity(),
-                &mut Context::from_waker(Waker::noop()),
-                &mut work(),
-            )
-            .unwrap();
+            root.progress(cursor.identity(), &mut Context::from_waker(Waker::noop()))
+                .unwrap();
         }
-        assert!(root.advance(&mut cursor, &mut work()).is_err());
+        assert!(root.advance(&mut cursor).is_err());
         assert!(body.upgrade().is_some());
         responses.pending_retirement.set(false);
-        root.progress(
-            cursor.identity(),
-            &mut Context::from_waker(Waker::noop()),
-            &mut work(),
-        )
-        .unwrap();
-        root.advance(&mut cursor, &mut work()).unwrap();
+        root.progress(cursor.identity(), &mut Context::from_waker(Waker::noop()))
+            .unwrap();
+        root.advance(&mut cursor).unwrap();
         assert!(body.upgrade().is_none());
     }
     assert_eq!(responses.sends.get(), 2);
     assert_eq!(responses.releases.get(), 2);
-    root.stop(&cursor, None, &mut work())
-        .unwrap_or_else(|_| panic!());
+    root.stop(&cursor, None).unwrap_or_else(|_| panic!());
     for _ in 0..4 {
-        root.progress(
-            cursor.identity(),
-            &mut Context::from_waker(Waker::noop()),
-            &mut work(),
-        )
-        .unwrap();
+        root.progress(cursor.identity(), &mut Context::from_waker(Waker::noop()))
+            .unwrap();
     }
     let report = root.take_settlement(cursor.identity()).unwrap();
-    assert_eq!(report.target, AffordanceTarget::Thing);
+    assert_eq!(
+        report.target(),
+        clinkz_wot_core::thing::AffordanceSite::Thing
+    );
     assert_eq!(report.responses_delivered, 2);
     drop(root);
     drop(report);
@@ -1254,7 +1190,7 @@ fn a_root_event_with_member_cancellation_can_select_a_start_only_form_and_stop_l
         )
     );
     let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
-    let mut root = collection_runtime(&owner, definition, access);
+    let mut root = collection_runtime(&owner, definition, access, &bank);
     let report = deliver_alarm_and_stop_locally(&mut root);
     assert_eq!(report.remote_cancellation, RemoteCancellation::NotAttempted);
     assert_eq!(responses.starts.get(), 1);
@@ -1272,31 +1208,25 @@ fn deliver_alarm_and_stop_locally(
             SubscriptionInput(None),
             ResponseRequirement::None,
             NotificationOverflow::Terminate,
-            &mut work(),
         )
         .ok()
         .unwrap();
     let mut cx = Context::from_waker(Waker::noop());
+    root.progress(cursor.identity(), &mut cx).unwrap();
     assert_eq!(
-        root.progress(cursor.identity(), &mut cx, &mut work())
-            .unwrap(),
+        root.status(cursor.identity()).unwrap().state,
         NotificationState::Active
     );
-    root.progress(cursor.identity(), &mut cx, &mut work())
-        .unwrap();
-    let item = root.front(&mut cursor, &mut work()).unwrap().unwrap();
+    root.progress(cursor.identity(), &mut cx).unwrap();
+    let item = root.front(&mut cursor).unwrap().unwrap();
     assert_eq!(item.target, thing::AffordanceSite::Event("alarm"));
     assert_eq!(
         item.data.unwrap().body.as_ref(),
         br#"{"reading":{"level":1}}"#
     );
-    root.stop(&cursor, None, &mut work()).ok().unwrap();
+    root.stop(&cursor, None).ok().unwrap();
     for _ in 0..4 {
-        if root
-            .progress(cursor.identity(), &mut cx, &mut work())
-            .unwrap()
-            == NotificationState::Closed
-        {
+        if root.progress(cursor.identity(), &mut cx).unwrap() == NotificationTurn::Closed {
             break;
         }
     }
@@ -1373,13 +1303,12 @@ fn member_reply_schemas_require_a_codec_only_when_the_native_program_can_offer_r
         )
     );
     let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
-    let mut root = collection_runtime(&owner, definition, Arc::default());
+    let mut root = collection_runtime(&owner, definition, Arc::default(), &bank);
     let refusal = root
         .subscribe(
             SubscriptionInput(None),
             ResponseRequirement::Required,
             NotificationOverflow::Terminate,
-            &mut work(),
         )
         .err()
         .unwrap();
@@ -1656,7 +1585,7 @@ fn delayed_response_policy_receives_original_occurrence_and_denial_retires_the_e
             .unwrap(),
     );
     let owner = ConsumerInstance::new(ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL));
-    let association = clinkz_wot_servient_finite::consumer_notification::ConsumerNotificationAssociation::try_new(owner.reference(), definition, services.access.clone(), bank.clone(), &mut work()).unwrap_or_else(|_| panic!());
+    let association = clinkz_wot_servient_finite::consumer_notification::ConsumerNotificationAssociation::try_new(owner.reference(), definition, services.access.clone()).unwrap_or_else(|_| panic!());
     let mut root =
         clinkz_wot_servient_finite::consumer_notification::ConsumerNotifications::try_new(
             RawNotificationLimits {
@@ -1666,9 +1595,8 @@ fn delayed_response_policy_receives_original_occurrence_and_denial_retires_the_e
                 payload_backing_bytes: 256,
                 control_backing_bytes: 0,
                 target_name_bytes: 64,
-                engine_bytes: 32768,
+                reports: 8,
             },
-            bank.clone(),
         )
         .unwrap();
     drop((source, registry, services));
@@ -1678,35 +1606,24 @@ fn delayed_response_policy_receives_original_occurrence_and_denial_retires_the_e
             SubscriptionInput(None),
             ResponseRequirement::Required,
             NotificationOverflow::Terminate,
-            &mut work(),
         )
         .unwrap_or_else(|_| panic!());
     drop(association);
     let mut cx = Context::from_waker(Waker::noop());
-    root.progress(cursor.identity(), &mut cx, &mut work())
-        .unwrap();
-    root.progress(cursor.identity(), &mut cx, &mut work())
-        .unwrap();
-    assert!(root.front(&mut cursor, &mut work()).unwrap().is_some());
+    root.progress(cursor.identity(), &mut cx).unwrap();
+    root.progress(cursor.identity(), &mut cx).unwrap();
+    assert!(root.front(&mut cursor).unwrap().is_some());
     root.respond(
         &mut cursor,
         EventDataResponse(Some(Payload::new(b"7".as_slice(), "application/json"))),
-        &mut work(),
     )
     .unwrap_or_else(|_| panic!());
     denied.store(true, Ordering::Relaxed);
-    assert!(
-        root.progress(cursor.identity(), &mut cx, &mut work())
-            .is_err()
-    );
+    assert!(root.progress(cursor.identity(), &mut cx).is_err());
     assert_eq!(checks.load(Ordering::Relaxed), 2);
     assert_eq!(responses.sends.get(), 0);
     for _ in 0..8 {
-        if root
-            .progress(cursor.identity(), &mut cx, &mut work())
-            .unwrap()
-            == NotificationState::Closed
-        {
+        if root.progress(cursor.identity(), &mut cx).unwrap() == NotificationTurn::Closed {
             break;
         }
     }
@@ -1746,13 +1663,13 @@ fn response_validation_dependency_failure_is_irreversible_after_restoration() {
             ConsumerDataPolicy {
                 retained_bytes: 0,
                 temporary_bytes: 4096,
-                body_bytes: 512,
-                encoded_selection_bytes: 0,
-                validation_work: if self.changed.load(Ordering::Relaxed) {
-                    1025
+                body_bytes: if self.changed.load(Ordering::Relaxed) {
+                    511
                 } else {
-                    1024
+                    512
                 },
+                encoded_selection_bytes: 0,
+                validation_work: 1024,
             }
         }
         fn validate(
@@ -1814,8 +1731,9 @@ fn response_validation_dependency_failure_is_irreversible_after_restoration() {
                 payload_backing_bytes: 256,
                 control_backing_bytes: 256,
                 target_name_bytes: 64,
-                engine_bytes: 32768,
+                reports: 8,
             },
+            &bank,
         )
         .unwrap();
         let mut cursor = root
@@ -1823,20 +1741,15 @@ fn response_validation_dependency_failure_is_irreversible_after_restoration() {
                 SubscriptionInput(None),
                 ResponseRequirement::Required,
                 NotificationOverflow::Terminate,
-                &mut work(),
             )
             .unwrap_or_else(|_| panic!());
         step(&mut root, &cursor);
         step(&mut root, &cursor);
-        assert!(root.front(&mut cursor, &mut work()).unwrap().is_some());
+        assert!(root.front(&mut cursor).unwrap().is_some());
         let occurrence = responses.last_body.borrow().as_ref().unwrap().clone();
         let malformed = Payload::new(b"false".as_slice(), "application/json");
         let refused = root
-            .respond(
-                &mut cursor,
-                EventDataResponse(Some(malformed.clone())),
-                &mut work(),
-            )
+            .respond(&mut cursor, EventDataResponse(Some(malformed.clone())))
             .err()
             .unwrap()
             .into_input();
@@ -1861,28 +1774,10 @@ fn response_validation_dependency_failure_is_irreversible_after_restoration() {
         );
         let original_ptr = original.body.as_ptr();
         let response_body = Arc::downgrade(&original.body);
-        // A short codec quantum remains recoverable and never enters validation.
         let calls = data.calls.load(Ordering::Relaxed);
-        let mut short = work().with_remaining(WorkClass::CodecInputBytes, 1023);
-        let input = root
-            .respond(&mut cursor, EventDataResponse(Some(original)), &mut short)
-            .err()
-            .unwrap()
-            .into_input();
-        assert_eq!(data.calls.load(Ordering::Relaxed), calls);
-        assert_eq!(
-            root.status(cursor.identity()).unwrap().state,
-            NotificationState::Active
-        );
-        assert!(
-            root.status(cursor.identity())
-                .unwrap()
-                .first_cause
-                .is_none()
-        );
         data.armed.store(true, Ordering::Relaxed);
         let input = root
-            .respond(&mut cursor, input, &mut work())
+            .respond(&mut cursor, EventDataResponse(Some(original)))
             .err()
             .unwrap()
             .into_input();
@@ -1902,44 +1797,23 @@ fn response_validation_dependency_failure_is_irreversible_after_restoration() {
             .unwrap()
             .clone();
         data.changed.store(false, Ordering::Relaxed);
-        let input = root
-            .respond(&mut cursor, input, &mut work())
-            .err()
-            .unwrap()
-            .into_input();
+        let input = root.respond(&mut cursor, input).err().unwrap().into_input();
         assert_eq!(input.0.as_ref().unwrap().body.as_ptr(), original_ptr);
         assert_eq!(
             data.calls.load(Ordering::Relaxed),
             calls + 1,
             "restoration cannot re-enter validation on the original conversation"
         );
-        assert!(root.front(&mut cursor, &mut work()).is_err());
-        assert!(root.advance(&mut cursor, &mut work()).is_err());
+        assert!(root.front(&mut cursor).is_err());
+        assert!(root.advance(&mut cursor).is_err());
         assert_eq!(
             root.status(cursor.identity()).unwrap().first_cause,
             Some(&first)
         );
         let funded = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
-        assert!(
-            root.progress(
-                cursor.identity(),
-                &mut Context::from_waker(Waker::noop()),
-                &mut WorkBudget::new()
-            )
-            .is_err()
-        );
         responses.pending_retirement.set(true);
-        let cleanup_only = || {
-            work()
-                .with_remaining(WorkClass::ProviderProbes, 0)
-                .with_remaining(WorkClass::CodecInputBytes, 0)
-        };
-        root.progress(
-            cursor.identity(),
-            &mut Context::from_waker(Waker::noop()),
-            &mut cleanup_only(),
-        )
-        .unwrap();
+        root.progress(cursor.identity(), &mut Context::from_waker(Waker::noop()))
+            .unwrap();
         assert_eq!(responses.releases.get(), 0);
         assert!(occurrence.upgrade().is_some());
         assert_eq!(
@@ -1949,13 +1823,9 @@ fn response_validation_dependency_failure_is_irreversible_after_restoration() {
         responses.pending_retirement.set(false);
         for _ in 0..8 {
             if root
-                .progress(
-                    cursor.identity(),
-                    &mut Context::from_waker(Waker::noop()),
-                    &mut cleanup_only(),
-                )
+                .progress(cursor.identity(), &mut Context::from_waker(Waker::noop()))
                 .unwrap()
-                == NotificationState::Closed
+                == NotificationTurn::Closed
             {
                 break;
             }

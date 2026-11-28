@@ -518,7 +518,7 @@ fn load_fixtures(
             .ok_or_else(|| format!("fixture {id:?} has unknown profile {profile:?}"))?;
         let recipe = string_field(table, "recipe", &id)?;
         let parsed_recipe = parse_recipe(&recipe)?;
-        validate_fixture_recipe(&id, &parsed_recipe, limits)?;
+        validate_fixture_recipe(&id, &profile, &parsed_recipe, limits)?;
         let forms_per_context_max = profile_limit(limits, "forms_per_context_max", &id)?
             .ok_or_else(|| format!("fixture {id:?} has no applicable forms-per-context limit"))?;
         let fixture = Fixture {
@@ -548,6 +548,7 @@ fn load_fixtures(
 
 fn validate_fixture_recipe(
     id: &str,
+    profile: &str,
     recipe: &BTreeMap<String, u64>,
     limits: &FixtureProfileLimits,
 ) -> Result<(), String> {
@@ -579,7 +580,6 @@ fn validate_fixture_recipe(
         ("security_branches", "security_branches_per_plan_max"),
         ("slot_state_bytes", "binding_slot_state_bytes_per_item_max"),
         ("string_bytes", "string_bytes_max"),
-        ("subscribers", "subscriptions_per_thing_max"),
         ("td_nodes", "json_value_nodes_per_document_max"),
         ("uri_template_bytes", "uri_template_source_bytes_max"),
     ] {
@@ -598,6 +598,19 @@ fn validate_fixture_recipe(
                 ));
             }
         }
+    }
+
+    // These synthetic cohorts are benchmark inputs. Their size says nothing
+    // about subscription capacity at a deployment's execution owners.
+    let subscriber_limit = match profile {
+        "GatewayDefaultV1" => 1024,
+        "BenchmarkStaticReferenceV1" => 256,
+        _ => 0,
+    };
+    if recipe.get("subscribers").copied().unwrap_or(0) > subscriber_limit {
+        return Err(format!(
+            "fixture {id:?} exceeds {subscriber_limit} synthetic subscribers"
+        ));
     }
 
     let forms = recipe.get("forms").copied().unwrap_or(0);

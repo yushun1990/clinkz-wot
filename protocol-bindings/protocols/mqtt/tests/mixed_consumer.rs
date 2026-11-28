@@ -240,18 +240,15 @@ impl Engine {
             owner: ConsumerOwner::try_new(bank.clone(), 16, 16).unwrap(),
             calls: ConsumerCalls::try_new(bank.clone(), 1).unwrap(),
             actions: ConsumerActions::try_new(1, bank.clone()).unwrap(),
-            notifications: ConsumerNotifications::try_new(
-                RawNotificationLimits {
-                    subscriptions: 2,
-                    queue_items: 4,
-                    queue_payload_bytes: 24_000,
-                    payload_backing_bytes: 4608,
-                    control_backing_bytes: 0,
-                    target_name_bytes: 64,
-                    engine_bytes: 128_000,
-                },
-                bank.clone(),
-            )
+            notifications: ConsumerNotifications::try_new(RawNotificationLimits {
+                subscriptions: 2,
+                queue_items: 4,
+                queue_payload_bytes: 24_000,
+                payload_backing_bytes: 4608,
+                control_backing_bytes: 0,
+                target_name_bytes: 64,
+                reports: 8,
+            })
             .unwrap(),
             finite,
             action,
@@ -310,8 +307,6 @@ impl Engine {
             instance.consumer(),
             self.notification.clone(),
             owners[2].clone(),
-            self.bank.clone(),
-            &mut budget(),
         )
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
         Managed {
@@ -331,7 +326,7 @@ impl Engine {
             self.calls.step(cx, now).unwrap();
         }
         self.actions.step(cx, now).unwrap();
-        self.notifications.step(cx, &mut budget()).unwrap();
+        self.notifications.step(cx).unwrap();
         self.calls.is_idle()
             && self.actions.is_idle()
             && self.notifications.retained_subscriptions() == 0
@@ -378,7 +373,6 @@ impl Engine {
                 SubscriptionInput(None),
                 ResponseRequirement::None,
                 NotificationOverflow::Terminate,
-                &mut budget(),
             )
             .unwrap_or_else(|e| panic!("{:?}", e.error()))
     }
@@ -605,7 +599,7 @@ fn managed_mixed_turns_keep_authorization_progress_and_reports_independent() {
         for cursor in [&mut ca, &mut cb] {
             assert_eq!(
                 e.notifications
-                    .front(cursor, &mut budget())
+                    .front(cursor)
                     .unwrap()
                     .unwrap()
                     .data
@@ -613,7 +607,7 @@ fn managed_mixed_turns_keep_authorization_progress_and_reports_independent() {
                     .body,
                 b"7"
             );
-            e.notifications.advance(cursor, &mut budget()).unwrap();
+            e.notifications.advance(cursor).unwrap();
         }
         let mut finite_result = None;
         e.until(true, |e, cx| {
@@ -670,7 +664,7 @@ fn managed_mixed_turns_keep_authorization_progress_and_reports_independent() {
         assert_eq!(peer.observed.cancels.load(Ordering::Acquire), 1);
 
         e.notifications
-            .stop(&ca, Some(CancellationInput(None)), &mut budget())
+            .stop(&ca, Some(CancellationInput(None)))
             .unwrap_or_else(|e| panic!("{:?}", e.error()));
         e.until(true, |e, _| {
             e.notifications.status(ca.identity()).unwrap().state == NotificationState::Closed
@@ -693,7 +687,7 @@ fn managed_mixed_turns_keep_authorization_progress_and_reports_independent() {
         .await;
         assert_eq!(
             e.notifications
-                .front(&mut cb, &mut budget())
+                .front(&mut cb)
                 .unwrap()
                 .unwrap()
                 .data
@@ -701,7 +695,7 @@ fn managed_mixed_turns_keep_authorization_progress_and_reports_independent() {
                 .body,
             b"8"
         );
-        e.notifications.advance(&mut cb, &mut budget()).unwrap();
+        e.notifications.advance(&mut cb).unwrap();
         e.owner.begin_close();
         e.until(true, |e, _| {
             e.notifications.status(cb.identity()).unwrap().state == NotificationState::Closed
@@ -780,9 +774,7 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
             successor.notification.definition()
         ));
         e.actions.step(&mut cx(), e.now()).unwrap();
-        e.notifications
-            .step(&mut cx(), &mut WorkBudget::new())
-            .unwrap();
+        e.notifications.step(&mut cx()).unwrap();
         assert_eq!(action.state().unwrap(), ConsumerActionState::Closed);
         assert!(matches!(
             action.query(e.now()),
@@ -836,7 +828,7 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
         assert!(e.mqtt.connected());
         assert_eq!(
             e.notifications
-                .front(&mut cb, &mut budget())
+                .front(&mut cb)
                 .unwrap()
                 .unwrap()
                 .data
@@ -844,7 +836,7 @@ fn replacement_keeps_unread_original_results_and_shared_native_siblings() {
                 .body,
             b"9"
         );
-        e.notifications.advance(&mut cb, &mut budget()).unwrap();
+        e.notifications.advance(&mut cb).unwrap();
 
         let replacement_action = e.invoke(&successor);
         let replacement_cursor = e.subscribe(&successor);
@@ -942,7 +934,7 @@ fn host_maintenance_retires_abandoned_mixed_work_and_passive_owner_loss() {
         .await;
         assert_eq!(
             e.notifications
-                .front(&mut cb, &mut budget())
+                .front(&mut cb)
                 .unwrap()
                 .unwrap()
                 .data
@@ -950,7 +942,7 @@ fn host_maintenance_retires_abandoned_mixed_work_and_passive_owner_loss() {
                 .body,
             b"10"
         );
-        e.notifications.advance(&mut cb, &mut budget()).unwrap();
+        e.notifications.advance(&mut cb).unwrap();
 
         // With MQTT now silent, only the deployment pulse can trigger this
         // delayed management command and subsequent original cleanup turns.
@@ -1063,7 +1055,7 @@ fn deployment_timer_observes_finite_and_action_deadlines_while_mqtt_stays_usable
         .await;
         assert_eq!(
             e.notifications
-                .front(&mut cursor, &mut budget())
+                .front(&mut cursor)
                 .unwrap()
                 .unwrap()
                 .data
@@ -1071,7 +1063,7 @@ fn deployment_timer_observes_finite_and_action_deadlines_while_mqtt_stays_usable
                 .body,
             b"11"
         );
-        e.notifications.advance(&mut cursor, &mut budget()).unwrap();
+        e.notifications.advance(&mut cursor).unwrap();
         drop(cursor);
         e.until(true, |e, _| e.notifications.retained_subscriptions() == 0)
             .await;

@@ -106,13 +106,13 @@ cargo test --locked -p clinkz-wot-binding-http --no-default-features --lib --tes
 
 ## Notification aggregation and retained regression evidence
 
-The [notification owner tests](../../servient/finite/tests/notification.rs) add
-three aggregate-turn counterexamples: rotating one-poll credit between a stalled
-and healthy conversation; blocked/failed reply retirement after cursor abandonment
-while a stop view survives; and zero-credit observation of passive parent loss.
-Sibling delivery continues under failed cleanup. Live cursors keep their terminal
-reports until explicit handoff. No response is fabricated, and prepaid backing
-cannot be released before complete original response/participant retirement.
+The [notification owner tests](../../servient/finite/tests/notification.rs)
+exercise one-slot rotation between stalled and healthy conversations, reply
+retirement after abandonment and cleanup after passive parent loss. A failed
+reply retirement leaves the sibling runnable. The native participation can
+retire while its original reply remains pending. Live cursors keep their
+terminal reports through collection, and collected reports keep their own
+slots through disposal. [Notification execution and MQTT evidence](consumer-notification-composition.md)
 
 The downstream observation Binding attempts a finite Read from its receive
 callback and from final service release by a report or idle view. Each attempt
@@ -158,8 +158,7 @@ not verified publisher/source provenance; proof verification, freshness and trus
 dependency retention remain open. No embedded continuing executor, hardware
 transport, fleet-scale performance or broader profile qualification is established.
 
-The deployment must continue supplying native and maintenance turns, clocks and
-credit. No universal Runtime, scheduler, per-Thing executor, background drain,
+The deployment supplies native and maintenance turns and monotonic time. No universal Runtime, scheduler, per-Thing executor, background drain,
 automatic semantic Query/Cancel, broadcast result wake API or deadline timer is
 created. Application result observation belongs in the same driving loop; separate
 async waiter tasks need explicit coordination under the retained manual contract.

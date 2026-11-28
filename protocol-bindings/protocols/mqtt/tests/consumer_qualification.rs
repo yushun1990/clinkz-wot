@@ -103,7 +103,7 @@ fn raw_limits() -> RawNotificationLimits {
         payload_backing_bytes: 4608,
         control_backing_bytes: 4608,
         target_name_bytes: 64,
-        engine_bytes: 100_000,
+        reports: 8,
     }
 }
 
@@ -285,33 +285,18 @@ fn captured_data_service_availability_and_capacity_are_checked_before_runtime_in
     let definition = Rc::new(definition);
     let access =
         ConsumerServiceOwner::retain_access(Arc::new(Access), &bank).unwrap_or_else(|_| panic!());
-    let (refused, access) = ConsumerNotificationAssociation::try_new(
-        owner.reference(),
-        definition,
-        access,
-        bank.clone(),
-        &mut budget(),
-    )
-    .err()
-    .unwrap()
-    .into_input();
+    let (refused, access) =
+        ConsumerNotificationAssociation::try_new(owner.reference(), definition, access)
+            .err()
+            .unwrap()
+            .into_input();
     available.store(true, Ordering::Relaxed);
-    let association = ConsumerNotificationAssociation::try_new(
-        owner.reference(),
-        refused,
-        access,
-        bank.clone(),
-        &mut budget(),
-    )
-    .unwrap_or_else(|_| panic!());
+    let association = ConsumerNotificationAssociation::try_new(owner.reference(), refused, access)
+        .unwrap_or_else(|_| panic!());
     let mut short = raw_limits();
-    short.engine_bytes = 1;
-    assert!(
-        ConsumerNotifications::<MqttNotificationConsumer>::try_new(short, bank.clone()).is_err()
-    );
-    let runtime =
-        ConsumerNotifications::<MqttNotificationConsumer>::try_new(raw_limits(), bank.clone())
-            .unwrap();
+    short.queue_items = usize::MAX;
+    assert!(ConsumerNotifications::<MqttNotificationConsumer>::try_new(short).is_err());
+    let runtime = ConsumerNotifications::<MqttNotificationConsumer>::try_new(raw_limits()).unwrap();
     drop((runtime, association));
     assert_empty(&bank);
     assert!(!s.connected());
@@ -345,6 +330,7 @@ fn subscribe_only_form_allows_local_stop_and_explicitly_refuses_mapped_cancellat
         definition,
         Arc::new(Access),
         raw_limits(),
+        &bank,
     )
     .unwrap_or_else(|_| panic!());
     let cursor = runtime
@@ -352,19 +338,16 @@ fn subscribe_only_form_allows_local_stop_and_explicitly_refuses_mapped_cancellat
             SubscriptionInput(None),
             ResponseRequirement::None,
             NotificationOverflow::Terminate,
-            &mut budget(),
         )
         .unwrap_or_else(|_| panic!());
     assert!(
         runtime
-            .stop(&cursor, Some(CancellationInput(None)), &mut budget())
+            .stop(&cursor, Some(CancellationInput(None)))
             .is_err()
     );
     assert_eq!(
-        runtime
-            .progress(cursor.identity(), &mut cx(), &mut budget())
-            .unwrap(),
-        NotificationState::Closed
+        runtime.progress(cursor.identity(), &mut cx()).unwrap(),
+        NotificationTurn::Closed
     );
     let report = runtime.take_settlement(cursor.identity()).unwrap();
     assert!(!report.native_started);

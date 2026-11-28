@@ -375,6 +375,7 @@ fn property_and_event_with_same_name_keep_schemas_targets_and_stop_independent()
             definition,
             Arc::new(Access::default()),
             engine_limits(4),
+            &bank,
         )
         .unwrap_or_else(|_| panic!());
         let event_target = AffordanceTarget::Event(Arc::from(NAME));
@@ -414,17 +415,18 @@ fn property_and_event_with_same_name_keep_schemas_targets_and_stop_independent()
             event_definition,
             Arc::new(Access::default()),
             engine_limits(4),
+            &bank,
         )
         .unwrap_or_else(|_| panic!());
         let mut cp = subscribe(&mut property, NotificationOverflow::Terminate);
         active(&mut property, &cp).await;
         let mut ce = subscribe(&mut event, NotificationOverflow::Terminate);
         active(&mut event, &ce).await;
-        assert!(property.front(&mut cp, &mut budget()).unwrap().is_none());
-        assert!(event.front(&mut ce, &mut budget()).unwrap().is_none());
+        assert!(property.front(&mut cp).unwrap().is_none());
+        assert!(event.front(&mut ce).unwrap().is_none());
         send(&mut o, &mut e, b"7").await;
         value(&mut property, &mut cp, b"7").await;
-        assert!(event.front(&mut ce, &mut budget()).unwrap().is_none());
+        assert!(event.front(&mut ce).unwrap().is_none());
         let key = e.key();
         assert!(
             o.publish_notification(
@@ -454,7 +456,7 @@ fn property_and_event_with_same_name_keep_schemas_targets_and_stop_independent()
         work.acknowledge().ok().unwrap();
         value(&mut event, &mut ce, b"\"alarm\"").await;
         event
-            .stop(&ce, Some(CancellationInput(None)), &mut budget())
+            .stop(&ce, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
         assert_eq!(
             settled(&mut event, &ce).await.remote_cancellation,
@@ -464,7 +466,7 @@ fn property_and_event_with_same_name_keep_schemas_targets_and_stop_independent()
         send(&mut o, &mut e, b"8").await;
         value(&mut property, &mut cp, b"8").await;
         property
-            .stop(&cp, Some(CancellationInput(None)), &mut budget())
+            .stop(&cp, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
         assert_eq!(
             settled(&mut property, &cp).await.remote_cancellation,

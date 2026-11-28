@@ -358,7 +358,9 @@ pub enum EventResponseDelivery {
 /// poll_retire must dispose all local obligations before Ready(Ok); it reports
 /// remote delivery separately. It may retire an unused optional opportunity
 /// without any poll_deliver call; retirement must not synthesize an application
-/// dataResponse. abort_local consumes the entire owner in finite,
+/// dataResponse. A reply remains usable for local retirement after its
+/// subscription participation closes. Each poll and its callbacks are bounded.
+/// abort_local consumes the entire owner in finite,
 /// nonblocking local work, with no escaped tasks/callbacks or remote claim.
 /// Trusted linked code must fund its own indirect backing and disposal envelope.
 pub trait NotificationResponse {
@@ -402,6 +404,7 @@ pub enum NotificationSignal<R> {
 /// logical participation; replies may retain independent physical work leases.
 /// Native queues, matching, distribution, sharing compatibility, idle retention,
 /// reconnect and final infrastructure shutdown belong to the Binding.
+/// Each poll, including synchronous callbacks and native buffering, is bounded.
 pub trait NotificationParticipation {
     type Response: NotificationResponse;
     fn poll_start(
@@ -417,8 +420,10 @@ pub trait NotificationParticipation {
         cx: &mut Context<'_>,
         max_payload_backing: usize,
     ) -> Poll<CoreResult<NotificationSignal<Self::Response>>>;
-    /// None requests local removal without application cancellation authority.
-    /// Some is a separately authorized mapped cancellation input. Pending/error
+    /// None requests local removal without authority to start a mapped cancel.
+    /// A previously attempted cancel can still yield its original evidence.
+    /// Some lends the same accepted input with current mapped authority for this
+    /// poll. Retirement must work if a later poll withdraws it. Pending/error
     /// retains the entire participant. Ready(Ok) means complete LOCAL disposal,
     /// not physical shutdown or necessarily confirmed remote cancellation.
     fn poll_close(
@@ -433,7 +438,9 @@ pub trait NotificationParticipation {
 
 /// Startup-registered source-free capability. No compiler or TD is retained.
 /// support is passive and bounded for the actual program/configuration.
-/// prepare is local construction ONLY: no external effects or escaped work.
+/// prepare acquires an actual native participation and its bounded backing
+/// locally, including everything needed to undo the acquisition. It performs
+/// no external effects and leaves no escaped work.
 /// Rejection returns the exact program; native establishment begins in the
 /// returned participant's poll_start, including all provisional cleanup owners.
 /// Registration/configuration/program destructors must provide finite local
@@ -498,10 +505,8 @@ impl NotificationAuthorization<'_> {
 }
 /// Actual captured application policy, rechecked at long-lived delivery and
 /// response/cancel. Native trust/credential services remain Binding-owned.
+/// One callback over a qualified input must fit within a bounded turn.
 pub trait NotificationAuthorizer {
-    fn work(&self) -> u64 {
-        1
-    }
     fn authorize(&self, request: NotificationAuthorization<'_>)
     -> CoreResult<NotificationDecision>;
 }
@@ -511,7 +516,7 @@ pub trait NotificationAuthorizer {
 /// A later dependency read cannot erase evidence returned by this callback.
 #[derive(Debug)]
 pub enum NotificationValidationError {
-    /// Input or work-credit refusal while original dependencies remain valid.
+    /// Input refusal while original dependencies remain valid.
     Rejected(crate::CoreError),
     /// An observed violation of the original prepared-service dependencies.
     /// An admitted conversation must be fenced even if the declaration returns
@@ -526,33 +531,21 @@ impl NotificationValidationError {
     }
 }
 
-/// Optional captured validation for the raw lifecycle. Data work is prepaid
-/// before native handoff; validation cannot strand an unowned late candidate.
-/// Implementations are trusted, pure and finite, like ConsumerDataService.
+/// Optional captured validation for the raw lifecycle. Implementations are
+/// trusted and pure, and supply bounded validation and any workspace needed to
+/// finish a call on the admitted schema and payload. The caller retains the
+/// native candidate before invoking a validator.
 /// Validation failures carry their origin, not an inferred CoreError category.
-/// Native data rejection remains fatal; caller response/input or short-credit
-/// rejection can be recoverable. An observed dependency failure is always fatal
+/// Native data rejection remains fatal. Caller input rejection can be recoverable.
+/// An observed dependency failure is always fatal
 /// to already admitted semantic use, without changing its cleanup ownership.
 pub trait NotificationValidation {
-    fn subscription(
-        &self,
-        input: &SubscriptionInput,
-        budget: &mut clinkz_wot_foundation::WorkBudget,
-    ) -> Result<(), NotificationValidationError>;
-    fn cancellation(
-        &self,
-        input: &CancellationInput,
-        budget: &mut clinkz_wot_foundation::WorkBudget,
-    ) -> Result<(), NotificationValidationError>;
+    fn subscription(&self, input: &SubscriptionInput) -> Result<(), NotificationValidationError>;
+    fn cancellation(&self, input: &CancellationInput) -> Result<(), NotificationValidationError>;
     fn response(
         &self,
         target: &AffordanceTarget,
         input: &EventDataResponse,
-        budget: &mut clinkz_wot_foundation::WorkBudget,
-    ) -> Result<(), NotificationValidationError>;
-    fn prepay_data(
-        &self,
-        budget: &mut clinkz_wot_foundation::WorkBudget,
     ) -> Result<(), NotificationValidationError>;
     fn data(
         &self,

@@ -447,8 +447,9 @@ mod live {
                     payload_backing_bytes: 4608,
                     control_backing_bytes: 4608,
                     target_name_bytes: 64,
-                    engine_bytes: 128_000,
+                    reports: 8,
                 },
+                &consumer_bank,
             )
             .unwrap_or_else(|_| panic!());
             drop(thing);
@@ -459,15 +460,13 @@ mod live {
                     SubscriptionInput(None),
                     ResponseRequirement::None,
                     NotificationOverflow::Terminate,
-                    &mut budget(),
                 )
                 .unwrap_or_else(|_| panic!());
             let end = Instant::now() + Duration::from_secs(5);
-            while events
-                .progress(cursor.identity(), &mut cx(), &mut budget())
-                .unwrap()
-                != NotificationState::Active
-            {
+            while {
+                events.progress(cursor.identity(), &mut cx()).unwrap();
+                events.status(cursor.identity()).unwrap().state != NotificationState::Active
+            } {
                 assert!(Instant::now() < end);
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
@@ -513,26 +512,21 @@ mod live {
             finish(&mut emission).await;
             emission.acknowledge().unwrap_or_else(|_| panic!());
             while events.status(cursor.identity()).unwrap().queued_items == 0 {
-                events
-                    .progress(cursor.identity(), &mut cx(), &mut budget())
-                    .unwrap();
+                events.progress(cursor.identity(), &mut cx()).unwrap();
                 assert!(Instant::now() < end);
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
-            let event = events.front(&mut cursor, &mut budget()).unwrap().unwrap();
+            let event = events.front(&mut cursor).unwrap().unwrap();
             assert_eq!(
                 event.target,
                 clinkz_wot_core::thing::AffordanceSite::Event("alarm")
             );
             assert_eq!(event.data.unwrap().body, b"true");
-            events.advance(&mut cursor, &mut budget()).unwrap();
+            events.advance(&mut cursor).unwrap();
             events
-                .stop(&cursor, Some(CancellationInput(None)), &mut budget())
+                .stop(&cursor, Some(CancellationInput(None)))
                 .unwrap_or_else(|_| panic!());
-            while events
-                .progress(cursor.identity(), &mut cx(), &mut budget())
-                .unwrap()
-                != NotificationState::Closed
+            while events.progress(cursor.identity(), &mut cx()).unwrap() != NotificationTurn::Closed
             {
                 assert!(Instant::now() < end);
                 tokio::time::sleep(Duration::from_millis(1)).await;

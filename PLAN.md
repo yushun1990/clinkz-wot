@@ -52,14 +52,16 @@ still use legacy accounting. The remaining dependencies determine the order.
    [Host execution](servient/finite/src/consumer.rs) · [Caller-owned evidence](docs/evidence/constrained-finite-execution.md)
 2. **Continuing and published work.** Consumer Invoke/Query/Cancel share bounded
    progress and independently backed exchange, continuation and result ownership
-   on Host and caller-owned paths. Migrate notification conversations, then
-   Producer candidate, invocation, delivery and reply owners with their Bindings
-   and deployment loops. Secure real continuation, correlation, reply and handoff
+   on Host and caller-owned paths. Host Consumer notification turns use local
+   conversation, delivery and report slots with independent native retirement.
+   Migrate Producer candidate, invocation, delivery and reply owners with their
+   Bindings and deployment loops. Secure real continuation, correlation, reply and handoff
    storage before effects. Drive local retirement under saturation and distinguish
    isolated cleanup failure from lost ingress. Shared access and validation work
-   declarations still serve notifications or preparation. Delete them with their
-   last consuming chain, along with the remaining per-family credit factories.
-   [Action execution and evidence](docs/evidence/continuing-action-runtime-independence.md)
+   declarations still serve Producer validation or preparation. Delete them with
+   their last consuming chain, along with the remaining per-family credit factories.
+   [Action execution](docs/evidence/continuing-action-runtime-independence.md) ·
+   [Notification execution](docs/evidence/consumer-notification-composition.md)
 3. **Preparation and Discovery.** Move TD traversal, Planning search and Discovery
    retrieval to the jobs that repeat visits, delegate, rewind or retry. Bound
    per-turn visits and cumulative work through exhaustion. Preserve page, byte,

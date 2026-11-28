@@ -2,32 +2,27 @@
 //! No TD, compiler, protocol matching or native distribution lives here.
 use super::{ConsumerOwned, ConsumerTurn};
 use crate::notification::*;
-use alloc::{rc::Rc, sync::Arc, vec::Vec};
-use clinkz_wot_core::host_accounts::{HostCapacityReservation, HostResourceAccounts};
+use alloc::{rc::Rc, sync::Arc};
 use clinkz_wot_core::{consumer::*, notification::*, *};
-use clinkz_wot_foundation::{ResourceKind as K, WorkBudget, WorkClass as W};
 use core::task::Context;
+
+fn context() -> ErrorContext {
+    ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
+}
+fn invalid() -> CoreError {
+    CoreError::Validation(context())
+}
 
 struct CapturedServices<B: ConsumerNotificationBinding> {
     consumer: ConsumerInstanceRef,
     definition: Rc<ConsumerNotificationDefinition<B>>,
     access: Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>,
-    access_work: u64,
     security_revision: u64,
-    bank: Arc<HostResourceAccounts>,
-    _funding: Vec<HostCapacityReservation>,
 }
 struct CapturedAuthorizer<B: ConsumerNotificationBinding> {
     association: Rc<ConsumerOwned<CapturedServices<B>>>,
-    // Original admitted work and instance quotas survive public view loss.
-    _quota: HostCapacityReservation,
-    _scratch: HostCapacityReservation,
-    _temporary: HostCapacityReservation,
 }
 impl<B: ConsumerNotificationBinding> NotificationAuthorizer for CapturedAuthorizer<B> {
-    fn work(&self) -> u64 {
-        self.association.access_work
-    }
     fn authorize(
         &self,
         request: NotificationAuthorization<'_>,
@@ -77,13 +72,9 @@ impl<B: ConsumerNotificationBinding> CapturedServices<B> {
     fn schemas(&self) -> &NotificationSchemas {
         &self.definition.input().schemas
     }
-    fn policy(&self) -> ConsumerDataPolicy {
-        self.definition.input().data_policy
-    }
     fn check_dependencies(&self) -> CoreResult<()> {
         self.definition.check_dependencies()?;
-        if self.access.work() != self.access_work
-            || self.access.retained_bytes() != self.access.backing_bytes()
+        if self.access.retained_bytes() != self.access.backing_bytes()
             || self.access.qualification_revision() != self.security_revision
             || !self
                 .access
@@ -122,45 +113,23 @@ impl<B: ConsumerNotificationBinding> CapturedServices<B> {
         }
         Ok(())
     }
-    fn prepay(&self, budget: &mut WorkBudget) -> Result<(), NotificationValidationError> {
-        self.check_dependencies()
-            .map_err(NotificationValidationError::Dependency)?;
-        if !pay(budget, W::CodecInputBytes, self.policy().validation_work) {
-            return Err(NotificationValidationError::Rejected(busy()));
-        }
-        Ok(())
-    }
 }
 impl<B: ConsumerNotificationBinding> NotificationValidation for ConsumerOwned<CapturedServices<B>> {
-    fn subscription(
-        &self,
-        input: &SubscriptionInput,
-        budget: &mut WorkBudget,
-    ) -> Result<(), NotificationValidationError> {
+    fn subscription(&self, input: &SubscriptionInput) -> Result<(), NotificationValidationError> {
         if matches!(self.schemas(), NotificationSchemas::SubscribeAllEvents(_)) && input.0.is_some()
         {
             return Err(NotificationValidationError::Rejected(
                 CoreError::UnsupportedOperation(context()),
             ));
-        }
-        if self.schemas().subscription().is_some() {
-            self.prepay(budget)?;
         }
         self.validate(self.schemas().subscription(), input.0.as_ref())
     }
-    fn cancellation(
-        &self,
-        input: &CancellationInput,
-        budget: &mut WorkBudget,
-    ) -> Result<(), NotificationValidationError> {
+    fn cancellation(&self, input: &CancellationInput) -> Result<(), NotificationValidationError> {
         if matches!(self.schemas(), NotificationSchemas::SubscribeAllEvents(_)) && input.0.is_some()
         {
             return Err(NotificationValidationError::Rejected(
                 CoreError::UnsupportedOperation(context()),
             ));
-        }
-        if self.schemas().cancellation().is_some() {
-            self.prepay(budget)?;
         }
         self.validate(self.schemas().cancellation(), input.0.as_ref())
     }
@@ -168,7 +137,6 @@ impl<B: ConsumerNotificationBinding> NotificationValidation for ConsumerOwned<Ca
         &self,
         target: &AffordanceTarget,
         input: &EventDataResponse,
-        budget: &mut WorkBudget,
     ) -> Result<(), NotificationValidationError> {
         let schema = if let NotificationSchemas::SubscribeAllEvents(s) = self.schemas() {
             let AffordanceTarget::Event(name) = target else {
@@ -181,22 +149,7 @@ impl<B: ConsumerNotificationBinding> NotificationValidation for ConsumerOwned<Ca
         } else {
             self.schemas().data_response()
         };
-        if schema.is_some() {
-            self.prepay(budget)?;
-        }
         self.validate(schema, input.0.as_ref())
-    }
-    fn prepay_data(&self, budget: &mut WorkBudget) -> Result<(), NotificationValidationError> {
-        if self.schemas().data().is_some()
-            || matches!(
-                self.schemas(),
-                NotificationSchemas::ObserveAllProperties(_)
-                    | NotificationSchemas::SubscribeAllEvents(_)
-            )
-        {
-            self.prepay(budget)?;
-        }
-        Ok(())
     }
     fn data(
         &self,
@@ -251,8 +204,6 @@ impl<B: ConsumerNotificationBinding> ConsumerNotificationAssociation<B> {
         consumer: ConsumerInstanceRef,
         definition: Rc<ConsumerNotificationDefinition<B>>,
         access: Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>,
-        bank: Arc<HostResourceAccounts>,
-        budget: &mut WorkBudget,
     ) -> Result<
         Self,
         BindingInputRejection<(
@@ -269,62 +220,33 @@ impl<B: ConsumerNotificationBinding> ConsumerNotificationAssociation<B> {
                 ));
             }
         };
-        let access_work = access.work();
-        let security_revision = access.qualification_revision();
-        let build = (|| {
+        let built = (|| {
             definition.check_dependencies()?;
+            let revision = access.qualification_revision();
             if !consumer.is_current()
-                || access_work == 0
                 || access.retained_bytes() != access.backing_bytes()
                 || !access.supports_security(&clinkz_wot_core::security::SecurityRequirement::NOSEC)
+                || revision != access.qualification_revision()
+                || !consumer.is_current()
             {
                 return Err(invalid());
             }
-            if !pay(budget, W::ProviderProbes, access_work) {
-                return Err(busy());
-            }
-            let input = definition.input();
-            access.authorize(
-                input.identity,
-                &input.endpoint,
-                input.schemas.kind().start_operation(),
-            )?;
-            definition.check_dependencies()?;
-            if !consumer.is_current()
-                || access.work() != access_work
-                || access.qualification_revision() != security_revision
-                || access.retained_bytes() != access.backing_bytes()
-            {
-                return Err(invalid());
-            }
-            reserve(
-                &bank,
-                &[(
-                    K::EngineLiveBytesGlobalMax,
-                    core::mem::size_of::<ConsumerOwned<CapturedServices<B>>>() as u64 + 128,
-                )],
-            )
+            Ok(revision)
         })();
-        let funding = match build {
-            Ok(f) => f,
-            Err(error) => {
-                return Err(BindingInputRejection::new(
-                    (definition, access),
-                    BindingOperationalError::new(error),
-                ));
-            }
-        };
-        Ok(Self {
-            captured: Rc::new(ConsumerOwned::new(CapturedServices {
-                consumer,
-                definition,
-                access,
-                access_work,
-                security_revision,
-                bank,
-                _funding: funding,
-            })),
-        })
+        match built {
+            Ok(security_revision) => Ok(Self {
+                captured: Rc::new(ConsumerOwned::new(CapturedServices {
+                    consumer,
+                    definition,
+                    access,
+                    security_revision,
+                })),
+            }),
+            Err(error) => Err(BindingInputRejection::new(
+                (definition, access),
+                BindingOperationalError::new(error),
+            )),
+        }
     }
     pub fn definition(&self) -> &Rc<ConsumerNotificationDefinition<B>> {
         &self.captured.definition
@@ -334,56 +256,26 @@ impl<B: ConsumerNotificationBinding> ConsumerNotificationAssociation<B> {
     }
 }
 
-/// Explicit family-specific conversation capacity, independently funded and
-/// usable by many persistent associations. No scheduling, native matching or
-/// physical subscription pool is introduced. Drive an explicit aggregate turn
-/// or select individual conversations for progress/cleanup.
+/// Shared conversation slots for independent associations on one Host driver.
 pub struct ConsumerNotifications<B: ConsumerNotificationBinding> {
     root: RawNotificationServient<B, CapturedAuthorizer<B>>,
-    bank: Arc<HostResourceAccounts>,
-    _funding: Vec<HostCapacityReservation>,
 }
 impl<B: ConsumerNotificationBinding + Clone + 'static> ConsumerNotifications<B>
 where
     B::Program: Clone + 'static,
     B::Configuration: Clone + 'static,
 {
-    pub fn try_new(
-        limits: RawNotificationLimits,
-        bank: Arc<HostResourceAccounts>,
-    ) -> CoreResult<Self> {
-        let overhead = (core::mem::size_of::<Self>()
-            - core::mem::size_of::<RawNotificationServient<B, CapturedAuthorizer<B>>>()
-            + 3 * core::mem::size_of::<HostCapacityReservation>()) as u64;
-        let funding = reserve(
-            &bank,
-            &[
-                (
-                    K::EngineLiveBytesGlobalMax,
-                    (limits.engine_bytes as u64)
-                        .checked_add(overhead)
-                        .ok_or_else(invalid)?,
-                ),
-                (K::CleanupItemsMax, limits.subscriptions as u64),
-                (K::SubscriptionsGlobalMax, limits.subscriptions as u64),
-            ],
-        )?;
-        let root = RawNotificationServient::try_new(limits)?;
+    pub fn try_new(limits: RawNotificationLimits) -> CoreResult<Self> {
         Ok(Self {
-            root,
-            bank,
-            _funding: funding,
+            root: RawNotificationServient::try_new(limits)?,
         })
     }
     pub fn retained_subscriptions(&self) -> usize {
         self.root.retained_subscriptions()
     }
-    /// Drive active conversations and original cleanup without retaining their
-    /// identities. Live cursors keep their data/reports; abandoned cursors are
-    /// reclaimed only after local retirement. No application response or remote
-    /// cancellation input is invented. See `RawNotificationServient::step`.
-    pub fn step(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) -> CoreResult<()> {
-        self.root.step(cx, budget)
+    /// Visit one rotating slot, including original cleanup and abandoned reports.
+    pub fn step(&mut self, cx: &mut Context<'_>) -> CoreResult<NotificationTurn> {
+        self.root.step(cx)
     }
     pub fn subscribe(
         &mut self,
@@ -391,60 +283,26 @@ where
         input: SubscriptionInput,
         responses: ResponseRequirement,
         overflow: NotificationOverflow,
-        budget: &mut WorkBudget,
     ) -> Result<NotificationCursor, BindingInputRejection<SubscriptionInput>> {
         let mut turn = match ConsumerTurn::enter() {
             Ok(turn) => turn,
-            Err(error) => {
-                return Err(BindingInputRejection::new(
-                    input,
-                    BindingOperationalError::new(error),
-                ));
-            }
+            Err(error) => return Err(reject(input, error)),
         };
         let captured = &association.captured;
-        let build = (|| {
-            captured.check_dependencies()?;
-            if !captured.consumer.is_current() {
-                return Err(CoreError::StaleHandle(context()));
-            }
-            let quota = reserve_one(&captured.bank, K::SubscriptionsPerThingMax, 1)?;
-            let scratch = reserve_one(
-                &self.bank,
-                K::EngineLiveBytesGlobalMax,
-                captured.policy().temporary_bytes,
-            )?;
-            let temporary = reserve_one(
-                &self.bank,
-                K::AdmissionTemporaryBytesGlobalMax,
-                captured.policy().temporary_bytes,
-            )?;
-            let definition = captured.definition.input();
-            RawNotificationContext::new_in_turn(
-                &mut turn,
-                definition.binding.clone(),
-                definition.configuration.clone(),
-                CapturedAuthorizer {
-                    association: captured.clone(),
-                    _quota: quota,
-                    _scratch: scratch,
-                    _temporary: temporary,
-                },
-                captured.consumer.clone(),
-                Some(captured.clone()),
-            )
-            .map_err(|e| e.error().error().clone())
-        })();
-        let context = match build {
-            Ok(context) => context,
-            Err(error) => {
-                return Err(BindingInputRejection::new(
-                    input,
-                    BindingOperationalError::new(error),
-                ));
-            }
-        };
         let definition = captured.definition.input();
+        let context = match RawNotificationContext::new_in_turn(
+            &mut turn,
+            definition.binding.clone(),
+            definition.configuration.clone(),
+            CapturedAuthorizer {
+                association: captured.clone(),
+            },
+            captured.consumer.clone(),
+            Some(captured.clone()),
+        ) {
+            Ok(context) => context,
+            Err(error) => return Err(reject(input, error.error().error().clone())),
+        };
         self.root
             .subscribe_in_turn(
                 &mut turn,
@@ -457,7 +315,6 @@ where
                 },
                 definition.program.clone(),
                 context,
-                budget,
             )
             .map_err(|e| {
                 let ((request, _, _), error) = e.into_parts();
@@ -468,49 +325,34 @@ where
         &mut self,
         id: &NotificationIdentity,
         cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<NotificationState> {
-        self.root.progress(id, cx, budget)
+    ) -> CoreResult<NotificationTurn> {
+        self.root.progress(id, cx)
     }
     pub fn front(
         &mut self,
         cursor: &mut NotificationCursor,
-        budget: &mut WorkBudget,
     ) -> CoreResult<Option<RawNotificationView<'_>>> {
-        self.root.front(cursor, budget)
+        self.root.front(cursor)
     }
-    pub fn advance(
-        &mut self,
-        cursor: &mut NotificationCursor,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<()> {
-        self.root.advance(cursor, budget)
+    pub fn advance(&mut self, cursor: &mut NotificationCursor) -> CoreResult<()> {
+        self.root.advance(cursor)
     }
-    /// Retire the exposed item's unused optional response without sending or
-    /// stopping. Progress must finish native retirement before cursor advance;
-    /// required or already submitted responses cannot be declined.
-    pub fn decline_response(
-        &mut self,
-        cursor: &mut NotificationCursor,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<()> {
-        self.root.decline_response(cursor, budget)
+    pub fn decline_response(&mut self, cursor: &mut NotificationCursor) -> CoreResult<()> {
+        self.root.decline_response(cursor)
     }
     pub fn stop(
         &mut self,
         cursor: &NotificationCursor,
         input: Option<CancellationInput>,
-        budget: &mut WorkBudget,
     ) -> Result<(), BindingInputRejection<Option<CancellationInput>>> {
-        self.root.stop(cursor, input, budget)
+        self.root.stop(cursor, input)
     }
     pub fn respond(
         &mut self,
         cursor: &mut NotificationCursor,
         input: EventDataResponse,
-        budget: &mut WorkBudget,
     ) -> Result<(), BindingInputRejection<EventDataResponse>> {
-        self.root.respond(cursor, input, budget)
+        self.root.respond(cursor, input)
     }
     pub fn status(&self, id: &NotificationIdentity) -> CoreResult<NotificationStatus<'_>> {
         self.root.status(id)
@@ -524,26 +366,10 @@ where
     pub fn step_cleanup(
         &mut self,
         cx: &mut Context<'_>,
-        budget: &mut WorkBudget,
     ) -> CoreResult<Option<NotificationSettlement>> {
-        self.root.step_cleanup(cx, budget)
+        self.root.step_cleanup(cx)
     }
     pub fn begin_close(&mut self) {
         self.root.begin_close();
     }
-}
-
-fn reserve_one(
-    bank: &Arc<HostResourceAccounts>,
-    kind: K,
-    amount: u64,
-) -> CoreResult<HostCapacityReservation> {
-    bank.reserve(kind, amount)
-        .ok_or_else(|| CoreError::LimitExceeded {
-            resource: kind,
-            limit: bank.account(kind).limit(),
-            requested: Some(amount),
-            observed: Some(bank.account(kind).used()),
-            context: context(),
-        })
 }

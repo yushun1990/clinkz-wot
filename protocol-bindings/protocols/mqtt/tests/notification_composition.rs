@@ -265,16 +265,9 @@ fn associate(
     consumer: &ConsumerInstance,
     def: Rc<ConsumerNotificationDefinition<Counted>>,
     access: Arc<ConsumerServiceOwner<dyn ConsumerAccessService>>,
-    instance_bank: &Arc<HostResourceAccounts>,
 ) -> ConsumerNotificationAssociation<Counted> {
-    ConsumerNotificationAssociation::try_new(
-        consumer.reference(),
-        def,
-        access,
-        instance_bank.clone(),
-        &mut budget(),
-    )
-    .unwrap_or_else(|e| panic!("{:?}", e.error()))
+    ConsumerNotificationAssociation::try_new(consumer.reference(), def, access)
+        .unwrap_or_else(|e| panic!("{:?}", e.error()))
 }
 fn limits(slots: usize) -> RawNotificationLimits {
     RawNotificationLimits {
@@ -284,7 +277,7 @@ fn limits(slots: usize) -> RawNotificationLimits {
         payload_backing_bytes: 4608,
         control_backing_bytes: 0,
         target_name_bytes: 64,
-        engine_bytes: 128_000,
+        reports: 8,
     }
 }
 fn subscribe(
@@ -296,7 +289,6 @@ fn subscribe(
         SubscriptionInput(None),
         ResponseRequirement::None,
         NotificationOverflow::DropNewest,
-        &mut budget(),
     )
 }
 
@@ -307,8 +299,6 @@ fn original_services_are_charged_once_across_definitions_and_banks() {
     let b = binding(&s);
     let original = bank();
     let maps = bank();
-    let instances = bank();
-    let capacity = bank();
     let data = Arc::new(Data::new(60_000));
     let access = Arc::new(Access::default());
     let services = retained(data.clone(), access, &original);
@@ -334,8 +324,8 @@ fn original_services_are_charged_once_across_definitions_and_banks() {
         charged
     );
     let consumer = owner(1);
-    let a = associate(&consumer, d1, services.access.clone(), &instances);
-    let mut work = ConsumerNotifications::try_new(limits(1), capacity.clone()).unwrap();
+    let a = associate(&consumer, d1, services.access.clone());
+    let mut work = ConsumerNotifications::try_new(limits(1)).unwrap();
     let cursor = subscribe(&mut work, &a).unwrap_or_else(|_| panic!());
     drop((services, d2, a));
     assert_eq!(
@@ -345,13 +335,9 @@ fn original_services_are_charged_once_across_definitions_and_banks() {
         charged
     );
     drop(cursor);
-    let report = work
-        .step_cleanup(&mut cx(), &mut budget())
-        .unwrap()
-        .unwrap();
+    let report = work.step_cleanup(&mut cx()).unwrap().unwrap();
     assert!(!report.native_started);
     drop(work);
-    assert_empty(&capacity);
     assert!(
         original
             .account(ResourceKind::EngineLiveBytesGlobalMax)
@@ -362,7 +348,6 @@ fn original_services_are_charged_once_across_definitions_and_banks() {
     drop((report, data));
     assert_empty(&original);
     assert_empty(&maps);
-    assert_empty(&instances);
     assert!(!s.connected());
 }
 
@@ -373,25 +358,20 @@ fn prepared_data_and_native_declarations_cannot_be_refreshed_by_binding_or_admis
     let b = binding(&s);
     let original = bank();
     let maps = bank();
-    let instances = bank();
-    let capacity = bank();
     let data = Arc::new(Data::new(32));
     let access = Arc::new(Access::default());
     let services = retained(data.clone(), access.clone(), &original);
     let def = definition(&b, services.clone(), &maps, address);
     let original_policy = data.policy();
     let consumer = owner(2);
-    let a = associate(&consumer, def.clone(), services.access.clone(), &instances);
-    let mut work = ConsumerNotifications::try_new(limits(1), capacity.clone()).unwrap();
-    let unchanged = ResourceKind::ALL.map(|k| capacity.account(k).used());
-    for field in 0..5 {
+    let a = associate(&consumer, def.clone(), services.access.clone());
+    let mut work = ConsumerNotifications::try_new(limits(1)).unwrap();
+    for field in 0..3 {
         let mut changed = original_policy;
         match field {
             0 => changed.retained_bytes += 123_456,
             1 => changed.temporary_bytes += 1,
-            2 => changed.body_bytes += 1,
-            3 => changed.validation_work += 1,
-            _ => changed.encoded_selection_bytes += 1,
+            _ => changed.body_bytes += 1,
         }
         *data.policy.lock().unwrap() = changed;
         assert!(def.check_dependencies().is_err());
@@ -399,17 +379,12 @@ fn prepared_data_and_native_declarations_cannot_be_refreshed_by_binding_or_admis
             ConsumerNotificationAssociation::try_new(
                 consumer.reference(),
                 def.clone(),
-                services.access.clone(),
-                instances.clone(),
-                &mut budget()
+                services.access.clone()
             )
             .is_err()
         );
         assert!(subscribe(&mut work, &a).is_err());
-        assert_eq!(
-            ResourceKind::ALL.map(|k| capacity.account(k).used()),
-            unchanged
-        );
+        assert_eq!(work.retained_subscriptions(), 0);
         *data.policy.lock().unwrap() = original_policy;
     }
     b.changed_support.set(true);
@@ -418,35 +393,20 @@ fn prepared_data_and_native_declarations_cannot_be_refreshed_by_binding_or_admis
     data.available.store(false, Ordering::Relaxed);
     assert!(subscribe(&mut work, &a).is_err());
     data.available.store(true, Ordering::Relaxed);
-    data.revision.fetch_add(1, Ordering::Relaxed);
-    data.supported.store(false, Ordering::Relaxed);
+    access.bytes.store(257, Ordering::Relaxed);
     assert!(subscribe(&mut work, &a).is_err());
-    data.revision.fetch_add(1, Ordering::Relaxed);
-    data.supported.store(true, Ordering::Relaxed);
-    for field in 0..2 {
-        match field {
-            0 => access.work.store(2, Ordering::Relaxed),
-            _ => access.bytes.store(257, Ordering::Relaxed),
-        }
-        assert!(subscribe(&mut work, &a).is_err());
-        access.work.store(1, Ordering::Relaxed);
-        access.bytes.store(256, Ordering::Relaxed);
-    }
+    access.bytes.store(256, Ordering::Relaxed);
     let cursor = subscribe(&mut work, &a).unwrap_or_else(|_| panic!());
-    data.policy.lock().unwrap().validation_work += 1;
-    assert!(
-        work.progress(cursor.identity(), &mut cx(), &mut budget())
-            .is_err()
-    );
+    data.policy.lock().unwrap().body_bytes -= 1;
+    assert!(work.progress(cursor.identity(), &mut cx()).is_err());
     *data.policy.lock().unwrap() = original_policy;
     assert_eq!(
         work.status(cursor.identity()).unwrap().state,
         NotificationState::Closing
     );
     assert_eq!(
-        work.progress(cursor.identity(), &mut cx(), &mut budget())
-            .unwrap(),
-        NotificationState::Closed
+        work.progress(cursor.identity(), &mut cx()).unwrap(),
+        NotificationTurn::Closed
     );
     let report = work.take_settlement(cursor.identity()).unwrap();
     assert!(!report.native_started);
@@ -456,12 +416,12 @@ fn prepared_data_and_native_declarations_cannot_be_refreshed_by_binding_or_admis
     assert!(subscribe(&mut work, &a).is_err());
     assert_eq!(data.validations.load(Ordering::Relaxed), 0);
     assert!(!s.connected());
+    data.revision.fetch_add(1, Ordering::Relaxed);
+    assert!(def.check_dependencies().is_err());
     assert_eq!(b.lowerings.get(), 1);
     drop((work, a, def, services));
     assert_empty(&original);
     assert_empty(&maps);
-    assert_empty(&instances);
-    assert_empty(&capacity);
 }
 
 #[cfg(feature = "broker-tests")]
@@ -472,9 +432,8 @@ async fn drive(
 ) {
     let end = std::time::Instant::now() + std::time::Duration::from_secs(3);
     loop {
-        let state = work
-            .progress(cursor.identity(), &mut cx(), &mut budget())
-            .unwrap();
+        work.progress(cursor.identity(), &mut cx()).unwrap();
+        let state = work.status(cursor.identity()).unwrap().state;
         if (active && state == NotificationState::Active)
             || (!active && state == NotificationState::Closed)
         {
@@ -492,8 +451,7 @@ async fn queued(
 ) {
     let end = std::time::Instant::now() + std::time::Duration::from_secs(3);
     while work.status(cursor.identity()).unwrap().queued_items < count {
-        work.progress(cursor.identity(), &mut cx(), &mut budget())
-            .unwrap();
+        work.progress(cursor.identity(), &mut cx()).unwrap();
         assert!(std::time::Instant::now() < end);
         tokio::time::sleep(std::time::Duration::from_millis(1)).await;
     }
@@ -507,7 +465,6 @@ fn one_compilation_many_associations_two_slots_and_one_native_interest_keep_inde
         let b = binding(&service);
         let original = bank();
         let maps = bank();
-        let capacity = bank();
         let data = Arc::new(Data::new(60_000));
         let first_access = Arc::new(Access::default());
         let second_access = Arc::new(Access::default());
@@ -517,13 +474,6 @@ fn one_compilation_many_associations_two_slots_and_one_native_interest_keep_inde
         let def = definition(&b, services.clone(), &maps, broker.address);
         let consumers: Vec<_> = (0..8).map(owner).collect();
         *second_access.expected.lock().unwrap() = Some(consumers[1].reference());
-        let banks: Vec<_> = (0..8)
-            .map(|_| {
-                let mut l = GatewayDefaultV1::LIMITS.clone();
-                assert!(l.set(ResourceKind::SubscriptionsPerThingMax, Some(1)));
-                Arc::new(HostResourceAccounts::new(&l))
-            })
-            .collect();
         let associations: Vec<_> = consumers
             .iter()
             .enumerate()
@@ -536,36 +486,19 @@ fn one_compilation_many_associations_two_slots_and_one_native_interest_keep_inde
                     } else {
                         services.access.clone()
                     },
-                    &banks[i],
                 )
             })
             .collect();
         assert_eq!(b.lowerings.get(), 1);
         assert!(!service.connected());
-        for bank in &banks {
-            assert_eq!(
-                bank.account(ResourceKind::SubscriptionsPerThingMax).used(),
-                0
-            );
-            assert_eq!(
-                bank.account(ResourceKind::AdmissionTemporaryBytesGlobalMax)
-                    .used(),
-                0
-            );
-        }
-        let mut work = ConsumerNotifications::try_new(limits(2), capacity.clone()).unwrap();
+        let mut work = ConsumerNotifications::try_new(RawNotificationLimits {
+            reports: 2,
+            ..limits(2)
+        })
+        .unwrap();
         let mut a = subscribe(&mut work, &associations[0]).unwrap_or_else(|_| panic!());
-        assert!(
-            subscribe(&mut work, &associations[0]).is_err(),
-            "per-instance quota with global capacity still available"
-        );
-        assert_eq!(work.retained_subscriptions(), 1);
         let mut z = subscribe(&mut work, &associations[1]).unwrap_or_else(|_| panic!());
         assert!(subscribe(&mut work, &associations[2]).is_err());
-        assert!(
-            subscribe(&mut work, &associations[0]).is_err(),
-            "per-instance outstanding quota"
-        );
         drive(&mut work, &a, true).await;
         drive(&mut work, &z, true).await;
         assert_eq!(
@@ -580,16 +513,16 @@ fn one_compilation_many_associations_two_slots_and_one_native_interest_keep_inde
             .deny_subscription
             .store(true, Ordering::Relaxed);
         assert!(
-            work.front(&mut a, &mut budget()).is_err(),
+            work.front(&mut a).is_err(),
             "fresh queued occurrence policy"
         );
-        let view = work.front(&mut z, &mut budget()).unwrap().unwrap();
+        let view = work.front(&mut z).unwrap().unwrap();
         assert_eq!(
             view.target,
             clinkz_wot_core::thing::AffordanceSite::Event("alarm")
         );
         assert_eq!(view.data.unwrap().body, b"41");
-        work.advance(&mut z, &mut budget()).unwrap();
+        work.advance(&mut z).unwrap();
         drive(&mut work, &a, false).await;
         assert!(
             subscribe(&mut work, &associations[2]).is_err(),
@@ -600,6 +533,11 @@ fn one_compilation_many_associations_two_slots_and_one_native_interest_keep_inde
             report.first_cause,
             Some(CoreError::Security { .. })
         ));
+        assert_eq!(work.retained_subscriptions(), 1);
+        assert!(
+            subscribe(&mut work, &associations[2]).is_err(),
+            "held report owns the last report slot"
+        );
         drop(report);
         first_access
             .deny_subscription
@@ -611,22 +549,19 @@ fn one_compilation_many_associations_two_slots_and_one_native_interest_keep_inde
         peer.publish_raw("composition/events/ready", b"true", false);
         queued(&mut work, &z, 1).await;
         queued(&mut work, &third, 1).await;
-        assert!(work.front(&mut z, &mut budget()).unwrap().is_some());
+        assert!(work.front(&mut z).unwrap().is_some());
         second_access.deny_cancel.store(true, Ordering::Relaxed);
-        assert!(
-            work.stop(&z, Some(CancellationInput(None)), &mut budget())
-                .is_err()
-        );
+        assert!(work.stop(&z, Some(CancellationInput(None))).is_err());
         drive(&mut work, &z, false).await;
         drop(work.take_settlement(z.identity()).unwrap());
         assert!(service.connected(), "sibling retains physical lease");
         consumers[2].revoke();
-        assert!(work.front(&mut { third }, &mut budget()).is_err());
+        assert!(work.front(&mut { third }).is_err());
         // Cleanup remains reachable after every public cursor is lost.
         drop((a, z));
         let end = std::time::Instant::now() + std::time::Duration::from_secs(3);
         while work.retained_subscriptions() > 0 {
-            drop(work.step_cleanup(&mut cx(), &mut budget()).unwrap());
+            drop(work.step_cleanup(&mut cx()).unwrap());
             assert!(std::time::Instant::now() < end);
             tokio::time::sleep(std::time::Duration::from_millis(1)).await;
         }
@@ -648,10 +583,63 @@ fn one_compilation_many_associations_two_slots_and_one_native_interest_keep_inde
         drop(work);
         assert_empty(&original);
         assert_empty(&maps);
-        assert_empty(&capacity);
-        for bank in &banks {
-            assert_empty(bank);
-        }
+    });
+}
+
+#[cfg(feature = "broker-tests")]
+#[test]
+fn native_lease_limit_refuses_a_spare_conversation_until_original_close() {
+    broker::runtime().block_on(async {
+        let broker = broker::Broker::start();
+        let service = service(broker.address);
+        let original = bank();
+        let services = retained(
+            Arc::new(Data::new(32)),
+            Arc::new(Access::default()),
+            &original,
+        );
+        let def = definition(
+            &binding(&service),
+            services.clone(),
+            &original,
+            broker.address,
+        );
+        let instance = owner(1);
+        let association = associate(&instance, def, services.access.clone());
+        let mut work = ConsumerNotifications::try_new(RawNotificationLimits {
+            reports: 32,
+            ..limits(32)
+        })
+        .unwrap();
+        let original_cursor = subscribe(&mut work, &association).unwrap_or_else(|_| panic!());
+        drive(&mut work, &original_cursor, true).await;
+        // Prepared native interests already own their slots before any poll starts them.
+        let provisional = (1..32)
+            .map(|_| subscribe(&mut work, &association).unwrap_or_else(|_| panic!()))
+            .collect::<Vec<_>>();
+        let mut contender = ConsumerNotifications::try_new(RawNotificationLimits {
+            reports: 1,
+            ..limits(1)
+        })
+        .unwrap();
+        let refused = subscribe(&mut contender, &association).err().unwrap();
+        assert!(matches!(
+            refused.error().error(),
+            CoreError::Backpressure(_)
+        ));
+        assert_eq!(contender.retained_subscriptions(), 0);
+
+        original_cursor.stop_handle().request_stop();
+        drive(&mut work, &original_cursor, false).await;
+        let original_report = work.take_settlement(original_cursor.identity()).unwrap();
+        let successor = subscribe(&mut contender, &association).unwrap_or_else(|_| panic!());
+        drive(&mut contender, &successor, true).await;
+        assert_ne!(original_report.identity, *successor.identity());
+
+        drop((provisional, work, contender, association, services));
+        assert!(!service.connected());
+        drop(original_report);
+        assert_empty(&original);
     });
 }
 
@@ -663,39 +651,31 @@ fn rejected_alarm_then_ready_on_original_conversation(queued_change: bool) {
         let b = binding(&service);
         let original = bank();
         let maps = bank();
-        let capacity = bank();
         let policy = Arc::new(Access::default());
         policy.deny_alarm.store(!queued_change, Ordering::Relaxed);
         let services = retained(Arc::new(Data::new(32)), policy.clone(), &original);
         let def = definition(&b, services.clone(), &maps, broker.address);
         let consumers = [owner(1), owner(2)];
-        let instances = [bank(), bank()];
         let sibling = ConsumerServiceOwner::retain_access(Arc::new(Access::default()), &original)
             .unwrap_or_else(|_| panic!());
         let associations = [
-            associate(
-                &consumers[0],
-                def.clone(),
-                services.access.clone(),
-                &instances[0],
-            ),
-            associate(&consumers[1], def.clone(), sibling, &instances[1]),
+            associate(&consumers[0], def.clone(), services.access.clone()),
+            associate(&consumers[1], def.clone(), sibling),
         ];
-        let mut work = ConsumerNotifications::try_new(limits(2), capacity.clone()).unwrap();
+        let mut work = ConsumerNotifications::try_new(limits(2)).unwrap();
         let mut a = subscribe(&mut work, &associations[0]).unwrap_or_else(|_| panic!());
         let mut z = subscribe(&mut work, &associations[1]).unwrap_or_else(|_| panic!());
         let original_id = a.identity().clone();
         drive(&mut work, &a, true).await;
         drive(&mut work, &z, true).await;
         if !queued_change {
-            work.progress(a.identity(), &mut cx(), &mut budget())
-                .unwrap();
+            work.progress(a.identity(), &mut cx()).unwrap();
             assert_eq!(
                 policy.missing_occurrences.load(Ordering::Relaxed),
                 0,
                 "native polling must not require a Deliver decision without an occurrence"
             );
-            assert!(work.front(&mut a, &mut budget()).unwrap().is_none());
+            assert!(work.front(&mut a).unwrap().is_none());
         }
         let mut peer = broker::Peer::new(&broker);
         peer.publish_raw("composition/events/alarm", b"41", false);
@@ -705,22 +685,21 @@ fn rejected_alarm_then_ready_on_original_conversation(queued_change: bool) {
         if queued_change {
             policy.deny_alarm.store(true, Ordering::Relaxed);
             assert!(
-                work.front(&mut a, &mut budget()).unwrap().is_none(),
+                work.front(&mut a).unwrap().is_none(),
                 "deny the original queued alarm without closing the conversation"
             );
             // Once refused, changing policy back cannot resurrect this item.
             policy.deny_alarm.store(false, Ordering::Relaxed);
-            assert!(work.front(&mut a, &mut budget()).unwrap().is_none());
-            work.progress(a.identity(), &mut cx(), &mut budget())
-                .unwrap();
+            assert!(work.front(&mut a).unwrap().is_none());
+            work.progress(a.identity(), &mut cx()).unwrap();
         }
-        let view = work.front(&mut a, &mut budget()).unwrap().unwrap();
+        let view = work.front(&mut a).unwrap().unwrap();
         assert_eq!(
             view.target,
             clinkz_wot_core::thing::AffordanceSite::Event("ready")
         );
         assert_eq!(view.data.unwrap().body, b"true");
-        work.advance(&mut a, &mut budget()).unwrap();
+        work.advance(&mut a).unwrap();
         assert_eq!(a.identity(), &original_id);
         assert_eq!(
             work.status(a.identity()).unwrap().state,
@@ -729,13 +708,13 @@ fn rejected_alarm_then_ready_on_original_conversation(queued_change: bool) {
         assert!(work.status(a.identity()).unwrap().first_cause.is_none());
         assert_eq!(policy.missing_occurrences.load(Ordering::Relaxed), 0);
         for (name, body) in [("alarm", b"41".as_slice()), ("ready", b"true".as_slice())] {
-            let view = work.front(&mut z, &mut budget()).unwrap().unwrap();
+            let view = work.front(&mut z).unwrap().unwrap();
             assert_eq!(
                 view.target,
                 clinkz_wot_core::thing::AffordanceSite::Event(name)
             );
             assert_eq!(view.data.unwrap().body, body);
-            work.advance(&mut z, &mut budget()).unwrap();
+            work.advance(&mut z).unwrap();
         }
         assert!(service.connected());
         assert_eq!(
@@ -750,8 +729,7 @@ fn rejected_alarm_then_ready_on_original_conversation(queued_change: bool) {
             0
         );
         for cursor in [&a, &z] {
-            work.stop(cursor, None, &mut budget())
-                .unwrap_or_else(|_| panic!());
+            work.stop(cursor, None).unwrap_or_else(|_| panic!());
             drive(&mut work, cursor, false).await;
             drop(work.take_settlement(cursor.identity()).unwrap());
         }
@@ -766,10 +744,6 @@ fn rejected_alarm_then_ready_on_original_conversation(queued_change: bool) {
         drop((work, associations, def, services));
         assert_empty(&original);
         assert_empty(&maps);
-        assert_empty(&capacity);
-        for bank in &instances {
-            assert_empty(bank);
-        }
     });
 }
 #[cfg(feature = "broker-tests")]

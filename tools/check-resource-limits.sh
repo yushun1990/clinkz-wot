@@ -58,7 +58,7 @@ if [[ -n "$duplicates" ]]; then
     exit 1
 fi
 
-expected_field_count=196
+expected_field_count=194
 actual_field_count=$(($(wc -l <"$schema") - 1))
 if [[ "$actual_field_count" -ne "$expected_field_count" ]]; then
     echo \
@@ -67,15 +67,13 @@ if [[ "$actual_field_count" -ne "$expected_field_count" ]]; then
     exit 1
 fi
 
-# Freeze the complete original schema, not just a suffix of field names.
-# Baseline: d4cf245eb1bf79e607c4851bba4b16a58e83a04e:docs/resource-limits.csv.
-# Hash includes the header, every column of indices 0..194, row order, and LF.
-# A change to this digest requires an explicit schema revision/migration under
-# docs/spec/foundation.md; an append-only addition leaves it unchanged.
-frozen_prefix_sha256=65e3edbcfbbc38b8fe16b4efd5db92d7964fc653ad71cc8e747ff056fe3b519e
-actual_prefix_sha256=$(head -n 196 "$schema" | sha256sum | cut -d' ' -f1)
+# Freeze the remaining legacy rows after retiring the two subscription counts.
+# Hash includes the header and the remaining original rows (indices 0..192).
+# The number-lexeme row is checked separately below.
+frozen_prefix_sha256=adced2095608236db950091e6b3e7bf6444c2d8c424d2fa7869474e4135a4164
+actual_prefix_sha256=$(head -n 194 "$schema" | sha256sum | cut -d' ' -f1)
 if [[ "$actual_prefix_sha256" != "$frozen_prefix_sha256" ]]; then
-    echo "resource limit check: frozen metadata at indices 0..194 changed; explicit schema migration required" >&2
+    echo "resource limit check: frozen metadata at indices 0..192 changed; explicit schema migration required" >&2
     exit 1
 fi
 
@@ -137,9 +135,9 @@ v49_fields=(
     binding_reactor_queue_items_per_binding_max
     binding_reactor_queue_bytes_per_binding_max
 )
-mapfile -t actual_v49_fields < <(sed -n '141,196p' "$schema" | cut -d, -f1)
+mapfile -t actual_v49_fields < <(sed -n '139,194p' "$schema" | cut -d, -f1)
 if [[ "${actual_v49_fields[*]}" != "${v49_fields[*]}" ]]; then
-    echo "resource limit check: v4.9 append-only field order is not frozen at 139..194" >&2
+    echo "resource limit check: v4.9 append-only field order is not retained at 137..192" >&2
     exit 1
 fi
 
@@ -157,7 +155,7 @@ for field in "${v49_fields[@]}"; do
 done
 
 if ! awk -F, '
-    NR == 197 && $1 == "number_lexeme_bytes_max" \
+    NR == 195 && $1 == "number_lexeme_bytes_max" \
         && $2 == "document" && $3 == "bytes" && $4 == "per-item" \
         && $5 == "consumer" && $6 == "disabled" \
         && $7 == "256" && $8 == "NA" && $9 == "64" \
@@ -165,7 +163,7 @@ if ! awk -F, '
         && $10 ~ /(^|\|)CONSTRAINED-WORK-001(\||$)/ { found = 1 }
     END { exit !found }
 ' "$schema"; then
-    echo "resource limit check: bounded Number lexeme field is not frozen at index 195" >&2
+    echo "resource limit check: bounded Number lexeme field is not frozen at index 193" >&2
     exit 1
 fi
 

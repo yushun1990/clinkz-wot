@@ -284,27 +284,18 @@ where
         let access = ConsumerServiceOwner::retain_access(Arc::new(Access::default()), original)
             .ok()
             .unwrap();
-        let assoc = ConsumerNotificationAssociation::try_new(
-            owner.reference(),
-            Rc::new(d),
-            access,
-            original.clone(),
-            &mut work(),
-        )
-        .ok()
-        .unwrap();
-        let mut capacity = ConsumerNotifications::try_new(
-            RawNotificationLimits {
-                subscriptions: 1,
-                queue_items: 1,
-                queue_payload_bytes: 240,
-                payload_backing_bytes: 200,
-                control_backing_bytes: 0,
-                target_name_bytes: 16,
-                engine_bytes: 8192,
-            },
-            original.clone(),
-        )
+        let assoc = ConsumerNotificationAssociation::try_new(owner.reference(), Rc::new(d), access)
+            .ok()
+            .unwrap();
+        let mut capacity = ConsumerNotifications::try_new(RawNotificationLimits {
+            subscriptions: 1,
+            queue_items: 1,
+            queue_payload_bytes: 240,
+            payload_backing_bytes: 200,
+            control_backing_bytes: 0,
+            target_name_bytes: 16,
+            reports: 8,
+        })
         .unwrap();
         let cursor = capacity
             .subscribe(
@@ -312,7 +303,6 @@ where
                 SubscriptionInput(None),
                 ResponseRequirement::None,
                 NotificationOverflow::Terminate,
-                &mut work(),
             )
             .ok()
             .unwrap();
@@ -322,8 +312,7 @@ where
                     &assoc,
                     SubscriptionInput(None),
                     ResponseRequirement::None,
-                    NotificationOverflow::Terminate,
-                    &mut work()
+                    NotificationOverflow::Terminate
                 )
                 .is_err()
         );
@@ -336,16 +325,13 @@ where
     async fn until(&mut self, state: NotificationState) {
         tokio::time::timeout(Duration::from_secs(2), async {
             loop {
-                if self
-                    .work
+                self.work
                     .progress(
                         self.cursor.identity(),
                         &mut Context::from_waker(Waker::noop()),
-                        &mut work(),
                     )
-                    .unwrap()
-                    == state
-                {
+                    .unwrap();
+                if self.work.status(self.cursor.identity()).unwrap().state == state {
                     return;
                 }
                 tokio::time::sleep(Duration::from_millis(1)).await;
@@ -358,7 +344,7 @@ where
         tokio::time::timeout(Duration::from_secs(2), async {
             loop {
                 self.until(NotificationState::Active).await;
-                if let Some(item) = self.work.front(&mut self.cursor, &mut work()).unwrap() {
+                if let Some(item) = self.work.front(&mut self.cursor).unwrap() {
                     assert_eq!(item.data.unwrap().body, expected);
                     break;
                 }
@@ -367,12 +353,12 @@ where
         })
         .await
         .unwrap();
-        self.work.advance(&mut self.cursor, &mut work()).unwrap();
+        self.work.advance(&mut self.cursor).unwrap();
     }
     async fn finish(mut self, mapped: bool) -> NotificationSettlement {
         if mapped {
             self.work
-                .stop(&self.cursor, Some(CancellationInput(None)), &mut work())
+                .stop(&self.cursor, Some(CancellationInput(None)))
                 .ok()
                 .unwrap();
         } else {

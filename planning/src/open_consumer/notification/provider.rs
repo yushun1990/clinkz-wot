@@ -116,7 +116,6 @@ where
             || r.binding.identity() != (self.id, identity.binding_generation())
             || r.binding.preparation_bounds().work == 0
             || r.services.access.work() == 0
-            || r.services.data.policy().validation_work == 0
         {
             return Err(invalid());
         }
@@ -323,7 +322,6 @@ where
                 content_type: form.facts.content_type.into(),
                 support,
                 funding,
-                bank: admission.bank.clone(),
             })
             .map_err(|e| match e.error().error() {
                 // The same executor just qualified this exact program.

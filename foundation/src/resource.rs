@@ -599,7 +599,7 @@ mod tests {
 
     #[test]
     fn generated_profiles_cover_every_schema_field() {
-        assert_eq!(RESOURCE_LIMIT_COUNT, 196);
+        assert_eq!(RESOURCE_LIMIT_COUNT, 194);
         assert_eq!(ResourceKind::ALL.len(), RESOURCE_LIMIT_COUNT);
         assert_eq!(GatewayDefaultV1::ID, ResourceProfileId::GATEWAY_DEFAULT_V1);
         assert_eq!(
@@ -651,8 +651,8 @@ mod tests {
     #[test]
     fn number_lexeme_schema_projection_is_consumer_only() {
         let kind = ResourceKind::NumberLexemeBytesMax;
-        assert_eq!(kind.index(), 195);
-        assert_eq!(ResourceKind::ALL[195], kind);
+        assert_eq!(kind.index(), 193);
+        assert_eq!(ResourceKind::ALL[193], kind);
         assert_eq!(kind.field_name(), "number_lexeme_bytes_max");
         assert_eq!(kind.category(), "document");
         assert_eq!(kind.unit(), "bytes");
@@ -667,8 +667,8 @@ mod tests {
             assert_eq!(limits.get(kind), expected);
             assert_eq!(limits.number_lexeme_bytes_max(), expected);
         }
-        // The append must not reinterpret an existing public identity.
-        assert_eq!(ResourceKind::DiscoveryProcessesGlobalMax.index(), 56);
+        // The two retired subscription rows no longer occupy positions.
+        assert_eq!(ResourceKind::DiscoveryProcessesGlobalMax.index(), 54);
         assert_eq!(
             ResourceKind::DiscoveryProcessesGlobalMax.category(),
             "discovery"

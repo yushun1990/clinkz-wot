@@ -221,12 +221,12 @@ other unsupported assertions listed above. Mere presence of a dataResponse
 schema never creates a response right. A caller requiring native Event responses
 is refused before native acquisition; protocol SUBACK is not a dataResponse.
 
-`ConsumerNotificationAssociation` binds a shared prepared mapping, an independent
-`ConsumerInstance` reference, retained access owner and instance bank. It allocates
-no queue, vacant conversation slot or native subscription. `ConsumerNotifications`
-supplies bounded work capacity at a separately selected bank; applications pass
-an association to `subscribe`. Each admitted conversation retains its original
-move-only cursor, identity, policy, queue, loss/stop, response and cleanup state.
+`ConsumerNotificationAssociation` binds a shared prepared mapping, original
+`ConsumerInstance` reference and retained access owner. The application
+supplies local conversation, delivery and report limits to
+`ConsumerNotifications` and passes its association to `subscribe`. The Binding
+supplies actual participation and native buffering. Each admitted conversation
+retains its original identity, cursor, policy, queue, loss, response and stop.
 Dropping association views does not revoke work. Original authority and prepared
 declarations are checked around native/validation/policy callbacks and at delayed
 delivery. Maintain checks the continuing grant without an item; Deliver/Respond
@@ -238,15 +238,14 @@ item is exposed or resurrected. Native interests change only for their actual
 participation/cleanup obligations. For a root Event conversation this is the declared Event name, not authenticated
 publisher identity. NoSec MQTT establishes no trusted meter/source provenance.
 
-Preparation can import original data/access service owners across registries;
-physical backing is charged once. Work capacity funds its Engine envelope and
-cleanup slots; each admitted conversation funds validation scratch at that work
-bank and its quota at the original instance bank. Scratch/quota release after
-retirement and acknowledgement; reports retain original coordinate backing until
-disposal. Native buffers and sockets remain separately Binding-owned. Pure
-compilation still requires an explicit Planning work allowance of at least 4096
-(the stock Gateway preset has 256), with compilation temporary capacity and
-explicit work limits. This does not qualify the unmodified Gateway profile.
+Preparation can import original data/access service owners across registries
+and charge physical service backing once. Notification execution uses local
+storage and a bounded operation per turn. A collected report retains its
+original coordinate backing and report slot through disposal. The MQTT
+Binding supplies bounded native queue storage and one inline control frame.
+Pure compilation still uses the Planning allowance and temporary backing. Its
+compilation limit needs at least 4096 for this mapping (the Gateway preset
+supplies 256).
 
 The [composition fixture](tests/notification_composition.rs) executes eight
 persistent associations over one compiled mapping, two Engine conversation slots
@@ -258,22 +257,21 @@ capabilities. Optional aggregate Host driving is described below.
 
 ### Managed mixed Consumer execution
 
-`ConsumerNotifications::step` visits active conversations and original cleanup
+`ConsumerNotifications::step` visits one conversation slot in rotation
 without an application cursor inventory. Live cursors keep queued data and closed
 reports. Aggregate driving disposes abandoned reports after complete local
 retirement; retain the cursor for a required report, or use the manual
 `progress`/`step_cleanup` path to collect reports after cursor loss.
 
 A deployment drives finite calls, Actions and notifications through their
-respective capacity owners. The finite owner visits one slot per turn.
-The continuing capacities still take independent work budgets.
+respective capacity owners. Each visits one slot per turn.
 Start with managed `ConsumerOwner` registration and bind continuing associations
 to that original passive reference. Removing/replacing the parent fences all its
 original work; capacity size and native connection count remain independent of
 Thing count. No scheduler, new work owner or native task registry is added.
 
 The deployment supplies native Wakers and independent maintenance turns covering
-passive lifecycle/stop changes, deadlines, credit and the next native phase.
+passive lifecycle/stop changes, deadlines and the next native phase.
 Observe application results in the same Host task/loop. Query, Cancel, advance,
 response and mapped stop remain explicit decisions. Each capacity drives its
 admitted progress and cleanup. Idle capacities do not imply final disposal of separately
@@ -290,7 +288,7 @@ cargo run -p clinkz-wot-binding-mqtt --example mixed_consumer -- \
 ```
 
 The [real mixed tests](tests/mixed_consumer.rs) exercise separate permissions,
-short credit, native wakes, silent deadlines, controls, replacement, owner loss,
+native wakes, silent deadlines, controls, replacement, owner loss,
 retained original results and physical release. The
 [scoped evidence](../../../docs/evidence/consumer-execution-composition.md)
 distinguishes managed Consumer integration from remaining Producer reuse,
@@ -300,7 +298,7 @@ Native policy is fixed and bounded: at most 32 actual participation leases and
 32 exact topics per service, four queued payloads per participant, 4096 payload
 bytes per item, a bounded frame, one control in flight and two-second connect/
 control timeouts. Native socket, queues, frame, waker and control backing belong
-to this Binding policy, separate from Engine bank accounting. Compatible logical
+to this Binding policy. Compatible logical
 subscribers share a single native topic subscription and connection. The Binding
 matches and distributes received payloads (sharing immutable body storage);
 the Engine does no subscriber loop. Each recipient still validates independently.
@@ -319,8 +317,8 @@ join to an existing subscription receives no sibling's queued data. Matching is
 by reception at the native service, without a cross-incarnation wire-history,
 publisher identity, global ordering, replay or loss-recovery guarantee.
 
-Stop fences local delivery immediately, even with zero work or denied/malformed
-mapped cancellation. An empty `CancellationInput` requests the selected described
+Stop fences local delivery immediately, including when mapped cancellation
+is denied or malformed. An empty `CancellationInput` requests the selected described
 unobserve/unsubscribe; application data is refused with its original input. The
 current mapping supports that request only when the selected observe/subscribe
 Form also includes `unobserveproperty` / `unsubscribeevent` respectively
@@ -529,7 +527,7 @@ terminate under the chosen policy, without coalescing.
 The bounded schema table permits up to 32 Events and 4096 total name bytes;
 semantic-arena, source and operation-definition limits may refuse earlier.
 Per-occurrence attribution backing joins payload in Engine handoff/queue limits;
-construction, disposal and validation are funded before handoff. Binding queues,
+the codec owns its bounded validation workspace. Binding queues,
 frames and shared sockets retain their separate fixed service policy. This
 establishes no total-process RAM, fleet throughput, general schema/security,
 constrained-profile or production qualification claim.

@@ -641,7 +641,12 @@ Notification association/capacity separation changes no native topology authorit
 Actual same-registration programs may serve many independent Consumer associations
 under checked original configuration/support. The Binding still decides native
 matching, distribution, compatibility, response cardinality and physical lease
-retirement. The Engine policy receives logical occurrence coordinates from the
+retirement. `prepare` secures the original participation and rollback backing
+before native start. Each native poll and its synchronous callbacks fit a bounded
+turn. Reply rights retain their own native backing through retirement even after
+the participant closes. A local close poll without mapped cancellation authority
+can still report evidence from an earlier authorized attempt. The Engine policy
+receives logical occurrence coordinates from the
 original candidate, without treating an MQTT topic or NoSec payload as verified
 sender evidence. Rich source-provenance support requires separately qualified
 mapping/verification and original trust/dependency ownership; neither this facet
@@ -673,8 +678,8 @@ source evidence to the exact TD Event identity before handoff; Core never parses
 topics or native event headers. It must not discard this attribution or relabel
 it using a collection-wide data schema. The Engine's public delivery loan lends
 Core `PayloadView` and `AffordanceSite` slices, while the owning native candidate
-and reply remain internal under their original queue/cleanup funding. No protocol
-mapping or native sharing behavior is changed by this read-only boundary.
+and reply remain internal in their original delivery slot. The Binding owns
+native buffering and can refuse handoff at the admitted backing limit.
 `poll_next`'s backing limit includes the
 occurrence name allocation (`notification_item_backing`) as well as payload;
 queue accounting retains both. The Engine checks scope/member/schema before

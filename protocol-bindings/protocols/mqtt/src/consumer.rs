@@ -189,7 +189,8 @@ struct Control {
     topic: Arc<str>,
     subscribe: bool,
     packet: u16,
-    frame: Vec<u8>,
+    frame: [u8; MAX_TOPIC_BYTES + 8],
+    len: usize,
     written: usize,
     timer: Pin<Box<Sleep>>,
 }
@@ -356,15 +357,13 @@ impl ConsumerSession {
                 // before its ACK. A service never reconnects after failure.
                 let packet = self.next_packet;
                 self.next_packet = self.next_packet.checked_add(1).unwrap_or(1);
-                let mut body = packet.to_be_bytes().to_vec();
-                body.extend_from_slice(&(topic.len() as u16).to_be_bytes());
-                body.extend_from_slice(topic.as_bytes());
-                if subscribe {
-                    body.push(0);
-                }
-                let mut frame = vec![if subscribe { 0x82 } else { 0xa2 }];
-                remaining(&mut frame, body.len());
-                frame.extend_from_slice(&body);
+                let mut frame = [0; MAX_TOPIC_BYTES + 8];
+                frame[0] = if subscribe { 0x82 } else { 0xa2 };
+                let body_len = 4 + topic.len() + usize::from(subscribe);
+                let header = 1 + remaining(&mut frame[1..], body_len);
+                frame[header..header + 2].copy_from_slice(&packet.to_be_bytes());
+                frame[header + 2..header + 4].copy_from_slice(&(topic.len() as u16).to_be_bytes());
+                frame[header + 4..header + 4 + topic.len()].copy_from_slice(topic.as_bytes());
                 self.topics
                     .iter_mut()
                     .find(|t| t.name == topic)
@@ -387,6 +386,7 @@ impl ConsumerSession {
                     subscribe,
                     packet,
                     frame,
+                    len: header + body_len,
                     written: 0,
                     timer: Box::pin(tokio::time::sleep(Duration::from_secs(2))),
                 });
@@ -399,10 +399,10 @@ impl ConsumerSession {
             self.fail(io_error());
             return;
         }
-        if control.written == control.frame.len() {
+        if control.written == control.len {
             return;
         }
-        let end = (control.written + self.registration.config.write_bytes).min(control.frame.len());
+        let end = (control.written + self.registration.config.write_bytes).min(control.len);
         match native::write(
             self.stream.as_ref().unwrap(),
             cx,
@@ -473,7 +473,7 @@ impl ConsumerSession {
             };
             if body.len() != if c.subscribe { 3 } else { 2 }
                 || body[..2] != c.packet.to_be_bytes()
-                || c.written != c.frame.len()
+                || c.written != c.len
                 || header != if c.subscribe { 0x90 } else { 0xb0 }
                 || c.subscribe && body[2] != 0
             {
@@ -579,15 +579,16 @@ impl ConsumerSession {
         self.wakes.wake_by_ref();
     }
 }
-fn remaining(frame: &mut Vec<u8>, mut n: usize) {
-    loop {
+fn remaining(frame: &mut [u8], mut n: usize) -> usize {
+    for (offset, byte) in frame.iter_mut().enumerate() {
         let b = (n % 128) as u8;
         n /= 128;
-        frame.push(b | if n != 0 { 128 } else { 0 });
+        *byte = b | if n != 0 { 128 } else { 0 };
         if n == 0 {
-            break;
+            return offset + 1;
         }
     }
+    unreachable!("bounded MQTT control length")
 }
 
 pub struct MqttSubscription {
@@ -635,8 +636,10 @@ impl ConsumerNotificationBinding for MqttNotificationConsumer {
             if s.interests.len() == LEASES {
                 return Err(busy());
             }
-            let interests = &s.interests.clone();
-            s.topics.retain(|t| {
+            let ConsumerSession {
+                interests, topics, ..
+            } = &mut *s;
+            topics.retain(|t| {
                 t.phase != TopicPhase::New
                     || interests
                         .iter()
@@ -657,6 +660,8 @@ impl ConsumerNotificationBinding for MqttNotificationConsumer {
                         .any(|i| i.borrow().slot == *n)
                 })
                 .unwrap();
+            let mut queue = VecDeque::new();
+            queue.try_reserve_exact(QUEUE).map_err(|_| busy())?;
             if !s.topics.iter().any(|t| t.name == program.topic) {
                 if s.topics.len() == LEASES {
                     return Err(busy());
@@ -676,7 +681,7 @@ impl ConsumerNotificationBinding for MqttNotificationConsumer {
                 closing: false,
                 authorized_cancel: false,
                 remote: RemoteCancellation::NotAttempted,
-                queue: VecDeque::with_capacity(QUEUE),
+                queue,
                 loss: 0,
             }));
             s.interests.push(Rc::downgrade(&interest));
@@ -758,7 +763,7 @@ impl NotificationParticipation for MqttSubscription {
         }
         let (slot, topic) = {
             let mut i = self.interest.borrow_mut();
-            i.authorized_cancel |= input.is_some();
+            i.authorized_cancel = input.is_some();
             i.closing = true;
             i.queue.clear();
             (i.slot, i.topic.clone())
