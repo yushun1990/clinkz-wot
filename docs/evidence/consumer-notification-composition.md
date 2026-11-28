@@ -10,26 +10,45 @@ and [Foundation](../spec/foundation.md). Decision alternatives are recorded in
 [topic 0123](../../workspace/0123-consumer-notification-association-capacity.md).
 
 The [public MQTT fixture](../../protocol-bindings/protocols/mqtt/tests/notification_composition.rs)
-uses one actual MQTT registration and program. Its wrapper counts the real pure
+uses one loopback MQTT registration and program. Its wrapper counts the pure
 compilation callback while delegating preparation, support and native participation
-to the production Binding. One TD admission/compilation produces one immutable
-endpoint-specialized definition; eight independent Consumer associations retain
-it, with separately selected policies and instance banks. Binding those existing
+to the hand-written Binding fixture. One TD admission and compilation produces an
+immutable endpoint-specialized definition. Eight independent Consumer associations retain
+it, with separately selected policies. Binding those existing
 facts does not repeat TD admission/schema preparation/native lowering. This is not
 compatibility checking for a newly supplied TD or a changed endpoint, and is not
 cross-endpoint reuse of partially invariant lowering as in the HTTP extractor.
 
-Two explicit conversation slots admit two associations; idle associations reserve
-no subscription quota, validation scratch, queue or native interest. A second
-outstanding conversation at a one-subscription instance bank refuses while global
-capacity is still available; a third association refuses under shared saturation.
-An unacknowledged closed conversation retains its slot. The same real broker
-interest remains usable by the sibling after the continuing grant is withdrawn
-from one Consumer, and after another Consumer's mapped cancellation is denied. Passive
-view loss does not revoke accepted work. Original Consumer revocation, lost cursor
-cleanup and final release are exercised with partial native frame writes.
-Mosquitto observes one SUBSCRIBE and one final UNSUBSCRIBE; the production Binding
-owns both, its distribution, socket and physical participation leases.
+Two conversation slots admit two associations. Idle associations use no
+conversation, report, queue or native interest slot. A third association is
+refused while both slots are occupied. A locally closed conversation holds its
+slot until collection. Holding the collected report still blocks the last
+report slot even after the conversation slot is free. Dropping it allows a
+successor to subscribe while the original sibling still holds the shared broker
+interest. The fixture exercises withdrawal of a continuing grant, denial of
+mapped cancellation, passive view loss and final release with partial native
+writes. Mosquitto observes one SUBSCRIBE and one final UNSUBSCRIBE. The Binding
+owns those controls, distribution, the socket and physical participation.
+
+In the cancellation attribution test, the original lease requests mapped stop
+while SUBACK is outstanding. A same-filter successor joins, receives a value and
+stops locally. The broker observes one housekeeping UNSUBSCRIBE. The original
+lease still reports `NotAttempted`. A mapped removal accepted while another
+filter occupies the writer reports the same broker acknowledgement from
+lease-driven and service-driven schedules. Withdrawal after acceptance permits
+that command to finish on the service's backing. A completed original lease
+retires while a successor on the same filter is writing its own UNSUBSCRIBE.
+During broker loss after a mapped command starts, the closing lease keeps
+`Cancelled` and remote `Unknown`, and the service owner retains the fault.
+Affected live leases receive the native fault on progress.
+[Mosquitto lifecycle cases](../../protocol-bindings/protocols/mqtt/tests/support/consumer_notifications.rs)
+
+A second broker test fills the Binding's 32 participation slots using one
+connected subscriber and 31 locally acquired interests. A separate capacity
+with vacant conversation and report slots is refused. Completing the original
+native close permits the contender to establish while the original report is
+still held. The pre-effect refusal releases the contender's provisional report
+slot, so that retry uses its only slot.
 
 The policy sees the original Thing-root conversation and named `alarm`/`ready`
 Event coordinates, including a permission change after queue admission. Only the
@@ -47,64 +66,64 @@ Event is delivered with no resubscribe, unsubscribe, first cause or native loss.
 Both cases fail on the original PR head: the first observes an occurrence-free
 Deliver call and the second gets terminal Security refusal from `front()`.
 
-The raw reply-owner counterexample refuses at acceptance, queued delivery, response
-admission and delayed response send, including required replies. Zero cleanup credit
-and pending native retirement retain the original payload/reply and submitted
-response, with no send and no new candidate acquired. Retirement progresses without
-codec/authorization credit; only subsequent paid disposal releases the payload.
-A later allowed Event and reply use the same conversation. A separate native
-retirement-error case fences on that actual failure and keeps the original job
-through eventual cleanup. Another case withdraws the continuing grant inside an
-occurrence policy callback: fresh Maintain refuses both staged and queued handoffs,
-even when the item callback returned RejectOccurrence. These deterministic owner tests supplement the real
-MQTT cases; they do not claim MQTT reciprocal response support.
+The raw reply-owner fixture refuses occurrences at acceptance, queued delivery,
+response admission and delayed response send, including required replies.
+Pending reply retirement retains the original payload and submitted response.
+Retirement completes without a fresh delivery grant. The response input is then
+released and the original payload stays owned until disposal. A later allowed
+Event and reply use the same conversation. A retirement error fences that
+conversation and retains the original job. Another case withdraws the
+continuing grant inside an occurrence callback. The Maintain check refuses both
+staged and queued handoffs, including when the item decision rejected the
+occurrence. The independent Binding supplies these reply opportunities.
 
 Review 10's notification F2 correction imports original data/access owners across
 independently constructed registries. A fixture allocates 60,000 bytes of data
 service backing and retains its one original bank charge while two mappings each
 add the same separate record/program/schema charge at another bank. That per-map
 charge is smaller than the service backing; physical service backing is not added
-to either mapping. Work/instance/report lifetimes retain the original owners and
-all account reservations reach zero after final disposal. These assertions measure
+to either mapping. Live definitions and conversations retain the original owners.
+A collected report owns its evidence, identity, coordinate and report slot. A
+Thing-root report can be held while the original access service is released
+and the identical mapping is prepared at the measured one-preparation peak.
+These assertions measure
 reservation topology; they are not an allocator/RSS or throughput benchmark.
 Raw startup adoption separately recognizes same-object aliases within one registry;
 sharing across registry roots requires explicitly propagating retained owners.
 
-The F3 regressions change prepared retained bytes, temporary bytes, body bytes,
-validation work and encoded-selection bounds between preparation and association
-binding/admission. They also change native support, availability/schema support,
-and already-bound access backing/work/security revision. Refusal cannot replace
-the original baseline or change work-bank reservations. A declaration change after
-admission fences the original conversation before native start, even if restored
-before cleanup. These metadata-mutation probes establish declaration fencing, not
-an allocation-overrun or credential-leak claim.
+The dependency regressions change retained, temporary and body bounds between
+preparation, installation and admission. They also exercise native support,
+codec availability and qualification revisions for data and access. An observed
+change after admission fences the original conversation before start. Restoring
+the metadata before cleanup leaves that fence in place.
 
-The response-validation regression mutates the prepared data service's work
-declaration inside its actual JSON validation callback, both for valid and invalid
-caller payloads. The observed mismatch fences the original conversation. Restoring
-the declaration cannot reenter validation, expose/advance the occurrence or submit
-the response. Ordinary malformed input and short codec credit instead leave the
-same conversation Active. The exact refused caller payload is returned; zero-credit
-and pending cleanup retain the original occurrence/reply and bank reservations.
-Final retirement sends nothing, releases the reply once and retains the original
-first cause. The regression failed before the correction: state remained Active.
-An independently supplied review probe likewise changed from Active/retry accepted/
-one send to Closing/retry refused/no send.
+The response-validation regression mutates the prepared data service's body
+bound inside the JSON callback for both accepted and refused payloads.
+Ordinary malformed input returns the original input and leaves the conversation
+Active. An observed dependency violation fences it even when validation fails.
+Pending cleanup retains the exact occurrence and reply and sends no dataResponse.
+The downstream UDP fixture holds a report while an idle association's final
+disposal attempts a callback-driven Read. The service release occurs inside
+the Consumer turn. A later independent turn can send the Read.
+[Mixed execution evidence](consumer-execution-composition.md)
 
-Adjacent raw counterexamples distinguish identical `CoreError` categories carrying
-input/work versus dependency origin before native polling. They also reject response
-validation after synchronous stop or native pairing loss, restore the pairing and
-attempt retry. Both paths fence immediately and retain the original input, first
-cause and reply/payload cleanup owners. Admission, cancellation and owned-native-data
-validation retain their existing refusal or fatal-cleanup semantics.
-
-The [raw lifecycle suite](../../servient/finite/tests/notification.rs) retains its
-original regressions for original identities, independent permissions/stop, loss,
-queue/late handoff, response cardinality, pending/error retirement, prepaid cleanup
-and finite local abort. Existing real Producer-to-Consumer MQTT tests retain
-Property/Event/collection schema, replacement, broker failure and native cleanup
-evidence. Migrated assertions distinguish per-conversation scratch release from
-retained report coordinate funding and capacity-envelope disposal.
+The [raw lifecycle suite](../../servient/finite/tests/notification.rs) drives
+one original slot per aggregate turn. It exercises bounded refusal, queue and
+handoff ownership, pending and failed retirement, local abort, and first cause
+when a native outcome arrives late. A stale identity from a refused Event
+admission cannot collect a later Property report in the same slot. Stop and
+instance revocation retain their actual order across direct, passive and
+abandonment paths with or without intervening progress.
+A native terminal failure or a withdrawn continuing grant can fence an active
+conversation during a pending reply. Local close releases the participation
+while the reply and payload remain held. The staged and queued replies each
+get retirement turns after fencing, including when a later queued reply must
+release the backing on which an earlier reply waits. A pending mapped
+stop loses permission to lend its accepted input and retains that exact backing
+through local close. A held report separately saturates report admission and
+returns its unit through disposal. Zero-size local capacity and oversized inputs refuse before native
+construction. The legacy global/per-Thing subscription accounts and execution
+work factories have no callers on this path.
 
 The [independent Cargo-linked fixture](../../tools/architecture-fixtures/open-consumer/tests/notification.rs)
 retains its structured four-role and exclusive response-owner regressions. Its

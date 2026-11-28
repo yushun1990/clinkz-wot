@@ -212,26 +212,21 @@ fn main() {
         instance.consumer(),
         Rc::new(definition),
         services.access.clone(),
-        bank.clone(),
-        &mut work(),
     )
     .unwrap_or_else(|e| panic!("{:?}", e.error()));
     drop((thing, registry, services));
 
     let calls = ConsumerCalls::try_new(bank.clone(), 1).unwrap();
     let actions = ConsumerActions::try_new(1, bank.clone()).unwrap();
-    let mut notifications = ConsumerNotifications::try_new(
-        RawNotificationLimits {
-            subscriptions: 1,
-            queue_items: 4,
-            queue_payload_bytes: 24_000,
-            payload_backing_bytes: 4608,
-            control_backing_bytes: 0,
-            target_name_bytes: 64,
-            engine_bytes: 128_000,
-        },
-        bank.clone(),
-    )
+    let mut notifications = ConsumerNotifications::try_new(RawNotificationLimits {
+        subscriptions: 1,
+        queue_items: 4,
+        queue_payload_bytes: 24_000,
+        payload_backing_bytes: 4608,
+        control_backing_bytes: 0,
+        target_name_bytes: 64,
+        reports: 8,
+    })
     .unwrap();
     let io = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -270,7 +265,6 @@ fn main() {
                     SubscriptionInput(None),
                     ResponseRequirement::None,
                     NotificationOverflow::Terminate,
-                    &mut work(),
                 )
                 .unwrap_or_else(|e| panic!("{:?}", e.error())),
         );
@@ -290,7 +284,7 @@ fn main() {
             let instant = now();
             calls.step(cx, instant).unwrap();
             actions.step(cx, instant).unwrap();
-            notifications.step(cx, &mut work()).unwrap();
+            notifications.step(cx).unwrap();
             let idle =
                 calls.is_idle() && actions.is_idle() && notifications.retained_subscriptions() == 0;
             if closing {
@@ -332,10 +326,10 @@ fn main() {
                     cursor = None;
                 } else if notifications.status(receiver.identity()).unwrap().state
                     == clinkz_wot_servient_finite::notification::NotificationState::Active
-                    && let Some(event) = notifications.front(receiver, &mut work()).unwrap()
+                    && let Some(event) = notifications.front(receiver).unwrap()
                 {
                     eprintln!("Event: {:?}", event.data);
-                    notifications.advance(receiver, &mut work()).unwrap();
+                    notifications.advance(receiver).unwrap();
                 }
             }
             if clock.elapsed() >= Duration::from_secs(10) {

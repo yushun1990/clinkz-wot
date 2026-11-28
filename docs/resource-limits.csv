@@ -52,8 +52,6 @@ queries_per_principal_max,directory,items,per-principal,directory-client,disable
 queries_global_max,directory,items,global,directory-client,disabled,1024,1024,NA,RES-LIMIT-001
 watchers_per_principal_max,directory,items,per-principal,directory-client,disabled,64,64,NA,RES-LIMIT-001
 watchers_global_max,directory,items,global,directory-client,disabled,8192,8192,NA,RES-LIMIT-001
-subscriptions_per_thing_max,subscription,items,per-thing,producer|consumer,disabled,1024,NA,256,RES-LIMIT-001
-subscriptions_global_max,subscription,items,global,producer|consumer,disabled,65536,NA,256,RES-LIMIT-001
 discovery_processes_per_principal_max,discovery,items,per-principal,directory-client,disabled,16,16,NA,RES-LIMIT-001
 discovery_processes_global_max,discovery,items,global,directory-client,disabled,1024,1024,NA,RES-LIMIT-001
 binding_and_contributor_probes_per_admission_max,plan,probes,per-admission,producer|consumer,disabled,16384,NA,1024,RES-LIMIT-001|PLAN-INDEX-001

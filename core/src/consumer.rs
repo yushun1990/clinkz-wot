@@ -14,6 +14,8 @@ use core::sync::atomic::{AtomicBool, Ordering};
 /// entire schema subset of each used value role; the service paired with the
 /// returning operation validates its normal/late result representation.
 /// Callbacks are trusted, pure and bounded by their captured declared policy.
+/// Notification validators supply any workspace needed on supported input.
+/// Receiving or validating an occurrence must not depend on caller work credit.
 /// Metadata/support/availability queries are bounded allocation-free passive
 /// inspection; they acquire no credentials, source documents or native I/O.
 /// Implementations must explicitly adopt qualification invalidation:
@@ -127,7 +129,7 @@ pub struct ConsumerDataPolicy {
     /// Complete returned selection-payload backing, reserved before encoding.
     /// Zero declines selection encoding. Separate from transient encoder scratch.
     pub encoded_selection_bytes: u64,
-    /// Legacy callback allowance for notifications and preparation.
+    /// Legacy allowance used by preparation and Producer validation.
     pub validation_work: u64,
 }
 
@@ -209,7 +211,7 @@ pub trait ConsumerAccessService: Send + Sync {
         request: crate::notification::NotificationAuthorization<'_>,
     ) -> CoreResult<crate::notification::NotificationDecision> {
         self.authorize_instance(
-            &request.recipient.consumer,
+            request.recipient.consumer(),
             binding,
             endpoint,
             request.operation(),
@@ -578,6 +580,7 @@ impl ConsumerFiniteSchemas {
 /// Field order retains original funding until every executable owner is gone.
 pub struct ConsumerNotificationDefinition<B: crate::notification::ConsumerNotificationBinding> {
     input: ConsumerNotificationDefinitionInput<B>,
+    data_revision: u64,
 }
 pub struct ConsumerNotificationDefinitionInput<B: crate::notification::ConsumerNotificationBinding>
 {
@@ -590,14 +593,12 @@ pub struct ConsumerNotificationDefinitionInput<B: crate::notification::ConsumerN
     pub form: u32,
     pub schemas: NotificationSchemas,
     pub data: Arc<ConsumerServiceOwner<dyn ConsumerDataService>>,
-    /// Admission declarations, captured before compilation and never refreshed
-    /// by association/capacity construction. Changed metadata requires new
-    /// qualification and funding, even when the new declaration is smaller.
+    /// Original service policy. The notification execution envelope uses its
+    /// body, temporary and retained-byte bounds.
     pub data_policy: ConsumerDataPolicy,
     pub content_type: Box<str>,
     pub support: crate::notification::NotificationSupport,
     pub funding: Vec<HostCapacityReservation>,
-    pub bank: Arc<HostResourceAccounts>,
 }
 impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDefinition<B> {
     /// Trusted source-free construction, not a TD support certificate. Refusal
@@ -605,8 +606,31 @@ impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDe
     pub fn try_new(
         input: ConsumerNotificationDefinitionInput<B>,
     ) -> Result<Self, BindingInputRejection<ConsumerNotificationDefinitionInput<B>>> {
-        let definition = Self { input };
-        match definition.check_dependencies() {
+        let data_revision = input.data.qualification_revision();
+        let definition = Self {
+            input,
+            data_revision,
+        };
+        let input = &definition.input;
+        let qualified = definition.check_dependencies().and_then(|()| {
+            if !input.schemas.kind().accepts_target(&input.target)
+                || !input
+                    .schemas
+                    .supports_start_data(input.data.service(), &input.content_type)
+                || !input.schemas.supports_optional_data(
+                    input.data.service(),
+                    &input.content_type,
+                    input.support,
+                )
+            {
+                return Err(invalid());
+            }
+            definition.check_dependencies()?;
+            input
+                .schemas
+                .check_control_inputs(input.support.cancellation)
+        });
+        match qualified {
             Ok(()) => Ok(definition),
             Err(e) => Err(BindingInputRejection::new(
                 definition.input,
@@ -617,21 +641,19 @@ impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDe
     pub fn check_dependencies(&self) -> CoreResult<()> {
         let input = &self.input;
         let data = input.data.service();
+        let policy = data.policy();
         if input.binding.identity()
             != (
                 input.identity.binding_id(),
                 input.identity.binding_generation(),
             )
             || input.binding.configuration() != &input.configuration
-            || !input.schemas.kind().accepts_target(&input.target)
             || !input.data.available()
-            || input.data.policy() != input.data_policy
-            || input.data_policy.retained_bytes != input.data.backing_bytes()
-            || input.data_policy.validation_work == 0
-            || !input.schemas.supports_start_data(data, &input.content_type)
-            || !input
-                .schemas
-                .supports_optional_data(data, &input.content_type, input.support)
+            || policy.body_bytes != input.data_policy.body_bytes
+            || policy.temporary_bytes != input.data_policy.temporary_bytes
+            || policy.retained_bytes != input.data.backing_bytes()
+            || policy.retained_bytes != input.data_policy.retained_bytes
+            || data.qualification_revision() != self.data_revision
         {
             return Err(invalid());
         }
@@ -641,7 +663,7 @@ impl<B: crate::notification::ConsumerNotificationBinding> ConsumerNotificationDe
         if support != input.support {
             return Err(invalid());
         }
-        input.schemas.check_control_inputs(support.cancellation)
+        Ok(())
     }
     pub fn input(&self) -> &ConsumerNotificationDefinitionInput<B> {
         &self.input

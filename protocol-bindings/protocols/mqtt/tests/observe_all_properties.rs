@@ -110,6 +110,7 @@ fn from_definition(
     owner: &ConsumerInstance,
     items: usize,
     access: Arc<dyn ConsumerAccessService>,
+    bank: &Arc<HostResourceAccounts>,
 ) -> Consumer {
     Consumer::try_new(
         owner.reference(),
@@ -122,8 +123,9 @@ fn from_definition(
             payload_backing_bytes: 4608,
             control_backing_bytes: 4608,
             target_name_bytes: 64,
-            engine_bytes: 128_000,
+            reports: 8,
         },
+        bank,
     )
     .unwrap_or_else(|e| panic!("runtime: {:?}", e))
 }
@@ -147,21 +149,19 @@ fn consumer(
         owner,
         items,
         access,
+        bank,
     )
 }
 fn subscribe(c: &mut Consumer, policy: NotificationOverflow) -> NotificationCursor {
-    c.subscribe(
-        SubscriptionInput(None),
-        ResponseRequirement::None,
-        policy,
-        &mut budget(),
-    )
-    .unwrap_or_else(|e| panic!("subscribe: {:?}", e.error()))
+    c.subscribe(SubscriptionInput(None), ResponseRequirement::None, policy)
+        .unwrap_or_else(|e| panic!("subscribe: {:?}", e.error()))
 }
 async fn active(c: &mut Consumer, id: &NotificationCursor) {
     let end = Instant::now() + Duration::from_secs(3);
-    while c.progress(id.identity(), &mut cx(), &mut budget()).unwrap() != NotificationState::Active
-    {
+    while {
+        c.progress(id.identity(), &mut cx()).unwrap();
+        c.status(id.identity()).unwrap().state != NotificationState::Active
+    } {
         assert!(
             Instant::now() < end,
             "establishment: {:?}",
@@ -176,27 +176,26 @@ async fn accounted(c: &mut Consumer, id: &NotificationCursor, n: u64) {
         let s = c.status(id.identity()).unwrap();
         s.queued_items as u64 + s.loss.items < n
     } {
-        c.progress(id.identity(), &mut cx(), &mut budget()).unwrap();
+        c.progress(id.identity(), &mut cx()).unwrap();
         assert!(Instant::now() < end, "missing collection samples");
         tokio::time::sleep(Duration::from_millis(1)).await;
     }
 }
 async fn value(c: &mut Consumer, id: &mut NotificationCursor, expected: &[u8]) {
     accounted(c, id, 1).await;
-    let v = c.front(id, &mut budget()).unwrap().unwrap();
+    let v = c.front(id).unwrap().unwrap();
     assert_eq!(v.data.unwrap().body, expected);
     assert_eq!(v.response, EventResponseState::Unavailable);
-    c.advance(id, &mut budget()).unwrap();
+    c.advance(id).unwrap();
 }
 async fn settled(c: &mut Consumer, id: &NotificationCursor) -> NotificationSettlement {
     let end = Instant::now() + Duration::from_secs(3);
-    while c.progress(id.identity(), &mut cx(), &mut budget()).unwrap() != NotificationState::Closed
-    {
+    while c.progress(id.identity(), &mut cx()).unwrap() != NotificationTurn::Closed {
         assert!(Instant::now() < end, "cleanup timeout");
         tokio::time::sleep(Duration::from_millis(1)).await;
     }
     let s = c.take_settlement(id.identity()).unwrap();
-    assert_eq!(s.target, AffordanceTarget::Thing);
+    assert_eq!(s.target(), clinkz_wot_core::thing::AffordanceSite::Thing);
     s
 }
 async fn fenced(c: &mut Consumer, id: &NotificationCursor) {
@@ -205,7 +204,7 @@ async fn fenced(c: &mut Consumer, id: &NotificationCursor) {
         c.status(id.identity()).unwrap().state,
         NotificationState::Establishing | NotificationState::Active
     ) {
-        c.progress(id.identity(), &mut cx(), &mut budget()).unwrap();
+        c.progress(id.identity(), &mut cx()).unwrap();
         assert!(Instant::now() < end, "expected collection refusal");
         tokio::time::sleep(Duration::from_millis(1)).await;
     }
@@ -300,8 +299,8 @@ fn joined_root_maps_use_one_native_subscription_and_independent_logical_stop() {
         assert_ne!(ca.identity(), cz.identity());
         active(&mut a, &ca).await;
         active(&mut z, &cz).await;
-        assert!(a.front(&mut ca, &mut budget()).unwrap().is_none());
-        assert!(z.front(&mut cz, &mut budget()).unwrap().is_none());
+        assert!(a.front(&mut ca).unwrap().is_none());
+        assert!(z.front(&mut cz).unwrap().is_none());
         let mut peer = Peer::new(&b);
         peer.subscribe(topic);
         send(&mut po, &mut pe, ONE).await;
@@ -316,7 +315,7 @@ fn joined_root_maps_use_one_native_subscription_and_independent_logical_stop() {
             1,
             "one collection, no N leaf subscriptions"
         );
-        a.stop(&ca, Some(CancellationInput(None)), &mut budget())
+        a.stop(&ca, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
         assert_eq!(
             settled(&mut a, &ca).await.remote_cancellation,
@@ -326,7 +325,7 @@ fn joined_root_maps_use_one_native_subscription_and_independent_logical_stop() {
         send(&mut po, &mut pe, TWO).await;
         peer.event(topic, TWO);
         value(&mut z, &mut cz, TWO).await;
-        z.stop(&cz, Some(CancellationInput(None)), &mut budget())
+        z.stop(&cz, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
         assert_eq!(
             settled(&mut z, &cz).await.remote_cancellation,
@@ -387,13 +386,14 @@ fn every_member_is_validated_without_partial_delivery_and_with_original_backing_
             let status = c.status(id.identity()).unwrap();
             assert_eq!(status.queued_items, 0);
             assert!(status.has_retained_handoff);
-            assert!(c.front(&mut id, &mut budget()).is_err());
+            assert!(c.front(&mut id).is_err());
             let used = bank.account(ResourceKind::EngineLiveBytesGlobalMax).used();
             assert!(c.take_settlement(id.identity()).is_err());
-            assert!(matches!(
-                c.progress(id.identity(), &mut cx(), &mut WorkBudget::new()),
-                Err(CoreError::Backpressure(_))
-            ));
+            assert_eq!(
+                c.progress(id.identity(), &mut cx()).unwrap(),
+                NotificationTurn::Advanced
+            );
+            assert!(!c.status(id.identity()).unwrap().has_retained_handoff);
             assert_eq!(
                 bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
                 used
@@ -433,6 +433,7 @@ fn independently_captured_collection_schemas_cannot_be_replaced_by_shared_native
             &two,
             4,
             Arc::new(Access::default()),
+            &bank,
         );
         let mut ca = subscribe(&mut a, NotificationOverflow::Terminate);
         let cz = subscribe(&mut z, NotificationOverflow::Terminate);
@@ -446,8 +447,7 @@ fn independently_captured_collection_schemas_cannot_be_replaced_by_shared_native
             Some(CoreError::Validation(_))
         ));
         assert!(s.connected());
-        a.stop(&ca, None, &mut budget())
-            .unwrap_or_else(|_| panic!());
+        a.stop(&ca, None).unwrap_or_else(|_| panic!());
         settled(&mut a, &ca).await;
         close(&mut po, &mut pe);
         drop((a, z, pe));
@@ -472,8 +472,7 @@ fn root_authority_is_fresh_on_handoff_and_denied_or_invalid_unobserve_still_stop
                 c.subscribe(
                     SubscriptionInput(None),
                     ResponseRequirement::Required,
-                    NotificationOverflow::Terminate,
-                    &mut budget()
+                    NotificationOverflow::Terminate
                 )
                 .is_err()
             );
@@ -481,8 +480,7 @@ fn root_authority_is_fresh_on_handoff_and_denied_or_invalid_unobserve_still_stop
                 c.subscribe(
                     SubscriptionInput(Some(Payload::new(b"1".as_slice(), "application/json"))),
                     ResponseRequirement::None,
-                    NotificationOverflow::Terminate,
-                    &mut budget()
+                    NotificationOverflow::Terminate
                 )
                 .is_err()
             );
@@ -494,18 +492,18 @@ fn root_authority_is_fresh_on_handoff_and_denied_or_invalid_unobserve_still_stop
             if invalid {
                 let p = Payload::new(b"{}".as_slice(), "application/json");
                 let returned = c
-                    .stop(&id, Some(CancellationInput(Some(p.clone()))), &mut budget())
+                    .stop(&id, Some(CancellationInput(Some(p.clone()))))
                     .err()
                     .unwrap()
                     .into_input()
                     .unwrap();
                 assert_eq!(returned.0, Some(p));
             } else {
-                c.stop(&id, Some(CancellationInput(None)), &mut budget())
+                c.stop(&id, Some(CancellationInput(None)))
                     .unwrap_or_else(|_| panic!());
                 access.deny_cancel.store(true, Ordering::Relaxed);
             }
-            assert!(c.front(&mut id, &mut budget()).is_err());
+            assert!(c.front(&mut id).is_err());
             let report = settled(&mut c, &id).await;
             assert!(matches!(report.first_cause, Some(CoreError::Cancelled(_))));
             assert!(report.cancellation_error.is_some());
@@ -523,7 +521,7 @@ fn root_authority_is_fresh_on_handoff_and_denied_or_invalid_unobserve_still_stop
         send(&mut po, &mut pe, ONE).await;
         accounted(&mut c, &id, 1).await;
         access.deny.store(true, Ordering::Relaxed);
-        assert!(c.front(&mut id, &mut budget()).is_err());
+        assert!(c.front(&mut id).is_err());
         assert_eq!(settled(&mut c, &id).await.delivered_items, 0);
         close(&mut po, &mut pe);
         drop((c, pe));
@@ -549,32 +547,15 @@ fn collection_loss_and_saturation_preserve_whole_samples_and_never_coalesce() {
             active(&mut c, &id).await;
             send(&mut po, &mut pe, ONE).await;
             accounted(&mut c, &id, 1).await;
-            assert_eq!(
-                c.front(&mut id, &mut budget())
-                    .unwrap()
-                    .unwrap()
-                    .data
-                    .unwrap()
-                    .body,
-                ONE
-            );
+            assert_eq!(c.front(&mut id).unwrap().unwrap().data.unwrap().body, ONE);
             send(&mut po, &mut pe, TWO).await;
             accounted(&mut c, &id, 2).await;
             assert_eq!(c.status(id.identity()).unwrap().loss.items, 1);
             if policy == NotificationOverflow::DropNewest {
-                assert_eq!(
-                    c.front(&mut id, &mut budget())
-                        .unwrap()
-                        .unwrap()
-                        .data
-                        .unwrap()
-                        .body,
-                    ONE
-                );
-                c.advance(&mut id, &mut budget()).unwrap();
-                assert!(c.front(&mut id, &mut budget()).unwrap().is_none());
-                c.stop(&id, None, &mut budget())
-                    .unwrap_or_else(|_| panic!());
+                assert_eq!(c.front(&mut id).unwrap().unwrap().data.unwrap().body, ONE);
+                c.advance(&mut id).unwrap();
+                assert!(c.front(&mut id).unwrap().is_none());
+                c.stop(&id, None).unwrap_or_else(|_| panic!());
             }
             let report = settled(&mut c, &id).await;
             assert_eq!(report.loss.items, 1);
@@ -599,8 +580,7 @@ fn collection_loss_and_saturation_preserve_whole_samples_and_never_coalesce() {
         accounted(&mut c, &id, 12).await;
         assert_eq!(c.status(id.identity()).unwrap().queued_items, 4);
         assert_eq!(c.status(id.identity()).unwrap().loss.items, 8);
-        c.stop(&id, None, &mut budget())
-            .unwrap_or_else(|_| panic!());
+        c.stop(&id, None).unwrap_or_else(|_| panic!());
         settled(&mut c, &id).await;
         close(&mut po, &mut pe);
         drop((c, pe));
@@ -629,8 +609,8 @@ fn replacement_cannot_retarget_an_old_collection_queue_or_inherit_it() {
         let mut cz = subscribe(&mut z, NotificationOverflow::Terminate);
         active(&mut z, &cz).await;
         assert_ne!(&original, cz.identity());
-        assert!(z.front(&mut cz, &mut budget()).unwrap().is_none());
-        assert!(a.front(&mut ca, &mut budget()).is_err());
+        assert!(z.front(&mut cz).unwrap().is_none());
+        assert!(a.front(&mut ca).is_err());
         let report = settled(&mut a, &ca).await;
         assert_eq!(report.identity, original);
         assert!(matches!(
@@ -668,10 +648,11 @@ fn partial_unobserve_and_broker_failure_preserve_stop_uncertainty_and_funding() 
         );
         let id = subscribe(&mut c, NotificationOverflow::Terminate);
         active(&mut c, &id).await;
-        c.stop(&id, Some(CancellationInput(None)), &mut budget())
+        c.stop(&id, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
+        c.progress(id.identity(), &mut cx()).unwrap();
         assert_eq!(
-            c.progress(id.identity(), &mut cx(), &mut budget()).unwrap(),
+            c.status(id.identity()).unwrap().state,
             NotificationState::Closing
         );
         assert!(c.take_settlement(id.identity()).is_err());
@@ -682,7 +663,7 @@ fn partial_unobserve_and_broker_failure_preserve_stop_uncertainty_and_funding() 
         assert_eq!(report.remote_cancellation, RemoteCancellation::Unknown);
         assert_eq!(
             bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
-            used - MqttJsonData.policy().temporary_bytes
+            used
         );
         assert!(!s.connected());
         drop(c);
@@ -909,7 +890,7 @@ fn producer_root_validation_policy_and_saturation_return_original_complete_carri
 }
 
 #[test]
-fn collection_validator_rechecks_original_authority_after_callback_and_requires_prepaid_work() {
+fn collection_validator_rechecks_original_authority_after_callback() {
     struct RevokingData {
         owner: Arc<ConsumerInstance>,
         calls: Arc<AtomicUsize>,
@@ -960,24 +941,10 @@ fn collection_validator_rechecks_original_authority_after_callback_and_requires_
                 calls: calls.clone(),
             }),
         );
-        let mut c = from_definition(d, &owner, 4, Arc::new(Access::default()));
+        let mut c = from_definition(d, &owner, 4, Arc::new(Access::default()), &bank);
         let id = subscribe(&mut c, NotificationOverflow::Terminate);
         active(&mut c, &id).await;
         send(&mut po, &mut pe, ONE).await;
-        let short = MqttJsonData.policy().validation_work - 1;
-        for _ in 0..10 {
-            let mut work = budget().with_remaining(WorkClass::CodecInputBytes, short);
-            assert!(matches!(
-                c.progress(id.identity(), &mut cx(), &mut work),
-                Err(CoreError::Backpressure(_))
-            ));
-            tokio::time::sleep(Duration::from_millis(1)).await;
-        }
-        assert_eq!(
-            calls.load(Ordering::Relaxed),
-            0,
-            "short work cannot acquire or validate a native sample"
-        );
         fenced(&mut c, &id).await;
         assert_eq!(calls.load(Ordering::Relaxed), 1);
         assert!(c.status(id.identity()).unwrap().has_retained_handoff);
@@ -1010,11 +977,11 @@ fn retained_root_samples_are_visible_loss_and_not_initial_values_or_replay() {
         active(&mut c, &id).await;
         accounted(&mut c, &id, 1).await;
         assert_eq!(c.status(id.identity()).unwrap().loss.items, 1);
-        assert!(c.front(&mut id, &mut budget()).unwrap().is_none());
+        assert!(c.front(&mut id).unwrap().is_none());
         peer.publish_raw(topic, TWO, false);
         accounted(&mut c, &id, 2).await;
         value(&mut c, &mut id, TWO).await;
-        c.stop(&id, Some(CancellationInput(None)), &mut budget())
+        c.stop(&id, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
         settled(&mut c, &id).await;
         assert!(!s.connected());

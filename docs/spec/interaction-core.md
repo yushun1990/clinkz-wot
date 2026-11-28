@@ -636,8 +636,9 @@ validation is inferred. The same owner also admits Thing-root Property collectio
 observations; constrained execution remains unimplemented by this Host slice.
 Fixed loss status and storage for an overflow or late handoff preserve cleanup when
 the item/byte queue is full. Explicit owner cleanup works after every cursor is
-lost; terminal acknowledgement releases the logical reservation. Native physical
-retirement and remote cancellation/response outcomes remain separate.
+lost. Terminal acknowledgement releases the conversation slot. The settlement
+keeps its separate report slot through disposal. Native participation, reply
+retirement and remote cancellation/response outcomes have separate release points.
 
 All Notification data roles use the common structured constraint interpretation
 and evaluator. A Property's readable value, Event subscription/data/dataResponse/
@@ -653,10 +654,10 @@ supplies none of these additional capabilities.
 The composed `ConsumerNotificationAssociation` binds a shared selected
 source-free Property, Property collection, Event or Event collection definition
 to the original Consumer and its retained access owner.
-Cloneable views are non-revoking. `ConsumerNotifications` supplies independently
-funded conversation capacity around the same raw lifecycle. Accepted work retains
-its original association after public view loss; neither an idle association nor
-a spare Engine slot establishes a native subscription or availability guarantee.
+Cloneable views are non-revoking. `ConsumerNotifications` supplies actual
+conversation and delivery storage around the same raw lifecycle. Accepted work
+retains its original association after public view loss. The Binding admits its
+own native participation separately.
 The detailed declaration, admission, policy and cleanup checks are owned by
 [Runtime Safety](runtime-safety.md#notification-associations-and-conversation-capacity).
 

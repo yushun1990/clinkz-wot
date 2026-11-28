@@ -579,7 +579,6 @@ fn validate_fixture_recipe(
         ("security_branches", "security_branches_per_plan_max"),
         ("slot_state_bytes", "binding_slot_state_bytes_per_item_max"),
         ("string_bytes", "string_bytes_max"),
-        ("subscribers", "subscriptions_per_thing_max"),
         ("td_nodes", "json_value_nodes_per_document_max"),
         ("uri_template_bytes", "uri_template_source_bytes_max"),
     ] {

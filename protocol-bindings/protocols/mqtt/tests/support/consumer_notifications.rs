@@ -70,7 +70,7 @@ fn engine_limits(items: usize) -> RawNotificationLimits {
         payload_backing_bytes: 4608,
         control_backing_bytes: 4608,
         target_name_bytes: 64,
-        engine_bytes: 128_000,
+        reports: 8,
     }
 }
 fn prepare_consumer(
@@ -128,24 +128,22 @@ fn consumer(
             panic!("{e:?}")
         });
     // The source TD, semantic arena and preparation registry are already gone.
-    Consumer::try_new(owner.reference(), definition, access, engine_limits(items))
+    Consumer::try_new(owner.reference(), definition, access, engine_limits(items), bank,)
         .unwrap_or_else(|e| panic!("runtime: {:?}", e))
 }
 fn subscribe(c: &mut Consumer, overflow: NotificationOverflow) -> NotificationCursor {
     c.subscribe(
         SubscriptionInput(None),
         ResponseRequirement::None,
-        overflow,
-        &mut budget(),
+        overflow
     )
     .unwrap_or_else(|e| panic!("subscribe: {:?}", e.error()))
 }
 async fn active(c: &mut Consumer, cursor: &NotificationCursor) {
     let end = Instant::now() + Duration::from_secs(3);
-    while c
-        .progress(cursor.identity(), &mut cx(), &mut budget())
-        .unwrap()
-        != NotificationState::Active
+    while { c
+        .progress(cursor.identity(), &mut cx())
+        .unwrap(); c.status(cursor.identity()).unwrap().state != NotificationState::Active }
     {
         assert!(
             Instant::now() < end,
@@ -157,7 +155,7 @@ async fn active(c: &mut Consumer, cursor: &NotificationCursor) {
 }
 async fn pump(c: &mut Consumer, cursor: &NotificationCursor, n: usize) {
     for _ in 0..n {
-        let _ = c.progress(cursor.identity(), &mut cx(), &mut budget());
+        let _ = c.progress(cursor.identity(), &mut cx());
         tokio::time::sleep(Duration::from_millis(1)).await;
     }
 }
@@ -168,7 +166,7 @@ async fn accounted(c: &mut Consumer, cursor: &NotificationCursor, count: u64) {
         if status.queued_items as u64 + status.loss.items >= count {
             return;
         }
-        c.progress(cursor.identity(), &mut cx(), &mut budget())
+        c.progress(cursor.identity(), &mut cx())
             .unwrap();
         assert!(Instant::now() < end, "notification accounting timeout");
         tokio::time::sleep(Duration::from_millis(1)).await;
@@ -177,13 +175,13 @@ async fn accounted(c: &mut Consumer, cursor: &NotificationCursor, count: u64) {
 async fn value(c: &mut Consumer, cursor: &mut NotificationCursor, expected: &[u8]) {
     let end = Instant::now() + Duration::from_secs(3);
     loop {
-        if let Some(view) = c.front(cursor, &mut budget()).unwrap() {
+        if let Some(view) = c.front(cursor).unwrap() {
             assert_eq!(view.data.unwrap().body, expected);
             assert_eq!(view.response, EventResponseState::Unavailable);
-            c.advance(cursor, &mut budget()).unwrap();
+            c.advance(cursor).unwrap();
             return;
         }
-        c.progress(cursor.identity(), &mut cx(), &mut budget())
+        c.progress(cursor.identity(), &mut cx())
             .unwrap();
         assert!(Instant::now() < end, "notification timeout");
         tokio::time::sleep(Duration::from_millis(1)).await;
@@ -192,9 +190,9 @@ async fn value(c: &mut Consumer, cursor: &mut NotificationCursor, expected: &[u8
 async fn settled(c: &mut Consumer, cursor: &NotificationCursor) -> NotificationSettlement {
     let end = Instant::now() + Duration::from_secs(3);
     while c
-        .progress(cursor.identity(), &mut cx(), &mut budget())
+        .progress(cursor.identity(), &mut cx())
         .unwrap()
-        != NotificationState::Closed
+        != NotificationTurn::Closed
     {
         assert!(Instant::now() < end, "cleanup timeout");
         tokio::time::sleep(Duration::from_millis(1)).await;
@@ -207,7 +205,7 @@ async fn fenced(c: &mut Consumer, cursor: &NotificationCursor) {
         c.status(cursor.identity()).unwrap().state,
         NotificationState::Active | NotificationState::Establishing
     ) {
-        let _ = c.progress(cursor.identity(), &mut cx(), &mut budget());
+        let _ = c.progress(cursor.identity(), &mut cx());
         assert!(Instant::now() < end, "fence timeout");
         tokio::time::sleep(Duration::from_millis(1)).await;
     }
@@ -305,14 +303,14 @@ fn engine_producer_to_engine_consumers_shares_native_subscription_and_releases_l
         active(&mut a, &ca).await;
         let mut cz = subscribe(&mut z, NotificationOverflow::DropNewest);
         active(&mut z, &cz).await;
-        assert!(a.front(&mut ca, &mut budget()).unwrap().is_none());
-        assert!(z.front(&mut cz, &mut budget()).unwrap().is_none());
+        assert!(a.front(&mut ca).unwrap().is_none());
+        assert!(z.front(&mut cz).unwrap().is_none());
         send(&mut po, &mut pe, b"41").await;
         value(&mut a, &mut ca, b"41").await;
         value(&mut z, &mut cz, b"41").await;
-        a.stop(&ca, Some(CancellationInput(None)), &mut budget())
+        a.stop(&ca, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
-        assert!(a.front(&mut ca, &mut budget()).is_err());
+        assert!(a.front(&mut ca).is_err());
         assert_eq!(
             settled(&mut a, &ca).await.remote_cancellation,
             RemoteCancellation::NotAttempted
@@ -320,7 +318,7 @@ fn engine_producer_to_engine_consumers_shares_native_subscription_and_releases_l
         assert!(s.connected(), "sibling retains shared connection");
         send(&mut po, &mut pe, b"42").await;
         value(&mut z, &mut cz, b"42").await;
-        z.stop(&cz, Some(CancellationInput(None)), &mut budget())
+        z.stop(&cz, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
         assert_eq!(
             settled(&mut z, &cz).await.remote_cancellation,
@@ -340,7 +338,7 @@ fn engine_producer_to_engine_consumers_shares_native_subscription_and_releases_l
 }
 
 #[test]
-fn required_responses_invalid_controls_and_unpaid_or_denied_start_refuse_before_native_effects() {
+fn required_responses_invalid_controls_and_denied_start_refuse_before_native_effects() {
     runtime().block_on(async {
         let b = Broker::start();
         let bank = bank();
@@ -352,9 +350,7 @@ fn required_responses_invalid_controls_and_unpaid_or_denied_start_refuse_before_
             c.subscribe(
                 SubscriptionInput(None),
                 ResponseRequirement::Required,
-                NotificationOverflow::Terminate,
-                &mut budget()
-            )
+                NotificationOverflow::Terminate)
             .is_err()
         );
         let invalid = Payload::new(b"1".to_vec(), "application/json");
@@ -362,36 +358,24 @@ fn required_responses_invalid_controls_and_unpaid_or_denied_start_refuse_before_
             .subscribe(
                 SubscriptionInput(Some(invalid.clone())),
                 ResponseRequirement::None,
-                NotificationOverflow::Terminate,
-                &mut budget(),
+                NotificationOverflow::Terminate
             )
             .err()
             .unwrap()
             .into_input();
         assert_eq!(refused.0, Some(invalid));
-        assert!(
-            c.subscribe(
-                SubscriptionInput(None),
-                ResponseRequirement::None,
-                NotificationOverflow::Terminate,
-                &mut WorkBudget::new()
-            )
-            .is_err()
-        );
         access.deny_start.store(true, Ordering::Relaxed);
         assert!(
             c.subscribe(
                 SubscriptionInput(None),
                 ResponseRequirement::None,
-                NotificationOverflow::Terminate,
-                &mut budget()
-            )
+                NotificationOverflow::Terminate)
             .is_err()
         );
         assert!(!s.connected());
         access.deny_start.store(false, Ordering::Relaxed);
         let ca = subscribe(&mut c, NotificationOverflow::Terminate);
-        c.stop(&ca, None, &mut budget())
+        c.stop(&ca, None)
             .unwrap_or_else(|_| panic!());
         let result = settled(&mut c, &ca).await;
         assert!(!result.native_started);
@@ -447,7 +431,7 @@ fn replacement_preserves_original_queued_identity_and_sibling_native_participati
             "same numeric slot cannot retarget original work"
         );
         assert!(
-            z.front(&mut cz, &mut budget()).unwrap().is_none(),
+            z.front(&mut cz).unwrap().is_none(),
             "no replay of sibling's queued Event"
         );
         let result = settled(&mut a, &ca).await;
@@ -462,7 +446,7 @@ fn replacement_preserves_original_queued_identity_and_sibling_native_participati
         drop(cz);
         z.begin_close();
         let end = Instant::now() + Duration::from_secs(3);
-        while z.step_cleanup(&mut cx(), &mut budget()).unwrap().is_none() {
+        while z.step_cleanup(&mut cx()).unwrap().is_none() {
             assert!(Instant::now() < end);
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
@@ -502,7 +486,7 @@ fn fresh_authorization_fences_buffered_delivery_and_denied_cancel_still_releases
         accounted(&mut c, &ca, 1).await;
         assert_eq!(c.status(ca.identity()).unwrap().queued_items, 1);
         access.deny_deliver.store(true, Ordering::Relaxed);
-        assert!(c.front(&mut ca, &mut budget()).is_err());
+        assert!(c.front(&mut ca).is_err());
         let result = settled(&mut c, &ca).await;
         assert!(matches!(
             result.first_cause,
@@ -523,7 +507,7 @@ fn fresh_authorization_fences_buffered_delivery_and_denied_cancel_still_releases
         active(&mut c, &ca).await;
         access.deny_cancel.store(true, Ordering::Relaxed);
         assert!(
-            c.stop(&ca, Some(CancellationInput(None)), &mut budget())
+            c.stop(&ca, Some(CancellationInput(None)))
                 .is_err()
         );
         let result = settled(&mut c, &ca).await;
@@ -540,7 +524,7 @@ fn fresh_authorization_fences_buffered_delivery_and_denied_cancel_still_releases
 }
 
 #[test]
-fn malformed_json_wrong_schema_and_unpaid_validation_never_escape_to_application() {
+fn malformed_json_and_wrong_schema_never_escape_to_application() {
     runtime().block_on(async {
         let b = Broker::start();
         let bank = bank();
@@ -560,15 +544,8 @@ fn malformed_json_wrong_schema_and_unpaid_validation_never_escape_to_application
             active(&mut c, &ca).await;
             let mut peer = Peer::new(&b);
             peer.publish_raw("invalid/alarm", bytes, false);
-            let mut short = budget();
-            short.set_remaining(WorkClass::CodecInputBytes, 65535);
-            assert!(c.progress(ca.identity(), &mut cx(), &mut short).is_err());
-            assert_eq!(
-                c.status(ca.identity()).unwrap().state,
-                NotificationState::Active
-            );
             fenced(&mut c, &ca).await;
-            assert!(c.front(&mut ca, &mut budget()).is_err());
+            assert!(c.front(&mut ca).is_err());
             let result = settled(&mut c, &ca).await;
             assert!(matches!(result.first_cause, Some(CoreError::Validation(_))));
             assert_eq!(result.delivered_items, 0);
@@ -599,7 +576,7 @@ fn malformed_json_wrong_schema_and_unpaid_validation_never_escape_to_application
             owner.reference(),
             definition,
             Arc::new(Access::default()),
-            engine_limits(4),
+            engine_limits(4), &bank,
         )
         .unwrap_or_else(|_| panic!());
         let ca = subscribe(&mut c, NotificationOverflow::Terminate);
@@ -639,12 +616,12 @@ fn retained_delivery_is_visible_loss_and_does_not_create_an_initial_or_replayed_
         let mut ca = subscribe(&mut c, NotificationOverflow::DropNewest);
         active(&mut c, &ca).await;
         pump(&mut c, &ca, 30).await;
-        assert!(c.front(&mut ca, &mut budget()).unwrap().is_none());
+        assert!(c.front(&mut ca).unwrap().is_none());
         assert_eq!(c.status(ca.identity()).unwrap().loss.items, 1);
         let (mut po, mut pe, _) = producer(&b, "retain/alarm", &bank).await;
         send(&mut po, &mut pe, b"11").await;
         value(&mut c, &mut ca, b"11").await;
-        c.stop(&ca, Some(CancellationInput(None)), &mut budget())
+        c.stop(&ca, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
         assert_eq!(settled(&mut c, &ca).await.loss.items, 1);
         close(&mut po, &mut pe);
@@ -688,7 +665,7 @@ fn logical_and_native_overflow_report_loss_without_coalescing() {
             }
             assert_eq!(c.status(ca.identity()).unwrap().loss.items, 6);
             value(&mut c, &mut ca, b"0").await;
-            c.stop(&ca, None, &mut budget())
+            c.stop(&ca, None)
                 .unwrap_or_else(|_| panic!());
             assert_eq!(settled(&mut c, &ca).await.loss.items, 6);
             close(&mut po, &mut pe);
@@ -757,21 +734,20 @@ fn broker_failure_is_terminal_shared_failure_and_final_cleanup_is_local() {
         b.stop();
         pump(&mut a, &ca, 20).await;
         pump(&mut z, &cz, 2).await;
+        let failure = s.first_failure().expect("shared service failure");
         for (c, cursor) in [(&mut a, &ca), (&mut z, &cz)] {
             let result = settled(c, cursor).await;
             assert!(matches!(result.first_cause, Some(CoreError::Binding(_))));
+            assert_eq!(result.native_error.as_ref(), Some(&failure));
             assert!(result.cleanup_error.is_none());
             assert_eq!(result.delivered_items, 0);
         }
         assert!(!s.connected());
-        assert!(s.first_failure().is_some());
         assert!(
             a.subscribe(
                 SubscriptionInput(None),
                 ResponseRequirement::None,
-                NotificationOverflow::Terminate,
-                &mut budget()
-            )
+                NotificationOverflow::Terminate)
             .is_err(),
             "no implicit reconnect"
         );
@@ -807,9 +783,9 @@ fn cancelling_during_shared_connection_setup_does_not_abort_the_sibling_handshak
             4,
         );
         let ca = subscribe(&mut a, NotificationOverflow::Terminate);
-        a.progress(ca.identity(), &mut cx(), &mut budget()).unwrap();
+        a.progress(ca.identity(), &mut cx()).unwrap();
         let mut cz = subscribe(&mut z, NotificationOverflow::Terminate);
-        a.stop(&ca, Some(CancellationInput(None)), &mut budget())
+        a.stop(&ca, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
         assert_eq!(
             settled(&mut a, &ca).await.remote_cancellation,
@@ -823,7 +799,7 @@ fn cancelling_during_shared_connection_setup_does_not_abort_the_sibling_handshak
         drop(cz);
         z.begin_close();
         let end = Instant::now() + Duration::from_secs(3);
-        while z.step_cleanup(&mut cx(), &mut budget()).unwrap().is_none() {
+        while z.step_cleanup(&mut cx()).unwrap().is_none() {
             assert!(Instant::now() < end);
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
@@ -851,8 +827,7 @@ fn cancellation_is_reauthorized_and_invalid_control_returns_its_original_payload
                 let returned = c
                     .stop(
                         &ca,
-                        Some(CancellationInput(Some(data.clone()))),
-                        &mut budget(),
+                        Some(CancellationInput(Some(data.clone())))
                     )
                     .err()
                     .unwrap()
@@ -860,7 +835,7 @@ fn cancellation_is_reauthorized_and_invalid_control_returns_its_original_payload
                     .unwrap();
                 assert_eq!(returned.0, Some(data));
             } else {
-                c.stop(&ca, Some(CancellationInput(None)), &mut budget())
+                c.stop(&ca, Some(CancellationInput(None)))
                     .unwrap_or_else(|_| panic!());
                 access.deny_cancel.store(true, Ordering::Relaxed);
             }
@@ -886,7 +861,7 @@ fn broker_loss_during_partial_unsubscribe_retains_stop_cause_and_reports_unknown
         let mut c = consumer(
             &s,
             &b,
-            "unsubscribe/alarm",
+            &"t".repeat(clinkz_wot_binding_mqtt::MAX_TOPIC_BYTES),
             &owner,
             &bank,
             Arc::new(Access::default()),
@@ -894,11 +869,11 @@ fn broker_loss_during_partial_unsubscribe_retains_stop_cause_and_reports_unknown
         );
         let ca = subscribe(&mut c, NotificationOverflow::Terminate);
         active(&mut c, &ca).await;
-        c.stop(&ca, Some(CancellationInput(None)), &mut budget())
+        c.stop(&ca, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
         assert_eq!(
-            c.progress(ca.identity(), &mut cx(), &mut budget()).unwrap(),
-            NotificationState::Closing
+            c.progress(ca.identity(), &mut cx()).unwrap(),
+            NotificationTurn::Waiting
         );
         assert!(
             c.take_settlement(ca.identity()).is_err(),
@@ -909,14 +884,150 @@ fn broker_loss_during_partial_unsubscribe_retains_stop_cause_and_reports_unknown
         let result = settled(&mut c, &ca).await;
         assert!(matches!(result.first_cause, Some(CoreError::Cancelled(_))));
         assert_eq!(result.remote_cancellation, RemoteCancellation::Unknown);
+        assert!(matches!(s.first_failure(), Some(CoreError::Binding(_))));
+        assert!(result.native_error.is_none());
+        assert!(result.cleanup_error.is_none());
+        assert!(result.cancellation_error.is_none());
         assert_eq!(
             bank.account(ResourceKind::EngineLiveBytesGlobalMax).used(),
-            funded - MqttJsonData.policy().temporary_bytes
+            funded
         );
         assert!(!s.connected());
         drop(c);
         drop(result);
         assert_empty(&bank);
+    });
+}
+
+#[test]
+fn same_filter_housekeeping_cannot_confirm_an_unissued_mapped_cancel() {
+    runtime().block_on(async {
+        let broker = Broker::start();
+        let bank = bank();
+        let service = service(&broker, 1);
+        let topic = "cancel/shared";
+        let original = consumer_owner(1);
+        let mut a = consumer(
+            &service, &broker, topic, &original, &bank, Arc::new(Access::default()), 4,
+        );
+        let ca = subscribe(&mut a, NotificationOverflow::Terminate);
+        let end = Instant::now() + Duration::from_secs(3);
+        while !broker.logs().contains("Received SUBSCRIBE from cr") {
+            a.progress(ca.identity(), &mut cx()).unwrap();
+            assert!(Instant::now() < end, "broker did not observe SUBSCRIBE");
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        assert_eq!(a.status(ca.identity()).unwrap().state, NotificationState::Establishing);
+        a.stop(&ca, Some(CancellationInput(None))).unwrap_or_else(|_| panic!());
+        assert_eq!(a.progress(ca.identity(), &mut cx()).unwrap(), NotificationTurn::Waiting);
+
+        let successor = consumer_owner(2);
+        let mut b = consumer(
+            &service, &broker, topic, &successor, &bank, Arc::new(Access::default()), 4,
+        );
+        let mut cb = subscribe(&mut b, NotificationOverflow::Terminate);
+        active(&mut b, &cb).await;
+        let mut peer = Peer::new(&broker);
+        peer.publish_raw(topic, b"17", false);
+        value(&mut b, &mut cb, b"17").await;
+
+        b.stop(&cb, None).unwrap_or_else(|_| panic!());
+        let housekeeping = settled(&mut b, &cb).await;
+        assert_eq!(housekeeping.remote_cancellation, RemoteCancellation::NotAttempted);
+        assert_eq!(broker.logs().matches("Received UNSUBSCRIBE from cr").count(), 1);
+
+        let report = settled(&mut a, &ca).await;
+        assert_eq!(report.remote_cancellation, RemoteCancellation::NotAttempted);
+        assert!(matches!(report.first_cause, Some(CoreError::Cancelled(_))));
+        assert!(!service.connected());
+        drop((a, b, report, housekeeping));
+        assert_empty(&bank);
+    });
+}
+
+#[test]
+fn mapped_cancel_accepted_behind_another_filter_keeps_its_owner_on_any_driver() {
+    runtime().block_on(async {
+        for (service_drives, withdraw_after_handoff) in [(false, false), (true, false), (true, true)] {
+            let broker = Broker::start();
+            let bank = bank();
+            let mut service = service(&broker, 1);
+            let a_owner = consumer_owner(1);
+            let b_owner = consumer_owner(2);
+            let access = Arc::new(Access::default());
+            let mut a = consumer(&service, &broker, "writer/a", &a_owner, &bank, access.clone(), 4);
+            let ca = subscribe(&mut a, NotificationOverflow::Terminate);
+            active(&mut a, &ca).await;
+            let mut b = consumer(
+                &service, &broker, "writer/b", &b_owner, &bank, Arc::new(Access::default()), 4,
+            );
+            let mut cb = subscribe(&mut b, NotificationOverflow::Terminate);
+            assert_eq!(b.progress(cb.identity(), &mut cx()).unwrap(), NotificationTurn::Waiting);
+            assert_eq!(broker.logs().matches("Received SUBSCRIBE from cr").count(), 1);
+
+            a.stop(&ca, Some(CancellationInput(None))).unwrap_or_else(|_| panic!());
+            assert_eq!(a.progress(ca.identity(), &mut cx()).unwrap(), NotificationTurn::Waiting);
+            assert!(!broker.logs().contains("Received UNSUBSCRIBE from cr"));
+            if withdraw_after_handoff {
+                access.deny_cancel.store(true, Ordering::Relaxed);
+                assert_eq!(a.progress(ca.identity(), &mut cx()).unwrap(), NotificationTurn::Waiting);
+            }
+            if service_drives {
+                let end = Instant::now() + Duration::from_secs(3);
+                while !broker.logs().contains("Sending UNSUBACK to cr") {
+                    service.step(&mut cx());
+                    assert!(Instant::now() < end, "service did not complete the accepted control");
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
+            }
+            let report = settled(&mut a, &ca).await;
+            assert_eq!(report.remote_cancellation, RemoteCancellation::Confirmed);
+            assert_eq!(report.cancellation_error.is_some(), withdraw_after_handoff);
+            assert_eq!(broker.logs().matches("Received UNSUBSCRIBE from cr").count(), 1);
+            active(&mut b, &cb).await;
+            let mut peer = Peer::new(&broker);
+            peer.publish_raw("writer/b", b"53", false);
+            value(&mut b, &mut cb, b"53").await;
+        }
+    });
+}
+
+#[test]
+fn acknowledged_unsubscribe_retires_while_its_same_filter_successor_is_closing() {
+    runtime().block_on(async {
+        let broker = Broker::start();
+        let bank = bank();
+        let service = service(&broker, 1);
+        let original = consumer_owner(1);
+        let successor = consumer_owner(2);
+        let topic = "retire/shared";
+        let mut a = consumer(
+            &service, &broker, topic, &original, &bank, Arc::new(Access::default()), 4,
+        );
+        let ca = subscribe(&mut a, NotificationOverflow::Terminate);
+        active(&mut a, &ca).await;
+        a.stop(&ca, Some(CancellationInput(None))).unwrap_or_else(|_| panic!());
+        assert_eq!(a.progress(ca.identity(), &mut cx()).unwrap(), NotificationTurn::Waiting);
+
+        let mut b = consumer(
+            &service, &broker, topic, &successor, &bank, Arc::new(Access::default()), 4,
+        );
+        let cb = subscribe(&mut b, NotificationOverflow::Terminate);
+        active(&mut b, &cb).await;
+        assert_eq!(broker.logs().matches("Received SUBSCRIBE from cr").count(), 2);
+        assert_eq!(broker.logs().matches("Sending UNSUBACK to cr").count(), 1);
+        b.stop(&cb, Some(CancellationInput(None))).unwrap_or_else(|_| panic!());
+        assert_eq!(b.progress(cb.identity(), &mut cx()).unwrap(), NotificationTurn::Waiting);
+
+        assert_eq!(a.progress(ca.identity(), &mut cx()).unwrap(), NotificationTurn::Closed);
+        let report = a.take_settlement(ca.identity()).unwrap();
+        assert_eq!(report.remote_cancellation, RemoteCancellation::Confirmed);
+        assert!(b.take_settlement(cb.identity()).is_err());
+        assert!(service.connected());
+        let successor_report = settled(&mut b, &cb).await;
+        assert_eq!(successor_report.remote_cancellation, RemoteCancellation::Confirmed);
+        assert_eq!(broker.logs().matches("Received UNSUBSCRIBE from cr").count(), 2);
+        assert!(!service.connected());
     });
 }
 
@@ -950,9 +1061,9 @@ fn root_drop_aborts_local_receive_owners_and_preserves_other_topic_until_final_d
         active(&mut a, &ca).await;
         let mut cz = subscribe(&mut z, NotificationOverflow::Terminate);
         active(&mut z, &cz).await;
-        a.stop(&ca, Some(CancellationInput(None)), &mut budget())
+        a.stop(&ca, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
-        a.progress(ca.identity(), &mut cx(), &mut budget()).unwrap(); // partial control frame
+        a.progress(ca.identity(), &mut cx()).unwrap(); // partial control frame
         drop(a);
         assert!(s.connected());
         let (mut po, mut pe, _) = producer(&b, "drop/z", &bank).await;
@@ -1000,9 +1111,9 @@ fn a_new_interest_during_partial_unsubscribe_keeps_original_remote_uncertainty()
         );
         let ca = subscribe(&mut a, NotificationOverflow::Terminate);
         active(&mut a, &ca).await;
-        a.stop(&ca, Some(CancellationInput(None)), &mut budget())
+        a.stop(&ca, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
-        a.progress(ca.identity(), &mut cx(), &mut budget()).unwrap();
+        a.progress(ca.identity(), &mut cx()).unwrap();
         let mut z = consumer(
             &s,
             &b,
@@ -1013,7 +1124,7 @@ fn a_new_interest_during_partial_unsubscribe_keeps_original_remote_uncertainty()
             4,
         );
         let mut cz = subscribe(&mut z, NotificationOverflow::Terminate);
-        z.progress(cz.identity(), &mut cx(), &mut budget()).unwrap();
+        z.progress(cz.identity(), &mut cx()).unwrap();
         let report = settled(&mut a, &ca).await;
         assert_eq!(report.remote_cancellation, RemoteCancellation::Unknown);
         active(&mut z, &cz).await;
@@ -1045,7 +1156,7 @@ fn explicit_resubscribe_uses_a_fresh_clean_connection_and_never_replays_old_work
             4,
         );
         let before_io = subscribe(&mut c, NotificationOverflow::Terminate);
-        c.stop(&before_io, None, &mut budget())
+        c.stop(&before_io, None)
             .unwrap_or_else(|_| panic!());
         assert!(!settled(&mut c, &before_io).await.native_started);
         let mut first = subscribe(&mut c, NotificationOverflow::Terminate);
@@ -1054,7 +1165,7 @@ fn explicit_resubscribe_uses_a_fresh_clean_connection_and_never_replays_old_work
         let (mut po, mut pe, _) = producer(&b, "fresh/alarm", &bank).await;
         send(&mut po, &mut pe, b"1").await;
         value(&mut c, &mut first, b"1").await;
-        c.stop(&first, Some(CancellationInput(None)), &mut budget())
+        c.stop(&first, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
         settled(&mut c, &first).await;
         assert!(!s.connected());
@@ -1062,10 +1173,10 @@ fn explicit_resubscribe_uses_a_fresh_clean_connection_and_never_replays_old_work
         let mut second = subscribe(&mut c, NotificationOverflow::Terminate);
         active(&mut c, &second).await;
         assert!(c.status(first.identity()).is_err());
-        assert!(c.front(&mut second, &mut budget()).unwrap().is_none());
+        assert!(c.front(&mut second).unwrap().is_none());
         send(&mut po, &mut pe, b"3").await;
         value(&mut c, &mut second, b"3").await;
-        c.stop(&second, Some(CancellationInput(None)), &mut budget())
+        c.stop(&second, Some(CancellationInput(None)))
             .unwrap_or_else(|_| panic!());
         settled(&mut c, &second).await;
         assert!(!s.connected());
@@ -1136,7 +1247,7 @@ fn revocation_during_captured_validation_fences_the_owned_native_candidate() {
             owner.reference(),
             definition,
             Arc::new(Access::default()),
-            engine_limits(4),
+            engine_limits(4), &bank,
         )
         .unwrap_or_else(|_| panic!());
         let ca = subscribe(&mut c, NotificationOverflow::Terminate);

@@ -27,7 +27,7 @@ reply rights and retained results each have their own release point. [ADR-0025](
 | Producer publication | An application supplies a TD, behaviors and policy. Linked finite services assemble the selected members. The Host qualifies the actual final address and every advertised operation before opening ingress. An assigned-endpoint loser releases its socket and returns the original handlers. [Public Host](servient/src/host_producer.rs) · [Wire and contention evidence](docs/evidence/finite-producer-publication.md) | Continuing Actions and MQTT still use the composed caller with explicitly assembled participants. [Mixed caller](protocol-bindings/protocols/mqtt/tests/collection_coexistence.rs) |
 | Finite Properties and collections | Both roles execute HTTP Read/Write and root ReadAll, ReadMultiple, WriteAll and WriteMultiple. Direct verified HTTPS supports selected data and security combinations. With shared Host capacity an expired, accepted HTTP PUT can release its connection while the same Thing and a sibling keep serving and the caller keeps its outcome. [Root ReadMultiple](protocol-bindings/protocols/http/tests/read_multiple_properties.rs) · [Root WriteMultiple](protocol-bindings/protocols/http/tests/write_multiple_properties.rs) · [Structured values](docs/evidence/structured-dataschema.md) · [Composed security](docs/evidence/security-composition.md) · [Retirement over HTTP](protocol-bindings/protocols/http/tests/support/accepted_timeout.rs) | HTTP serves one native exchange per finite participant. The caller-owned Read supports multiple active replies on one member. Per-effect credential and data-direction work continues. [Independent reply retirement](servient/finite/tests/borrowed_producer.rs) |
 | Continuing Actions | HTTP Invoke, Query and Cancel retain the original invocation across exchanges. QueryAllActions observes a root inventory with per-invocation identity, output and visibility. A source-free Consumer can drive an invocation with caller-owned storage. [HTTP root status](protocol-bindings/protocols/http/tests/query_all_actions.rs) · [Caller-owned Action](docs/evidence/continuing-action-runtime-independence.md) | Producer retention reads process time. The aggregate walk must bound handle construction as well as lookup. |
-| Observations and Events | Both roles execute MQTT observe/unobserve, subscribe/unsubscribe and the corresponding root collections. One root conversation preserves member identity and schema. A completed QoS 0 packet releases the shared writer while its result is held. A downstream Consumer can reply to an occurrence. [Root Properties](protocol-bindings/protocols/mqtt/tests/observe_all_properties.rs) · [Root Events](protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs) · [Writer lifetime](protocol-bindings/protocols/mqtt/tests/producer_events.rs) · [Occurrence replies](tools/architecture-fixtures/open-consumer/tests/notification.rs) | A recoverable emission cleanup error revokes a healthy Thing. Application-controlled subscriptions also need setup acceptance, a returned control operand and per-delivery ownership in both roles. [Emission settlement](servient/finite/src/notification_publication.rs) |
+| Observations and Events | The loopback MQTT fixture exercises observe/unobserve, subscribe/unsubscribe and the corresponding root collections in both roles. One root conversation preserves member identity and schema. A completed QoS 0 packet releases the shared writer while its result is held. A downstream Consumer can reply to an occurrence. [Root Properties](protocol-bindings/protocols/mqtt/tests/observe_all_properties.rs) · [Root Events](protocol-bindings/protocols/mqtt/tests/subscribe_all_events.rs) · [Writer lifetime](protocol-bindings/protocols/mqtt/tests/producer_events.rs) · [Occurrence replies](tools/architecture-fixtures/open-consumer/tests/notification.rs) | A recoverable emission cleanup error revokes a healthy Thing. Application-controlled subscriptions also need setup acceptance, a returned control operand and per-delivery ownership in both roles. [Emission settlement](servient/finite/src/notification_publication.rs) |
 | Definition reuse and deployment | Compatible HTTP Reads in both roles can reuse prepared instructions. Mixed Host turns drive both roles. Caller-owned Consumers execute Read and continuing Action. A caller-owned Producer serves a trusted final Read with supplied storage, time and manual progress. [Consumer reuse](docs/evidence/consumer-execution-reuse.md) · [Producer reuse](docs/evidence/producer-preparation-reuse.md) · [Finite deployments](docs/evidence/finite-producer-publication.md) | Continuing definitions can still specialize endpoints. Costs on the ordinary deployment turn, a second reusable mapping and caller-owned notification lifetimes remain open. |
 
 ## Engineering priorities and dependencies
@@ -52,14 +52,16 @@ still use legacy accounting. The remaining dependencies determine the order.
    [Host execution](servient/finite/src/consumer.rs) · [Caller-owned evidence](docs/evidence/constrained-finite-execution.md)
 2. **Continuing and published work.** Consumer Invoke/Query/Cancel share bounded
    progress and independently backed exchange, continuation and result ownership
-   on Host and caller-owned paths. Migrate notification conversations, then
-   Producer candidate, invocation, delivery and reply owners with their Bindings
-   and deployment loops. Secure real continuation, correlation, reply and handoff
+   on Host and caller-owned paths. Host Consumer notification turns use local
+   conversation, delivery and report slots with independent native retirement.
+   Migrate Producer candidate, invocation, delivery and reply owners with their
+   Bindings and deployment loops. Secure real continuation, correlation, reply and handoff
    storage before effects. Drive local retirement under saturation and distinguish
    isolated cleanup failure from lost ingress. Shared access and validation work
-   declarations still serve notifications or preparation. Delete them with their
-   last consuming chain, along with the remaining per-family credit factories.
-   [Action execution and evidence](docs/evidence/continuing-action-runtime-independence.md)
+   declarations still serve Producer validation or preparation. Delete them with
+   their last consuming chain, along with the remaining per-family credit factories.
+   [Action execution](docs/evidence/continuing-action-runtime-independence.md) ·
+   [Notification execution](docs/evidence/consumer-notification-composition.md)
 3. **Preparation and Discovery.** Move TD traversal, Planning search and Discovery
    retrieval to the jobs that repeat visits, delegate, rewind or retry. Bound
    per-turn visits and cumulative work through exhaustion. Preserve page, byte,
@@ -172,6 +174,11 @@ callback supplies its destination. [Data and security contracts](docs/spec/inter
   root control across distinct members and refusal when required source
   evidence is unavailable. Exercise the notification and its response with both
   caller-owned storage and Host driving. [Consumer participation](core/src/notification.rs) · [Producer emission](core/src/publication.rs) · [Selected subscription contract](workspace/0132-engine-lifecycle-design.md#when-a-producer-accepts-a-subscription)
+
+Future Host MQTT work qualifies a maintained SDK through the existing native
+ownership boundaries. Assess SPI fit using that integration and a Thing-issued
+cancellation operand from the callback mapping. [SDK-backed Binding](https://github.com/yushun1990/clinkz-wot/issues/317) ·
+[SPI compatibility](https://github.com/yushun1990/clinkz-wot/issues/318)
 
 ### Measure staging and reuse on the public paths
 

@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const EXPECTED_HEADER: &str = "field,resource_kind,unit,scope,capability_roles,zero_semantics,gateway_default_v1,directory_client_default_v1,benchmark_static_reference_v1,requirements";
-const EXPECTED_RESOURCE_LIMIT_COUNT: usize = 196;
+const EXPECTED_RESOURCE_LIMIT_COUNT: usize = 194;
 
 #[derive(Debug)]
 struct LimitRow {
@@ -78,7 +78,7 @@ fn generate() -> Result<(), String> {
     }
     if rows.len() != EXPECTED_RESOURCE_LIMIT_COUNT {
         return Err(format!(
-            "revision v4.9 requires {EXPECTED_RESOURCE_LIMIT_COUNT} resource fields; found {}",
+            "the legacy schema requires {EXPECTED_RESOURCE_LIMIT_COUNT} resource fields; found {}",
             rows.len()
         ));
     }
@@ -93,12 +93,12 @@ fn render(rows: &[LimitRow]) -> Result<String, String> {
     let mut output = String::new();
     writeln!(
         output,
-        "/// Number of fields in the revision v4.9 resource-limit schema.\npub const RESOURCE_LIMIT_COUNT: usize = {};",
+        "/// Number of fields in the legacy resource-limit schema.\npub const RESOURCE_LIMIT_COUNT: usize = {};",
         rows.len()
     )
     .map_err(|error| error.to_string())?;
     output.push_str(
-        "\n/// Stable identity of one field in `docs/resource-limits.csv`.\n\
+        "\n/// Identity of one field in `docs/resource-limits.csv`.\n\
          #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]\n\
          #[repr(u16)]\n\
          pub enum ResourceKind {\n",
@@ -106,12 +106,12 @@ fn render(rows: &[LimitRow]) -> Result<String, String> {
     for row in rows {
         writeln!(output, "    {},", row.variant).map_err(|error| error.to_string())?;
     }
-    output.push_str("}\n\nimpl ResourceKind {\n    /// Every schema field in stable CSV order.\n    pub const ALL: [Self; RESOURCE_LIMIT_COUNT] = [\n");
+    output.push_str("}\n\nimpl ResourceKind {\n    /// Every schema field in current CSV order.\n    pub const ALL: [Self; RESOURCE_LIMIT_COUNT] = [\n");
     for row in rows {
         writeln!(output, "        Self::{},", row.variant).map_err(|error| error.to_string())?;
     }
     output.push_str(
-        "    ];\n\n    /// Returns the stable zero-based schema index.\n    pub const fn index(self) -> usize { self as usize }\n\n\
+        "    ];\n\n    /// Returns the zero-based index in this schema.\n    pub const fn index(self) -> usize { self as usize }\n\n\
          /// Returns the CSV field name.\n    pub const fn field_name(self) -> &'static str { RESOURCE_FIELD_NAMES[self.index()] }\n\n\
          /// Returns the resource category.\n    pub const fn category(self) -> &'static str { RESOURCE_CATEGORIES[self.index()] }\n\n\
          /// Returns the accounting unit.\n    pub const fn unit(self) -> &'static str { RESOURCE_UNITS[self.index()] }\n\n\

@@ -397,8 +397,8 @@ That assessment's probe reproduced F2/F3 through public preparation/runtime APIs
 without network progress. Its assertions preserve reviewed defects, not desired
 general behavior; retire or invert the relevant assertions when corrections land. Native
 cleanup, interoperability and physical allocation growth are outside its claim.
-From the repository root, provision a temporary standalone Cargo manifest to
-run the retained source without adding a workspace member:
+Use the repository at probe revision `eb16425f` for these historical APIs.
+From its root, provision a temporary standalone Cargo manifest to run the probe.
 
 ```sh
 python3 - <<'PY'

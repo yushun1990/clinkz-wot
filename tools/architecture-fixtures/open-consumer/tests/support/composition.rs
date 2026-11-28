@@ -750,6 +750,7 @@ impl NotificationParticipation for Participation {
         cancel: Option<&CancellationInput>,
     ) -> Poll<CoreResult<RemoteCancellation>> {
         assert!(cancel.is_none());
+        self.hub.receivers.borrow_mut().remove(&self.key);
         self.hub.closes.set(self.hub.closes.get() + 1);
         Poll::Ready(Ok(RemoteCancellation::Unsupported))
     }
@@ -763,7 +764,7 @@ impl NotificationAuthorizer for Access {
         &self,
         request: NotificationAuthorization<'_>,
     ) -> CoreResult<NotificationDecision> {
-        assert!(request.recipient.consumer.is_current());
+        assert!(request.recipient.consumer().is_current());
         if self.0.deny.get() {
             Err(invalid())
         } else {
@@ -796,7 +797,7 @@ fn observations(owner: &ConsumerInstance, hub: Rc<Hub>) -> Observations {
             payload_backing_bytes: 512,
             control_backing_bytes: 0,
             target_name_bytes: 256,
-            engine_bytes: 32768,
+            reports: 8,
         })
         .unwrap(),
         consumer: owner.reference(),
@@ -837,23 +838,19 @@ fn subscribe(root: &mut Observations) -> NotificationCursor {
             },
             (),
             context,
-            &mut work(),
         )
         .unwrap_or_else(|_| panic!())
 }
 fn progress(root: &mut Observations, cursor: &NotificationCursor) -> NotificationState {
-    root.progress(
-        cursor.identity(),
-        &mut Context::from_waker(Waker::noop()),
-        &mut work(),
-    )
-    .unwrap()
+    root.progress(cursor.identity(), &mut Context::from_waker(Waker::noop()))
+        .unwrap();
+    root.status(cursor.identity()).unwrap().state
 }
 fn deliver(root: &mut Observations, cursor: &mut NotificationCursor) {
     let start = Instant::now();
     loop {
         progress(root, cursor);
-        if let Some(view) = root.front(cursor, &mut work()).unwrap() {
+        if let Some(view) = root.front(cursor).unwrap() {
             assert_eq!(view.data.unwrap().body, b"17");
             return;
         }
@@ -871,7 +868,6 @@ fn owner_cleanup_drains_external_revocation_with_retained_cursor_and_preserves_s
         let mut owner = Some(instance());
         let sibling_owner = instance();
         let mut root = observations(owner.as_ref().unwrap(), hub.clone());
-        let baseline = root.reserved_engine_bytes();
         let cursor = subscribe(&mut root);
         assert_eq!(progress(&mut root, &cursor), NotificationState::Active);
         let mut sibling = observations(&sibling_owner, hub.clone());
@@ -894,12 +890,11 @@ fn owner_cleanup_drains_external_revocation_with_retained_cursor_and_preserves_s
             root.status(cursor.identity()).unwrap().state,
             NotificationState::Closing
         );
-        assert!(root.step_cleanup(&mut cx, &mut WorkBudget::new()).is_err());
         assert_eq!(hub.closes.get(), 0);
         assert_eq!(root.retained_subscriptions(), 1);
         let mut result = None;
         for _ in 0..8 {
-            if let Some(settlement) = root.step_cleanup(&mut cx, &mut work()).unwrap() {
+            if let Some(settlement) = root.step_cleanup(&mut cx).unwrap() {
                 result = Some(settlement);
                 break;
             }
@@ -921,7 +916,6 @@ fn owner_cleanup_drains_external_revocation_with_retained_cursor_and_preserves_s
         assert_eq!(result.remote_cancellation, RemoteCancellation::Unsupported);
         assert_eq!(hub.closes.get(), 1);
         assert_eq!(root.retained_subscriptions(), 0);
-        assert_eq!(root.reserved_engine_bytes(), baseline);
         assert!(root.status(cursor.identity()).is_err());
         assert_eq!(hub.receivers.borrow().len(), 1);
         assert!(hub.receivers.borrow().contains_key(&1));
@@ -965,11 +959,11 @@ fn one_consumer_fences_calls_and_notifications_without_retargeting_replacement_o
     let mut sibling = observations(&sibling_owner, hub.clone());
     let mut a = subscribe(&mut first);
     let mut b = subscribe(&mut sibling);
-    assert_eq!(a.identity().consumer, rt.0.consumer());
+    assert_eq!(a.identity().consumer(), &rt.0.consumer());
     assert_eq!(progress(&mut first, &a), NotificationState::Active);
     assert_eq!(progress(&mut sibling, &b), NotificationState::Active);
     assert!(
-        first.front(&mut a, &mut work()).unwrap().is_none(),
+        first.front(&mut a).unwrap().is_none(),
         "no invented initial value"
     );
     let mut bytes = [0; 128];
@@ -986,7 +980,7 @@ fn one_consumer_fences_calls_and_notifications_without_retargeting_replacement_o
     assert!(call.poll(&mut cx, now()).is_pending());
     exchange(&peer, b"7");
     drop(owner); // sole logical authority; all retained references now fence
-    assert!(first.front(&mut a, &mut WorkBudget::new()).is_err());
+    assert!(first.front(&mut a).is_err());
     let late = poll(&mut call);
     assert!(matches!(
         late.first_cause(),
@@ -1000,7 +994,7 @@ fn one_consumer_fences_calls_and_notifications_without_retargeting_replacement_o
     assert_ne!(late.consumer(), &replacement.reference());
     let mut replacement_root = observations(&replacement, hub.clone());
     assert!(
-        replacement_root.front(&mut a, &mut work()).is_err(),
+        replacement_root.front(&mut a).is_err(),
         "foreign cursor cannot retarget"
     );
     drop(replacement_root);
@@ -1051,7 +1045,7 @@ fn closing_finite_facet_keeps_same_consumers_notification_live_and_callback_revo
     drop(rt);
     peer.send_to(b"0:17", local).unwrap();
     deliver(&mut notifications, &mut cursor);
-    notifications.advance(&mut cursor, &mut work()).unwrap();
+    notifications.advance(&mut cursor).unwrap();
     let revoke = owner.clone();
     *hub.hook.borrow_mut() = Some(Box::new(move || revoke.revoke()));
     peer.send_to(b"0:99", local).unwrap();
@@ -1059,7 +1053,7 @@ fn closing_finite_facet_keeps_same_consumers_notification_live_and_callback_revo
         progress(&mut notifications, &cursor),
         NotificationState::Closing
     );
-    assert!(notifications.front(&mut cursor, &mut work()).is_err());
+    assert!(notifications.front(&mut cursor).is_err());
     assert!(
         notifications
             .status(cursor.identity())
@@ -1204,14 +1198,15 @@ fn prepared_observations(
             payload_backing_bytes: 512,
             control_backing_bytes: 0,
             target_name_bytes: 256,
-            engine_bytes: 32768,
+            reports: 8,
         },
+        bank,
     )
     .unwrap_or_else(|e| panic!("{e:?}"))
 }
 
 #[test]
-fn notification_report_and_last_idle_view_guard_service_disposal_against_udp_read() {
+fn last_idle_notification_view_guards_service_disposal_even_with_a_held_report() {
     for collect_report in [true, false] {
         let notify_peer = UdpSocket::bind("127.0.0.1:0").unwrap();
         let hub = hub(notify_peer.local_addr().unwrap());
@@ -1226,19 +1221,12 @@ fn notification_report_and_last_idle_view_guard_service_disposal_against_udp_rea
                     SubscriptionInput(None),
                     ResponseRequirement::None,
                     NotificationOverflow::Terminate,
-                    &mut work(),
                 )
                 .unwrap_or_else(|e| panic!("{:?}", e.error()));
-            root.progress(cursor.identity(), &mut cx, &mut work())
-                .unwrap();
-            root.stop(&cursor, None, &mut work())
-                .unwrap_or_else(|_| panic!());
+            root.progress(cursor.identity(), &mut cx).unwrap();
+            root.stop(&cursor, None).unwrap_or_else(|_| panic!());
             for _ in 0..8 {
-                if root
-                    .progress(cursor.identity(), &mut cx, &mut work())
-                    .unwrap()
-                    == NotificationState::Closed
-                {
+                if root.progress(cursor.identity(), &mut cx).unwrap() == NotificationTurn::Closed {
                     return root.take_settlement(cursor.identity()).unwrap();
                 }
             }
@@ -1272,20 +1260,16 @@ fn notification_report_and_last_idle_view_guard_service_disposal_against_udp_rea
         })));
         drop(root.association);
         assert!(!fired.get());
-        if let Some(report) = report {
-            drop(view);
-            drop(root.work);
-            assert!(!fired.get());
-            // Public fields can outlive the private validation owner.
-            let target = report.target;
-            drop(report.identity);
-            assert!(matches!(target, AffordanceTarget::Property(_)));
-        } else {
-            drop(view);
-            assert_eq!(root.work.retained_subscriptions(), 0);
-            drop(root.work);
-        }
+        drop(view);
         assert!(fired.get());
+        assert_eq!(root.work.retained_subscriptions(), 0);
+        drop(root.work);
+        if let Some(report) = report {
+            assert!(matches!(
+                report.target(),
+                clinkz_wot_core::thing::AffordanceSite::Property(_)
+            ));
+        }
         peer.set_nonblocking(true).unwrap();
         assert_eq!(
             peer.peek_from(&mut [0; 64]).unwrap_err().kind(),
@@ -1313,13 +1297,12 @@ fn notification_callbacks_cannot_drive_a_finite_handle_or_its_capacity() {
             SubscriptionInput(None),
             ResponseRequirement::None,
             NotificationOverflow::Terminate,
-            &mut work(),
         )
         .unwrap_or_else(|e| panic!("{:?}", e.error()));
     let mut cx = Context::from_waker(Waker::noop());
+    root.progress(cursor.identity(), &mut cx).unwrap();
     assert_eq!(
-        root.progress(cursor.identity(), &mut cx, &mut work())
-            .unwrap(),
+        root.status(cursor.identity()).unwrap().state,
         NotificationState::Active
     );
 
@@ -1352,10 +1335,9 @@ fn notification_callbacks_cannot_drive_a_finite_handle_or_its_capacity() {
             ));
         }));
         if capacity_turn {
-            root.step(&mut cx, &mut work()).unwrap();
+            root.step(&mut cx).unwrap();
         } else {
-            root.progress(cursor.identity(), &mut cx, &mut work())
-                .unwrap();
+            root.progress(cursor.identity(), &mut cx).unwrap();
         }
         assert!(hub.hook.borrow().is_none());
         peer.set_nonblocking(true).unwrap();
@@ -1386,38 +1368,31 @@ fn downstream_property_preparation_uses_real_datagrams_after_source_and_registry
             SubscriptionInput(None),
             ResponseRequirement::None,
             NotificationOverflow::Terminate,
-            &mut work(),
         )
         .unwrap_or_else(|_| panic!());
     let mut cx = Context::from_waker(Waker::noop());
+    root.progress(cursor.identity(), &mut cx).unwrap();
     assert_eq!(
-        root.progress(cursor.identity(), &mut cx, &mut work())
-            .unwrap(),
+        root.status(cursor.identity()).unwrap().state,
         NotificationState::Active
     );
     let mut wire = [0; 128];
     let (n, from) = peer.recv_from(&mut wire).unwrap();
     assert_eq!(&wire[..n], b"OBSERVE 0");
-    assert!(root.front(&mut cursor, &mut work()).unwrap().is_none());
+    assert!(root.front(&mut cursor).unwrap().is_none());
     peer.send_to(b"0:17", from).unwrap();
     let start = Instant::now();
     loop {
-        root.progress(cursor.identity(), &mut cx, &mut work())
-            .unwrap();
-        if let Some(view) = root.front(&mut cursor, &mut work()).unwrap() {
+        root.progress(cursor.identity(), &mut cx).unwrap();
+        if let Some(view) = root.front(&mut cursor).unwrap() {
             assert_eq!(view.data.unwrap().body, b"17");
             break;
         }
         assert!(start.elapsed() < Duration::from_secs(2));
     }
-    root.advance(&mut cursor, &mut work()).unwrap();
-    root.stop(&cursor, None, &mut work())
-        .unwrap_or_else(|_| panic!());
-    while root
-        .progress(cursor.identity(), &mut cx, &mut work())
-        .unwrap()
-        != NotificationState::Closed
-    {
+    root.advance(&mut cursor).unwrap();
+    root.stop(&cursor, None).unwrap_or_else(|_| panic!());
+    while root.progress(cursor.identity(), &mut cx).unwrap() != NotificationTurn::Closed {
         assert!(start.elapsed() < Duration::from_secs(2));
     }
     assert_eq!(

@@ -98,6 +98,15 @@ for each admitted Invoke or control. Caller-owned Read and Action execution use
 exclusive typed slots and bounded native polls. The target has no exhaustive public limit schema,
 generic admission receipt or registration-wide footprint declaration.
 
+Host Consumer notification execution uses local conversation, delivery and report
+capacity. The Binding owns native participation and reply storage, and the validator
+owns its workspace. The legacy global and per-Thing subscription counts are retired.
+Notification execution records no longer participate in the shared engine-byte,
+temporary-byte or cleanup-item accounts. Prepared mappings and adopted services
+retain their original preparation and service charges. The remaining profile arrays
+use the current CSV order. Older positional arrays require rebuilding after the
+two subscription rows were removed. [Notification limits](runtime-safety.md#notification-associations-and-conversation-capacity)
+
 ## Host allocation and environment failure scope
 
 `RES-ENV-001`: Ordinary saturation, cancellation and supported allocation failure

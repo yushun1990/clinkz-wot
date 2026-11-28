@@ -1,8 +1,7 @@
 //! Test assembly only: keep existing lifecycle regressions readable while the
 //! production API supplies persistent association and work capacity separately.
 #![allow(dead_code)]
-use clinkz_wot_core::{consumer::*, notification::*, *};
-use clinkz_wot_foundation::{WorkBudget, WorkClass};
+use clinkz_wot_core::{consumer::*, host_accounts::HostResourceAccounts, notification::*, *};
 use clinkz_wot_servient_finite::{consumer_notification::*, notification::*};
 use std::{
     ops::{Deref, DerefMut},
@@ -24,22 +23,14 @@ where
         definition: ConsumerNotificationDefinition<B>,
         access: Arc<dyn ConsumerAccessService>,
         limits: RawNotificationLimits,
+        bank: &Arc<HostResourceAccounts>,
     ) -> CoreResult<Self> {
-        let bank = definition.input().bank.clone();
-        let access = ConsumerServiceOwner::retain_access(access, &bank)
+        let access = ConsumerServiceOwner::retain_access(access, bank)
             .map_err(|e| e.error().error().clone())?;
-        let mut budget = WorkClass::ALL
-            .into_iter()
-            .fold(WorkBudget::new(), |b, c| b.with_remaining(c, 1_000_000));
-        let association = ConsumerNotificationAssociation::try_new(
-            consumer,
-            Rc::new(definition),
-            access,
-            bank.clone(),
-            &mut budget,
-        )
-        .map_err(|e| e.error().error().clone())?;
-        let work = ConsumerNotifications::try_new(limits, bank)?;
+        let association =
+            ConsumerNotificationAssociation::try_new(consumer, Rc::new(definition), access)
+                .map_err(|e| e.error().error().clone())?;
+        let work = ConsumerNotifications::try_new(limits)?;
         Ok(Self { association, work })
     }
     pub fn subscribe(
@@ -47,10 +38,9 @@ where
         input: SubscriptionInput,
         responses: ResponseRequirement,
         overflow: NotificationOverflow,
-        budget: &mut WorkBudget,
     ) -> Result<NotificationCursor, BindingInputRejection<SubscriptionInput>> {
         self.work
-            .subscribe(&self.association, input, responses, overflow, budget)
+            .subscribe(&self.association, input, responses, overflow)
     }
 }
 impl<B: ConsumerNotificationBinding> Deref for NotificationFixture<B> {

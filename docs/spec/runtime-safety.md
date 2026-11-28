@@ -300,33 +300,91 @@ not prove that a later `ActionOutput::view` selects the previously checked value
 ### Notification associations and conversation capacity
 
 A notification association retains the original Consumer, definition and access
-service. Passive views cannot revoke on Drop. Binding checks the prepared
-dependencies and captures the access configuration. A later capacity constructor
-cannot refresh it. An idle association needs no queue, interest or work slot.
+service. The application owns its association views. Installation checks the
+prepared dependencies and captures the access configuration. Establishment
+checks current permission for the original Consumer and selected endpoint.
+An idle association uses no conversation, report, queue or native interest slot.
 
-Subscribe claims a bounded conversation slot and usable storage for the selected
-validation, queue, reply and retirement. Include any quota the deployment
-advertises for that subscription. Each entry keeps its original participant
-and rights through local retirement. Acknowledgement releases the conversation
-slot. Retained reports keep original prepared/association owners for any
-shared target backing until report disposal. Capacity Drop performs qualified
-whole-owner finite local abort; it does not revoke persistent associations or
-other capacity domains. Original instance revocation fences only its work.
-Applications schedule progress/cleanup after passive revocation and cursor loss,
-either individually or with the aggregate turn below. There is no scheduler or
-automatic authority-change wake mechanism.
+Subscribe acquires an actual conversation slot, queue storage, one inline
+handoff for an overflow or late candidate, and inline terminal evidence. A
+report slot counts the evidence from admission through final report disposal.
+The Binding acquires its original participation and local rollback before the
+first native start poll. The validator supplies its bounded workspace. Exhausted
+slots or a refused native acquisition return original inputs before effects.
+Each identity exposed to Establish policy or the Binding names one admission
+attempt. The slot advances its generation before the first exposure. Refusal
+returns unused capacity while the exposed identity remains stale. Generation
+exhaustion retires the slot once vacant.
+Each accepted conversation can finish local retirement under saturation.
 
-The Host holds the shared Consumer turn through the final release of a raw
-context, a report's retained validator and an idle association's captured
-services. Public notification report fields can move out independently.
+The queue is for logical delivery after the Binding's native handoff. The
+configured item and attributable byte limits apply per conversation. A separate
+item bound applies independently to the staged handoff and the single submitted
+response input.
+Each control input has its own bound, and the target name length is checked at
+admission and handoff. A Binding supplies the indirect backing of any reply
+right it transfers. `RawNotificationLimits` defaults to four conversations,
+eight reports, four queued items per conversation, 16,384 queue bytes, 4,608
+bytes per handoff or control and 256 bytes per target name. The Host accepts
+up to 32 conversations and 32 queued items per conversation. Zero conversations,
+reports or queue items disables admission. A zero byte limit admits only
+zero backing at that boundary. Property observations require value backing.
 
-`RawNotificationServient::step` and `ConsumerNotifications::step` visit every
-original conversation at most once per turn, rotating the first visit across
-turns. A pending participant or retained error cannot starve sibling visits.
-Each bounded visit uses the original policy, validation, queue, response and
-retirement transitions. Passive observation can see a stop or authority fence.
-The turn invents no application
-response, cancellation input, remote control or permission.
+Active delivery retains FIFO exposure. A pending front reply gives ingress a
+turn while a handoff slot is available. An occupied handoff can retire on that
+turn. Once delivery is fenced, alternate participation close with delivery
+retirement. Rotate between the staged handoff and the queued owners and give
+each queued owner a turn, including while an earlier reply waits or fails.
+Keep each original owner across Pending or failed close. Completed close
+releases the participation and cancel input. Completed reply retirement
+releases its response input and reply right. Delivery data lasts through
+cursor advance or bounded disposal. The setup input is released when
+establishment finishes or its local close starts.
+
+Local close removes the delivery queue once its owners have retired.
+Acknowledgement releases the conversation slot and its execution context.
+A taken report owns its evidence, original identity, bounded target coordinate
+and report slot through disposal. The coordinate is lent as a view. A Thing
+coordinate needs no name backing. The local limits apply to that capacity
+across its original Consumers. Native lease limits continue to apply at the
+Binding. Capacity Drop performs qualified bounded local abort. Passive
+revocation and cursor loss need application-supplied turns to finish retirement.
+
+The Host holds the shared Consumer turn through final release of the
+conversation context and an idle association's captured services.
+
+`RawNotificationServient::step` and `ConsumerNotifications::step` visit one slot
+in rotation. Direct `progress` visits the identified conversation. A visit
+performs at most one native poll or one delivery disposal, using bounded access
+and validation callbacks. `NotificationTurn` reports advancement, native wait,
+retirement failure or closure. A vacant visit is idle. Continue rotation for
+siblings and the other work owners when one native poll waits. Passive
+`status` observes stop and instance loss without linked callbacks.
+A passive stop records whether the original Consumer still has authority.
+Revocation before stop records stale authority, and a stop while current
+preserves cancellation through later revocation. Direct stop and capacity
+close observe the same order before fencing. Mapped stop and application
+responses remain explicit decisions.
+
+An active turn checks the continuing grant even while a reply waits. Grant
+withdrawal fences the conversation and lets its participation close while the
+original reply still retires. Once fenced, local retirement proceeds without a
+continuing grant or another `Maintain` callback.
+
+Mapped stop enters the same exclusive application turn as a response. It
+fences local delivery first, then validates the caller's mapped input. A
+separately authorized input reaches each poll that may execute mapped
+cancellation. If permission or pairing fails during close, end the loan and
+poll local retirement with `None`. The conversation retains the accepted input
+through the original participation's local close or abort. Preserve evidence
+from earlier accepted work on its original operation. A Binding with command
+backing can accept mapped work during an authorized poll and continue it after
+the loan ends. Local settlement snapshots the evidence available at release.
+Passive stop remains available inside callbacks.
+Reports preserve first cause, observed native and cleanup failures of the work,
+cancellation failure and remote outcome independently. A Binding can acknowledge
+completed local retirement with remote uncertainty and expose a shared service
+fault through its service owner.
 
 A live cursor retains queued values and its closed unread report. Cursor Drop
 records abandonment separately from stop intent. Aggregate progress disposes an
@@ -344,9 +402,12 @@ admission and applicable delayed handoffs. Availability, schema, access and conf
 dependencies refuse or fence the original obligation. Cleanup retains its
 original owner even when those dependencies are unusable. Changed services
 require explicit qualification.
+The prepared notification context authorizes the captured selected endpoint.
+A separately resolved control destination needs its own qualified mapping and
+destination authorization.
 
 Validation MUST preserve an observed dependency violation separately from ordinary
-caller-input refusal or a yield. Both scalar and collection validators recheck
+caller-input refusal. Both scalar and collection validators recheck
 captured dependencies after the codec callback, including on error. Observed
 dependency loss during response admission or receive fences the original
 conversation. Restoring the configuration cannot revive it or permit a response.
@@ -389,8 +450,8 @@ disposal; it never scans a stream of refused items. Later queue entries remain
 behind the original refused head until its retirement completes. Callers continue
 manual progress after an empty view or pending retirement.
 
-Refused payloads and submitted responses stay funded until their exact reply
-owner retires and their own disposal step completes. Required response opportunities
+Refused payloads stay owned after reply retirement until their disposal step.
+Submitted response inputs stay owned until reply retirement. Required response opportunities
 can be retired on refusal without fabricating a send. Pending cleanup retains
 the original owner and needs no renewed delivery permission or codec callback.
 Failure to retire the reply fences its conversation and retains the error and
@@ -755,9 +816,10 @@ notification associations are explicitly bound, not looked up through a new
 universal configuration registry. Removing/replacing a parent or dropping its
 owner fences every original facet without retargeting work. Closing a capacity
 still fences only that capacity. The deployment calls each capacity directly.
-Finite and Action capacities observe deadlines for all their original calls
-and visit one slot per turn in rotation. An Action turn reports the disposition
-of the visited slot. The deployment continues rotating while siblings own work. Cancellation and close preserve
+Finite and Action capacities observe deadlines for all their original calls.
+Each capacity visits one slot per turn in rotation. Action and notification turns
+report the disposition of the visited slot. The deployment continues rotating
+while siblings own work. Cancellation and close preserve
 any expiry already recorded as the first cause.
 
 The application holds execution authority for finite, continuing Action and

@@ -139,6 +139,7 @@ impl MqttConsumerService {
     pub fn connected(&self) -> bool {
         self.binding.session.borrow().stream.is_some()
     }
+    /// First terminal fault of this shared service, retained after local close.
     pub fn first_failure(&self) -> Option<CoreError> {
         self.binding.session.borrow().failed.clone()
     }
@@ -179,17 +180,30 @@ enum TopicPhase {
     New,
     Subscribing,
     Active,
-    Unsubscribing,
+    // The service owns this removal, including while its writer is busy.
+    Removing,
 }
 struct Topic {
     name: Arc<str>,
     phase: TopicPhase,
+    // A close can wait for its original filter work. The service can finish
+    // that work after this lease releases, without lending the receipt to
+    // another lease on the same filter.
+    retiring: Option<Weak<RefCell<Interest>>>,
+}
+impl Topic {
+    fn retires(&self, lease: &Rc<RefCell<Interest>>) -> bool {
+        self.retiring
+            .as_ref()
+            .is_some_and(|owner| owner.as_ptr() == Rc::as_ptr(lease))
+    }
 }
 struct Control {
     topic: Arc<str>,
     subscribe: bool,
     packet: u16,
-    frame: Vec<u8>,
+    frame: [u8; MAX_TOPIC_BYTES + 8],
+    len: usize,
     written: usize,
     timer: Pin<Box<Sleep>>,
 }
@@ -201,7 +215,6 @@ struct Interest {
     slot: usize,
     started: bool,
     closing: bool,
-    authorized_cancel: bool,
     remote: RemoteCancellation,
     queue: VecDeque<Occurrence>,
     loss: u64,
@@ -241,7 +254,7 @@ impl ConsumerSession {
     fn live(&self, topic: &str) -> bool {
         self.interests.iter().filter_map(Weak::upgrade).any(|i| {
             let i = i.borrow();
-            i.started && !i.closing && i.recipient.consumer.is_current() && &*i.topic == topic
+            i.started && !i.closing && i.recipient.consumer().is_current() && &*i.topic == topic
         })
     }
     fn step(&mut self, caller: &mut Context<'_>, slot: usize) {
@@ -263,7 +276,7 @@ impl ConsumerSession {
             ConnectionPhase::New => {
                 if !self.interests.iter().filter_map(Weak::upgrade).any(|i| {
                     let i = i.borrow();
-                    i.started && !i.closing && i.recipient.consumer.is_current()
+                    i.started && !i.closing && i.recipient.consumer().is_current()
                 }) {
                     return;
                 }
@@ -343,50 +356,47 @@ impl ConsumerSession {
     }
     fn control_step(&mut self, cx: &mut Context<'_>) {
         if self.control.is_none() {
+            // Drain the accepted removals before starting new SUBSCRIBEs.
+            // Each occupies its original topic slot and shares the one writer.
             let next = self
                 .topics
                 .iter()
-                .find_map(|t| match (t.phase, self.live(&t.name)) {
-                    (TopicPhase::New, true) => Some((t.name.clone(), true)),
-                    (TopicPhase::Active, false) => Some((t.name.clone(), false)),
-                    _ => None,
+                .position(|t| t.phase == TopicPhase::Removing)
+                .map(|index| (index, false))
+                .or_else(|| {
+                    self.topics.iter().enumerate().find_map(|(index, t)| {
+                        match (t.phase, self.live(&t.name)) {
+                            (TopicPhase::New, true) => Some((index, true)),
+                            (TopicPhase::Active, false) => Some((index, false)),
+                            _ => None,
+                        }
+                    })
                 });
-            if let Some((topic, subscribe)) = next {
+            if let Some((index, subscribe)) = next {
+                let t = &mut self.topics[index];
+                t.phase = if subscribe {
+                    TopicPhase::Subscribing
+                } else {
+                    TopicPhase::Removing
+                };
+                let topic = t.name.clone();
                 // At most one original control in flight; ids are not reused
                 // before its ACK. A service never reconnects after failure.
                 let packet = self.next_packet;
                 self.next_packet = self.next_packet.checked_add(1).unwrap_or(1);
-                let mut body = packet.to_be_bytes().to_vec();
-                body.extend_from_slice(&(topic.len() as u16).to_be_bytes());
-                body.extend_from_slice(topic.as_bytes());
-                if subscribe {
-                    body.push(0);
-                }
-                let mut frame = vec![if subscribe { 0x82 } else { 0xa2 }];
-                remaining(&mut frame, body.len());
-                frame.extend_from_slice(&body);
-                self.topics
-                    .iter_mut()
-                    .find(|t| t.name == topic)
-                    .unwrap()
-                    .phase = if subscribe {
-                    TopicPhase::Subscribing
-                } else {
-                    TopicPhase::Unsubscribing
-                };
-                if !subscribe {
-                    for i in self.interests.iter().filter_map(Weak::upgrade) {
-                        let mut i = i.borrow_mut();
-                        if i.topic == topic && i.closing && i.authorized_cancel {
-                            i.remote = RemoteCancellation::Unknown;
-                        }
-                    }
-                }
+                let mut frame = [0; MAX_TOPIC_BYTES + 8];
+                frame[0] = if subscribe { 0x82 } else { 0xa2 };
+                let body_len = 4 + topic.len() + usize::from(subscribe);
+                let header = 1 + remaining(&mut frame[1..], body_len);
+                frame[header..header + 2].copy_from_slice(&packet.to_be_bytes());
+                frame[header + 2..header + 4].copy_from_slice(&(topic.len() as u16).to_be_bytes());
+                frame[header + 4..header + 4 + topic.len()].copy_from_slice(topic.as_bytes());
                 self.control = Some(Control {
                     topic,
                     subscribe,
                     packet,
                     frame,
+                    len: header + body_len,
                     written: 0,
                     timer: Box::pin(tokio::time::sleep(Duration::from_secs(2))),
                 });
@@ -399,10 +409,10 @@ impl ConsumerSession {
             self.fail(io_error());
             return;
         }
-        if control.written == control.frame.len() {
+        if control.written == control.len {
             return;
         }
-        let end = (control.written + self.registration.config.write_bytes).min(control.frame.len());
+        let end = (control.written + self.registration.config.write_bytes).min(control.len);
         match native::write(
             self.stream.as_ref().unwrap(),
             cx,
@@ -473,7 +483,7 @@ impl ConsumerSession {
             };
             if body.len() != if c.subscribe { 3 } else { 2 }
                 || body[..2] != c.packet.to_be_bytes()
-                || c.written != c.frame.len()
+                || c.written != c.len
                 || header != if c.subscribe { 0x90 } else { 0xb0 }
                 || c.subscribe && body[2] != 0
             {
@@ -487,12 +497,13 @@ impl ConsumerSession {
             } else {
                 TopicPhase::New
             };
-            if !c.subscribe {
-                for i in self.interests.iter().filter_map(Weak::upgrade) {
-                    let mut i = i.borrow_mut();
-                    if i.topic == topic && i.remote == RemoteCancellation::Unknown {
-                        i.remote = RemoteCancellation::Confirmed;
-                    }
+            let retiring = t.retiring.take();
+            if !c.subscribe
+                && let Some(owner) = retiring.and_then(|owner| owner.upgrade())
+            {
+                let mut owner = owner.borrow_mut();
+                if owner.remote == RemoteCancellation::Unknown {
+                    owner.remote = RemoteCancellation::Confirmed;
                 }
             }
             self.control = None;
@@ -521,7 +532,7 @@ impl ConsumerSession {
             let mut i = interest.borrow_mut();
             if !i.started
                 || i.closing
-                || !i.recipient.consumer.is_current()
+                || !i.recipient.consumer().is_current()
                 || !topic_matches(&i.topic, topic)
             {
                 continue;
@@ -551,7 +562,10 @@ impl ConsumerSession {
         // Slots for unsubscribed topics can be reused, preserving an in-flight
         // control even when the original logical recipient has gone away.
         let interests = &self.interests;
-        self.topics.retain(|t| {
+        self.topics.retain_mut(|t| {
+            if t.retires(interest) {
+                t.retiring = None;
+            }
             t.phase != TopicPhase::New
                 || interests
                     .iter()
@@ -579,15 +593,16 @@ impl ConsumerSession {
         self.wakes.wake_by_ref();
     }
 }
-fn remaining(frame: &mut Vec<u8>, mut n: usize) {
-    loop {
+fn remaining(frame: &mut [u8], mut n: usize) -> usize {
+    for (offset, byte) in frame.iter_mut().enumerate() {
         let b = (n % 128) as u8;
         n /= 128;
-        frame.push(b | if n != 0 { 128 } else { 0 });
+        *byte = b | if n != 0 { 128 } else { 0 };
         if n == 0 {
-            break;
+            return offset + 1;
         }
     }
+    unreachable!("bounded MQTT control length")
 }
 
 pub struct MqttSubscription {
@@ -635,8 +650,10 @@ impl ConsumerNotificationBinding for MqttNotificationConsumer {
             if s.interests.len() == LEASES {
                 return Err(busy());
             }
-            let interests = &s.interests.clone();
-            s.topics.retain(|t| {
+            let ConsumerSession {
+                interests, topics, ..
+            } = &mut *s;
+            topics.retain(|t| {
                 t.phase != TopicPhase::New
                     || interests
                         .iter()
@@ -657,6 +674,8 @@ impl ConsumerNotificationBinding for MqttNotificationConsumer {
                         .any(|i| i.borrow().slot == *n)
                 })
                 .unwrap();
+            let mut queue = VecDeque::new();
+            queue.try_reserve_exact(QUEUE).map_err(|_| busy())?;
             if !s.topics.iter().any(|t| t.name == program.topic) {
                 if s.topics.len() == LEASES {
                     return Err(busy());
@@ -664,6 +683,7 @@ impl ConsumerNotificationBinding for MqttNotificationConsumer {
                 s.topics.push(Topic {
                     name: program.topic.clone(),
                     phase: TopicPhase::New,
+                    retiring: None,
                 });
             }
             let interest = Rc::new(RefCell::new(Interest {
@@ -674,9 +694,8 @@ impl ConsumerNotificationBinding for MqttNotificationConsumer {
                 slot,
                 started: false,
                 closing: false,
-                authorized_cancel: false,
                 remote: RemoteCancellation::NotAttempted,
-                queue: VecDeque::with_capacity(QUEUE),
+                queue,
                 loss: 0,
             }));
             s.interests.push(Rc::downgrade(&interest));
@@ -756,27 +775,44 @@ impl NotificationParticipation for MqttSubscription {
         if input.is_some_and(|i| i.0.is_some()) {
             return Poll::Ready(Err(unsupported()));
         }
-        let (slot, topic) = {
+        let (slot, topic, starting_close) = {
             let mut i = self.interest.borrow_mut();
-            i.authorized_cancel |= input.is_some();
+            let starting_close = i.started && !i.closing;
             i.closing = true;
             i.queue.clear();
-            (i.slot, i.topic.clone())
+            (i.slot, i.topic.clone(), starting_close)
         };
         let mut s = self.session.borrow_mut();
-        // Shared native interests survive this logical stop. Only the final
-        // matching lease sends UNSUBSCRIBE, without granting global shutdown.
-        let shared = s.live(&topic);
-        if !shared && s.phase == ConnectionPhase::Ready {
-            s.step(cx, slot);
-        }
-        let pending = !shared
-            && s.phase == ConnectionPhase::Ready
-            && s.topics
-                .iter()
-                .any(|t| t.name == topic && t.phase != TopicPhase::New);
-        if pending {
-            return Poll::Pending;
+        // A shared lease releases immediately. Its successor can take over
+        // local filter progress without inheriting an earlier mapped outcome.
+        if s.phase == ConnectionPhase::Ready && !s.live(&topic) {
+            let index = s.topics.iter().position(|t| t.name == topic).unwrap();
+            let t = &mut s.topics[index];
+            if starting_close {
+                match t.phase {
+                    TopicPhase::Active => {
+                        // Accept the original removal into the service's
+                        // topic slot before any driver can run the writer.
+                        t.phase = TopicPhase::Removing;
+                        t.retiring = Some(Rc::downgrade(&self.interest));
+                        if input.is_some() {
+                            self.interest.borrow_mut().remote = RemoteCancellation::Unknown;
+                        }
+                    }
+                    TopicPhase::Subscribing if t.retiring.is_none() => {
+                        // A stopped setup may finish its own SUBSCRIBE.
+                        // Housekeeping after SUBACK grants no mapped outcome.
+                        t.retiring = Some(Rc::downgrade(&self.interest));
+                    }
+                    _ => {}
+                }
+            }
+            if s.topics[index].retires(&self.interest) {
+                s.step(cx, slot);
+                if s.phase == ConnectionPhase::Ready && s.topics[index].retires(&self.interest) {
+                    return Poll::Pending;
+                }
+            }
         }
         let result = self.interest.borrow().remote;
         s.dispose(&self.interest);

@@ -589,7 +589,7 @@ fn host_turns_join_independent_publications_all_families_replacement_and_complet
         assert_eq!(event.native.effect, PublicationEffect::LocallyPublished);
         assert_eq!(
             e.notifications
-                .front(&mut cursor, &mut budget())
+                .front(&mut cursor)
                 .unwrap()
                 .unwrap()
                 .data
@@ -597,7 +597,7 @@ fn host_turns_join_independent_publications_all_families_replacement_and_complet
                 .body,
             b"31"
         );
-        e.notifications.advance(&mut cursor, &mut budget()).unwrap();
+        e.notifications.advance(&mut cursor).unwrap();
         // Native ingress gets zero credit; accepted Action work still progresses.
         let polls = apps[0].polls.get();
         apps[0].complete.set(true);
