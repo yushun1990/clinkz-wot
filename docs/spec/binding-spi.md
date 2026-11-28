@@ -712,9 +712,12 @@ Other errors propagate. The answer must stay stable under the selection
 configuration. Different Binding implementations can share a continuation
 contract, and two mappings of the same protocol can address incompatible peers.
 `destination` calculates the actual target before fresh authorization.
-`start` receives that exact operand and captures all borrowed input. Before a
-native effect, the Binding must secure the original exchange, any promised
-continuation or value backing and local retirement. A typed exchange can use
+`start` receives that exact operand and captures all borrowed input. The typed
+`ActionBinding::Destination` lends identical target text from resolution until
+disposal, including after exchange and continuation retirement and through
+settlement handoff and validated result loans. Before a native effect, the
+Binding must secure the original exchange, any promised continuation or value
+backing and local retirement. A typed exchange can use
 inline or exclusive storage. Host Bindings can move an admitted byte buffer into
 `ConsumerActionOutput` and release the native exchange independently. Refusal permits
 no semantic effect. Refused control start does not withdraw unrelated admitted

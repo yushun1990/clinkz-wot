@@ -130,8 +130,10 @@ pub trait ActionBinding {
     type Program;
     type Configuration: Eq;
     type Exchange: ActionExchange;
-    /// A bounded owned or program-borrowed destination. Its exact text stays
-    /// immutable through exchange and continuation retirement. AsRef and
+    /// A bounded owned or program-borrowed destination. Every `as_ref` call
+    /// lends the same exact target text from resolution until this value is
+    /// dropped, including after exchange and continuation retirement, across
+    /// settlement handoff and during every validated result loan. Access and
     /// disposal are bounded local operations.
     type Destination: AsRef<str>;
     fn configuration(&self) -> &Self::Configuration;
@@ -140,8 +142,9 @@ pub trait ActionBinding {
         program: &'a Self::Program,
         operation: Operation,
     ) -> Option<ActionMapping<'a>>;
-    /// Pure actual destination, checked before policy; start must use this same
-    /// destination. Redirects need equivalent explicit policy coverage.
+    /// Resolve the actual destination without effects before authorization.
+    /// `start` must use this same operand. Redirects need equivalent explicit
+    /// policy coverage.
     fn destination(
         &self,
         program: &Self::Program,

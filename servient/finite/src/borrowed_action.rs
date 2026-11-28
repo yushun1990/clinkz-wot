@@ -393,7 +393,8 @@ impl<'a, B: ActionBinding, I: ActionInput> ActionSlot<'a, B, I> {
         Ok(step_action(work, cx))
     }
     /// Transfer the original retired invocation under current permission.
-    /// The settlement keeps the original exclusive result slot.
+    /// The settlement keeps the returning operation's destination and the
+    /// original exclusive result slot.
     pub fn take_settlement(
         &mut self,
         handle: ActionHandle<'_>,
@@ -476,8 +477,8 @@ impl<B: ActionBinding, I: ActionInput> ActionSettlement<'_, B, I> {
             None => None,
         })
     }
-    /// Each application loan validates the exact view it returns, with fresh
-    /// permission after the adapter and codec can change dependencies.
+    /// Each application loan validates the exact view it returns and checks
+    /// permission for the original destination before and after validation.
     pub fn result(&mut self) -> CoreResult<InteractionOutputView<'_>> {
         let work = &mut self.0;
         let _turn = work.driving.try_borrow_mut().map_err(|_| reentry())?;

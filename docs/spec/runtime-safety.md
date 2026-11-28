@@ -910,8 +910,8 @@ CancelAction, static prepared value meaning and primary output. The actual
 Binding qualifies native meaning and continuation compatibility at installation.
 Invoke input and Invoke/Query output use their own captured media/service and
 body limits over one shared schema pair. Destination resolution produces a
-bounded native operand that is checked and used unchanged by start. Capture one
-input view before fresh authorization and use it for validation and native
+bounded native operand that is checked and used unchanged by `start`. Capture
+one input view before fresh authorization and use it for validation and native
 start. Retaining the input owner can later lend its current view.
 
 Before native construction, the caller-owned slot claims the original typed
@@ -925,9 +925,10 @@ their own earlier release points.
 
 See [Action associations and invocation capacity](#continuing-action-associations-and-invocation-capacity)
 for current dependencies, first cause and retirement. A settled result keeps
-raw output even when validation or permission fails. Handoff checks the given
-clock and original permission. Each new validated application loan checks
-current authority and validates the exact view it lends. A loan already returned
+the returning operation's destination owner and raw output even when validation
+or permission fails. Handoff checks the given clock and current permission for
+that destination. Each new validated application loan checks permission for the
+same destination and validates the exact view it lends. A loan already returned
 keeps its original bytes and metadata. A raw adapter can lend rejected or late
 output in one bounded turn without authority, validation or native progress.
 Absent data and stored native errors require no linked adapter.

@@ -162,7 +162,7 @@ impl<'a, 'native: 'a> Case<'a, 'native> {
 }
 fn fixture_with(meaning: ValueExecution<'_>, f: impl FnOnce(Case<'_, '_>)) {
     let peer = Peer::new();
-    let open = || peer.open();
+    let open = |_: &str| peer.open();
     let stats = Statistics::default();
     let binding = Binding {
         open: &open,
@@ -660,6 +660,82 @@ fn unread_and_held_results_exclude_admission_and_keep_fresh_permission() {
 }
 
 #[test]
+fn query_result_keeps_its_authorized_destination_after_native_retirement() {
+    fixture(|c| {
+        const QUERY_TARGET: &str = "test-datagram:query";
+        let query_peer = Peer::new();
+        let open = |target: &str| match target {
+            QUERY_TARGET => query_peer.open(),
+            "test-datagram:measure" => c.peer.open(),
+            _ => Err(failed()),
+        };
+        let binding = Binding {
+            open: &open,
+            ..*c.binding
+        };
+        let query_access = Permission {
+            allowed_target: Some(QUERY_TARGET),
+            ..Permission::default()
+        };
+        let result = ActionResultSlot::new();
+        let successor_result = ActionResultSlot::new();
+        let mut slot = ActionSlot::bind(
+            c.driving,
+            c.definition,
+            &binding,
+            c.authority.reference(),
+            [Some(c.invoke_codec), Some(c.query_codec)],
+            [
+                Some(c.invoke_access),
+                Some(&query_access),
+                Some(c.invoke_access),
+            ],
+        )
+        .unwrap();
+        let input = |body| {
+            Some(Input {
+                body,
+                stats: c.stats,
+            })
+        };
+        let original = slot
+            .invoke(input(b"7"), &result, Deadline::NONE, now(1))
+            .unwrap_or_else(|_| panic!("original admission"));
+        drive(&mut slot, now(1));
+        c.peer.respond(b"I7", &[b'A', 7]);
+        drive(&mut slot, now(1));
+
+        c.stats.query_target.set(Some(QUERY_TARGET));
+        slot.query(original, now(1)).unwrap();
+        drive(&mut slot, now(1));
+        query_peer.respond(&[b'Q', 7], b"O\x0042");
+        drive(&mut slot, now(1));
+        assert_eq!(
+            slot.state(original).unwrap(),
+            ConsumerActionState::Completed
+        );
+        assert_eq!(c.stats.tokens_dropped.get(), 1);
+        query_peer.released();
+
+        // The next resolution selects the Invoke peer while policy stays current.
+        c.stats.query_target.set(None);
+        let mut settlement = slot.take_settlement(original, now(1)).unwrap();
+        assert_eq!(settlement.first_cause(), None);
+        assert_eq!(settlement.result().unwrap().data().unwrap().body, b"42");
+
+        let successor = slot
+            .invoke(input(b"8"), &successor_result, Deadline::NONE, now(1))
+            .unwrap_or_else(|_| panic!("successor admission"));
+        drive(&mut slot, now(1));
+        c.peer.respond(b"I8", b"O\x0035");
+        assert_eq!(settlement.result().unwrap().data().unwrap().body, b"42");
+        drive(&mut slot, now(1));
+        let mut successor = slot.take_settlement(successor, now(1)).unwrap();
+        assert_eq!(successor.result().unwrap().data().unwrap().body, b"35");
+    });
+}
+
+#[test]
 fn equal_slots_share_definition_without_sharing_authority_or_work() {
     fixture(|mut c| {
         let h = c.accept();
@@ -1074,7 +1150,7 @@ fn input_view_revocation_is_fenced_before_native_start() {
         let peer = Peer::new();
         let authority = instance();
         let started_after_revocation = Cell::new(false);
-        let open = || {
+        let open = |_: &str| {
             started_after_revocation.set(!authority.is_current());
             let socket = peer.open()?;
             socket.0.send(b"START").unwrap();
@@ -1180,7 +1256,7 @@ fn native_start_uses_validated_input_view_when_authorization_changes_selection()
     }
     let peer = Peer::new();
     let authority = instance();
-    let open = || peer.open();
+    let open = |_: &str| peer.open();
     let stats = Statistics::default();
     let binding = Binding {
         open: &open,

@@ -80,7 +80,10 @@ result keeps its input, actual returning destination and result backing.
 
 The [caller-owned datagram suite](../../tools/architecture-fixtures/constrained-consumer/src/action/tests.rs)
 uses one exclusive typed result slot per admission. A held result excludes
-reuse of that cell while an independent cell remains usable. The Binding,
+reuse of that cell while an independent cell remains usable. A UDP Query uses
+a separate peer and retires its exchange and continuation. After the Binding's
+selector changes, handoff and repeated validated loans still use the authorized
+Query destination while the invocation slot serves a successor. The Binding,
 validators and access services are supplied at installation of the prepared
 program. Siblings share a drive cell. An access callback attempting to poll a
 sibling gets a readiness lifecycle error before observing its clock, and
